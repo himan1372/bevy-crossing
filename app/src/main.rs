@@ -5,16 +5,19 @@ mod player;
 mod npc;
 mod interaction;
 mod dialogue;
+mod save;
 
 use town::TownPlugin;
 use player::PlayerPlugin;
 use npc::NpcPlugin;
 use interaction::InteractionPlugin;
 use dialogue::DialoguePlugin;
+use save::SavePlugin;
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
+        .add_plugins(SavePlugin)
         .add_plugins(TownPlugin)
         .add_plugins(PlayerPlugin)
         .add_plugins(NpcPlugin)

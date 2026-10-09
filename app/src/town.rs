@@ -12,6 +12,11 @@ pub struct Town {
     pub plan: TownPlan,
 }
 
+/// Seed used for town generation. Set from the save file at startup
+/// (see `save.rs`); falls back to the default when no save exists.
+#[derive(Resource, Clone, Copy)]
+pub struct TownSeed(pub u32);
+
 impl Town {
     /// Convert acre (ax, az) + cell (cx, cz) to world position.
     pub fn cell_to_world(ax: usize, az: usize, cx: usize, cz: usize) -> Vec3 {
@@ -64,13 +69,16 @@ impl Town {
 }
 
 /// Generate a town and store it as a resource.
-pub fn generate_town(mut commands: Commands) {
+/// Uses `TownSeed` when the save system has set one (PreStartup),
+/// otherwise falls back to the default seed.
+pub fn generate_town(mut commands: Commands, seed: Option<Res<TownSeed>>) {
+    let seed_val = seed.map(|s| s.0).unwrap_or(12345);
     let pool: Vec<u16> = (0..15).collect();
-    let plan = town_gen::generate(12345, &pool, 6)
+    let plan = town_gen::generate(seed_val, &pool, 6)
         .expect("Failed to generate town");
 
     commands.insert_resource(Town { plan });
-    println!("Town generated with seed 12345 (30 acres)");
+    println!("Town generated with seed {seed_val} (30 acres)");
 }
 
 /// Render the town: acres as ground, trees, houses, rocks.

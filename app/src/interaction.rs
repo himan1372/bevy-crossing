@@ -23,7 +23,20 @@ pub enum ItemKind {
 #[derive(Component)]
 pub struct GroundItem {
     pub kind: ItemKind,
+    /// Index into `ITEM_SPOTS` — lets the save system track pickups.
+    pub index: usize,
 }
+
+/// Fixed ground-item spawn spots: (kind, x, z).
+/// The save system records picked-up items as indices into this array.
+pub const ITEM_SPOTS: [(ItemKind, f32, f32); 6] = [
+    (ItemKind::Bells(100), 3.0, 2.0),
+    (ItemKind::Bells(200), -4.0, 3.0),
+    (ItemKind::Bells(150), 2.0, -4.0),
+    (ItemKind::Fruit, -3.0, -2.0),
+    (ItemKind::Fruit, 5.0, -3.0),
+    (ItemKind::Fruit, -5.0, -4.0),
+];
 
 /// Player's collected items (placeholder inventory for Phase 2).
 #[derive(Resource, Default)]
@@ -51,45 +64,61 @@ const INTERACT_RANGE_ITEM: f32 = 3.0;
 /// Cosine threshold for the facing cone (~78 degrees).
 const FACING_DOT: f32 = 0.2;
 
+/// Spawn a single ground item. Shared by the startup spawner and the
+/// save system (which respawns un-picked items on quick-load).
+pub fn spawn_ground_item(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    index: usize,
+    kind: ItemKind,
+    pos: Vec3,
+) {
+    let (mesh, mat) = match kind {
+        ItemKind::Bells(_) => (
+            meshes.add(Sphere::new(0.25)),
+            materials.add(Color::srgb(1.0, 0.85, 0.2)),
+        ),
+        ItemKind::Fruit => (
+            meshes.add(Sphere::new(0.28)),
+            materials.add(Color::srgb(1.0, 0.45, 0.15)),
+        ),
+    };
+    commands.spawn((
+        GroundItem { kind, index },
+        PbrBundle {
+            mesh,
+            material: mat,
+            transform: Transform::from_translation(pos),
+            ..default()
+        },
+    ));
+}
+
 /// Spawn a few test items on walkable ground near the town center.
+/// Skips items the loaded save says were already picked up.
 fn spawn_items(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     town: Res<Town>,
+    loaded: Option<Res<crate::save::LoadedSave>>,
 ) {
-    let bell_mesh = meshes.add(Sphere::new(0.25));
-    let bell_mat = materials.add(Color::srgb(1.0, 0.85, 0.2));
-    let fruit_mesh = meshes.add(Sphere::new(0.28));
-    let fruit_mat = materials.add(Color::srgb(1.0, 0.45, 0.15));
+    let picked: &[usize] = loaded
+        .as_ref()
+        .and_then(|l| l.0.as_ref())
+        .map(|s| s.picked_items.as_slice())
+        .unwrap_or(&[]);
 
-    let spots: [(ItemKind, f32, f32); 6] = [
-        (ItemKind::Bells(100), 3.0, 2.0),
-        (ItemKind::Bells(200), -4.0, 3.0),
-        (ItemKind::Bells(150), 2.0, -4.0),
-        (ItemKind::Fruit, -3.0, -2.0),
-        (ItemKind::Fruit, 5.0, -3.0),
-        (ItemKind::Fruit, -5.0, -4.0),
-    ];
-
-    for (kind, x, z) in spots {
-        let pos = Vec3::new(x, 0.3, z);
-        if !town.is_walkable(Vec3::new(x, 0.0, z)) {
+    for (index, (kind, x, z)) in ITEM_SPOTS.iter().enumerate() {
+        if picked.contains(&index) {
             continue;
         }
-        let (mesh, mat) = match kind {
-            ItemKind::Bells(_) => (bell_mesh.clone(), bell_mat.clone()),
-            ItemKind::Fruit => (fruit_mesh.clone(), fruit_mat.clone()),
-        };
-        commands.spawn((
-            GroundItem { kind },
-            PbrBundle {
-                mesh,
-                material: mat,
-                transform: Transform::from_translation(pos),
-                ..default()
-            },
-        ));
+        let pos = Vec3::new(*x, 0.3, *z);
+        if !town.is_walkable(Vec3::new(*x, 0.0, *z)) {
+            continue;
+        }
+        spawn_ground_item(&mut commands, &mut meshes, &mut materials, index, *kind, pos);
     }
     println!("Ground items spawned");
 }
