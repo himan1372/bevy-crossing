@@ -8,7 +8,7 @@ pub struct Player;
 /// Movement speed in units per second.
 const PLAYER_SPEED: f32 = 5.0;
 
-/// Spawn the player at the center of the town.
+/// Spawn the player and camera.
 pub fn spawn_player(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -27,7 +27,14 @@ pub fn spawn_player(
         },
     ));
 
-    println!("Player spawned");
+    // Spawn camera
+    commands.spawn(Camera3dBundle {
+        transform: Transform::from_xyz(0.0, 12.0, 10.0)
+            .looking_at(Vec3::ZERO, Vec3::Y),
+        ..default()
+    });
+
+    println!("Player and camera spawned");
 }
 
 /// Handle WASD movement with collision.

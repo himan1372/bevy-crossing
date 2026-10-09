@@ -17,7 +17,6 @@ impl Town {
     pub fn cell_to_world(ax: usize, az: usize, cx: usize, cz: usize) -> Vec3 {
         let wx = (ax as f32 * ACRE_SIZE) + (cx as f32 * CELL_SIZE) + CELL_SIZE / 2.0;
         let wz = (az as f32 * ACRE_SIZE) + (cz as f32 * CELL_SIZE) + CELL_SIZE / 2.0;
-        // Center the town at origin
         let ox = (ACRE_WIDTH as f32 * ACRE_SIZE) / 2.0;
         let oz = (ACRE_DEPTH as f32 * ACRE_SIZE) / 2.0;
         Vec3::new(wx - ox, 0.0, wz - oz)
@@ -51,118 +50,108 @@ impl Town {
         Some(self.plan.acres[acre_idx].cells[cell_idx])
     }
 
-    /// Check if a world position is walkable (not a tree, rock, house, etc.)
+    /// Check if a world position is walkable.
     pub fn is_walkable(&self, world_pos: Vec3) -> bool {
         match self.cell_at(world_pos) {
             Some(c) => {
-                let kind = c as u8;
-                // Grass, Flower, Weed are walkable. Tree, Rock, House, etc. are not.
-                kind == CellKind::Grass as u8
-                    || kind == CellKind::Flower as u8
-                    || kind == CellKind::Weed as u8
+                c == CellKind::Grass as u8
+                    || c == CellKind::Flower as u8
+                    || c == CellKind::Weed as u8
             }
-            None => false, // Out of bounds = not walkable
+            None => false,
         }
     }
 }
 
 /// Generate a town and store it as a resource.
 pub fn generate_town(mut commands: Commands) {
-    // Dummy villager pool (IDs 0-15), 6 villagers
     let pool: Vec<u16> = (0..15).collect();
     let plan = town_gen::generate(12345, &pool, 6)
         .expect("Failed to generate town");
 
     commands.insert_resource(Town { plan });
-    println!("Town generated with seed 12345");
+    println!("Town generated with seed 12345 (30 acres)");
 }
 
-/// Render the town: acres as ground, trees as cylinders, houses as boxes.
+/// Render the town: acres as ground, trees, houses, rocks.
 pub fn render_town(
     town: Res<Town>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // Only run once
-    if town.is_added() {
-        let ground_mat = materials.add(Color::srgb(0.35, 0.7, 0.35));
-        let tree_trunk_mat = materials.add(Color::srgb(0.4, 0.25, 0.15));
-        let tree_leaf_mat = materials.add(Color::srgb(0.2, 0.6, 0.25));
-        let house_mat = materials.add(Color::srgb(0.8, 0.6, 0.4));
-        let rock_mat = materials.add(Color::srgb(0.5, 0.5, 0.5));
+    let ground_mat = materials.add(Color::srgb(0.35, 0.7, 0.35));
+    let tree_trunk_mat = materials.add(Color::srgb(0.4, 0.25, 0.15));
+    let tree_leaf_mat = materials.add(Color::srgb(0.2, 0.6, 0.25));
+    let house_mat = materials.add(Color::srgb(0.8, 0.6, 0.4));
+    let rock_mat = materials.add(Color::srgb(0.5, 0.5, 0.5));
 
-        let ground_mesh = meshes.add(Plane3d::default().mesh().size(ACRE_SIZE, ACRE_SIZE));
-        let trunk_mesh = meshes.add(Cylinder::new(0.3, 1.5));
-        let leaf_mesh = meshes.add(Sphere::new(1.2).mesh());
-        let house_mesh = meshes.add(Cuboid::new(3.0, 2.5, 3.0));
-        let rock_mesh = meshes.add(Sphere::new(0.8).mesh());
+    let ground_mesh = meshes.add(Plane3d::default().mesh().size(ACRE_SIZE, ACRE_SIZE));
+    let trunk_mesh = meshes.add(Cylinder::new(0.3, 1.5));
+    let leaf_mesh = meshes.add(Sphere::new(1.2).mesh());
+    let house_mesh = meshes.add(Cuboid::new(3.0, 2.5, 3.0));
+    let rock_mesh = meshes.add(Sphere::new(0.8).mesh());
 
-        for az in 0..ACRE_DEPTH {
-            for ax in 0..ACRE_WIDTH {
-                let acre_idx = az * ACRE_WIDTH + ax;
-                let acre = &town.plan.acres[acre_idx];
+    let mut tree_count = 0;
+    let mut house_count = 0;
 
-                // Ground plane for this acre
-                let wx = (ax as f32 * ACRE_SIZE) + ACRE_SIZE / 2.0 - (ACRE_WIDTH as f32 * ACRE_SIZE) / 2.0;
-                let wz = (az as f32 * ACRE_SIZE) + ACRE_SIZE / 2.0 - (ACRE_DEPTH as f32 * ACRE_SIZE) / 2.0;
+    for az in 0..ACRE_DEPTH {
+        for ax in 0..ACRE_WIDTH {
+            let acre_idx = az * ACRE_WIDTH + ax;
+            let acre = &town.plan.acres[acre_idx];
 
-                commands.spawn(PbrBundle {
-                    mesh: ground_mesh.clone(),
-                    material: ground_mat.clone(),
-                    transform: Transform::from_xyz(wx, 0.0, wz),
-                    ..default()
-                });
+            let wx = (ax as f32 * ACRE_SIZE) + ACRE_SIZE / 2.0 - (ACRE_WIDTH as f32 * ACRE_SIZE) / 2.0;
+            let wz = (az as f32 * ACRE_SIZE) + ACRE_SIZE / 2.0 - (ACRE_DEPTH as f32 * ACRE_SIZE) / 2.0;
 
-                // Render cells (trees, houses, rocks)
-                for cz in 0..16 {
-                    for cx in 0..16 {
-                        let cell_idx = cz * 16 + cx;
-                        let cell = acre.cells[cell_idx];
-                        let pos = Town::cell_to_world(ax, az, cx, cz);
+            commands.spawn(PbrBundle {
+                mesh: ground_mesh.clone(),
+                material: ground_mat.clone(),
+                transform: Transform::from_xyz(wx, 0.0, wz),
+                ..default()
+            });
 
-                        match cell {
-                            c if c == CellKind::Tree as u8 => {
-                                // Trunk
-                                commands.spawn(PbrBundle {
-                                    mesh: trunk_mesh.clone(),
-                                    material: tree_trunk_mat.clone(),
-                                    transform: Transform::from_xyz(pos.x, 0.75, pos.z),
-                                    ..default()
-                                });
-                                // Leaves
-                                commands.spawn(PbrBundle {
-                                    mesh: leaf_mesh.clone(),
-                                    material: tree_leaf_mat.clone(),
-                                    transform: Transform::from_xyz(pos.x, 2.2, pos.z),
-                                    ..default()
-                                });
-                            }
-                            c if c == CellKind::House as u8 => {
-                                commands.spawn(PbrBundle {
-                                    mesh: house_mesh.clone(),
-                                    material: house_mat.clone(),
-                                    transform: Transform::from_xyz(pos.x, 1.25, pos.z),
-                                    ..default()
-                                });
-                            }
-                            c if c == CellKind::Rock as u8 => {
-                                commands.spawn(PbrBundle {
-                                    mesh: rock_mesh.clone(),
-                                    material: rock_mat.clone(),
-                                    transform: Transform::from_xyz(pos.x, 0.4, pos.z),
-                                    ..default()
-                                });
-                            }
-                            _ => {}
-                        }
+            for cz in 0..16 {
+                for cx in 0..16 {
+                    let cell_idx = cz * 16 + cx;
+                    let cell = acre.cells[cell_idx];
+                    let pos = Town::cell_to_world(ax, az, cx, cz);
+
+                    if cell == CellKind::Tree as u8 {
+                        tree_count += 1;
+                        commands.spawn(PbrBundle {
+                            mesh: trunk_mesh.clone(),
+                            material: tree_trunk_mat.clone(),
+                            transform: Transform::from_xyz(pos.x, 0.75, pos.z),
+                            ..default()
+                        });
+                        commands.spawn(PbrBundle {
+                            mesh: leaf_mesh.clone(),
+                            material: tree_leaf_mat.clone(),
+                            transform: Transform::from_xyz(pos.x, 2.2, pos.z),
+                            ..default()
+                        });
+                    } else if cell == CellKind::House as u8 {
+                        house_count += 1;
+                        commands.spawn(PbrBundle {
+                            mesh: house_mesh.clone(),
+                            material: house_mat.clone(),
+                            transform: Transform::from_xyz(pos.x, 1.25, pos.z),
+                            ..default()
+                        });
+                    } else if cell == CellKind::Rock as u8 {
+                        commands.spawn(PbrBundle {
+                            mesh: rock_mesh.clone(),
+                            material: rock_mat.clone(),
+                            transform: Transform::from_xyz(pos.x, 0.4, pos.z),
+                            ..default()
+                        });
                     }
                 }
             }
         }
-
-        println!("Town rendered: {} acres", ACRE_WIDTH * ACRE_DEPTH);
     }
+
+    println!("Town rendered: {} trees, {} houses", tree_count, house_count);
 }
 
 pub struct TownPlugin;
