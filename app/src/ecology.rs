@@ -504,7 +504,17 @@ fn update_bugs(
 }
 
 /// 1/2/3 to equip rod / net / nothing.
-fn tool_select(keyboard: Res<ButtonInput<KeyCode>>, mut tool: ResMut<EquippedTool>) {
+fn tool_select(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    shop_loc: Res<State<crate::shop::ShopLocation>>,
+    shop_ui: Res<crate::shop::ShopUi>,
+    mut tool: ResMut<EquippedTool>,
+) {
+    // No tools inside the shop or while its menu is open — the shop
+    // force-unequips on entry, and this keeps it that way.
+    if *shop_loc != crate::shop::ShopLocation::Town || shop_ui.open {
+        return;
+    }
     if keyboard.just_pressed(KeyCode::Digit1) {
         *tool = EquippedTool::Rod;
         println!("Equipped fishing rod");
@@ -537,7 +547,8 @@ fn tool_interact(
     mut notify_timer: ResMut<CatchNotifyTimer>,
     mut notify_query: Query<&mut Text, With<CatchNotifyText>>,
 ) {
-    // Inside the house, E belongs to the house doors.
+    // Inside the house, E belongs to the house doors. (The shop
+    // force-unequips tools on entry, so no shop check is needed here.)
     if *state != HouseState::Town {
         return;
     }

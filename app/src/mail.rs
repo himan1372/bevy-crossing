@@ -345,18 +345,20 @@ fn spawn_mailbox(
 fn mailbox_interact(
     keyboard: Res<ButtonInput<KeyCode>>,
     state: Res<State<HouseState>>,
+    shop_loc: Res<State<crate::shop::ShopLocation>>,
     dialogue: Res<DialogueState>,
     tool: Res<crate::ecology::EquippedTool>,
     mut ui: ResMut<MailUi>,
+    shop_ui: Res<crate::shop::ShopUi>,
     mailbox_pos: Option<Res<MailboxPos>>,
     player_query: Query<(&Transform, &Facing), With<Player>>,
     mut panel_query: Query<&mut Visibility, With<MailPanel>>,
 ) {
-    // Inside the house, E belongs to the house doors.
-    if *state != HouseState::Town {
+    // Inside the house or shop, E belongs to the doors.
+    if *state != HouseState::Town || *shop_loc != crate::shop::ShopLocation::Town {
         return;
     }
-    if ui.open || dialogue.active {
+    if ui.open || shop_ui.open || dialogue.active {
         return;
     }
     // A held tool claims the E press for the ecology plugin.

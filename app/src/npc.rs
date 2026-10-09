@@ -142,6 +142,7 @@ fn spawn_villagers(
 fn villager_wander(
     mut rng: ResMut<WanderRng>,
     town: Res<Town>,
+    shop_building: Option<Res<crate::shop::ShopBuilding>>,
     time: Res<Time>,
     player_query: Query<&Transform, With<Player>>,
     mut villagers: Query<(&mut Villager, &mut Transform), Without<Player>>,
@@ -171,8 +172,13 @@ fn villager_wander(
             let step = dir * villager.speed * time.delta_seconds();
             let candidate = transform.translation + step;
 
-            // Don't walk into unwalkable cells or through the player.
+            // Don't walk into unwalkable cells, the shop building, or
+            // through the player.
+            let shop_blocked = shop_building.as_ref().map_or(false, |s| {
+                crate::shop::point_blocked(s, candidate.x, candidate.z)
+            });
             if town.is_walkable(Vec3::new(candidate.x, 0.0, candidate.z))
+                && !shop_blocked
                 && candidate.distance(player_pos) > 1.2
             {
                 transform.translation = candidate;

@@ -51,6 +51,18 @@ pub struct SaveData {
     /// Sent letters (added later; defaults to empty for old saves).
     #[serde(default)]
     pub sent_letters: Vec<crate::mail::Letter>,
+    /// Nook's stock (added later; defaults to empty = regenerate).
+    #[serde(default)]
+    pub shop_stock: Vec<crate::shop::StockItem>,
+    /// Sales sum toward the shop upgrade (added later).
+    #[serde(default)]
+    pub shop_sales: u32,
+    /// Displayed shop tier as u8 (added later).
+    #[serde(default)]
+    pub shop_tier: u8,
+    /// Furniture bought at Nook's (added later).
+    #[serde(default)]
+    pub furniture: Vec<String>,
 }
 
 /// Save data loaded at startup (PreStartup), consumed by Startup systems.
@@ -161,10 +173,17 @@ fn collect_save(
     seed: &TownSeed,
     house_state: &State<HouseState>,
     return_pos: Option<&ReturnPosition>,
+    shop_loc: &State<crate::shop::ShopLocation>,
+    shop_return: Option<&crate::shop::ShopReturnPos>,
+    shop: &crate::shop::ShopData,
     mailbox: &Mailbox,
 ) -> SaveData {
     let player_pos = if *house_state == HouseState::Inside {
         return_pos
+            .map(|r| r.0.to_array())
+            .unwrap_or([0.0, 1.0, 0.0])
+    } else if *shop_loc == crate::shop::ShopLocation::Inside {
+        shop_return
             .map(|r| r.0.to_array())
             .unwrap_or([0.0, 1.0, 0.0])
     } else {
@@ -189,6 +208,10 @@ fn collect_save(
         picked_items,
         letters: mailbox.letters.clone(),
         sent_letters: mailbox.sent.clone(),
+        shop_stock: shop.stock.clone(),
+        shop_sales: shop.shop.sales_sum,
+        shop_tier: shop.shop.shop_level as u8,
+        furniture: inventory.furniture.clone(),
     }
 }
 
@@ -256,6 +279,9 @@ fn quick_save(
     seed: Res<TownSeed>,
     house_state: Res<State<HouseState>>,
     return_pos: Option<Res<ReturnPosition>>,
+    shop_loc: Res<State<crate::shop::ShopLocation>>,
+    shop_return: Option<Res<crate::shop::ShopReturnPos>>,
+    shop: Res<crate::shop::ShopData>,
     mailbox: Res<Mailbox>,
     mut timer: ResMut<NotifyTimer>,
     notify_query: Query<&mut Text, With<NotifyText>>,
@@ -271,6 +297,9 @@ fn quick_save(
         &seed,
         &house_state,
         return_pos.as_deref(),
+        &shop_loc,
+        shop_return.as_deref(),
+        &shop,
         &mailbox,
     );
     if write_save(&save) {
@@ -296,6 +325,8 @@ fn quick_load(
     mut playtime: ResMut<Playtime>,
     mut mailbox: ResMut<Mailbox>,
     mut next_house: ResMut<NextState<HouseState>>,
+    mut next_shop: ResMut<NextState<crate::shop::ShopLocation>>,
+    mut shop: ResMut<crate::shop::ShopData>,
     mut timer: ResMut<NotifyTimer>,
     notify_query: Query<&mut Text, With<NotifyText>>,
 ) {
@@ -312,13 +343,21 @@ fn quick_load(
     }
     // Loading always drops the player back on the town map.
     next_house.set(HouseState::Town);
+    next_shop.set(crate::shop::ShopLocation::Town);
     inventory.bells = save.bells;
     inventory.fruit = save.fruit;
     inventory.fish = save.fish;
     inventory.bugs = save.bugs;
+    inventory.furniture = save.furniture.clone();
     playtime.secs = save.playtime_secs;
     mailbox.letters = save.letters.clone();
     mailbox.sent = save.sent_letters.clone();
+    if !save.shop_stock.is_empty() {
+        shop.stock = save.shop_stock.clone();
+    }
+    shop.shop.sales_sum = save.shop_sales;
+    shop.shop.shop_level =
+        rustimal_logic::shop::ShopTier::from_u8(save.shop_tier).unwrap_or(rustimal_logic::shop::ShopTier::Zakka);
 
     for entity in items_query.iter() {
         commands.entity(entity).despawn();

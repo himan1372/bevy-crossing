@@ -240,22 +240,24 @@ fn build_interior(
 fn house_enter(
     keyboard: Res<ButtonInput<KeyCode>>,
     state: Res<State<HouseState>>,
+    shop_loc: Res<State<crate::shop::ShopLocation>>,
     dialogue: Res<DialogueState>,
     tool: Res<EquippedTool>,
     mail_ui: Res<crate::mail::MailUi>,
+    shop_ui: Res<crate::shop::ShopUi>,
     house: Option<Res<PlayerHouse>>,
     mut next_state: ResMut<NextState<HouseState>>,
     mut commands: Commands,
     mut player_query: Query<(&mut Transform, &mut Facing), With<Player>>,
 ) {
-    if *state != HouseState::Town {
+    if *state != HouseState::Town || *shop_loc != crate::shop::ShopLocation::Town {
         return;
     }
     if !keyboard.just_pressed(KeyCode::KeyE) || dialogue.active {
         return;
     }
-    // The mail UI claims the E key while open.
-    if mail_ui.open {
+    // The mail or shop UI claims the E key while open.
+    if mail_ui.open || shop_ui.open {
         return;
     }
     // A held tool claims E for the ecology plugin; the door needs empty hands.

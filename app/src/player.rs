@@ -39,15 +39,22 @@ pub fn spawn_player(
 }
 
 /// Handle WASD movement with collision. Stands down inside the house
-/// (see `house::interior_movement`).
+/// or shop (see `house::interior_movement` / `shop::shop_interior_movement`),
+/// and while the shop menu is open.
 pub fn player_movement(
     keyboard: Res<ButtonInput<KeyCode>>,
     state: Res<State<HouseState>>,
+    shop_loc: Res<State<crate::shop::ShopLocation>>,
+    shop_ui: Res<crate::shop::ShopUi>,
+    shop_building: Option<Res<crate::shop::ShopBuilding>>,
     mut player_query: Query<&mut Transform, With<Player>>,
     town: Res<Town>,
     time: Res<Time>,
 ) {
-    if *state != HouseState::Town {
+    if *state != HouseState::Town || *shop_loc != crate::shop::ShopLocation::Town {
+        return;
+    }
+    if shop_ui.open {
         return;
     }
     let Ok(mut transform) = player_query.get_single_mut() else {
@@ -73,17 +80,23 @@ pub fn player_movement(
         direction = direction.normalize();
         let movement = direction * PLAYER_SPEED * time.delta_seconds();
 
+        let blocked = |x: f32, z: f32| {
+            shop_building.as_ref().map_or(false, |s| {
+                crate::shop::point_blocked(s, x, z)
+            })
+        };
+
         // Try X movement
         let new_x = transform.translation.x + movement.x;
         let test_pos_x = Vec3::new(new_x, 0.0, transform.translation.z);
-        if town.is_walkable(test_pos_x) {
+        if town.is_walkable(test_pos_x) && !blocked(new_x, transform.translation.z) {
             transform.translation.x = new_x;
         }
 
         // Try Z movement
         let new_z = transform.translation.z + movement.z;
         let test_pos_z = Vec3::new(transform.translation.x, 0.0, new_z);
-        if town.is_walkable(test_pos_z) {
+        if town.is_walkable(test_pos_z) && !blocked(transform.translation.x, new_z) {
             transform.translation.z = new_z;
         }
     }

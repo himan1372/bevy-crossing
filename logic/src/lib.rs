@@ -19,7 +19,7 @@ mod dvd;
 mod game_time;
 mod buried_items;
 pub mod house;
-mod shop;
+pub mod shop;
 mod behavior;
 mod attr_walls;
 mod bg_check;

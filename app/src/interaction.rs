@@ -48,6 +48,8 @@ pub struct PlayerInventory {
     pub fish: u32,
     /// Bugs caught with the net (Phase 3 ecology).
     pub bugs: u32,
+    /// Furniture bought at Nook's (Phase 3 shop).
+    pub furniture: Vec<String>,
 }
 
 /// Fired when the player talks to a villager.
@@ -166,9 +168,11 @@ pub fn track_player_facing(
 pub fn interact(
     keyboard: Res<ButtonInput<KeyCode>>,
     state: Res<State<HouseState>>,
+    shop_loc: Res<State<crate::shop::ShopLocation>>,
     dialogue: Res<DialogueState>,
     tool: Res<crate::ecology::EquippedTool>,
     mail_ui: Res<crate::mail::MailUi>,
+    shop_ui: Res<crate::shop::ShopUi>,
     mut talk_events: EventWriter<TalkEvent>,
     mut commands: Commands,
     player_query: Query<(&Transform, &Facing), With<Player>>,
@@ -176,15 +180,15 @@ pub fn interact(
     items: Query<(Entity, &GroundItem, &Transform), Without<Player>>,
     mut inventory: ResMut<PlayerInventory>,
 ) {
-    // Inside the house, E belongs to the house doors.
-    if *state != HouseState::Town {
+    // Inside the house or shop, E belongs to the doors.
+    if *state != HouseState::Town || *shop_loc != crate::shop::ShopLocation::Town {
         return;
     }
     if !keyboard.just_pressed(KeyCode::KeyE) || dialogue.active {
         return;
     }
-    // The mail UI claims the E key while open.
-    if mail_ui.open {
+    // The mail or shop UI claims the E key while open.
+    if mail_ui.open || shop_ui.open {
         return;
     }
     // A held tool claims the E press — the ecology plugin handles it.
@@ -254,7 +258,8 @@ impl Plugin for InteractionPlugin {
                 (track_player_facing, interact)
                     .chain()
                     .after(crate::house::HouseInputSet)
-                    .after(crate::mail::MailInputSet),
+                    .after(crate::mail::MailInputSet)
+                    .after(crate::shop::ShopInputSet),
             );
     }
 }
