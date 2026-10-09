@@ -380,7 +380,10 @@ fn mailbox_interact(
 fn show_mail_notify(
     text: &str,
     timer: &mut ResMut<MailNotifyTimer>,
-    query: &mut Query<(&mut Text, &mut Visibility), With<MailNotifyText>>,
+    query: &mut Query<
+        (&mut Text, &mut Visibility),
+        (With<MailNotifyText>, Without<MailPanel>),
+    >,
 ) {
     if let Ok((mut t, mut vis)) = query.single_mut() {
         t.0 = text.to_string();
@@ -414,7 +417,10 @@ fn send_letter(
     mailbox: &mut Mailbox,
     names: &[String],
     timer: &mut ResMut<MailNotifyTimer>,
-    notify_query: &mut Query<(&mut Text, &mut Visibility), With<MailNotifyText>>,
+    notify_query: &mut Query<
+        (&mut Text, &mut Visibility),
+        (With<MailNotifyText>, Without<MailPanel>),
+    >,
 ) {
     let recipient = names
         .get(ui.write_recipient)
@@ -478,8 +484,11 @@ fn mail_ui_input(
     mut mailbox: ResMut<Mailbox>,
     villagers: Query<&Villager>,
     mut timer: ResMut<MailNotifyTimer>,
-    mut notify_query: Query<(&mut Text, &mut Visibility), With<MailNotifyText>>,
-    mut panel_query: Query<&mut Visibility, With<MailPanel>>,
+    mut notify_query: Query<
+        (&mut Text, &mut Visibility),
+        (With<MailNotifyText>, Without<MailPanel>),
+    >,
+    mut panel_query: Query<&mut Visibility, (With<MailPanel>, Without<MailNotifyText>)>,
 ) {
     if !ui.open {
         return;
@@ -577,9 +586,18 @@ fn refresh_mail_ui(
     ui: Res<MailUi>,
     mailbox: Res<Mailbox>,
     villagers: Query<&Villager>,
-    mut list_query: Query<(&mut Text, &mut Visibility), With<MailListText>>,
-    mut body_query: Query<(&mut Text, &mut Visibility), With<MailBodyText>>,
-    mut hint_query: Query<&mut Text, With<MailHintText>>,
+    mut list_query: Query<
+        (&mut Text, &mut Visibility),
+        (With<MailListText>, Without<MailBodyText>, Without<MailHintText>),
+    >,
+    mut body_query: Query<
+        (&mut Text, &mut Visibility),
+        (With<MailBodyText>, Without<MailListText>, Without<MailHintText>),
+    >,
+    mut hint_query: Query<
+        &mut Text,
+        (With<MailHintText>, Without<MailListText>, Without<MailBodyText>),
+    >,
 ) {
     if !ui.is_changed() && !mailbox.is_changed() {
         return;
@@ -641,7 +659,10 @@ fn on_talk_maybe_letter(
     mut mailbox: ResMut<Mailbox>,
     mut rng: ResMut<MailRng>,
     mut timer: ResMut<MailNotifyTimer>,
-    mut notify_query: Query<(&mut Text, &mut Visibility), With<MailNotifyText>>,
+    mut notify_query: Query<
+        (&mut Text, &mut Visibility),
+        (With<MailNotifyText>, Without<MailPanel>),
+    >,
 ) {
     for event in events.read() {
         let Ok(v) = villagers.get(event.villager) else {

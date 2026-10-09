@@ -346,7 +346,7 @@ fn setup_quest_ui(mut commands: Commands) {
 
 fn show_panel(
     text: &str,
-    panel: &mut Query<&mut Visibility, With<QuestPanel>>,
+    panel: &mut Query<&mut Visibility, (With<QuestPanel>, Without<QuestNotifyText>)>,
     body: &mut Query<&mut Text, With<QuestPanelText>>,
 ) {
     if let Ok(mut vis) = panel.single_mut() {
@@ -357,7 +357,7 @@ fn show_panel(
     }
 }
 
-fn hide_panel(panel: &mut Query<&mut Visibility, With<QuestPanel>>) {
+fn hide_panel(panel: &mut Query<&mut Visibility, (With<QuestPanel>, Without<QuestNotifyText>)>) {
     if let Ok(mut vis) = panel.single_mut() {
         *vis = Visibility::Hidden;
     }
@@ -366,7 +366,10 @@ fn hide_panel(panel: &mut Query<&mut Visibility, With<QuestPanel>>) {
 fn notify(
     msg: &str,
     timer: &mut ResMut<QuestNotifyTimer>,
-    query: &mut Query<(&mut Visibility, &mut Text), With<QuestNotifyText>>,
+    query: &mut Query<
+        (&mut Visibility, &mut Text),
+        (With<QuestNotifyText>, Without<QuestPanel>),
+    >,
 ) {
     if let Ok((mut vis, mut text)) = query.single_mut() {
         text.0 = msg.to_string();
@@ -474,7 +477,7 @@ fn quest_talk_intercept(
     mut claim: ResMut<QuestClaim>,
     mut qui: ResMut<QuestUi>,
     inventory: Res<PlayerInventory>,
-    mut panel: Query<&mut Visibility, With<QuestPanel>>,
+    mut panel: Query<&mut Visibility, (With<QuestPanel>, Without<QuestNotifyText>)>,
     mut body: Query<&mut Text, With<QuestPanelText>>,
 ) {
     if *house_state != HouseState::Town || *shop_loc != crate::shop::ShopLocation::Town {
@@ -523,9 +526,9 @@ fn quest_ui_input(
     mut inventory: ResMut<PlayerInventory>,
     mut mailbox: ResMut<crate::mail::Mailbox>,
     markers: Query<Entity, With<QuestMarker>>,
-    mut panel: Query<&mut Visibility, With<QuestPanel>>,
+    mut panel: Query<&mut Visibility, (With<QuestPanel>, Without<QuestNotifyText>)>,
     mut timer: ResMut<QuestNotifyTimer>,
-    mut notify_query: Query<(&mut Visibility, &mut Text), With<QuestNotifyText>>,
+    mut notify_query: Query<(&mut Visibility, &mut Text), (With<QuestNotifyText>, Without<QuestPanel>)>,
 ) {
     if !ui.open {
         return;
@@ -537,7 +540,7 @@ fn quest_ui_input(
     }
     let close = |ui: &mut ResMut<QuestUi>,
                  claim: &mut ResMut<QuestClaim>,
-                 panel: &mut Query<&mut Visibility, With<QuestPanel>>| {
+                 panel: &mut Query<&mut Visibility, (With<QuestPanel>, Without<QuestNotifyText>)>| {
         ui.open = false;
         claim.0 = None;
         hide_panel(panel);
