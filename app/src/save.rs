@@ -20,6 +20,7 @@ use std::path::PathBuf;
 
 use crate::house::{HouseState, ReturnPosition};
 use crate::interaction::{spawn_ground_item, GroundItem, PlayerInventory, ITEM_SPOTS};
+use crate::mail::Mailbox;
 use crate::player::Player;
 use crate::town::{Town, TownSeed};
 
@@ -44,6 +45,12 @@ pub struct SaveData {
     pub playtime_secs: f64,
     /// Indices into `ITEM_SPOTS` that had been picked up when saving.
     pub picked_items: Vec<usize>,
+    /// Received letters (added later; defaults to empty for old saves).
+    #[serde(default)]
+    pub letters: Vec<crate::mail::Letter>,
+    /// Sent letters (added later; defaults to empty for old saves).
+    #[serde(default)]
+    pub sent_letters: Vec<crate::mail::Letter>,
 }
 
 /// Save data loaded at startup (PreStartup), consumed by Startup systems.
@@ -154,6 +161,7 @@ fn collect_save(
     seed: &TownSeed,
     house_state: &State<HouseState>,
     return_pos: Option<&ReturnPosition>,
+    mailbox: &Mailbox,
 ) -> SaveData {
     let player_pos = if *house_state == HouseState::Inside {
         return_pos
@@ -179,6 +187,8 @@ fn collect_save(
         bugs: inventory.bugs,
         playtime_secs: playtime.secs,
         picked_items,
+        letters: mailbox.letters.clone(),
+        sent_letters: mailbox.sent.clone(),
     }
 }
 
@@ -246,6 +256,7 @@ fn quick_save(
     seed: Res<TownSeed>,
     house_state: Res<State<HouseState>>,
     return_pos: Option<Res<ReturnPosition>>,
+    mailbox: Res<Mailbox>,
     mut timer: ResMut<NotifyTimer>,
     notify_query: Query<&mut Text, With<NotifyText>>,
 ) {
@@ -260,6 +271,7 @@ fn quick_save(
         &seed,
         &house_state,
         return_pos.as_deref(),
+        &mailbox,
     );
     if write_save(&save) {
         println!("Saved to {}", save_path().display());
@@ -282,6 +294,7 @@ fn quick_load(
     items_query: Query<Entity, With<GroundItem>>,
     mut inventory: ResMut<PlayerInventory>,
     mut playtime: ResMut<Playtime>,
+    mut mailbox: ResMut<Mailbox>,
     mut next_house: ResMut<NextState<HouseState>>,
     mut timer: ResMut<NotifyTimer>,
     notify_query: Query<&mut Text, With<NotifyText>>,
@@ -304,6 +317,8 @@ fn quick_load(
     inventory.fish = save.fish;
     inventory.bugs = save.bugs;
     playtime.secs = save.playtime_secs;
+    mailbox.letters = save.letters.clone();
+    mailbox.sent = save.sent_letters.clone();
 
     for entity in items_query.iter() {
         commands.entity(entity).despawn();

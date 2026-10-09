@@ -70,7 +70,7 @@ const DOOR_RANGE_IN: f32 = 2.6;
 const DOOR_DOT: f32 = 0.6;
 
 /// Find the player's house from the town plan and record its door position.
-fn find_player_house(town: Res<Town>, mut commands: Commands) {
+pub(crate) fn find_player_house(town: Res<Town>, mut commands: Commands) {
     let mut door = None;
     'acres: for az in 0..ACRE_DEPTH {
         for ax in 0..ACRE_WIDTH {
@@ -242,6 +242,7 @@ fn house_enter(
     state: Res<State<HouseState>>,
     dialogue: Res<DialogueState>,
     tool: Res<EquippedTool>,
+    mail_ui: Res<crate::mail::MailUi>,
     house: Option<Res<PlayerHouse>>,
     mut next_state: ResMut<NextState<HouseState>>,
     mut commands: Commands,
@@ -251,6 +252,10 @@ fn house_enter(
         return;
     }
     if !keyboard.just_pressed(KeyCode::KeyE) || dialogue.active {
+        return;
+    }
+    // The mail UI claims the E key while open.
+    if mail_ui.open {
         return;
     }
     // A held tool claims E for the ecology plugin; the door needs empty hands.

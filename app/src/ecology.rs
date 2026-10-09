@@ -524,6 +524,7 @@ fn tool_interact(
     state: Res<State<HouseState>>,
     tool: Res<EquippedTool>,
     dialogue: Res<DialogueState>,
+    mail_ui: Res<crate::mail::MailUi>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -541,6 +542,10 @@ fn tool_interact(
         return;
     }
     if *tool == EquippedTool::None || dialogue.active {
+        return;
+    }
+    // The mail UI claims the E key while open.
+    if mail_ui.open {
         return;
     }
     if !keyboard.just_pressed(KeyCode::KeyE) {

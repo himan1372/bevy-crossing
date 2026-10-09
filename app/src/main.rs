@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+mod mail;
 mod town;
 mod player;
 mod npc;
@@ -17,6 +18,7 @@ use dialogue::DialoguePlugin;
 use save::SavePlugin;
 use ecology::EcologyPlugin;
 use house::HousePlugin;
+use mail::MailPlugin;
 
 fn main() {
     App::new()
@@ -29,6 +31,7 @@ fn main() {
         .add_plugins(DialoguePlugin)
         .add_plugins(EcologyPlugin)
         .add_plugins(HousePlugin)
+        .add_plugins(MailPlugin)
         .add_systems(Startup, setup_light)
         .run();
 }

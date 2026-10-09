@@ -44,7 +44,7 @@ mod scene_layout;
 mod gbi_runtime;
 pub mod graphics;
 mod house_scene;
-mod letter_score;
+pub mod letter_score;
 mod mtx;
 pub mod npc;
 mod request_selector;

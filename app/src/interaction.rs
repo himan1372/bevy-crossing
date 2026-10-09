@@ -168,6 +168,7 @@ pub fn interact(
     state: Res<State<HouseState>>,
     dialogue: Res<DialogueState>,
     tool: Res<crate::ecology::EquippedTool>,
+    mail_ui: Res<crate::mail::MailUi>,
     mut talk_events: EventWriter<TalkEvent>,
     mut commands: Commands,
     player_query: Query<(&Transform, &Facing), With<Player>>,
@@ -180,6 +181,10 @@ pub fn interact(
         return;
     }
     if !keyboard.just_pressed(KeyCode::KeyE) || dialogue.active {
+        return;
+    }
+    // The mail UI claims the E key while open.
+    if mail_ui.open {
         return;
     }
     // A held tool claims the E press — the ecology plugin handles it.
@@ -248,7 +253,8 @@ impl Plugin for InteractionPlugin {
                 Update,
                 (track_player_facing, interact)
                     .chain()
-                    .after(crate::house::HouseInputSet),
+                    .after(crate::house::HouseInputSet)
+                    .after(crate::mail::MailInputSet),
             );
     }
 }
