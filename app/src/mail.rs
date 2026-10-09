@@ -350,6 +350,7 @@ fn mailbox_interact(
     tool: Res<crate::ecology::EquippedTool>,
     mut ui: ResMut<MailUi>,
     shop_ui: Res<crate::shop::ShopUi>,
+    quest_ui: Res<crate::quest::QuestUi>,
     mailbox_pos: Option<Res<MailboxPos>>,
     player_query: Query<(&Transform, &Facing), With<Player>>,
     mut panel_query: Query<&mut Visibility, With<MailPanel>>,
@@ -358,7 +359,7 @@ fn mailbox_interact(
     if *state != HouseState::Town || *shop_loc != crate::shop::ShopLocation::Town {
         return;
     }
-    if ui.open || shop_ui.open || dialogue.active {
+    if ui.open || shop_ui.open || dialogue.active || quest_ui.open {
         return;
     }
     // A held tool claims the E press for the ecology plugin.

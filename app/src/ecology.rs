@@ -508,8 +508,14 @@ fn tool_select(
     keyboard: Res<ButtonInput<KeyCode>>,
     shop_loc: Res<State<crate::shop::ShopLocation>>,
     shop_ui: Res<crate::shop::ShopUi>,
+    quest_ui: Res<crate::quest::QuestUi>,
     mut tool: ResMut<EquippedTool>,
 ) {
+    // No tools inside the shop, while its menu is open, or while the
+    // quest panel is open.
+    if quest_ui.open {
+        return;
+    }
     // No tools inside the shop or while its menu is open — the shop
     // force-unequips on entry, and this keeps it that way.
     if *shop_loc != crate::shop::ShopLocation::Town || shop_ui.open {
@@ -556,6 +562,8 @@ fn tool_interact(
         return;
     }
     // The mail UI claims the E key while open.
+    // (The quest panel can only open with empty hands, so no quest check
+    // is needed here -- see tool_select.)
     if mail_ui.open {
         return;
     }

@@ -245,6 +245,7 @@ fn house_enter(
     tool: Res<EquippedTool>,
     mail_ui: Res<crate::mail::MailUi>,
     shop_ui: Res<crate::shop::ShopUi>,
+    quest_ui: Res<crate::quest::QuestUi>,
     house: Option<Res<PlayerHouse>>,
     mut next_state: ResMut<NextState<HouseState>>,
     mut commands: Commands,
@@ -256,8 +257,8 @@ fn house_enter(
     if !keyboard.just_pressed(KeyCode::KeyE) || dialogue.active {
         return;
     }
-    // The mail or shop UI claims the E key while open.
-    if mail_ui.open || shop_ui.open {
+    // The mail, shop, or quest UI claims the E key while open.
+    if mail_ui.open || shop_ui.open || quest_ui.open {
         return;
     }
     // A held tool claims E for the ecology plugin; the door needs empty hands.

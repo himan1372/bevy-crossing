@@ -173,6 +173,7 @@ pub fn interact(
     tool: Res<crate::ecology::EquippedTool>,
     mail_ui: Res<crate::mail::MailUi>,
     shop_ui: Res<crate::shop::ShopUi>,
+    quest_ui: Res<crate::quest::QuestUi>,
     mut talk_events: EventWriter<TalkEvent>,
     mut commands: Commands,
     player_query: Query<(&Transform, &Facing), With<Player>>,
@@ -187,8 +188,8 @@ pub fn interact(
     if !keyboard.just_pressed(KeyCode::KeyE) || dialogue.active {
         return;
     }
-    // The mail or shop UI claims the E key while open.
-    if mail_ui.open || shop_ui.open {
+    // The mail, shop, or quest UI claims the E key while open.
+    if mail_ui.open || shop_ui.open || quest_ui.open {
         return;
     }
     // A held tool claims the E press — the ecology plugin handles it.

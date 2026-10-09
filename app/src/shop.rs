@@ -522,6 +522,7 @@ fn shop_enter(
     dialogue: Res<DialogueState>,
     tool: Res<EquippedTool>,
     mail_ui: Res<crate::mail::MailUi>,
+    quest_ui: Res<crate::quest::QuestUi>,
     building: Option<Res<ShopBuilding>>,
     mut next_state: ResMut<NextState<ShopLocation>>,
     mut commands: Commands,
@@ -533,8 +534,8 @@ fn shop_enter(
     if !keyboard.just_pressed(KeyCode::KeyE) || dialogue.active {
         return;
     }
-    // The mail UI claims the E key while open.
-    if mail_ui.open {
+    // The mail or quest UI claims the E key while open.
+    if mail_ui.open || quest_ui.open {
         return;
     }
     // A held tool claims E for the ecology plugin; the door needs empty hands.

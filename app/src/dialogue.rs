@@ -129,15 +129,22 @@ fn setup_ui(mut commands: Commands) {
 }
 
 /// Start dialogue when a TalkEvent arrives.
+///
+/// Talks the quest system claimed (offers / turn-ins) are skipped here —
+/// the quest plugin shows its own panel for those.
 fn on_talk(
     mut events: EventReader<TalkEvent>,
     villagers: Query<&Villager>,
     mut dialogue: ResMut<DialogueState>,
     mut counter: ResMut<TalkCounter>,
+    quest_claim: Res<crate::quest::QuestClaim>,
     mut box_query: Query<&mut Visibility, With<DialogueBox>>,
     mut text_query: Query<&mut Text, With<DialogueText>>,
 ) {
     for event in events.read() {
+        if quest_claim.0 == Some(event.villager) {
+            continue;
+        }
         let Ok(villager) = villagers.get(event.villager) else {
             continue;
         };
@@ -218,7 +225,7 @@ impl Plugin for DialoguePlugin {
         app.insert_resource(DialogueState::default())
             .insert_resource(TalkCounter::default())
             .add_systems(Startup, setup_ui)
-            .add_systems(Update, on_talk)
+            .add_systems(Update, on_talk.after(crate::quest::QuestInputSet))
             .add_systems(Update, dialogue_input.after(crate::interaction::interact))
             .add_systems(Update, update_hud);
     }

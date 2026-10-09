@@ -10,6 +10,7 @@ mod save;
 mod ecology;
 mod house;
 mod shop;
+mod quest;
 
 use town::TownPlugin;
 use player::PlayerPlugin;
@@ -21,6 +22,7 @@ use ecology::EcologyPlugin;
 use house::HousePlugin;
 use mail::MailPlugin;
 use shop::ShopPlugin;
+use quest::QuestPlugin;
 
 fn main() {
     App::new()
@@ -35,6 +37,7 @@ fn main() {
         .add_plugins(HousePlugin)
         .add_plugins(MailPlugin)
         .add_plugins(ShopPlugin)
+        .add_plugins(QuestPlugin)
         .add_systems(Startup, setup_light)
         .run();
 }

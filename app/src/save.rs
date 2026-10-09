@@ -63,6 +63,9 @@ pub struct SaveData {
     /// Furniture bought at Nook's (added later).
     #[serde(default)]
     pub furniture: Vec<String>,
+    /// Active quest (added later; defaults to none for old saves).
+    #[serde(default)]
+    pub quest: Option<crate::quest::ActiveQuest>,
 }
 
 /// Save data loaded at startup (PreStartup), consumed by Startup systems.
@@ -161,6 +164,16 @@ fn apply_loaded_inventory(loaded: Res<LoadedSave>, mut inventory: ResMut<PlayerI
     }
 }
 
+/// Startup: restore the active quest from the loaded save.
+fn apply_loaded_quest(loaded: Res<LoadedSave>, mut quest: ResMut<crate::quest::QuestState>) {
+    if let Some(save) = loaded.0.as_ref() {
+        quest.active = save.quest.clone();
+        if quest.active.is_some() {
+            println!("Quest restored from save");
+        }
+    }
+}
+
 /// Gather the current game state into a `SaveData`.
 ///
 /// If the player is inside the house, the saved position is the town-map
@@ -177,6 +190,7 @@ fn collect_save(
     shop_return: Option<&crate::shop::ShopReturnPos>,
     shop: &crate::shop::ShopData,
     mailbox: &Mailbox,
+    quest: &crate::quest::QuestState,
 ) -> SaveData {
     let player_pos = if *house_state == HouseState::Inside {
         return_pos
@@ -212,6 +226,7 @@ fn collect_save(
         shop_sales: shop.shop.sales_sum,
         shop_tier: shop.shop.shop_level as u8,
         furniture: inventory.furniture.clone(),
+        quest: quest.active.clone(),
     }
 }
 
@@ -283,6 +298,7 @@ fn quick_save(
     shop_return: Option<Res<crate::shop::ShopReturnPos>>,
     shop: Res<crate::shop::ShopData>,
     mailbox: Res<Mailbox>,
+    quest: Res<crate::quest::QuestState>,
     mut timer: ResMut<NotifyTimer>,
     notify_query: Query<&mut Text, With<NotifyText>>,
 ) {
@@ -301,6 +317,7 @@ fn quick_save(
         shop_return.as_deref(),
         &shop,
         &mailbox,
+        &quest,
     );
     if write_save(&save) {
         println!("Saved to {}", save_path().display());
@@ -327,6 +344,7 @@ fn quick_load(
     mut next_house: ResMut<NextState<HouseState>>,
     mut next_shop: ResMut<NextState<crate::shop::ShopLocation>>,
     mut shop: ResMut<crate::shop::ShopData>,
+    mut quest: ResMut<crate::quest::QuestState>,
     mut timer: ResMut<NotifyTimer>,
     notify_query: Query<&mut Text, With<NotifyText>>,
 ) {
@@ -358,6 +376,11 @@ fn quick_load(
     shop.shop.sales_sum = save.shop_sales;
     shop.shop.shop_level =
         rustimal_logic::shop::ShopTier::from_u8(save.shop_tier).unwrap_or(rustimal_logic::shop::ShopTier::Zakka);
+    // Quest: restore the active quest (markers regenerate via cooldown).
+    quest.active = save.quest.clone();
+    if quest.active.is_some() {
+        println!("Quest restored from save");
+    }
 
     for entity in items_query.iter() {
         commands.entity(entity).despawn();
@@ -391,7 +414,8 @@ impl Plugin for SavePlugin {
             .add_systems(Startup, setup_notify)
             .add_systems(
                 Startup,
-                (apply_loaded_player, apply_loaded_inventory).after(crate::player::spawn_player),
+                (apply_loaded_player, apply_loaded_inventory, apply_loaded_quest)
+                    .after(crate::player::spawn_player),
             )
             .add_systems(
                 Update,
