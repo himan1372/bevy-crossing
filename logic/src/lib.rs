@@ -77,7 +77,7 @@ mod placement;
 mod albumin_geometry;
 mod albumin_collision_data;
 mod template_select;
-mod species;
+pub mod species;
 mod uki;
 mod bee_ant;
 mod special_delivery;

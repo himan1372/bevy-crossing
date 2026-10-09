@@ -43,6 +43,10 @@ pub const ITEM_SPOTS: [(ItemKind, f32, f32); 6] = [
 pub struct PlayerInventory {
     pub bells: u32,
     pub fruit: u32,
+    /// Fish caught with the rod (Phase 3 ecology).
+    pub fish: u32,
+    /// Bugs caught with the net (Phase 3 ecology).
+    pub bugs: u32,
 }
 
 /// Fired when the player talks to a villager.
@@ -155,9 +159,13 @@ pub fn track_player_facing(
 }
 
 /// E key: talk to the nearest faced villager, else pick up the nearest item.
+///
+/// When a fishing rod or bug net is equipped (see `ecology::EquippedTool`),
+/// this system stands down and lets the ecology plugin handle the E press.
 pub fn interact(
     keyboard: Res<ButtonInput<KeyCode>>,
     dialogue: Res<DialogueState>,
+    tool: Res<crate::ecology::EquippedTool>,
     mut talk_events: EventWriter<TalkEvent>,
     mut commands: Commands,
     player_query: Query<(&Transform, &Facing), With<Player>>,
@@ -166,6 +174,10 @@ pub fn interact(
     mut inventory: ResMut<PlayerInventory>,
 ) {
     if !keyboard.just_pressed(KeyCode::KeyE) || dialogue.active {
+        return;
+    }
+    // A held tool claims the E press — the ecology plugin handles it.
+    if *tool != crate::ecology::EquippedTool::None {
         return;
     }
     let Ok((player_transform, facing)) = player_query.get_single() else {

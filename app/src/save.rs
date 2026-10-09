@@ -34,6 +34,12 @@ pub struct SaveData {
     pub player_pos: [f32; 3],
     pub bells: u32,
     pub fruit: u32,
+    /// Fish caught (added after v1; defaults to 0 for old saves).
+    #[serde(default)]
+    pub fish: u32,
+    /// Bugs caught (added after v1; defaults to 0 for old saves).
+    #[serde(default)]
+    pub bugs: u32,
     pub playtime_secs: f64,
     /// Indices into `ITEM_SPOTS` that had been picked up when saving.
     pub picked_items: Vec<usize>,
@@ -126,7 +132,12 @@ fn apply_loaded_inventory(loaded: Res<LoadedSave>, mut inventory: ResMut<PlayerI
     if let Some(save) = loaded.0.as_ref() {
         inventory.bells = save.bells;
         inventory.fruit = save.fruit;
-        println!("Inventory restored: {} bells, {} fruit", save.bells, save.fruit);
+        inventory.fish = save.fish;
+        inventory.bugs = save.bugs;
+        println!(
+            "Inventory restored: {} bells, {} fruit, {} fish, {} bugs",
+            save.bells, save.fruit, save.fish, save.bugs
+        );
     }
 }
 
@@ -152,6 +163,8 @@ fn collect_save(
         player_pos,
         bells: inventory.bells,
         fruit: inventory.fruit,
+        fish: inventory.fish,
+        bugs: inventory.bugs,
         playtime_secs: playtime.secs,
         picked_items,
     }
@@ -263,6 +276,8 @@ fn quick_load(
     }
     inventory.bells = save.bells;
     inventory.fruit = save.fruit;
+    inventory.fish = save.fish;
+    inventory.bugs = save.bugs;
     playtime.secs = save.playtime_secs;
 
     for entity in items_query.iter() {

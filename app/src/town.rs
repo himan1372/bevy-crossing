@@ -84,6 +84,14 @@ impl Town {
         Some(self.plan.acres[acre_idx].cells[cell_idx])
     }
 
+    /// Check if a world position is a river water tile.
+    pub fn is_river(&self, world_pos: Vec3) -> bool {
+        match self.cell_indices(world_pos) {
+            Some((ax, az, cx, cz)) => self.river_tiles.contains(&(ax, az, cx, cz)),
+            None => false,
+        }
+    }
+
     /// Check if a world position is walkable.
     pub fn is_walkable(&self, world_pos: Vec3) -> bool {
         let (ax, az, cx, cz) = match self.cell_indices(world_pos) {

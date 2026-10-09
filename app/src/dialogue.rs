@@ -204,7 +204,10 @@ fn update_hud(
         return;
     }
     if let Ok(mut text) = text_query.get_single_mut() {
-        text.sections[0].value = format!("Bells: {}   Fruit: {}", inventory.bells, inventory.fruit);
+        text.sections[0].value = format!(
+            "Bells: {}   Fruit: {}   Fish: {}   Bugs: {}",
+            inventory.bells, inventory.fruit, inventory.fish, inventory.bugs
+        );
     }
 }
 
