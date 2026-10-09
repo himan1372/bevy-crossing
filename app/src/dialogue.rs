@@ -7,7 +7,9 @@
 //! indexed by that ID, which the Bevy port doesn't ship. The original
 //! lines below stand in until real text content exists.
 
+use bevy::ecs::message::MessageReader;
 use bevy::prelude::*;
+use bevy::text::FontSize;
 use rustimal_logic::dialogue_topics::talk_check_msg;
 
 use crate::interaction::{PlayerInventory, TalkEvent};
@@ -76,52 +78,42 @@ fn setup_ui(mut commands: Commands) {
     commands
         .spawn((
             DialogueBox,
-            NodeBundle {
-                style: Style {
-                    position_type: PositionType::Absolute,
-                    bottom: Val::Px(24.0),
-                    left: Val::Px(24.0),
-                    right: Val::Px(24.0),
-                    padding: UiRect::all(Val::Px(18.0)),
-                    ..default()
-                },
-                background_color: BackgroundColor(Color::srgba(0.05, 0.05, 0.08, 0.88)),
-                visibility: Visibility::Hidden,
+            Node {
+                position_type: PositionType::Absolute,
+                bottom: Val::Px(24.0),
+                left: Val::Px(24.0),
+                right: Val::Px(24.0),
+                padding: UiRect::all(Val::Px(18.0)),
                 ..default()
             },
+            BackgroundColor(Color::srgba(0.05, 0.05, 0.08, 0.88)),
+            Visibility::Hidden,
         ))
         .with_children(|parent| {
             parent.spawn((
                 DialogueText,
-                TextBundle::from_section(
-                    "",
-                    TextStyle {
-                        font_size: 24.0,
-                        color: Color::WHITE,
-                        ..default()
-                    },
-                ),
+                Text::new(""),
+                TextFont {
+                    font_size: FontSize::Px(24.0),
+                    ..default()
+                },
+                TextColor(Color::WHITE),
             ));
         });
 
     // Inventory HUD — top-left corner.
     commands.spawn((
         HudText,
-        TextBundle {
-            text: Text::from_section(
-                "Bells: 0   Fruit: 0",
-                TextStyle {
-                    font_size: 20.0,
-                    color: Color::WHITE,
-                    ..default()
-                },
-            ),
-            style: Style {
-                position_type: PositionType::Absolute,
-                top: Val::Px(12.0),
-                left: Val::Px(12.0),
-                ..default()
-            },
+        Text::new("Bells: 0   Fruit: 0"),
+        TextFont {
+            font_size: FontSize::Px(20.0),
+            ..default()
+        },
+        TextColor(Color::WHITE),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(12.0),
+            left: Val::Px(12.0),
             ..default()
         },
     ));
@@ -133,7 +125,7 @@ fn setup_ui(mut commands: Commands) {
 /// Talks the quest system claimed (offers / turn-ins) are skipped here —
 /// the quest plugin shows its own panel for those.
 fn on_talk(
-    mut events: EventReader<TalkEvent>,
+    mut events: MessageReader<TalkEvent>,
     villagers: Query<&Villager>,
     mut dialogue: ResMut<DialogueState>,
     mut counter: ResMut<TalkCounter>,
@@ -158,15 +150,13 @@ fn on_talk(
             .map(|l| format!("{}: {}", villager.name, l))
             .collect();
         // Show which decomp message ID this talk resolved to.
-        dialogue
-            .lines
-            .push(format!("(msg #{})", msg_id));
+        dialogue.lines.push(format!("(msg #{})", msg_id));
 
-        if let Ok(mut vis) = box_query.get_single_mut() {
+        if let Ok(mut vis) = box_query.single_mut() {
             *vis = Visibility::Visible;
         }
-        if let Ok(mut text) = text_query.get_single_mut() {
-            text.sections[0].value = dialogue.lines[0].clone();
+        if let Ok(mut text) = text_query.single_mut() {
+            text.0 = dialogue.lines[0].clone();
         }
         println!("Talking to {} (msg #{})", villager.name, msg_id);
     }
@@ -193,25 +183,22 @@ fn dialogue_input(
         dialogue.active = false;
         dialogue.lines.clear();
         dialogue.index = 0;
-        if let Ok(mut vis) = box_query.get_single_mut() {
+        if let Ok(mut vis) = box_query.single_mut() {
             *vis = Visibility::Hidden;
         }
         println!("Dialogue closed");
-    } else if let Ok(mut text) = text_query.get_single_mut() {
-        text.sections[0].value = dialogue.lines[dialogue.index].clone();
+    } else if let Ok(mut text) = text_query.single_mut() {
+        text.0 = dialogue.lines[dialogue.index].clone();
     }
 }
 
 /// Keep the HUD in sync with the inventory.
-fn update_hud(
-    inventory: Res<PlayerInventory>,
-    mut text_query: Query<&mut Text, With<HudText>>,
-) {
+fn update_hud(inventory: Res<PlayerInventory>, mut text_query: Query<&mut Text, With<HudText>>) {
     if !inventory.is_changed() {
         return;
     }
-    if let Ok(mut text) = text_query.get_single_mut() {
-        text.sections[0].value = format!(
+    if let Ok(mut text) = text_query.single_mut() {
+        text.0 = format!(
             "Bells: {}   Fruit: {}   Fish: {}   Bugs: {}",
             inventory.bells, inventory.fruit, inventory.fish, inventory.bugs
         );

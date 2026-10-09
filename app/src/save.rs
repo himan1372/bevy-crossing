@@ -14,6 +14,7 @@
 //! wander continuously, so exact positions don't matter).
 
 use bevy::prelude::*;
+use bevy::text::FontSize;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -144,7 +145,7 @@ fn apply_loaded_player(loaded: Res<LoadedSave>, mut player: Query<&mut Transform
     let Some(save) = loaded.0.as_ref() else {
         return;
     };
-    if let Ok(mut transform) = player.get_single_mut() {
+    if let Ok(mut transform) = player.single_mut() {
         transform.translation = Vec3::from_array(save.player_pos);
         println!("Player position restored");
     }
@@ -202,7 +203,7 @@ fn collect_save(
             .unwrap_or([0.0, 1.0, 0.0])
     } else {
         player
-            .get_single()
+            .single()
             .map(|t| t.translation.to_array())
             .unwrap_or([0.0, 1.0, 0.0])
     };
@@ -232,41 +233,39 @@ fn collect_save(
 
 /// Build the top-center notification text (empty = invisible).
 fn setup_notify(mut commands: Commands) {
-    let mut text = Text::from_section(
-        "",
-        TextStyle {
-            font_size: 28.0,
-            color: Color::WHITE,
-            ..default()
-        },
-    );
-    text.justify = bevy::text::JustifyText::Center;
     commands.spawn((
         NotifyText,
-        TextBundle {
-            text,
-            style: Style {
-                position_type: PositionType::Absolute,
-                top: Val::Px(56.0),
-                left: Val::Px(0.0),
-                right: Val::Px(0.0),
-                ..default()
-            },
+        Text::new(""),
+        TextFont {
+            font_size: FontSize::Px(28.0),
+            ..default()
+        },
+        TextColor(Color::WHITE),
+        TextLayout::justify(Justify::Center),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(56.0),
+            left: Val::Px(0.0),
+            right: Val::Px(0.0),
             ..default()
         },
     ));
 }
 
-fn show_notification(msg: &str, timer: &mut ResMut<NotifyTimer>, mut query: Query<&mut Text, With<NotifyText>>) {
-    if let Ok(mut text) = query.get_single_mut() {
-        text.sections[0].value = msg.to_string();
+fn show_notification(
+    msg: &str,
+    timer: &mut ResMut<NotifyTimer>,
+    mut query: Query<&mut Text, With<NotifyText>>,
+) {
+    if let Ok(mut text) = query.single_mut() {
+        text.0 = msg.to_string();
     }
     timer.0 = NOTIFY_DURATION_SECS;
 }
 
 fn clear_notification(mut query: Query<&mut Text, With<NotifyText>>) {
-    if let Ok(mut text) = query.get_single_mut() {
-        text.sections[0].value.clear();
+    if let Ok(mut text) = query.single_mut() {
+        text.0.clear();
     }
 }
 
@@ -277,7 +276,7 @@ fn tick_notification(
     query: Query<&mut Text, With<NotifyText>>,
 ) {
     if timer.0 > 0.0 {
-        timer.0 -= time.delta_seconds();
+        timer.0 -= time.delta().as_secs_f32();
         if timer.0 <= 0.0 {
             clear_notification(query);
         }
@@ -356,7 +355,7 @@ fn quick_load(
         return;
     };
 
-    if let Ok(mut transform) = player_query.get_single_mut() {
+    if let Ok(mut transform) = player_query.single_mut() {
         transform.translation = Vec3::from_array(save.player_pos);
     }
     // Loading always drops the player back on the town map.
@@ -374,8 +373,8 @@ fn quick_load(
         shop.stock = save.shop_stock.clone();
     }
     shop.shop.sales_sum = save.shop_sales;
-    shop.shop.shop_level =
-        rustimal_logic::shop::ShopTier::from_u8(save.shop_tier).unwrap_or(rustimal_logic::shop::ShopTier::Zakka);
+    shop.shop.shop_level = rustimal_logic::shop::ShopTier::from_u8(save.shop_tier)
+        .unwrap_or(rustimal_logic::shop::ShopTier::Zakka);
     // Quest: restore the active quest (markers regenerate via cooldown).
     quest.active = save.quest.clone();
     if quest.active.is_some() {
@@ -393,7 +392,14 @@ fn quick_load(
         if !town.is_walkable(Vec3::new(*x, 0.0, *z)) {
             continue;
         }
-        spawn_ground_item(&mut commands, &mut meshes, &mut materials, index, *kind, pos);
+        spawn_ground_item(
+            &mut commands,
+            &mut meshes,
+            &mut materials,
+            index,
+            *kind,
+            pos,
+        );
     }
 
     println!("Loaded save (seed {})", save.town_seed);
@@ -402,7 +408,7 @@ fn quick_load(
 
 /// Accumulate playtime every frame.
 fn tick_playtime(time: Res<Time>, mut playtime: ResMut<Playtime>) {
-    playtime.secs += time.delta_seconds() as f64;
+    playtime.secs += time.delta().as_secs_f32() as f64;
 }
 
 pub struct SavePlugin;
@@ -414,7 +420,11 @@ impl Plugin for SavePlugin {
             .add_systems(Startup, setup_notify)
             .add_systems(
                 Startup,
-                (apply_loaded_player, apply_loaded_inventory, apply_loaded_quest)
+                (
+                    apply_loaded_player,
+                    apply_loaded_inventory,
+                    apply_loaded_quest,
+                )
                     .after(crate::player::spawn_player),
             )
             .add_systems(

@@ -15,9 +15,11 @@
 //! - A villager's "thank you" for a sent letter arrives as a reply letter
 //!   (scored through the real `LetterRank` tiers) rather than in person.
 
+use bevy::ecs::message::MessageReader;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::input::ButtonState;
 use bevy::prelude::*;
+use bevy::text::FontSize;
 use rustimal_logic::letter_score::{score_letter, LetterRank, TrigramMode, MAIL_BODY_LEN};
 use serde::{Deserialize, Serialize};
 
@@ -205,89 +207,75 @@ fn setup_mail_ui(mut commands: Commands) {
     commands
         .spawn((
             MailPanel,
-            NodeBundle {
-                style: Style {
-                    position_type: PositionType::Absolute,
-                    left: Val::Percent(22.0),
-                    right: Val::Percent(22.0),
-                    top: Val::Percent(14.0),
-                    bottom: Val::Percent(14.0),
-                    flex_direction: FlexDirection::Column,
-                    padding: UiRect::all(Val::Px(20.0)),
-                    row_gap: Val::Px(12.0),
-                    ..default()
-                },
-                background_color: BackgroundColor(Color::srgba(0.07, 0.09, 0.14, 0.96)),
-                visibility: Visibility::Hidden,
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Percent(22.0),
+                right: Val::Percent(22.0),
+                top: Val::Percent(14.0),
+                bottom: Val::Percent(14.0),
+                flex_direction: FlexDirection::Column,
+                padding: UiRect::all(Val::Px(20.0)),
+                row_gap: Val::Px(12.0),
                 ..default()
             },
+            BackgroundColor(Color::srgba(0.07, 0.09, 0.14, 0.96)),
+            Visibility::Hidden,
         ))
         .with_children(|parent| {
             // Static title — no marker, never updated.
-            parent.spawn(TextBundle::from_section(
-                "Mailbox",
-                TextStyle {
-                    font_size: 28.0,
-                    color: Color::srgb(1.0, 0.9, 0.5),
+            parent.spawn((
+                Text::new("Mailbox"),
+                TextFont {
+                    font_size: FontSize::Px(28.0),
                     ..default()
                 },
+                TextColor(Color::srgb(1.0, 0.9, 0.5)),
             ));
             parent.spawn((
                 MailListText,
-                TextBundle::from_section(
-                    "",
-                    TextStyle {
-                        font_size: 20.0,
-                        color: Color::WHITE,
-                        ..default()
-                    },
-                ),
+                Text::new(""),
+                TextFont {
+                    font_size: FontSize::Px(20.0),
+                    ..default()
+                },
+                TextColor(Color::WHITE),
             ));
             parent.spawn((
                 MailBodyText,
-                TextBundle::from_section(
-                    "",
-                    TextStyle {
-                        font_size: 20.0,
-                        color: Color::WHITE,
-                        ..default()
-                    },
-                ),
+                Text::new(""),
+                TextFont {
+                    font_size: FontSize::Px(20.0),
+                    ..default()
+                },
+                TextColor(Color::WHITE),
             ));
             parent.spawn((
                 MailHintText,
-                TextBundle::from_section(
-                    "",
-                    TextStyle {
-                        font_size: 16.0,
-                        color: Color::srgb(0.7, 0.7, 0.75),
-                        ..default()
-                    },
-                ),
+                Text::new(""),
+                TextFont {
+                    font_size: FontSize::Px(16.0),
+                    ..default()
+                },
+                TextColor(Color::srgb(0.7, 0.7, 0.75)),
             ));
         });
 
     // "You have mail!" notification — top-center, below the save notice.
     commands.spawn((
         MailNotifyText,
-        TextBundle {
-            text: Text::from_section(
-                "",
-                TextStyle {
-                    font_size: 22.0,
-                    color: Color::srgb(1.0, 0.95, 0.6),
-                    ..default()
-                },
-            ),
-            style: Style {
-                position_type: PositionType::Absolute,
-                top: Val::Px(52.0),
-                left: Val::Percent(50.0),
-                ..default()
-            },
-            visibility: Visibility::Hidden,
+        Text::new(""),
+        TextFont {
+            font_size: FontSize::Px(22.0),
             ..default()
         },
+        TextColor(Color::srgb(1.0, 0.95, 0.6)),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(52.0),
+            left: Val::Percent(50.0),
+            ..default()
+        },
+        Visibility::Hidden,
     ));
     println!("Mail UI ready");
 }
@@ -307,26 +295,23 @@ fn spawn_mailbox(
     commands.insert_resource(MailboxPos(pos));
 
     // Post.
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(Cuboid::new(0.14, 1.2, 0.14)),
-        material: materials.add(Color::srgb(0.42, 0.28, 0.16)),
-        transform: Transform::from_translation(pos + Vec3::new(0.0, 0.6, 0.0)),
-        ..default()
-    });
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(0.14, 1.2, 0.14))),
+        MeshMaterial3d(materials.add(Color::srgb(0.42, 0.28, 0.16))),
+        Transform::from_translation(pos + Vec3::new(0.0, 0.6, 0.0)),
+    ));
     // Blue mail box.
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(Cuboid::new(0.7, 0.5, 0.5)),
-        material: materials.add(Color::srgb(0.15, 0.35, 0.85)),
-        transform: Transform::from_translation(pos + Vec3::new(0.0, 1.35, 0.0)),
-        ..default()
-    });
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(0.7, 0.5, 0.5))),
+        MeshMaterial3d(materials.add(Color::srgb(0.15, 0.35, 0.85))),
+        Transform::from_translation(pos + Vec3::new(0.0, 1.35, 0.0)),
+    ));
     // Little red flag.
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(Cuboid::new(0.08, 0.35, 0.08)),
-        material: materials.add(Color::srgb(0.9, 0.15, 0.15)),
-        transform: Transform::from_translation(pos + Vec3::new(0.32, 1.6, 0.0)),
-        ..default()
-    });
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(0.08, 0.35, 0.08))),
+        MeshMaterial3d(materials.add(Color::srgb(0.9, 0.15, 0.15))),
+        Transform::from_translation(pos + Vec3::new(0.32, 1.6, 0.0)),
+    ));
 
     if let Some(save) = loaded.as_ref().and_then(|l| l.0.as_ref()) {
         mailbox.letters = save.letters.clone();
@@ -370,7 +355,7 @@ fn mailbox_interact(
         return;
     }
     let Some(pos) = mailbox_pos else { return };
-    let Ok((transform, facing)) = player_query.get_single() else {
+    let Ok((transform, facing)) = player_query.single() else {
         return;
     };
     let to_box = pos.0 - transform.translation;
@@ -385,7 +370,7 @@ fn mailbox_interact(
     ui.selected = 0;
     ui.reading = None;
     ui.writing = false;
-    if let Ok(mut vis) = panel_query.get_single_mut() {
+    if let Ok(mut vis) = panel_query.single_mut() {
         *vis = Visibility::Visible;
     }
     println!("Mailbox opened");
@@ -397,8 +382,8 @@ fn show_mail_notify(
     timer: &mut ResMut<MailNotifyTimer>,
     query: &mut Query<(&mut Text, &mut Visibility), With<MailNotifyText>>,
 ) {
-    if let Ok((mut t, mut vis)) = query.get_single_mut() {
-        t.sections[0].value = text.to_string();
+    if let Ok((mut t, mut vis)) = query.single_mut() {
+        t.0 = text.to_string();
         *vis = Visibility::Visible;
     }
     timer.0 = NOTIFY_DURATION;
@@ -413,9 +398,9 @@ fn tick_mail_notify(
     if timer.0 <= 0.0 {
         return;
     }
-    timer.0 -= time.delta_seconds();
+    timer.0 -= time.delta().as_secs_f32();
     if timer.0 <= 0.0 {
-        if let Ok(mut vis) = query.get_single_mut() {
+        if let Ok(mut vis) = query.single_mut() {
             *vis = Visibility::Hidden;
         }
     }
@@ -488,7 +473,7 @@ fn send_letter(
 #[allow(clippy::too_many_arguments)]
 fn mail_ui_input(
     keyboard: Res<ButtonInput<KeyCode>>,
-    mut key_events: EventReader<KeyboardInput>,
+    mut key_events: MessageReader<KeyboardInput>,
     mut ui: ResMut<MailUi>,
     mut mailbox: ResMut<Mailbox>,
     villagers: Query<&Villager>,
@@ -502,8 +487,7 @@ fn mail_ui_input(
 
     // --- Reading view ---
     if let Some(idx) = ui.reading {
-        if keyboard.just_pressed(KeyCode::Escape) || keyboard.just_pressed(KeyCode::Backspace)
-        {
+        if keyboard.just_pressed(KeyCode::Escape) || keyboard.just_pressed(KeyCode::Backspace) {
             if let Some(letter) = mailbox.letters.get_mut(idx) {
                 letter.read = true;
             }
@@ -559,7 +543,7 @@ fn mail_ui_input(
     // --- List view ---
     if keyboard.just_pressed(KeyCode::Escape) {
         ui.open = false;
-        if let Ok(mut vis) = panel_query.get_single_mut() {
+        if let Ok(mut vis) = panel_query.single_mut() {
             *vis = Visibility::Hidden;
         }
         println!("Mailbox closed");
@@ -600,13 +584,13 @@ fn refresh_mail_ui(
     if !ui.is_changed() && !mailbox.is_changed() {
         return;
     }
-    let Ok((mut list_text, mut list_vis)) = list_query.get_single_mut() else {
+    let Ok((mut list_text, mut list_vis)) = list_query.single_mut() else {
         return;
     };
-    let Ok((mut body_text, mut body_vis)) = body_query.get_single_mut() else {
+    let Ok((mut body_text, mut body_vis)) = body_query.single_mut() else {
         return;
     };
-    let Ok(mut hint_text) = hint_query.get_single_mut() else {
+    let Ok(mut hint_text) = hint_query.single_mut() else {
         return;
     };
 
@@ -614,18 +598,22 @@ fn refresh_mail_ui(
         *list_vis = Visibility::Hidden;
         *body_vis = Visibility::Visible;
         if let Some(letter) = mailbox.letters.get(idx) {
-            body_text.sections[0].value =
-                format!("From: {}\nSubject: {}\n\n{}", letter.sender, letter.subject, letter.body);
+            body_text.0 = format!(
+                "From: {}\nSubject: {}\n\n{}",
+                letter.sender, letter.subject, letter.body
+            );
         }
-        hint_text.sections[0].value = "[Esc]/[Backspace] back to list".to_string();
+        hint_text.0 = "[Esc]/[Backspace] back to list".to_string();
     } else if ui.writing {
         *list_vis = Visibility::Hidden;
         *body_vis = Visibility::Visible;
         let names: Vec<String> = villagers.iter().map(|v| v.name.to_string()).collect();
-        let name = names.get(ui.write_recipient).map(|s| s.as_str()).unwrap_or("???");
-        body_text.sections[0].value =
-            format!("To: {name}   (Up/Down to change)\n\n{}_", ui.write_text);
-        hint_text.sections[0].value = "[Enter] send   [Esc] cancel".to_string();
+        let name = names
+            .get(ui.write_recipient)
+            .map(|s| s.as_str())
+            .unwrap_or("???");
+        body_text.0 = format!("To: {name}   (Up/Down to change)\n\n{}_", ui.write_text);
+        hint_text.0 = "[Enter] send   [Esc] cancel".to_string();
     } else {
         *list_vis = Visibility::Visible;
         *body_vis = Visibility::Hidden;
@@ -633,20 +621,22 @@ fn refresh_mail_ui(
         for (i, letter) in mailbox.letters.iter().enumerate() {
             let marker = if i == ui.selected { ">" } else { " " };
             let flag = if letter.read { "    " } else { "NEW " };
-            s.push_str(&format!("{marker} [{flag}] {} — {}\n", letter.sender, letter.subject));
+            s.push_str(&format!(
+                "{marker} [{flag}] {} — {}\n",
+                letter.sender, letter.subject
+            ));
         }
         if mailbox.letters.is_empty() {
             s.push_str("(no letters yet)\n");
         }
-        list_text.sections[0].value = s;
-        hint_text.sections[0].value =
-            "[Up/Down] select   [Enter] read   [N] write   [Esc] close".to_string();
+        list_text.0 = s;
+        hint_text.0 = "[Up/Down] select   [Enter] read   [N] write   [Esc] close".to_string();
     }
 }
 
 /// After talking to a villager, there's a small chance they send a letter.
 fn on_talk_maybe_letter(
-    mut events: EventReader<TalkEvent>,
+    mut events: MessageReader<TalkEvent>,
     villagers: Query<&Villager>,
     mut mailbox: ResMut<Mailbox>,
     mut rng: ResMut<MailRng>,
