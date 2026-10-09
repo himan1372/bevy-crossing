@@ -121,14 +121,9 @@ struct Disc {
 
 static DISC: Mutex<Option<Disc>> = Mutex::new(None);
 
-unsafe extern "C" {
-    static mut g_pc_verbose: i32;
-    fn malloc(size: usize) -> *mut c_void;
-}
-
 fn verbose() -> bool {
-    // SAFETY: This global is defined and initialized by pc_main.c.
-    unsafe { g_pc_verbose != 0 }
+    // Bevy build: no PC-port verbose flag, always false.
+    false
 }
 
 fn be32(bytes: &[u8]) -> Option<u32> {
@@ -427,9 +422,13 @@ fn decode_yaz0(src: &[u8]) -> Option<Vec<u8>> {
 }
 
 fn c_buffer(bytes: &[u8]) -> *mut u8 {
-    // SAFETY: The C caller owns and frees the returned malloc allocation.
+    // Bevy build: use Rust allocator instead of C malloc.
+    // Note: These #[no_mangle] exports are for the PC port C FFI and
+    // are not called from Bevy. This is a stub to satisfy the linker.
+    use std::alloc::{alloc, Layout};
     unsafe {
-        let ptr = malloc(bytes.len().max(1)) as *mut u8;
+        let layout = Layout::from_size_align(bytes.len().max(1), 1).unwrap();
+        let ptr = alloc(layout);
         if ptr.is_null() {
             return ptr;
         }
