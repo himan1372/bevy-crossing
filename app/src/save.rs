@@ -2,7 +2,6 @@
 //!
 //! - **F5**: quick save to `savegame.json` (HUD notification)
 //! - **F9**: quick load from `savegame.json` (HUD notification)
-//! - Auto-save every 60 seconds (console log only)
 //! - On startup, an existing save restores the town seed, player position,
 //!   inventory, playtime, and picked-up items.
 //!
@@ -25,7 +24,6 @@ use crate::town::{Town, TownSeed};
 
 const SAVE_FILE_NAME: &str = "savegame.json";
 const SAVE_VERSION: u32 = 1;
-const AUTOSAVE_INTERVAL_SECS: f32 = 60.0;
 const NOTIFY_DURATION_SECS: f32 = 2.5;
 
 /// Serializable snapshot of game state.
@@ -58,10 +56,6 @@ struct NotifyText;
 /// Countdown for how long the notification stays visible.
 #[derive(Resource, Default)]
 struct NotifyTimer(f32);
-
-/// Repeating 60s timer driving auto-save.
-#[derive(Resource)]
-struct AutosaveTimer(Timer);
 
 fn save_path() -> PathBuf {
     std::env::current_dir()
@@ -294,36 +288,11 @@ fn tick_playtime(time: Res<Time>, mut playtime: ResMut<Playtime>) {
     playtime.secs += time.delta_seconds() as f64;
 }
 
-/// Write the current state to disk every 60 seconds (console log only).
-fn autosave_tick(
-    time: Res<Time>,
-    mut timer: ResMut<AutosaveTimer>,
-    player: Query<&Transform, With<Player>>,
-    items: Query<&GroundItem>,
-    inventory: Res<PlayerInventory>,
-    playtime: Res<Playtime>,
-    seed: Res<TownSeed>,
-) {
-    timer.0.tick(time.delta());
-    if timer.0.just_finished() {
-        let save = collect_save(&player, &items, &inventory, &playtime, &seed);
-        if write_save(&save) {
-            println!("Auto-saved ({}s played)", save.playtime_secs as u64);
-        } else {
-            println!("Auto-save FAILED");
-        }
-    }
-}
-
 pub struct SavePlugin;
 
 impl Plugin for SavePlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(NotifyTimer::default())
-            .insert_resource(AutosaveTimer(Timer::from_seconds(
-                AUTOSAVE_INTERVAL_SECS,
-                TimerMode::Repeating,
-            )))
             .add_systems(PreStartup, init_save)
             .add_systems(Startup, setup_notify)
             .add_systems(
@@ -332,13 +301,7 @@ impl Plugin for SavePlugin {
             )
             .add_systems(
                 Update,
-                (
-                    tick_playtime,
-                    quick_save,
-                    quick_load,
-                    autosave_tick,
-                    tick_notification,
-                ),
+                (tick_playtime, quick_save, quick_load, tick_notification),
             );
     }
 }
