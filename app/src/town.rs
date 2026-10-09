@@ -16,6 +16,16 @@ const EDGE_W: u8 = 8;
 /// Half-width of the river band in cells (band is 4 cells wide, centered on cell 8).
 const RIVER_HALF_WIDTH: usize = 2;
 
+/// Deterministic 0/1 shade jitter for an acre index, so the grass
+/// checkerboard has slight organic variation instead of a perfect pattern.
+fn acre_jitter(acre_idx: usize) -> usize {
+    let mut x = (acre_idx as u32).wrapping_mul(0x9E3779B9).wrapping_add(0x85EBCA6B);
+    x ^= x >> 16;
+    x = x.wrapping_mul(0x85EBCA6B);
+    x ^= x >> 13;
+    (x % 2) as usize
+}
+
 /// Resource holding the generated town layout.
 #[derive(Resource)]
 pub struct Town {
@@ -253,7 +263,15 @@ pub fn render_town(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let ground_mat = materials.add(Color::srgb(0.35, 0.7, 0.35));
+    // Grass: two complementary greens in an acre-level checkerboard (like the
+    // retail games), each with a subtle deterministic shade variant so the
+    // town doesn't look perfectly uniform. Four materials, zero extra meshes.
+    let grass_mats = [
+        materials.add(Color::srgb(0.36, 0.72, 0.34)), // light
+        materials.add(Color::srgb(0.33, 0.69, 0.31)), // light, slightly muted
+        materials.add(Color::srgb(0.30, 0.65, 0.29)), // dark
+        materials.add(Color::srgb(0.28, 0.62, 0.27)), // dark, slightly muted
+    ];
     let water_mat = materials.add(Color::srgb(0.22, 0.5, 0.88));
     let tree_trunk_mat = materials.add(Color::srgb(0.4, 0.25, 0.15));
     let tree_leaf_mat = materials.add(Color::srgb(0.2, 0.6, 0.25));
@@ -279,9 +297,15 @@ pub fn render_town(
             let wx = (ax as f32 * ACRE_SIZE) + ACRE_SIZE / 2.0 - (ACRE_WIDTH as f32 * ACRE_SIZE) / 2.0;
             let wz = (az as f32 * ACRE_SIZE) + ACRE_SIZE / 2.0 - (ACRE_DEPTH as f32 * ACRE_SIZE) / 2.0;
 
+            // Checkerboard grass: alternate light/dark acres, with a deterministic
+            // per-acre shade jitter for a less artificial look.
+            let checker = (ax + az) % 2;
+            let jitter = acre_jitter(acre_idx);
+            let grass_mat = grass_mats[checker * 2 + jitter].clone();
+
             commands.spawn(PbrBundle {
                 mesh: ground_mesh.clone(),
-                material: ground_mat.clone(),
+                material: grass_mat,
                 transform: Transform::from_xyz(wx, 0.0, wz),
                 ..default()
             });
