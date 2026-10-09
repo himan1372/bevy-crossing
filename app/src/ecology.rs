@@ -21,6 +21,7 @@ use rustimal_logic::species::{self, FishArea, FishType, InsectArea, InsectType};
 use rustimal_logic::town_gen::{ACRE_WIDTH, CellKind};
 
 use crate::dialogue::DialogueState;
+use crate::house::HouseState;
 use crate::interaction::{Facing, PlayerInventory};
 use crate::player::Player;
 use crate::town::Town;
@@ -520,6 +521,7 @@ fn tool_select(keyboard: Res<ButtonInput<KeyCode>>, mut tool: ResMut<EquippedToo
 #[allow(clippy::too_many_arguments)]
 fn tool_interact(
     keyboard: Res<ButtonInput<KeyCode>>,
+    state: Res<State<HouseState>>,
     tool: Res<EquippedTool>,
     dialogue: Res<DialogueState>,
     mut commands: Commands,
@@ -534,6 +536,10 @@ fn tool_interact(
     mut notify_timer: ResMut<CatchNotifyTimer>,
     mut notify_query: Query<&mut Text, With<CatchNotifyText>>,
 ) {
+    // Inside the house, E belongs to the house doors.
+    if *state != HouseState::Town {
+        return;
+    }
     if *tool == EquippedTool::None || dialogue.active {
         return;
     }

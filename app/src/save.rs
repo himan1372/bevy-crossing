@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
+use crate::house::{HouseState, ReturnPosition};
 use crate::interaction::{spawn_ground_item, GroundItem, PlayerInventory, ITEM_SPOTS};
 use crate::player::Player;
 use crate::town::{Town, TownSeed};
@@ -142,17 +143,28 @@ fn apply_loaded_inventory(loaded: Res<LoadedSave>, mut inventory: ResMut<PlayerI
 }
 
 /// Gather the current game state into a `SaveData`.
+///
+/// If the player is inside the house, the saved position is the town-map
+/// spot they entered from (interior coordinates are meaningless on load).
 fn collect_save(
     player: &Query<&Transform, With<Player>>,
     items: &Query<&GroundItem>,
     inventory: &PlayerInventory,
     playtime: &Playtime,
     seed: &TownSeed,
+    house_state: &State<HouseState>,
+    return_pos: Option<&ReturnPosition>,
 ) -> SaveData {
-    let player_pos = player
-        .get_single()
-        .map(|t| t.translation.to_array())
-        .unwrap_or([0.0, 1.0, 0.0]);
+    let player_pos = if *house_state == HouseState::Inside {
+        return_pos
+            .map(|r| r.0.to_array())
+            .unwrap_or([0.0, 1.0, 0.0])
+    } else {
+        player
+            .get_single()
+            .map(|t| t.translation.to_array())
+            .unwrap_or([0.0, 1.0, 0.0])
+    };
     let remaining: Vec<usize> = items.iter().map(|i| i.index).collect();
     let picked_items: Vec<usize> = (0..ITEM_SPOTS.len())
         .filter(|i| !remaining.contains(i))
@@ -232,13 +244,23 @@ fn quick_save(
     inventory: Res<PlayerInventory>,
     playtime: Res<Playtime>,
     seed: Res<TownSeed>,
+    house_state: Res<State<HouseState>>,
+    return_pos: Option<Res<ReturnPosition>>,
     mut timer: ResMut<NotifyTimer>,
     notify_query: Query<&mut Text, With<NotifyText>>,
 ) {
     if !keyboard.just_pressed(KeyCode::F5) {
         return;
     }
-    let save = collect_save(&player, &items, &inventory, &playtime, &seed);
+    let save = collect_save(
+        &player,
+        &items,
+        &inventory,
+        &playtime,
+        &seed,
+        &house_state,
+        return_pos.as_deref(),
+    );
     if write_save(&save) {
         println!("Saved to {}", save_path().display());
         show_notification("Saved!", &mut timer, notify_query);
@@ -260,6 +282,7 @@ fn quick_load(
     items_query: Query<Entity, With<GroundItem>>,
     mut inventory: ResMut<PlayerInventory>,
     mut playtime: ResMut<Playtime>,
+    mut next_house: ResMut<NextState<HouseState>>,
     mut timer: ResMut<NotifyTimer>,
     notify_query: Query<&mut Text, With<NotifyText>>,
 ) {
@@ -274,6 +297,8 @@ fn quick_load(
     if let Ok(mut transform) = player_query.get_single_mut() {
         transform.translation = Vec3::from_array(save.player_pos);
     }
+    // Loading always drops the player back on the town map.
+    next_house.set(HouseState::Town);
     inventory.bells = save.bells;
     inventory.fruit = save.fruit;
     inventory.fish = save.fish;

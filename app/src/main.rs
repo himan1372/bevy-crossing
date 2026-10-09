@@ -7,6 +7,7 @@ mod interaction;
 mod dialogue;
 mod save;
 mod ecology;
+mod house;
 
 use town::TownPlugin;
 use player::PlayerPlugin;
@@ -15,6 +16,7 @@ use interaction::InteractionPlugin;
 use dialogue::DialoguePlugin;
 use save::SavePlugin;
 use ecology::EcologyPlugin;
+use house::HousePlugin;
 
 fn main() {
     App::new()
@@ -26,6 +28,7 @@ fn main() {
         .add_plugins(InteractionPlugin)
         .add_plugins(DialoguePlugin)
         .add_plugins(EcologyPlugin)
+        .add_plugins(HousePlugin)
         .add_systems(Startup, setup_light)
         .run();
 }

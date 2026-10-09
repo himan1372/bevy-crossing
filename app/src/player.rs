@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use crate::house::HouseState;
 use crate::town::Town;
 
 /// Player marker component.
@@ -37,13 +38,18 @@ pub fn spawn_player(
     println!("Player and camera spawned");
 }
 
-/// Handle WASD movement with collision.
+/// Handle WASD movement with collision. Stands down inside the house
+/// (see `house::interior_movement`).
 pub fn player_movement(
     keyboard: Res<ButtonInput<KeyCode>>,
+    state: Res<State<HouseState>>,
     mut player_query: Query<&mut Transform, With<Player>>,
     town: Res<Town>,
     time: Res<Time>,
 ) {
+    if *state != HouseState::Town {
+        return;
+    }
     let Ok(mut transform) = player_query.get_single_mut() else {
         return;
     };
@@ -104,7 +110,12 @@ pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_player)
-            .add_systems(Update, (player_movement, camera_follow));
+        app.add_systems(Startup, spawn_player).add_systems(
+            Update,
+            (
+                player_movement,
+                camera_follow,
+            ),
+        );
     }
 }

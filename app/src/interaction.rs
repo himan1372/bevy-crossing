@@ -8,6 +8,7 @@
 use bevy::prelude::*;
 
 use crate::dialogue::DialogueState;
+use crate::house::HouseState;
 use crate::npc::Villager;
 use crate::player::Player;
 use crate::town::Town;
@@ -59,7 +60,7 @@ pub struct TalkEvent {
 #[derive(Component)]
 pub struct Facing {
     pub dir: Vec3,
-    last_pos: Vec3,
+    pub(crate) last_pos: Vec3,
     initialized: bool,
 }
 
@@ -164,6 +165,7 @@ pub fn track_player_facing(
 /// this system stands down and lets the ecology plugin handle the E press.
 pub fn interact(
     keyboard: Res<ButtonInput<KeyCode>>,
+    state: Res<State<HouseState>>,
     dialogue: Res<DialogueState>,
     tool: Res<crate::ecology::EquippedTool>,
     mut talk_events: EventWriter<TalkEvent>,
@@ -173,6 +175,10 @@ pub fn interact(
     items: Query<(Entity, &GroundItem, &Transform), Without<Player>>,
     mut inventory: ResMut<PlayerInventory>,
 ) {
+    // Inside the house, E belongs to the house doors.
+    if *state != HouseState::Town {
+        return;
+    }
     if !keyboard.just_pressed(KeyCode::KeyE) || dialogue.active {
         return;
     }
@@ -238,6 +244,11 @@ impl Plugin for InteractionPlugin {
         app.insert_resource(PlayerInventory::default())
             .add_event::<TalkEvent>()
             .add_systems(Startup, spawn_items.after(crate::town::generate_town))
-            .add_systems(Update, (track_player_facing, interact).chain());
+            .add_systems(
+                Update,
+                (track_player_facing, interact)
+                    .chain()
+                    .after(crate::house::HouseInputSet),
+            );
     }
 }
