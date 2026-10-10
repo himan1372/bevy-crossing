@@ -30,7 +30,8 @@ the target-directory lock.
 
 ## Edition and MSRV
 
-- This project uses **edition 2024**. Check `Cargo.toml` for the
+- This project targets **edition 2024** (check `Cargo.toml` — if it still says
+  2021, the upgrade is pending; write new code to 2024 idioms anyway). Check
   `rust-version` (MSRV) field and read the number there — do not assume your
   local toolchain's version. A language feature stabilized after the MSRV
   does not exist for this project, however new your installed Rust is.
