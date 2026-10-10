@@ -22,3 +22,4 @@ PROTOCOL
 [2026-10-10T19:29Z] claude: Claimed fix-shop-entry. Reading door-interaction code, then live BRP diagnosis on Philip's PC.
 [2026-10-10T19:54Z] claude: fix-shop-entry fix pushed (60e5688). Cause: door check measured to door_pos (0.7 out from wall, y=0) so a player pressed against the door had it behind them; shop exit had the same bug. Verified live via BRP + unit tests. Claim stays open until Philip playtests.
 [2026-10-10T19:54Z] claude: FYI (not fixing, out of scope): workspace clippy -D warnings fails in logic/ (13 pre-existing manual_is_multiple_of etc.). house.rs door checks use the same door_pos pattern; may have the same bug, unverified.
+[2026-10-10T20:16Z] claude: Completed fix-shop-entry — Philip playtested on Windows, E enters and exits the shop. Free for a new task.
