@@ -1,5 +1,7 @@
 use crate::house::HouseState;
 use crate::input::{Actions, InputFocus};
+use crate::interaction::Facing;
+use crate::locomotion::{self, Locomotion};
 use crate::states::GameplaySet;
 use crate::town::Town;
 use bevy::prelude::*;
@@ -7,9 +9,6 @@ use bevy::prelude::*;
 /// Player marker component.
 #[derive(Component)]
 pub struct Player;
-
-/// Movement speed in units per second.
-const PLAYER_SPEED: f32 = 5.0;
 
 /// Spawn the player and camera.
 pub fn spawn_player(
@@ -22,6 +21,8 @@ pub fn spawn_player(
 
     commands.spawn((
         Player,
+        Facing::default(),
+        Locomotion::default(),
         Mesh3d(player_mesh),
         MeshMaterial3d(player_mat),
         Transform::from_xyz(0.0, 1.0, 0.0),
@@ -45,7 +46,7 @@ pub fn player_movement(
     state: Res<State<HouseState>>,
     shop_loc: Res<State<crate::shop::ShopLocation>>,
     shop_building: Option<Res<crate::shop::ShopBuilding>>,
-    mut player_query: Query<&mut Transform, With<Player>>,
+    mut player_query: Query<(&mut Transform, &mut Facing, &mut Locomotion), With<Player>>,
     town: Res<Town>,
     time: Res<Time>,
 ) {
@@ -55,16 +56,12 @@ pub fn player_movement(
     if !focus.is_world() {
         return;
     }
-    let Ok(mut transform) = player_query.single_mut() else {
+    let Ok((mut transform, mut facing, mut loco)) = player_query.single_mut() else {
         return;
     };
 
-    let mut direction = actions.move_dir();
-
-    if direction.length() > 0.0 {
-        direction = direction.normalize();
-        let movement = direction * PLAYER_SPEED * time.delta().as_secs_f32();
-
+    let movement = locomotion::step(&actions, time.delta().as_secs_f32(), &mut facing, &mut loco);
+    if movement != Vec3::ZERO {
         let blocked = |x: f32, z: f32| {
             shop_building
                 .as_ref()

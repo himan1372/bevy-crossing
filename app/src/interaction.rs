@@ -60,12 +60,53 @@ pub struct TalkEvent {
     pub villager: Entity,
 }
 
-/// Player's facing direction, tracked from movement.
+/// Player's facing direction on the ground plane. Set by
+/// [`crate::locomotion::step`] while moving, and by doors on teleport.
 #[derive(Component)]
 pub struct Facing {
     pub dir: Vec3,
-    pub(crate) last_pos: Vec3,
-    initialized: bool,
+}
+
+impl Default for Facing {
+    fn default() -> Self {
+        Self {
+            dir: Vec3::new(0.0, 0.0, -1.0),
+        }
+    }
+}
+
+/// A door panel in a wall running along x: centred on `center_x`,
+/// `half_w` wide each way, with `face_z` the wall face the player stands at
+/// and `into_z` (+1 or -1) the z direction from the player into the door.
+pub struct DoorPanel {
+    pub center_x: f32,
+    pub half_w: f32,
+    pub face_z: f32,
+    pub into_z: f32,
+}
+
+/// How far behind the wall face the door is measured to, so a player pressed
+/// right against the face still has a clear direction to it.
+const DOOR_DEPTH: f32 = 0.1;
+
+impl DoorPanel {
+    /// True when a player at `pos` is within `range` of the panel and facing
+    /// it (cosine at least `min_dot`). Measured on the ground plane to the
+    /// nearest point of the panel, so standing anywhere along the door works
+    /// and turning arcs (see `locomotion`) don't leave you "beside" it.
+    pub fn faced_by(&self, pos: Vec3, facing_dir: Vec3, range: f32, min_dot: f32) -> bool {
+        let x = pos
+            .x
+            .clamp(self.center_x - self.half_w, self.center_x + self.half_w);
+        let z = self.face_z + self.into_z * DOOR_DEPTH;
+        let to_door = Vec3::new(x - pos.x, 0.0, z - pos.z);
+        let dist = to_door.length();
+        if dist > range || dist < 0.001 {
+            return false;
+        }
+        let facing = Vec3::new(facing_dir.x, 0.0, facing_dir.z).normalize_or_zero();
+        facing.dot(to_door / dist) >= min_dot
+    }
 }
 
 const INTERACT_RANGE_VILLAGER: f32 = 4.0;
@@ -134,37 +175,6 @@ fn spawn_items(
         );
     }
     println!("Ground items spawned");
-}
-
-/// Track which way the player is facing from their movement.
-pub fn track_player_facing(
-    mut commands: Commands,
-    player_query: Query<(Entity, &Transform), With<Player>>,
-    mut facing_query: Query<&mut Facing>,
-) {
-    let Ok((entity, transform)) = player_query.single() else {
-        return;
-    };
-    let pos = transform.translation;
-
-    if let Ok(mut facing) = facing_query.single_mut() {
-        if !facing.initialized {
-            facing.last_pos = pos;
-            facing.initialized = true;
-            return;
-        }
-        let delta = pos - facing.last_pos;
-        if delta.length() > 0.01 {
-            facing.dir = Vec3::new(delta.x, 0.0, delta.z).normalize();
-            facing.last_pos = pos;
-        }
-    } else {
-        commands.entity(entity).insert(Facing {
-            dir: Vec3::new(0.0, 0.0, -1.0),
-            last_pos: pos,
-            initialized: false,
-        });
-    }
 }
 
 /// E key: talk to the nearest faced villager, else pick up the nearest item.
@@ -262,13 +272,39 @@ impl Plugin for InteractionPlugin {
             .add_systems(Startup, spawn_items.after(crate::town::generate_town))
             .add_systems(
                 Update,
-                track_player_facing
-                    .before(InteractSet::Doors)
-                    .in_set(GameplaySet),
-            )
-            .add_systems(
-                Update,
                 interact.in_set(InteractSet::Talk).in_set(GameplaySet),
             );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An interior door on a south wall at z = 4.8, player inside (north).
+    fn interior_door() -> DoorPanel {
+        DoorPanel {
+            center_x: 0.0,
+            half_w: 0.7,
+            face_z: 4.8,
+            into_z: 1.0,
+        }
+    }
+
+    #[test]
+    fn door_after_turning_arc_still_counts() {
+        // Turning 180° to face the door arcs the player ~1.3 to the side.
+        assert!(interior_door().faced_by(Vec3::new(-1.3, 1.0, 4.2), Vec3::Z, 2.6, 0.5));
+    }
+
+    #[test]
+    fn door_flush_against_face_counts() {
+        assert!(interior_door().faced_by(Vec3::new(0.0, 1.0, 4.8), Vec3::Z, 2.6, 0.5));
+    }
+
+    #[test]
+    fn door_rejects_facing_away_or_far() {
+        assert!(!interior_door().faced_by(Vec3::new(0.0, 1.0, 4.2), -Vec3::Z, 2.6, 0.5));
+        assert!(!interior_door().faced_by(Vec3::new(0.0, 1.0, 0.0), Vec3::Z, 2.6, 0.5));
     }
 }

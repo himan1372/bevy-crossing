@@ -17,7 +17,8 @@ use rustimal_logic::town_gen::{CellKind, Feature, ACRE_DEPTH, ACRE_WIDTH};
 
 use crate::ecology::EquippedTool;
 use crate::input::{Action, Actions, InputFocus, InteractSet};
-use crate::interaction::Facing;
+use crate::interaction::{DoorPanel, Facing};
+use crate::locomotion::{self, Locomotion};
 use crate::player::Player;
 use crate::states::{AppState, GameplaySet};
 use crate::town::Town;
@@ -61,12 +62,13 @@ const INTERIOR_ORIGIN: Vec3 = Vec3::new(3000.0, 0.0, 3000.0);
 /// How far the player may walk from the room center.
 const WALK_HALF: f32 = 3.3;
 const PLAYER_RADIUS: f32 = 0.4;
-const PLAYER_SPEED: f32 = 5.0;
 const DOOR_RANGE_OUT: f32 = 3.2;
 const DOOR_RANGE_IN: f32 = 2.6;
 /// Interior door z offset from the origin: inner face of the south wall
 /// (wall centre +4.0, thickness 0.4).
 const INTERIOR_DOOR_Z: f32 = 3.8;
+/// Half the interior door panel's width (panel is 1.4 wide).
+const INTERIOR_DOOR_HALF_W: f32 = 0.7;
 const DOOR_DOT: f32 = 0.6;
 
 /// Find the player's house from the town plan and record its door position.
@@ -290,7 +292,6 @@ fn house_enter(
     commands.insert_resource(ReturnPosition(transform.translation));
     transform.translation = INTERIOR_ORIGIN + Vec3::new(0.0, 1.0, 2.6);
     facing.dir = Vec3::new(0.0, 0.0, -1.0);
-    facing.last_pos = transform.translation;
     next_state.set(HouseState::Inside);
     println!("Entered house");
 }
@@ -313,25 +314,21 @@ fn house_exit(
     let Ok((mut transform, mut facing)) = player_query.single_mut() else {
         return;
     };
-    // Inner face of the south wall, at the player's height. The old target
-    // (+3.0, floor level) sat inside the walk bound (WALK_HALF) and below the
-    // player, so standing at the door put it behind/beneath them.
-    let door = Vec3::new(
-        INTERIOR_ORIGIN.x,
-        transform.translation.y,
-        INTERIOR_ORIGIN.z + INTERIOR_DOOR_Z,
-    );
-    let to_door = door - transform.translation;
-    let dist = to_door.length();
-    if dist > DOOR_RANGE_IN || dist < 0.001 {
-        return;
-    }
-    if facing.dir.dot(to_door / dist) < 0.5 || !actions.consume(Action::Interact) {
+    // The door panel on the inner face of the south wall. (The old target,
+    // +3.0 at floor level, sat inside the walk bound and below the player.)
+    let door = DoorPanel {
+        center_x: INTERIOR_ORIGIN.x,
+        half_w: INTERIOR_DOOR_HALF_W,
+        face_z: INTERIOR_ORIGIN.z + INTERIOR_DOOR_Z,
+        into_z: 1.0,
+    };
+    if !door.faced_by(transform.translation, facing.dir, DOOR_RANGE_IN, 0.5)
+        || !actions.consume(Action::Interact)
+    {
         return;
     }
     transform.translation = return_pos.map(|r| r.0).unwrap_or(Vec3::new(0.0, 1.0, 5.0));
     facing.dir = Vec3::new(0.0, 0.0, 1.0);
-    facing.last_pos = transform.translation;
     next_state.set(HouseState::Town);
     println!("Left house");
 }
@@ -341,23 +338,19 @@ fn interior_movement(
     actions: Res<Actions>,
     focus: Res<InputFocus>,
     state: Res<State<HouseState>>,
-    mut player_query: Query<(&mut Transform, &mut Facing), With<Player>>,
+    mut player_query: Query<(&mut Transform, &mut Facing, &mut Locomotion), With<Player>>,
     obstacles: Res<InteriorObstacles>,
     time: Res<Time>,
 ) {
     if *state != HouseState::Inside || !focus.is_world() {
         return;
     }
-    let Ok((mut transform, mut facing)) = player_query.single_mut() else {
+    let Ok((mut transform, mut facing, mut loco)) = player_query.single_mut() else {
         return;
     };
 
-    let mut direction = actions.move_dir();
-
-    if direction.length() > 0.0 {
-        direction = direction.normalize();
-        let movement = direction * PLAYER_SPEED * time.delta().as_secs_f32();
-
+    let movement = locomotion::step(&actions, time.delta().as_secs_f32(), &mut facing, &mut loco);
+    if movement != Vec3::ZERO {
         let nx = transform.translation.x + movement.x;
         if (nx - INTERIOR_ORIGIN.x).abs() <= WALK_HALF
             && !hits_obstacle(nx, transform.translation.z, &obstacles)
@@ -370,8 +363,6 @@ fn interior_movement(
         {
             transform.translation.z = nz;
         }
-        facing.dir = Vec3::new(direction.x, 0.0, direction.z);
-        facing.last_pos = transform.translation;
     }
 }
 

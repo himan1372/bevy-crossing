@@ -20,7 +20,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::ecology::EquippedTool;
 use crate::input::{Action, Actions, InputFocus, InteractSet};
-use crate::interaction::{Facing, PlayerInventory};
+use crate::interaction::{DoorPanel, Facing, PlayerInventory};
+use crate::locomotion::{self, Locomotion};
 use crate::player::Player;
 use crate::states::{AppState, GameplaySet};
 use crate::town::Town;
@@ -166,13 +167,14 @@ const DOOR_DOT: f32 = 0.6;
 const DOOR_HALF_W: f32 = 0.6;
 /// Interior door z offset from the origin: inner face of the south wall.
 const INTERIOR_DOOR_Z: f32 = 4.8;
+/// Half the interior door panel's width (panel is 1.4 wide).
+const INTERIOR_DOOR_HALF_W: f32 = 0.7;
 const NOOK_RANGE: f32 = 3.5;
 const NOOK_DOT: f32 = 0.5;
 /// Interior walk bounds (half-extents from the origin).
 const SHOP_WALK_X: f32 = 5.2;
 const SHOP_WALK_Z: f32 = 4.2;
 const PLAYER_RADIUS: f32 = 0.4;
-const PLAYER_SPEED: f32 = 5.0;
 /// What Nook pays per unit.
 const FRUIT_SELL: u32 = 100;
 const FISH_SELL: u32 = 250;
@@ -513,17 +515,13 @@ fn apply_loaded_shop(
 /// y = 0, so measuring to it rejected a player pressed against the door: the
 /// point was beside/behind them and the 1-unit height gap skewed the dot.
 fn can_enter_door(building: &ShopBuilding, pos: Vec3, facing_dir: Vec3) -> bool {
-    let door_x = pos.x.clamp(
-        building.door_pos.x - DOOR_HALF_W,
-        building.door_pos.x + DOOR_HALF_W,
-    );
-    let to_door = Vec3::new(door_x - pos.x, 0.0, building.max_z - pos.z);
-    let dist = to_door.length();
-    if dist > DOOR_RANGE_OUT || dist < 0.001 {
-        return false;
+    DoorPanel {
+        center_x: building.door_pos.x,
+        half_w: DOOR_HALF_W,
+        face_z: building.max_z,
+        into_z: -1.0,
     }
-    let facing = Vec3::new(facing_dir.x, 0.0, facing_dir.z).normalize_or_zero();
-    facing.dot(to_door / dist) >= DOOR_DOT
+    .faced_by(pos, facing_dir, DOOR_RANGE_OUT, DOOR_DOT)
 }
 
 /// E at the exterior shop door: teleport into the interior.
@@ -565,7 +563,6 @@ fn shop_enter(
     commands.insert_resource(ShopReturnPos(transform.translation));
     transform.translation = SHOP_ORIGIN + Vec3::new(0.0, 1.0, 3.4);
     facing.dir = Vec3::new(0.0, 0.0, -1.0);
-    facing.last_pos = transform.translation;
     next_state.set(ShopLocation::Inside);
     println!("Entered the shop");
 }
@@ -589,25 +586,20 @@ fn shop_exit(
     let Ok((mut transform, mut facing)) = player_query.single_mut() else {
         return;
     };
-    // Inner face of the south wall, at the player's height: the walk bound
-    // (SHOP_WALK_Z) lets the player step past a point any closer than this,
-    // which put the door behind them when pressed against it.
-    let door = Vec3::new(
-        SHOP_ORIGIN.x,
-        transform.translation.y,
-        SHOP_ORIGIN.z + INTERIOR_DOOR_Z,
-    );
-    let to_door = door - transform.translation;
-    let dist = to_door.length();
-    if dist > DOOR_RANGE_IN || dist < 0.001 {
-        return;
-    }
-    if facing.dir.dot(to_door / dist) < 0.5 || !actions.consume(Action::Interact) {
+    // The door panel on the inner face of the south wall.
+    let door = DoorPanel {
+        center_x: SHOP_ORIGIN.x,
+        half_w: INTERIOR_DOOR_HALF_W,
+        face_z: SHOP_ORIGIN.z + INTERIOR_DOOR_Z,
+        into_z: 1.0,
+    };
+    if !door.faced_by(transform.translation, facing.dir, DOOR_RANGE_IN, 0.5)
+        || !actions.consume(Action::Interact)
+    {
         return;
     }
     transform.translation = return_pos.map(|r| r.0).unwrap_or(Vec3::new(0.0, 1.0, 5.0));
     facing.dir = Vec3::new(0.0, 0.0, 1.0);
-    facing.last_pos = transform.translation;
     next_state.set(ShopLocation::Town);
     println!("Left the shop");
 }
@@ -876,23 +868,19 @@ fn shop_interior_movement(
     actions: Res<Actions>,
     focus: Res<InputFocus>,
     state: Res<State<ShopLocation>>,
-    mut player_query: Query<(&mut Transform, &mut Facing), With<Player>>,
+    mut player_query: Query<(&mut Transform, &mut Facing, &mut Locomotion), With<Player>>,
     obstacles: Res<ShopObstacles>,
     time: Res<Time>,
 ) {
     if *state != ShopLocation::Inside || !focus.is_world() {
         return;
     }
-    let Ok((mut transform, mut facing)) = player_query.single_mut() else {
+    let Ok((mut transform, mut facing, mut loco)) = player_query.single_mut() else {
         return;
     };
 
-    let mut direction = actions.move_dir();
-
-    if direction.length() > 0.0 {
-        direction = direction.normalize();
-        let movement = direction * PLAYER_SPEED * time.delta().as_secs_f32();
-
+    let movement = locomotion::step(&actions, time.delta().as_secs_f32(), &mut facing, &mut loco);
+    if movement != Vec3::ZERO {
         let nx = transform.translation.x + movement.x;
         if (nx - SHOP_ORIGIN.x).abs() <= SHOP_WALK_X
             && !hits_obstacle(nx, transform.translation.z, &obstacles)
@@ -905,8 +893,6 @@ fn shop_interior_movement(
         {
             transform.translation.z = nz;
         }
-        facing.dir = Vec3::new(direction.x, 0.0, direction.z);
-        facing.last_pos = transform.translation;
     }
 }
 
@@ -996,6 +982,13 @@ mod tests {
         assert!(can_enter_door(
             &building(),
             Vec3::new(-3.5, 1.0, 2.04),
+            NORTH
+        ));
+        // Flush against the face (seen live once movement followed the
+        // smoothed facing): must still count.
+        assert!(can_enter_door(
+            &building(),
+            Vec3::new(-3.5, 1.0, 2.0007),
             NORTH
         ));
     }

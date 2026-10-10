@@ -9,6 +9,7 @@ mod ecology;
 mod house;
 mod input;
 mod interaction;
+mod locomotion;
 mod mail;
 mod npc;
 mod player;

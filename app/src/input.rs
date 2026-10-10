@@ -26,6 +26,8 @@ pub enum Action {
     MoveDown,
     MoveLeft,
     MoveRight,
+    /// Hold to run instead of walk.
+    Run,
     /// Doors, mailbox, talk, pick up, use tool.
     Interact,
     /// Advance dialogue (E also advances, via `Interact`).
@@ -71,6 +73,7 @@ impl Default for KeyBindings {
             (MoveDown, vec![K::KeyS, K::ArrowDown]),
             (MoveLeft, vec![K::KeyA, K::ArrowLeft]),
             (MoveRight, vec![K::KeyD, K::ArrowRight]),
+            (Run, vec![K::ShiftLeft, K::ShiftRight]),
             (Interact, vec![K::KeyE]),
             (Advance, vec![K::Space]),
             (Tool1, vec![K::Digit1]),
