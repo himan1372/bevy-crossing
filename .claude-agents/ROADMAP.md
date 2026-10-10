@@ -46,12 +46,12 @@ Each milestone ends with a Philip playtest.
 
 ### M0 — Decisions and foundations
 - [x] **slice-scope** — Philip set the scope above (2026-10-10).
-- [ ] **ip-rename** (P) — the shop uses Nintendo names (Tom Nook, Nook's Cranny, Nook 'n Go, Nookway, Nookington's in `app/src/shop.rs`); villagers Maple, Pippy, Bob, Chief are real Animal Crossing villagers. The project rules say no Nintendo IP, so Philip should pick original names; then a quick find/replace.
+- [ ] **ip-rename** (P, deferred by Philip 2026-10-10: keep names for now) — the shop uses Nintendo names (Tom Nook, Nook's Cranny, Nook 'n Go, Nookway, Nookington's in `app/src/shop.rs`); villagers Maple, Pippy, Bob, Chief are real Animal Crossing villagers. The project rules say no Nintendo IP, so Philip should pick original names; then a quick find/replace.
 - [x] **app-states** — done (claude): `AppState` (Loading / Title / InGame) + `PauseState`; gameplay runs only in game and unpaused; HouseState/ShopLocation are sub-states.
 - [x] **input-actions** — done (claude): one action map, a single input-focus rule, and consumable presses (`app/src/input.rs`).
 - [x] **assets-scaffold** — done (claude): `app/assets/` (models, textures, audio, fonts), loading gate, placeholder fallback.
 - [x] **ci-gate** — done (claude): `.github/workflows/ci.yml` runs the full gate on every push to `main`.
-- [ ] **art-direction** (P) — Philip picks one look (suggestion: low-poly, flat colours, soft outlines) and approves one reference render. [blocks all of M2]
+- [ ] **art-direction** (P) — Philip chose: look similar to Animal Crossing GameCube (soft pastel palette, chunky rounded low-poly, big-headed characters, painterly ground) built from scratch: no game textures or traced assets as reference. Next: one reference render for Philip to approve. [blocks all of M2]
 
 ### M1 — Main loop on the translated code (placeholder art is fine)
 - [ ] **logic-expose** — make the slice modules `pub` in `logic/src/lib.rs`: `player_move`, `inventory`, `item_prefs`, `talk_request`, `talk_topics`, `request_selector`, `npc_ai`, `behavior`, `collision`, `game_time`. Add a small test per module proving the app-facing call works.

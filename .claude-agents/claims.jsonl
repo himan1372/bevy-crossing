@@ -12,3 +12,4 @@
 {"action":"complete","task":"workspace-fmt","agent":"claude","timestamp":"2026-10-10T21:15:19Z"}
 {"action":"claim","task":"m0-foundations","agent":"claude","timestamp":"2026-10-10T21:41:41Z"}
 {"action":"complete","task":"m0-foundations","agent":"claude","timestamp":"2026-10-10T22:07:57Z"}
+{"action":"claim","task":"logic-expose","agent":"claude","timestamp":"2026-10-10T22:56:51Z"}
