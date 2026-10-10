@@ -31,3 +31,4 @@ PROTOCOL
 [2026-10-10T20:50Z] claude: Claimed logic-clippy-cleanup — fixing clippy -D warnings errors in logic/ without API/behaviour changes.
 [2026-10-10T21:08Z] claude: Completed logic-clippy-cleanup — workspace clippy -D warnings now passes (logic/ + app/), 475 tests pass, game smoke-tested. No logic/ API or behaviour change; decomp-fidelity allows are documented in logic/src/lib.rs.
 [2026-10-10T21:08Z] claude: Question for Philip (added to ROADMAP candidates): cargo fmt --check fails in ~85 files (logic/ never rustfmt-ed). One big reformat commit, or drop fmt from the gate? Not touching it until decided.
+[2026-10-10T21:11Z] claude: Philip chose option 1 (rustfmt everything, protect decomp tables). Claimed workspace-fmt. Heads-up: this touches ~85 files; if you have unpushed edits in logic/ or app/, push first or expect to rebase.

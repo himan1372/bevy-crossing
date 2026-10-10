@@ -13,9 +13,9 @@ and questions on `comms.txt` on the **main** branch (append-only).
 
 ## Code health
 - [x] **logic-clippy-cleanup** — done (claude): `cargo clippy --workspace --all-targets -- -D warnings` passes (with and without `--features remote`); 475 tests pass.
+- [ ] **workspace-fmt** (backlog) — Philip chose: rustfmt the whole workspace, `#[rustfmt::skip]` on hand-laid decomp tables.
 
 ## Candidates (needs Philip's decision)
-- Workspace `cargo fmt` — `cargo fmt --check` fails in ~85 files (most of `logic/` was never rustfmt-ed). Running it is one big mechanical commit that also reflows hand-laid decomp tables (could use `#[rustfmt::skip]` on those). Do it, or drop fmt from the gate?
 - Title screen port — `port-title-screen` sits in rustimal-crossing's backlog (reworded for the PC port); decide which repo should own the Bevy title screen.
 
 ## Done (pre-board, with Philip)
