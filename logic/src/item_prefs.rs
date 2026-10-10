@@ -170,11 +170,7 @@ impl IslandFtr {
     /// caller's variant normalizer (models
     /// `aMR_CorrespondFurniture` / `aMR_GetFurnitureUnit`): two items
     /// mapping to the same unit share a slot.
-    pub fn find_slot(
-        &self,
-        item: u16,
-        normalize: &dyn Fn(u16) -> u32,
-    ) -> Option<usize> {
+    pub fn find_slot(&self, item: u16, normalize: &dyn Fn(u16) -> u32) -> Option<usize> {
         let unit = normalize(item);
         (0..ISLAND_FTR_NUM)
             .find(|&i| self.item_list[i] != 0 && normalize(self.item_list[i]) == unit)
@@ -197,7 +193,9 @@ pub extern "C" fn pc_eligible_furniture_count(flags: *const u8) -> u32 {
         return 0;
     }
     let f = unsafe { core::slice::from_raw_parts(flags, HOUSE_SCAN_W * HOUSE_SCAN_H) };
-    f.iter().filter(|&&b| (b & 1) != 0 && ((b >> 1) & 7) == 7).count() as u32
+    f.iter()
+        .filter(|&&b| (b & 1) != 0 && ((b >> 1) & 7) == 7)
+        .count() as u32
 }
 
 #[cfg(test)]

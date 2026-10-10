@@ -420,14 +420,32 @@ mod tests {
     #[test]
     fn scoop_frames() {
         // DIG_SCOOP timeline.
-        assert_eq!(dig_scoop_frame_event(14.0, false), Some(DigEffect::DigHole(0)));
-        assert_eq!(dig_scoop_frame_event(15.0, false), Some(DigEffect::DigHole(1)));
-        assert_eq!(dig_scoop_frame_event(16.0, false), Some(DigEffect::DigHole(2)));
-        assert_eq!(dig_scoop_frame_event(22.0, false), Some(DigEffect::DigScoop(0)));
-        assert_eq!(dig_scoop_frame_event(22.0, true), Some(DigEffect::DigScoop(3)));
+        assert_eq!(
+            dig_scoop_frame_event(14.0, false),
+            Some(DigEffect::DigHole(0))
+        );
+        assert_eq!(
+            dig_scoop_frame_event(15.0, false),
+            Some(DigEffect::DigHole(1))
+        );
+        assert_eq!(
+            dig_scoop_frame_event(16.0, false),
+            Some(DigEffect::DigHole(2))
+        );
+        assert_eq!(
+            dig_scoop_frame_event(22.0, false),
+            Some(DigEffect::DigScoop(0))
+        );
+        assert_eq!(
+            dig_scoop_frame_event(22.0, true),
+            Some(DigEffect::DigScoop(3))
+        );
         assert_eq!(dig_scoop_frame_event(21.0, false), None);
         // Stump variant.
-        assert_eq!(dig_kabu_frame_event(42.0, false), Some(DigEffect::DigScoop(0)));
+        assert_eq!(
+            dig_kabu_frame_event(42.0, false),
+            Some(DigEffect::DigScoop(0))
+        );
         assert_eq!(dig_kabu_frame_event(41.0, false), None);
         // Hole registration.
         assert!(dig_hole_register_frame(20.0, 0.0));
@@ -437,18 +455,42 @@ mod tests {
         assert!((get_scoop_scale(24.0) - 0.0016666666 * 3.0).abs() < 1e-7);
         assert_eq!(get_scoop_scale(27.0), 0.01);
         // Continuation protocol.
-        assert_eq!(get_scoop_continuation(0x3F), Some(GetScoopContinuation::Putaway));
-        assert_eq!(get_scoop_continuation(0x40), Some(GetScoopContinuation::Putin));
+        assert_eq!(
+            get_scoop_continuation(0x3F),
+            Some(GetScoopContinuation::Putaway)
+        );
+        assert_eq!(
+            get_scoop_continuation(0x40),
+            Some(GetScoopContinuation::Putin)
+        );
         assert_eq!(get_scoop_continuation(0x41), None);
         // FILL_SCOOP timeline.
-        assert_eq!(fill_scoop_frame_event(18.0, 0.0), Some(FillEffect::RemoveHole));
-        assert_eq!(fill_scoop_frame_event(13.0, 0.0), Some(FillEffect::Impact(3)));
-        assert_eq!(fill_scoop_frame_event(19.0, 0.0), Some(FillEffect::Impact(4)));
-        assert_eq!(fill_scoop_frame_event(25.0, 0.0), Some(FillEffect::Impact(5)));
+        assert_eq!(
+            fill_scoop_frame_event(18.0, 0.0),
+            Some(FillEffect::RemoveHole)
+        );
+        assert_eq!(
+            fill_scoop_frame_event(13.0, 0.0),
+            Some(FillEffect::Impact(3))
+        );
+        assert_eq!(
+            fill_scoop_frame_event(19.0, 0.0),
+            Some(FillEffect::Impact(4))
+        );
+        assert_eq!(
+            fill_scoop_frame_event(25.0, 0.0),
+            Some(FillEffect::Impact(5))
+        );
         assert_eq!(fill_scoop_frame_event(40.0, 0.0), Some(FillEffect::Final));
         assert_eq!(fill_scoop_frame_event(20.0, 0.0), None);
         // Check_DigScoop membership.
-        for idx in [index::DIG_SCOOP, index::REFLECT_SCOOP, index::GET_SCOOP, index::FILL_SCOOP, index::PUTIN_SCOOP] {
+        for idx in [
+            index::DIG_SCOOP,
+            index::REFLECT_SCOOP,
+            index::GET_SCOOP,
+            index::FILL_SCOOP,
+            index::PUTIN_SCOOP,
+        ] {
             assert!(check_dig_scoop(idx));
         }
         assert!(!check_dig_scoop(index::AIR_SCOOP));

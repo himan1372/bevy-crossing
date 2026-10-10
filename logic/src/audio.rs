@@ -222,12 +222,21 @@ pub struct CommandRing {
 
 impl CommandRing {
     pub fn new() -> CommandRing {
-        CommandRing { buf: [None; 256], write_pos: 0 }
+        CommandRing {
+            buf: [None; 256],
+            write_pos: 0,
+        }
     }
 
     /// `Nap_Set*`: append one command.
     pub fn push(&mut self, opcode: u8, arg0: u8, arg1: u8, arg2: u8, param: AudioParam) {
-        self.buf[self.write_pos & 0xFF] = Some(AudioPort { opcode, arg0, arg1, arg2, param });
+        self.buf[self.write_pos & 0xFF] = Some(AudioPort {
+            opcode,
+            arg0,
+            arg1,
+            arg2,
+            param,
+        });
         self.write_pos = self.write_pos.wrapping_add(1);
     }
 
@@ -449,7 +458,9 @@ pub struct TrgSeManager {
 
 impl TrgSeManager {
     pub fn new() -> TrgSeManager {
-        TrgSeManager { slots: [TrgSe::default(); slots::TRG_SE] }
+        TrgSeManager {
+            slots: [TrgSe::default(); slots::TRG_SE],
+        }
     }
 
     /// `Sou_TrgStart`, writing JAudio subtrack port commands into `ring`.
@@ -469,11 +480,41 @@ impl TrgSeManager {
 
         // MONO path: dedicated subtrack 14, no slot allocation.
         if se.mono {
-            ring.push(0x10, group::SE as u8, se_subtrack::MONO as u8, 0, AudioParam::F32(freq_scale));
-            ring.push(0x11, group::SE as u8, se_subtrack::MONO as u8, 0, AudioParam::U8(pan));
-            ring.push(0x12, group::SE as u8, se_subtrack::MONO as u8, 0, AudioParam::U8(reverb));
-            ring.push(0x13, group::SE as u8, se_subtrack::MONO as u8, 0, AudioParam::U8(se.idx_lo));
-            ring.push(0x13, group::SE as u8, se_subtrack::MONO as u8, 1, AudioParam::U8(se.idx_hi));
+            ring.push(
+                0x10,
+                group::SE as u8,
+                se_subtrack::MONO as u8,
+                0,
+                AudioParam::F32(freq_scale),
+            );
+            ring.push(
+                0x11,
+                group::SE as u8,
+                se_subtrack::MONO as u8,
+                0,
+                AudioParam::U8(pan),
+            );
+            ring.push(
+                0x12,
+                group::SE as u8,
+                se_subtrack::MONO as u8,
+                0,
+                AudioParam::U8(reverb),
+            );
+            ring.push(
+                0x13,
+                group::SE as u8,
+                se_subtrack::MONO as u8,
+                0,
+                AudioParam::U8(se.idx_lo),
+            );
+            ring.push(
+                0x13,
+                group::SE as u8,
+                se_subtrack::MONO as u8,
+                1,
+                AudioParam::U8(se.idx_hi),
+            );
             return TrgStartResult::Mono;
         }
 
@@ -484,7 +525,9 @@ impl TrgSeManager {
 
         // Free slot?
         if let Some(i) = self.slots.iter().position(|s| s.id == 0) {
-            self.fill(i, id, volume, opt_volume, freq_scale, pan, reverb, distance, &se, ring);
+            self.fill(
+                i, id, volume, opt_volume, freq_scale, pan, reverb, distance, &se, ring,
+            );
             return TrgStartResult::Started(i);
         }
 
@@ -503,7 +546,9 @@ impl TrgSeManager {
         }
         match trg_priority(se.idx_lo) {
             Some(p) if p >= self.slots[oldest].priority => {
-                self.fill(oldest, id, volume, opt_volume, freq_scale, pan, reverb, distance, &se, ring);
+                self.fill(
+                    oldest, id, volume, opt_volume, freq_scale, pan, reverb, distance, &se, ring,
+                );
                 TrgStartResult::Replaced(oldest)
             }
             _ => TrgStartResult::PriorityRejected,
@@ -559,7 +604,13 @@ impl TrgSeManager {
                 continue;
             }
             s.frames = s.frames.wrapping_add(1);
-            ring.push(0x10, group::SE as u8, i as u8, 0, AudioParam::F32(s.volume * s.opt_volume));
+            ring.push(
+                0x10,
+                group::SE as u8,
+                i as u8,
+                0,
+                AudioParam::F32(s.volume * s.opt_volume),
+            );
             ring.push(0x11, group::SE as u8, i as u8, 0, AudioParam::U8(s.pan));
         }
     }
@@ -606,7 +657,12 @@ pub struct LevSe {
 
 impl Default for LevSe {
     fn default() -> LevSe {
-        LevSe { pending: [0; slots::LEV_HISTORY], stack: [0; 4], pan: 0x40, volume: 1.0 }
+        LevSe {
+            pending: [0; slots::LEV_HISTORY],
+            stack: [0; 4],
+            pan: 0x40,
+            volume: 1.0,
+        }
     }
 }
 
@@ -616,7 +672,9 @@ pub struct LevSeManager {
 
 impl LevSeManager {
     pub fn new() -> LevSeManager {
-        LevSeManager { slots: [LevSe::default(); slots::LEV_SE] }
+        LevSeManager {
+            slots: [LevSe::default(); slots::LEV_SE],
+        }
     }
 
     /// `Sou_LevStart`: dedup, then push onto the first free stack entry.
@@ -734,7 +792,14 @@ impl OngenManager {
             return self.entries.iter().position(|e| e.live && e.id == id);
         }
         if let Some(i) = self.entries.iter().position(|e| !e.live) {
-            self.entries[i] = OngenEntry { id, index, pan, distance, age: 1, live: true };
+            self.entries[i] = OngenEntry {
+                id,
+                index,
+                pan,
+                distance,
+                age: 1,
+                live: true,
+            };
             return Some(i);
         }
         None
@@ -826,7 +891,12 @@ pub fn assign_insect_variance(ids: &[u16], rand: &mut dyn FnMut() -> u8) -> Vec<
             }
             j += 1;
         }
-        out.push(RoomInsect { insect_id: id, variance: v, alive: true, timer: 0 });
+        out.push(RoomInsect {
+            insect_id: id,
+            variance: v,
+            alive: true,
+            timer: 0,
+        });
     }
     out
 }
@@ -893,7 +963,13 @@ impl VoiceManager {
                 s.freq_scale = pitch;
                 s.pan = pan;
                 s.busy = true;
-                ring.push(0x13, group::VOICE as u8, slot as u8, 0, AudioParam::U8(phoneme));
+                ring.push(
+                    0x13,
+                    group::VOICE as u8,
+                    slot as u8,
+                    0,
+                    AudioParam::U8(phoneme),
+                );
                 Some(slot)
             }
         }
@@ -905,7 +981,13 @@ impl VoiceManager {
             if !s.busy {
                 continue;
             }
-            ring.push(0x10, group::VOICE as u8, i as u8, 0, AudioParam::F32(s.volume));
+            ring.push(
+                0x10,
+                group::VOICE as u8,
+                i as u8,
+                0,
+                AudioParam::F32(s.volume),
+            );
             ring.push(0x11, group::VOICE as u8, i as u8, 0, AudioParam::U8(s.pan));
         }
     }
@@ -922,25 +1004,26 @@ impl Default for VoiceManager {
 // ---------------------------------------------------------------------------
 
 /// Hourly field-track mute masks: 1 = mute, 0 = unchanged.
+#[rustfmt::skip]
 pub const BGM_MUTE_TABLE_FINE: [u16; 24] = [
     0x01e0, 0x0d80, 0x3800, 0x0500, 0x00e0, 0x01c0, 0x05e0, 0x3dc0,
     0x0d80, 0x0d80, 0x1800, 0x1d00, 0x1d80, 0x1d80, 0x01f0, 0x00f8,
     0x0d80, 0x7c00, 0xf200, 0x1d00, 0x1d00, 0x05e0, 0x0d80, 0x0dfc,
 ];
+#[rustfmt::skip]
 pub const BGM_MUTE_TABLE_SNOW: [u16; 24] = [
     0x0302, 0x0c23, 0x216e, 0x040c, 0x0006, 0x0006, 0x0406, 0x381b,
     0x0803, 0x0c64, 0x1020, 0x1083, 0x1c02, 0x104f, 0x070e, 0x06c0,
     0x081d, 0x001b, 0x2023, 0x1017, 0x1803, 0x0006, 0x0c16, 0x0d82,
 ];
+#[rustfmt::skip]
 pub const BGM_MUTE_TABLE_SAKURA: [u16; 24] = [
     0x00e2, 0x00a7, 0x116e, 0x001c, 0x0006, 0x0106, 0x018e, 0x01db,
     0x0107, 0x00ff, 0x0024, 0x0087, 0x0007, 0x0c4f, 0x00be, 0x0418,
     0x045f, 0x001b, 0xca07, 0x0517, 0x0107, 0x0106, 0x019f, 0x007b,
 ];
 /// Museum masks: not-museum, lobby, painting, fish, insect, fossil.
-pub const BGM_MUTE_TABLE_MUSEUM: [u16; 6] = [
-    0x0000, 0xFFE8, 0x9ff6, 0xff1a, 0xfdff, 0x62fc,
-];
+pub const BGM_MUTE_TABLE_MUSEUM: [u16; 6] = [0x0000, 0xFFE8, 0x9ff6, 0xff1a, 0xfdff, 0x62fc];
 
 /// Weather selector for the hourly-track masks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -961,14 +1044,21 @@ pub struct BgmManager {
 
 impl BgmManager {
     pub fn new() -> BgmManager {
-        BgmManager { handle: group::BGM0, volume: 1.0 }
+        BgmManager {
+            handle: group::BGM0,
+            volume: 1.0,
+        }
     }
 
     /// Start a BGM id on the *other* group and fade the current one out;
     /// then swap handles (`Na_BgmStart` crossfade skeleton). `seq_id` is
     /// the `SEQ_TABLE` lookup result (ROM data; resolved by the engine).
     pub fn crossfade_to(&mut self, ring: &mut CommandRing, seq_id: u16) {
-        let next = if self.handle == group::BGM0 { group::BGM1 } else { group::BGM0 };
+        let next = if self.handle == group::BGM0 {
+            group::BGM1
+        } else {
+            group::BGM0
+        };
         // Start the new sequence on the standby group...
         ring.push(0x20, next as u8, 0, 0, AudioParam::U16(seq_id));
         // ...fade the old group out...
@@ -980,7 +1070,12 @@ impl BgmManager {
     /// Apply an hourly mute mask (`Sou_BgmTenkiConv` core): mute every
     /// subtrack of the current group, then enable the mask-selected ones.
     /// One weather state substitutes BGM id 0x45 instead of masking.
-    pub fn apply_weather(&mut self, ring: &mut CommandRing, hour: usize, weather: BgmWeather) -> Option<u16> {
+    pub fn apply_weather(
+        &mut self,
+        ring: &mut CommandRing,
+        hour: usize,
+        weather: BgmWeather,
+    ) -> Option<u16> {
         if weather == BgmWeather::Rain {
             return Some(0x45); // substituted BGM id, no mask
         }
@@ -1007,7 +1102,13 @@ impl BgmManager {
     /// group. The filter coefficients themselves are DSP-side.
     pub fn set_filter(&mut self, ring: &mut CommandRing, filter: u32) {
         for st in 0..engine::SUBTRACK_NUM {
-            ring.push(0x24, self.handle as u8, st as u8, 0, AudioParam::U32(filter));
+            ring.push(
+                0x24,
+                self.handle as u8,
+                st as u8,
+                0,
+                AudioParam::U32(filter),
+            );
         }
     }
 }
@@ -1053,12 +1154,18 @@ pub struct RhythmManager {
 
 impl RhythmManager {
     pub fn new() -> RhythmManager {
-        RhythmManager { buffers: [RhythmSlot::default(); slots::RHYTHM_BUFFER] }
+        RhythmManager {
+            buffers: [RhythmSlot::default(); slots::RHYTHM_BUFFER],
+        }
     }
 
     pub fn alloc(&mut self, buffer_id: u16) -> Option<usize> {
         let i = self.buffers.iter().position(|b| b.state == 0)?;
-        self.buffers[i] = RhythmSlot { state: 1, subtrack: i as u8, buffer_id };
+        self.buffers[i] = RhythmSlot {
+            state: 1,
+            subtrack: i as u8,
+            buffer_id,
+        };
         Some(i)
     }
 
@@ -1237,7 +1344,10 @@ mod tests {
         let mut g = GameAudio::new();
         let id = se_flag::SINGLETON | 0x0042;
         let mut ring = CommandRing::new();
-        assert!(matches!(g.trg.start(&mut ring, id, 1.0, 1.0, 1.0, 0x40, 0, 100.0), TrgStartResult::Started(_)));
+        assert!(matches!(
+            g.trg.start(&mut ring, id, 1.0, 1.0, 1.0, 0x40, 0, 100.0),
+            TrgStartResult::Started(_)
+        ));
         assert_eq!(
             g.trg.start(&mut ring, id, 1.0, 1.0, 1.0, 0x40, 0, 100.0),
             TrgStartResult::SingletonRejected
@@ -1248,7 +1358,16 @@ mod tests {
     fn mono_bypasses_slots() {
         let mut g = GameAudio::new();
         let mut ring = CommandRing::new();
-        let r = g.trg.start(&mut ring, se_flag::MONO | 0x0010, 1.0, 1.0, 1.0, 0x40, 0, 50.0);
+        let r = g.trg.start(
+            &mut ring,
+            se_flag::MONO | 0x0010,
+            1.0,
+            1.0,
+            1.0,
+            0x40,
+            0,
+            50.0,
+        );
         assert_eq!(r, TrgStartResult::Mono);
         assert!(g.trg.slots.iter().all(|s| s.id == 0));
         assert!(ring.pending() > 0);
@@ -1260,7 +1379,9 @@ mod tests {
         let mut ring = CommandRing::new();
         // Fill all six slots; idx 0x00..0x05 have priority 50.
         for i in 0..6u16 {
-            let r = g.trg.start(&mut ring, 0x0001 + i, 1.0, 1.0, 1.0, 0x40, 0, 10.0);
+            let r = g
+                .trg
+                .start(&mut ring, 0x0001 + i, 1.0, 1.0, 1.0, 0x40, 0, 10.0);
             assert!(matches!(r, TrgStartResult::Started(_)));
         }
         // Age slot 0 the most.
@@ -1291,7 +1412,7 @@ mod tests {
         // Kiteki: verbatim, including the dead branch.
         let v = distance2vol_kiteki(10000.0);
         assert!(v < 0.0); // negative past range: the retail bug
-        // MD clamped to [0.2, 0.8].
+                          // MD clamped to [0.2, 0.8].
         assert_eq!(distance2vol_md(0.0, 533.0), 0.8);
         assert_eq!(distance2vol_md(100000.0, 533.0), 0.2);
     }

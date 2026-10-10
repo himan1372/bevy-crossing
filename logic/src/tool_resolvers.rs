@@ -18,6 +18,7 @@
 
 /// The eight neighbor-unit offsets searched by the shovel resolver
 /// (player's own unit omitted).
+#[rustfmt::skip]
 pub const SCOOP_NEIGHBORS: [(i32, i32); 8] = [
     (-1, -1), (0, -1), (1, -1),
     (-1, 0),           (1, 0),
@@ -55,7 +56,14 @@ pub const GOLD_SHOVEL_MONEY_ITEM: u16 = 0x2103;
 /// Golden-shovel area gate: a new roll is only possible when the dig
 /// position differs from the previous golden dig by more than half a
 /// field-unit in X or Z (mFI_CheckDigDiffPosArea).
-pub fn dig_differs_from_last(x: f32, z: f32, last_x: f32, last_z: f32, half_x: f32, half_z: f32) -> bool {
+pub fn dig_differs_from_last(
+    x: f32,
+    z: f32,
+    last_x: f32,
+    last_z: f32,
+    half_x: f32,
+    half_z: f32,
+) -> bool {
     x > last_x + half_x || x < last_x - half_x || z > last_z + half_z || z < last_z - half_z
 }
 
@@ -97,9 +105,18 @@ pub const AXE_WEAR_NEXT: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8]; // 8 = broken (EMPT
 /// Apply axe damage; returns (new_wear_stage, damage_counter_reset).
 /// wear_stage: 0=AXE .. 7=USE_7, 8=broken.
 pub fn axe_apply_damage(wear_stage: u8, damage: i32, reflected: bool) -> (u8, i32) {
-    let damage = damage + if reflected { AXE_DAMAGE_REFLECTED } else { AXE_DAMAGE_NORMAL };
+    let damage = damage
+        + if reflected {
+            AXE_DAMAGE_REFLECTED
+        } else {
+            AXE_DAMAGE_NORMAL
+        };
     if damage >= AXE_DAMAGE_STAGE_THRESHOLD {
-        let next = if wear_stage < 8 { AXE_WEAR_NEXT[wear_stage as usize] } else { 8 };
+        let next = if wear_stage < 8 {
+            AXE_WEAR_NEXT[wear_stage as usize]
+        } else {
+            8
+        };
         (next, 0)
     } else {
         (wear_stage, damage)
@@ -117,11 +134,19 @@ pub const NET_RADIAL_BASE_GOLD: f32 = 21.0;
 
 /// Net sweep length for a gold flag.
 pub fn net_sweep_length(gold: bool) -> f32 {
-    if gold { NET_SWEEP_LEN_GOLD } else { NET_SWEEP_LEN }
+    if gold {
+        NET_SWEEP_LEN_GOLD
+    } else {
+        NET_SWEEP_LEN
+    }
 }
 /// Net radial tolerance for a gold flag and target radius.
 pub fn net_radial_tol(gold: bool, rad_req: f32) -> f32 {
-    if gold { NET_RADIAL_BASE_GOLD + rad_req } else { NET_RADIAL_BASE + rad_req }
+    if gold {
+        NET_RADIAL_BASE_GOLD + rad_req
+    } else {
+        NET_RADIAL_BASE + rad_req
+    }
 }
 
 /// Rod cast validation: ready-rod frame, forward projection, sample
@@ -129,7 +154,11 @@ pub fn net_radial_tol(gold: bool, rad_req: f32) -> f32 {
 pub const ROD_VALIDATE_FRAME: f32 = 10.0;
 pub const ROD_CAST_DISTANCE: f32 = 100.0;
 pub const ROD_SAMPLE_OFFSETS: [(f32, f32); 5] = [
-    (0.0, 0.0), (-10.0, 10.0), (10.0, 10.0), (-10.0, -10.0), (10.0, -10.0),
+    (0.0, 0.0),
+    (-10.0, 10.0),
+    (10.0, 10.0),
+    (-10.0, -10.0),
+    (10.0, -10.0),
 ];
 pub const ROD_WATER_HEIGHT_LIMIT: f32 = 60.0;
 
@@ -208,7 +237,7 @@ mod tests {
         assert_eq!((w, d), (0, 1));
         let (w, d) = axe_apply_damage(0, 8, false);
         assert_eq!((w, d), (1, 0)); // 9 damage -> next wear stage, reset
-        // Reflected hit: +3.
+                                    // Reflected hit: +3.
         let (w, d) = axe_apply_damage(1, 6, true);
         assert_eq!((w, d), (2, 0));
         let (w, d) = axe_apply_damage(1, 5, true);

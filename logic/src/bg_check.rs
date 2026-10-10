@@ -225,7 +225,10 @@ pub fn neighborhood_coords(center_x: i32, center_z: i32, size: i32) -> [PcUnitCo
     for dz in 0..size {
         for dx in 0..size {
             if n < 49 {
-                out[n] = PcUnitCoord { x: center_x - half + dx, z: center_z - half + dz };
+                out[n] = PcUnitCoord {
+                    x: center_x - half + dx,
+                    z: center_z - half + dz,
+                };
                 n += 1;
             }
         }
@@ -352,6 +355,9 @@ mod tests {
         assert_eq!(n, 25);
         assert_eq!(buf[0], PcUnitCoord { x: 3, z: 3 });
         assert_eq!(buf[24], PcUnitCoord { x: 7, z: 7 });
-        assert_eq!(unsafe { pc_bg_neighborhood_coords(0, 0, 3, core::ptr::null_mut()) }, 0);
+        assert_eq!(
+            unsafe { pc_bg_neighborhood_coords(0, 0, 3, core::ptr::null_mut()) },
+            0
+        );
     }
 }

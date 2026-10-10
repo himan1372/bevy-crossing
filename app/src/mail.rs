@@ -380,10 +380,7 @@ fn mailbox_interact(
 fn show_mail_notify(
     text: &str,
     timer: &mut ResMut<MailNotifyTimer>,
-    query: &mut Query<
-        (&mut Text, &mut Visibility),
-        (With<MailNotifyText>, Without<MailPanel>),
-    >,
+    query: &mut Query<(&mut Text, &mut Visibility), (With<MailNotifyText>, Without<MailPanel>)>,
 ) {
     if let Ok((mut t, mut vis)) = query.single_mut() {
         t.0 = text.to_string();
@@ -588,15 +585,27 @@ fn refresh_mail_ui(
     villagers: Query<&Villager>,
     mut list_query: Query<
         (&mut Text, &mut Visibility),
-        (With<MailListText>, Without<MailBodyText>, Without<MailHintText>),
+        (
+            With<MailListText>,
+            Without<MailBodyText>,
+            Without<MailHintText>,
+        ),
     >,
     mut body_query: Query<
         (&mut Text, &mut Visibility),
-        (With<MailBodyText>, Without<MailListText>, Without<MailHintText>),
+        (
+            With<MailBodyText>,
+            Without<MailListText>,
+            Without<MailHintText>,
+        ),
     >,
     mut hint_query: Query<
         &mut Text,
-        (With<MailHintText>, Without<MailListText>, Without<MailBodyText>),
+        (
+            With<MailHintText>,
+            Without<MailListText>,
+            Without<MailBodyText>,
+        ),
     >,
 ) {
     if !ui.is_changed() && !mailbox.is_changed() {

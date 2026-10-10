@@ -135,7 +135,12 @@ pub fn segments_cross(a0: [f32; 2], a1: [f32; 2], b0: [f32; 2], b1: [f32; 2]) ->
 }
 
 /// Segment-segment intersection point.
-pub fn segment_intersection(a0: [f32; 2], a1: [f32; 2], b0: [f32; 2], b1: [f32; 2]) -> Option<[f32; 2]> {
+pub fn segment_intersection(
+    a0: [f32; 2],
+    a1: [f32; 2],
+    b0: [f32; 2],
+    b1: [f32; 2],
+) -> Option<[f32; 2]> {
     let r = [a1[0] - a0[0], a1[1] - a0[1]];
     let s = [b1[0] - b0[0], b1[1] - b0[1]];
     let denom = r[0] * s[1] - r[1] * s[0];
@@ -259,8 +264,8 @@ pub fn solve_walls(
             }
             let rev = match w.kind() {
                 WallKind2::Attribute => {
-                    let cross = segment_intersection(actor_start, *end, w.start, w.end)
-                        .unwrap_or(*end);
+                    let cross =
+                        segment_intersection(actor_start, *end, w.start, w.end).unwrap_or(*end);
                     cross_reverse_attribute(cross, *end)
                 }
                 _ => {
@@ -278,8 +283,7 @@ pub fn solve_walls(
         distance_pass(walls, &mut end, &all, range, None, wall_ok);
         // Faithful priority: midpoint dist² from actor_start, merge
         // sort, u64-mask reconstruction (wall_priority.rs).
-        let segs: Vec<([f32; 2], [f32; 2])> =
-            walls.iter().map(|w| (w.start, w.end)).collect();
+        let segs: Vec<([f32; 2], [f32; 2])> = walls.iter().map(|w| (w.start, w.end)).collect();
         let prio = priority_order(&segs, actor_start);
         distance_pass(walls, &mut end, &prio, range, None, wall_ok);
         crossing_pass(walls, actor_start, &mut end, range, wall_ok);
@@ -317,10 +321,16 @@ mod tests {
 
     fn wall(sx: f32, sz: f32, ex: f32, ez: f32, nx: f32, nz: f32) -> WallSeg2 {
         WallSeg2 {
-            start: [sx, sz], end: [ex, ez],
-            start_top: 100.0, start_btm: 0.0, end_top: 100.0, end_btm: 0.0,
-            normal: [nx, nz], normal_angle: 0,
-            moving: false, atr_wall: false,
+            start: [sx, sz],
+            end: [ex, ez],
+            start_top: 100.0,
+            start_btm: 0.0,
+            end_top: 100.0,
+            end_btm: 0.0,
+            normal: [nx, nz],
+            normal_angle: 0,
+            moving: false,
+            atr_wall: false,
         }
     }
 

@@ -37,6 +37,7 @@ pub mod sched {
 /// (girl, ko_girl, boy, sport_man, grim_man, naniwa_lady).
 /// Entries are (schedule type, end time as (hour, min, sec)); the
 /// manager walks until `end_time > now_sec` and takes that entry's type.
+#[rustfmt::skip]
 pub const SCHEDULE_TABLES: [[[u32; 3]; 9]; 6] = [
     // Girl
     [
@@ -129,7 +130,13 @@ pub fn global_schedule_override(first_job: bool, halloween_active: bool) -> Opti
 /// `aNPC_check_chg_schedule` verbatim: switch allowed only when the
 /// NPC's step matches, the desired type differs from current_type,
 /// and the NPC is not talking.
-pub fn check_chg_schedule(step: u8, npc_step: u8, npc_type: u32, current_type: u32, talking: bool) -> bool {
+pub fn check_chg_schedule(
+    step: u8,
+    npc_step: u8,
+    npc_type: u32,
+    current_type: u32,
+    talking: bool,
+) -> bool {
     npc_step == step && npc_type != current_type && !talking
 }
 
@@ -176,17 +183,30 @@ pub enum Interrupt {
 
 /// `aNPC_think_chk_interrupt_proc` order, verbatim.
 /// The `moving` split: the clap/fatigue/turn/obstacle/ball/
- /// insect chain only runs while speed != 0; when still, only clap is
+/// insect chain only runs while speed != 0; when still, only clap is
 /// checked before friendship.
 pub fn interrupt_order(moving: bool) -> &'static [Interrupt] {
     use Interrupt::*;
     if moving {
         &[
-            TalkStart, Pitfall, RightHand, LeftHand, Uzai, Entrance, Clap, Fatigue, CollisionTurn,
-            Obstacle, Ball, InsectGyoei, Friendship,
+            TalkStart,
+            Pitfall,
+            RightHand,
+            LeftHand,
+            Uzai,
+            Entrance,
+            Clap,
+            Fatigue,
+            CollisionTurn,
+            Obstacle,
+            Ball,
+            InsectGyoei,
+            Friendship,
         ]
     } else {
-        &[TalkStart, Pitfall, RightHand, LeftHand, Uzai, Entrance, Clap, Friendship]
+        &[
+            TalkStart, Pitfall, RightHand, LeftHand, Uzai, Entrance, Clap, Friendship,
+        ]
     }
 }
 
@@ -351,8 +371,13 @@ pub extern "C" fn pc_schedule_step(
     if out.is_null() {
         return;
     }
-    let (saved, current, timer) =
-        schedule_manager_sub(looks as usize, now_sec, forced_type, forced_timer, forced_ticks);
+    let (saved, current, timer) = schedule_manager_sub(
+        looks as usize,
+        now_sec,
+        forced_type,
+        forced_timer,
+        forced_ticks,
+    );
     unsafe {
         *out.add(0) = saved;
         *out.add(1) = current;
@@ -363,7 +388,11 @@ pub extern "C" fn pc_schedule_step(
 /// C ABI: global event override; returns 1 and writes FIELD when
 /// active, else 0.
 #[no_mangle]
-pub extern "C" fn pc_schedule_global_override(first_job: u8, halloween: u8, out_type: *mut u32) -> u8 {
+pub extern "C" fn pc_schedule_global_override(
+    first_job: u8,
+    halloween: u8,
+    out_type: *mut u32,
+) -> u8 {
     match global_schedule_override(first_job != 0, halloween != 0) {
         Some(t) => {
             if !out_type.is_null() {
@@ -440,8 +469,7 @@ mod tests {
         let (saved, _, _) = schedule_manager_sub(0, 4 * 3600, 0, 0, 1);
         assert_eq!(saved, sched::SLEEP);
         // Forced timer overrides and decrements.
-        let (saved, current, timer) =
-            schedule_manager_sub(0, 7 * 3600, sched::IN_HOUSE, 100, 3);
+        let (saved, current, timer) = schedule_manager_sub(0, 7 * 3600, sched::IN_HOUSE, 100, 3);
         assert_eq!((saved, current, timer), (sched::FIELD, sched::IN_HOUSE, 97));
         // Timer clamps at 0.
         let (_, _, timer) = schedule_manager_sub(0, 7 * 3600, sched::IN_HOUSE, 2, 5);
@@ -451,10 +479,28 @@ mod tests {
         assert_eq!(global_schedule_override(false, true), Some(sched::FIELD));
         assert_eq!(global_schedule_override(false, false), None);
         // Schedule change gate: needs step match, type change, not talking.
-        assert!(check_chg_schedule(1, 1, sched::IN_HOUSE, sched::FIELD, false));
-        assert!(!check_chg_schedule(1, 2, sched::IN_HOUSE, sched::FIELD, false));
+        assert!(check_chg_schedule(
+            1,
+            1,
+            sched::IN_HOUSE,
+            sched::FIELD,
+            false
+        ));
+        assert!(!check_chg_schedule(
+            1,
+            2,
+            sched::IN_HOUSE,
+            sched::FIELD,
+            false
+        ));
         assert!(!check_chg_schedule(1, 1, sched::FIELD, sched::FIELD, false));
-        assert!(!check_chg_schedule(1, 1, sched::IN_HOUSE, sched::FIELD, true));
+        assert!(!check_chg_schedule(
+            1,
+            1,
+            sched::IN_HOUSE,
+            sched::FIELD,
+            true
+        ));
         // Sleep force schedule.
         assert_eq!(sleep_force_schedule_type(true), sched::IN_HOUSE);
         assert_eq!(sleep_force_schedule_type(false), sched::FIELD);
@@ -472,20 +518,59 @@ mod tests {
     #[test]
     fn wander_and_interrupt() {
         // Border tables: girl {3,6}: rng 0-3 wait, 4-6 walk, 7-9 run.
-        assert_eq!(wander_decide_next(0, 3, false, false, false, false, sched::FIELD, sched::FIELD), WanderAct::Wait);
-        assert_eq!(wander_decide_next(0, 6, false, false, false, false, sched::FIELD, sched::FIELD), WanderAct::Walk);
-        assert_eq!(wander_decide_next(0, 7, false, false, false, false, sched::FIELD, sched::FIELD), WanderAct::Run);
+        assert_eq!(
+            wander_decide_next(0, 3, false, false, false, false, sched::FIELD, sched::FIELD),
+            WanderAct::Wait
+        );
+        assert_eq!(
+            wander_decide_next(0, 6, false, false, false, false, sched::FIELD, sched::FIELD),
+            WanderAct::Walk
+        );
+        assert_eq!(
+            wander_decide_next(0, 7, false, false, false, false, sched::FIELD, sched::FIELD),
+            WanderAct::Run
+        );
         // ko-girl {6,8}: 9 -> run.
-        assert_eq!(wander_decide_next(1, 9, false, false, false, false, sched::FIELD, sched::FIELD), WanderAct::Run);
-        assert_eq!(wander_decide_next(1, 7, false, false, false, false, sched::FIELD, sched::FIELD), WanderAct::Walk);
+        assert_eq!(
+            wander_decide_next(1, 9, false, false, false, false, sched::FIELD, sched::FIELD),
+            WanderAct::Run
+        );
+        assert_eq!(
+            wander_decide_next(1, 7, false, false, false, false, sched::FIELD, sched::FIELD),
+            WanderAct::Walk
+        );
         // Fatigue or sleepy -> wait regardless of rng.
-        assert_eq!(wander_decide_next(3, 9, true, false, false, false, sched::FIELD, sched::FIELD), WanderAct::Wait);
-        assert_eq!(wander_decide_next(3, 9, false, true, false, false, sched::FIELD, sched::FIELD), WanderAct::Wait);
+        assert_eq!(
+            wander_decide_next(3, 9, true, false, false, false, sched::FIELD, sched::FIELD),
+            WanderAct::Wait
+        );
+        assert_eq!(
+            wander_decide_next(3, 9, false, true, false, false, sched::FIELD, sched::FIELD),
+            WanderAct::Wait
+        );
         // WALK_WANDER think: rng>5 wait else walk.
-        assert_eq!(wander_decide_next(0, 6, false, false, true, false, sched::FIELD, sched::FIELD), WanderAct::Wait);
-        assert_eq!(wander_decide_next(0, 5, false, false, true, false, sched::FIELD, sched::FIELD), WanderAct::Walk);
+        assert_eq!(
+            wander_decide_next(0, 6, false, false, true, false, sched::FIELD, sched::FIELD),
+            WanderAct::Wait
+        );
+        assert_eq!(
+            wander_decide_next(0, 5, false, false, true, false, sched::FIELD, sched::FIELD),
+            WanderAct::Walk
+        );
         // Forced FIELD (current != saved) downgrades run to walk.
-        assert_eq!(wander_decide_next(0, 9, false, false, false, false, sched::FIELD, sched::IN_HOUSE), WanderAct::Walk);
+        assert_eq!(
+            wander_decide_next(
+                0,
+                9,
+                false,
+                false,
+                false,
+                false,
+                sched::FIELD,
+                sched::IN_HOUSE
+            ),
+            WanderAct::Walk
+        );
         // Interrupt order: friendship last.
         let ord = interrupt_order(true);
         assert_eq!(ord[0], Interrupt::TalkStart);
@@ -513,8 +598,14 @@ mod tests {
         assert_eq!(t.patience(0), Patience::Annoyed);
         assert_eq!(t.timer, 1000);
         // C ABI.
-        assert_eq!(pc_wander_decide_next(0, 7, 0, 0, 0, 0, sched::FIELD, sched::FIELD), 2);
-        assert_eq!(pc_wander_decide_next(0, 9, 0, 0, 0, 0, sched::FIELD, sched::IN_HOUSE), 1);
+        assert_eq!(
+            pc_wander_decide_next(0, 7, 0, 0, 0, 0, sched::FIELD, sched::FIELD),
+            2
+        );
+        assert_eq!(
+            pc_wander_decide_next(0, 9, 0, 0, 0, 0, sched::FIELD, sched::IN_HOUSE),
+            1
+        );
         assert_eq!(pc_uzai_trigger(601, 0, 0), 1);
         assert_eq!(pc_talk_patience(0, 12), 1);
         assert_eq!(pc_talk_patience(0, 15), 2);

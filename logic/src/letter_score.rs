@@ -112,7 +112,13 @@ pub enum TrigramMode {
 fn is_sep(c: u8) -> bool {
     matches!(
         c,
-        CHAR_SPACE | CHAR_COMMA | CHAR_QUESTIONMARK | CHAR_EXCLAMATION | CHAR_PERIOD | CHAR_INTERPUNCT | CHAR_NEW_LINE
+        CHAR_SPACE
+            | CHAR_COMMA
+            | CHAR_QUESTIONMARK
+            | CHAR_EXCLAMATION
+            | CHAR_PERIOD
+            | CHAR_INTERPUNCT
+            | CHAR_NEW_LINE
     )
 }
 
@@ -699,7 +705,10 @@ mod tests {
         // (symbols tolerate up to 8 in a row), so the component defaults up.
         let body = body_of(b"!!!!!");
         let mut len = 0;
-        assert_eq!(quest_trigram_component(&body, &mut len, TrigramMode::Intended), 2);
+        assert_eq!(
+            quest_trigram_component(&body, &mut len, TrigramMode::Intended),
+            2
+        );
         assert_eq!(len, 5);
         assert_eq!(quest_rank(&body, false, TrigramMode::Intended), 3);
         assert_eq!(quest_rank(&body, true, TrigramMode::Intended), 9);

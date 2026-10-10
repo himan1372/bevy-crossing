@@ -138,21 +138,28 @@ mod tests {
         assert_eq!(attribute_action_info(0), 0x1C); // NPC|PLACE|PLANT4
         assert_eq!(attribute_action_info(3), 0x1F); // NPC|PLACE|KILL
         assert_eq!(attribute_action_info(63), 0x18); // NPC|PLACE|PLANT0
-        // The river-bank asymmetry is at 62, not 61.
+                                                     // The river-bank asymmetry is at 62, not 61.
         assert_eq!(attribute_action_info(62), 0x17); // NPC|NO_PLACE|KILL
         assert_eq!(attribute_action_info(61), 0x18);
         // Wood bridge center (31) vs directional pieces (27-30).
         assert_eq!(attribute_action_info(31), 0x1F); // NPC|PLACE|KILL
         assert_eq!(attribute_action_info(27), 0x07); // NO_NPC|NO_PLACE|KILL
-        // Wave (11) keeps saplings where water (12) kills.
+                                                     // Wave (11) keeps saplings where water (12) kills.
         assert_eq!(attribute_action_info(11) & bit::PLANT_MASK, plant::PLANT0);
-        assert_eq!(attribute_action_info(12) & bit::PLANT_MASK, plant::KILL_PLANT);
+        assert_eq!(
+            attribute_action_info(12) & bit::PLANT_MASK,
+            plant::KILL_PLANT
+        );
         // Masking: attr & 0x3F.
         assert_eq!(attribute_action_info(64), attribute_action_info(0));
         // Only PLANT0/PLANT2/PLANT4/KILL ever emitted.
         for b in ATTRIBUTE_ACTION_INFO {
             let p = b & bit::PLANT_MASK;
-            assert!(p == 0 || p == 2 || p == 4 || p == 7, "attr plant bits = {}", p);
+            assert!(
+                p == 0 || p == 2 || p == 4 || p == 7,
+                "attr plant bits = {}",
+                p
+            );
             assert_eq!(b & 0xE0, 0);
         }
     }

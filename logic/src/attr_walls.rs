@@ -67,6 +67,7 @@ pub struct ForbidVecData {
 const SQRT2_2: f32 = std::f32::consts::FRAC_1_SQRT_2;
 
 /// `mCoBG_make_vector_table[8]` — verbatim.
+#[rustfmt::skip]
 pub const MAKE_VECTOR_TABLE: [ForbidVecData; 8] = [
     ForbidVecData { norm_angle_deg: 0.0, norm: [0.0, 1.0], wall_name: wall_name::UP },
     ForbidVecData { norm_angle_deg: -90.0, norm: [-1.0, 0.0], wall_name: wall_name::RIGHT },
@@ -79,6 +80,7 @@ pub const MAKE_VECTOR_TABLE: [ForbidVecData; 8] = [
 ];
 
 /// `mCoBG_forbid_vector_idx[36][2]` — verbatim. Index = attr − 27.
+#[rustfmt::skip]
 pub const FORBID_VECTOR_IDX: [[i16; 2]; 36] = [
     [4, -1], [5, -1], [6, -1], [7, -1], [-1, -1], [0, -1], [1, -1], [2, -1],
     [3, -1], [3, -1], [6, -1], [5, -1], [4, -1], [5, -1], [6, -1], [7, -1],
@@ -89,6 +91,7 @@ pub const FORBID_VECTOR_IDX: [[i16; 2]; 36] = [
 
 /// Decomp header comments for attributes 27–62
 /// (`include/m_collision_bg.h:79`), in attribute order.
+#[rustfmt::skip]
 pub const ATTRIBUTE_NAMES: [&str; 36] = [
     "wood bridge nw", "wood bridge sw", "wood bridge se", "wood bridge ne",
     "wood bridge center", "stone bridge n", "stone bridge e", "stone bridge w",
@@ -381,7 +384,10 @@ mod tests {
         let v = forbid_vector_kernel(32);
         assert!(v[0].is_some() && v[1].is_none());
         let r = v[0].unwrap();
-        assert_eq!((r.normal_x, r.normal_z, r.wall_name), (0.0, 1.0, wall_name::UP));
+        assert_eq!(
+            (r.normal_x, r.normal_z, r.wall_name),
+            (0.0, 1.0, wall_name::UP)
+        );
         let v = forbid_vector_kernel(51);
         assert!(v[0].is_some() && v[1].is_some());
         let v = forbid_vector_kernel(31);
@@ -398,7 +404,10 @@ mod tests {
         assert!((s[0] - 35.0).abs() < 1e-4 && (s[1] - 40.0).abs() < 1e-4);
         assert!((e[0] - 85.0).abs() < 1e-4 && (e[1] - 40.0).abs() < 1e-4);
         // Attr 51 (tunnel) -> two segments.
-        assert_eq!(forbid_wall_segments(51, 0.0, 0.0, CheckType::Normal).len(), 2);
+        assert_eq!(
+            forbid_wall_segments(51, 0.0, 0.0, CheckType::Normal).len(),
+            2
+        );
         assert!(forbid_wall_segments(31, 0.0, 0.0, CheckType::Normal).is_empty());
     }
 }

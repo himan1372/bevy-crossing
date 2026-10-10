@@ -141,11 +141,11 @@ pub fn check_wave_atr_detail(
 fn wave_segment(orig_attr: u8) -> Option<((f32, f32), (f32, f32))> {
     const H: f32 = 20.0; // mFI_UT_WORLDSIZE_HALF_X/Z_F
     match orig_attr {
-        36 => Some(((0.0, H), (0.0, -H))),     // wave_s
-        37 => Some(((0.0, 0.0), (-H, -H))),    // wave_se
-        38 => Some(((0.0, 0.0), (H, H))),      // wave_sw
-        25 => Some(((H, H), (0.0, 0.0))),      // wave_se2
-        26 => Some(((-H, H), (0.0, 0.0))),     // wave_sw2
+        36 => Some(((0.0, H), (0.0, -H))),  // wave_s
+        37 => Some(((0.0, 0.0), (-H, -H))), // wave_se
+        38 => Some(((0.0, 0.0), (H, H))),   // wave_sw
+        25 => Some(((H, H), (0.0, 0.0))),   // wave_se2
+        26 => Some(((-H, H), (0.0, 0.0))),  // wave_sw2
         _ => None,
     }
 }
@@ -578,12 +578,24 @@ mod tests {
         // Unknown attr -> SEA.
         assert_eq!(get_wave_dynamic_attr(99, (0.0, 0.0), 0.0), attr::SEA);
         // Degenerate projection -> SEA.
-        assert_eq!(check_wave_atr_detail((1.0, 1.0), (0.0, 0.0), (0.0, 0.0), 0.0), attr::SEA);
+        assert_eq!(
+            check_wave_atr_detail((1.0, 1.0), (0.0, 0.0), (0.0, 0.0), 0.0),
+            attr::SEA
+        );
         // C ABI: redirect marker.
-        assert_eq!(pc_wpos2attribute_step(63, 2, 0.0, 0.0, 1, 1, 0.0) & 0xFF, 0xFF);
-        assert_eq!((pc_wpos2attribute_step(63, 2, 0.0, 0.0, 1, 1, 0.0) >> 8) & 0xFF, 2);
+        assert_eq!(
+            pc_wpos2attribute_step(63, 2, 0.0, 0.0, 1, 1, 0.0) & 0xFF,
+            0xFF
+        );
+        assert_eq!(
+            (pc_wpos2attribute_step(63, 2, 0.0, 0.0, 1, 1, 0.0) >> 8) & 0xFF,
+            2
+        );
         // C ABI: attr + cant_dig bit.
-        assert_eq!(pc_wpos2attribute_step(33, 0, 0.0, 0.0, 1, 1, 0.0), 7 | (1 << 8));
+        assert_eq!(
+            pc_wpos2attribute_step(33, 0, 0.0, 0.0, 1, 1, 0.0),
+            7 | (1 << 8)
+        );
     }
 
     #[test]
@@ -595,9 +607,15 @@ mod tests {
         assert_eq!(pluss_direct_offset(100.0, 100.0, 3), Some((140.0, 100.0))); // E
         assert_eq!(pluss_direct_offset(100.0, 100.0, 5), Some((60.0, 140.0))); // "NE" per source table
         assert_eq!(pluss_direct_offset(100.0, 100.0, 8), None); // out of range: no write
-        // SearchAttribute redirect: cardinal only, local offset preserved.
-        assert_eq!(search_attribute_redirect(12.0, 5.0, area::W), Some((-28.0, 5.0)));
-        assert_eq!(search_attribute_redirect(12.0, 5.0, area::N), Some((12.0, -35.0)));
+                                                                // SearchAttribute redirect: cardinal only, local offset preserved.
+        assert_eq!(
+            search_attribute_redirect(12.0, 5.0, area::W),
+            Some((-28.0, 5.0))
+        );
+        assert_eq!(
+            search_attribute_redirect(12.0, 5.0, area::N),
+            Some((12.0, -35.0))
+        );
         assert_eq!(search_attribute_redirect(12.0, 5.0, 4), None);
         // SlateGround: top_left != bot_right -> SLATE_UP.
         // UP: S/E -> bot_right, N/W -> top_left.
@@ -628,6 +646,9 @@ mod tests {
             1
         );
         assert_eq!((ox, oz), (-28.0, 5.0));
-        assert_eq!(pc_slate_ground_height(10, 11, 20, 12, area::S, 100.0), 300.0);
+        assert_eq!(
+            pc_slate_ground_height(10, 11, 20, 12, area::S, 100.0),
+            300.0
+        );
     }
 }

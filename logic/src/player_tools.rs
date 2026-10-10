@@ -180,7 +180,11 @@ pub extern "C" fn pc_swing_axe_frame_event(frame: f32) -> u8 {
 /// C ABI: tree-hit outcome. Writes (became_stump, dropped_fruit,
 /// bee_counter_set) as bytes to out[3]; returns 1.
 #[no_mangle]
-pub extern "C" fn pc_tree_hit_outcome(cutcount_remaining: i32, is_bee_tree: u8, out: *mut u8) -> u8 {
+pub extern "C" fn pc_tree_hit_outcome(
+    cutcount_remaining: i32,
+    is_bee_tree: u8,
+    out: *mut u8,
+) -> u8 {
     if out.is_null() {
         return 0;
     }
@@ -231,10 +235,22 @@ mod tests {
 
     #[test]
     fn axe_family() {
-        assert_eq!(swing_axe_frame_event(10.0, false, false), Some(AxeSwingEvent::Whoosh));
-        assert_eq!(swing_axe_frame_event(15.0, false, false), Some(AxeSwingEvent::Hit));
-        assert_eq!(swing_axe_frame_event(16.5, false, false), Some(AxeSwingEvent::BeeAttackStatus));
-        assert_eq!(swing_axe_frame_event(17.0, true, false), Some(AxeSwingEvent::SettleOrWalk));
+        assert_eq!(
+            swing_axe_frame_event(10.0, false, false),
+            Some(AxeSwingEvent::Whoosh)
+        );
+        assert_eq!(
+            swing_axe_frame_event(15.0, false, false),
+            Some(AxeSwingEvent::Hit)
+        );
+        assert_eq!(
+            swing_axe_frame_event(16.5, false, false),
+            Some(AxeSwingEvent::BeeAttackStatus)
+        );
+        assert_eq!(
+            swing_axe_frame_event(17.0, true, false),
+            Some(AxeSwingEvent::SettleOrWalk)
+        );
         assert_eq!(swing_axe_frame_event(14.0, false, false), None);
         assert_eq!(AXE_HIT_OFFSET, (-7.0, 20.0, 24.0));
         // Tree resolution: cutcount exhausted -> stump.
@@ -263,7 +279,10 @@ mod tests {
         assert_eq!(net_catch_length(true), 60.0);
         assert_eq!(net_swing_outcome(2, true, true), NetSwingOutcome::Pull);
         assert_eq!(net_swing_outcome(0, true, false), NetSwingOutcome::Stop);
-        assert_eq!(net_swing_outcome(2, false, false), NetSwingOutcome::Continue);
+        assert_eq!(
+            net_swing_outcome(2, false, false),
+            NetSwingOutcome::Continue
+        );
         assert_eq!(net_swing_outcome(1, true, false), NetSwingOutcome::Continue);
         assert_eq!(PULL_NET_MSG_BASE, 0xA2C);
         // C ABI.

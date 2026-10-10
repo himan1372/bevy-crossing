@@ -48,14 +48,49 @@ pub struct MoveBgSize {
 /// The six predefined size records (`mCoBG_mBg_data`, verbatim).
 pub mod size_preset {
     use super::MoveBgSize;
-    pub const A: MoveBgSize = MoveBgSize { right: 20.0, left: 20.0, up: 20.0, down: 20.0 };
-    pub const B_0: MoveBgSize = MoveBgSize { right: 60.0, left: 20.0, up: 20.0, down: 20.0 };
-    pub const B_180: MoveBgSize = MoveBgSize { right: 20.0, left: 60.0, up: 20.0, down: 20.0 };
-    pub const B_270: MoveBgSize = MoveBgSize { right: 20.0, left: 20.0, up: 20.0, down: 60.0 };
-    pub const B_90: MoveBgSize = MoveBgSize { right: 20.0, left: 20.0, up: 60.0, down: 20.0 };
-    pub const C: MoveBgSize = MoveBgSize { right: 40.0, left: 40.0, up: 40.0, down: 40.0 };
+    pub const A: MoveBgSize = MoveBgSize {
+        right: 20.0,
+        left: 20.0,
+        up: 20.0,
+        down: 20.0,
+    };
+    pub const B_0: MoveBgSize = MoveBgSize {
+        right: 60.0,
+        left: 20.0,
+        up: 20.0,
+        down: 20.0,
+    };
+    pub const B_180: MoveBgSize = MoveBgSize {
+        right: 20.0,
+        left: 60.0,
+        up: 20.0,
+        down: 20.0,
+    };
+    pub const B_270: MoveBgSize = MoveBgSize {
+        right: 20.0,
+        left: 20.0,
+        up: 20.0,
+        down: 60.0,
+    };
+    pub const B_90: MoveBgSize = MoveBgSize {
+        right: 20.0,
+        left: 20.0,
+        up: 60.0,
+        down: 20.0,
+    };
+    pub const C: MoveBgSize = MoveBgSize {
+        right: 40.0,
+        left: 40.0,
+        up: 40.0,
+        down: 40.0,
+    };
     /// Boat collision footprint (`l_mCoBG_boat_size`): {20, 20, 40, 40}.
-    pub const BOAT: MoveBgSize = MoveBgSize { right: 20.0, left: 20.0, up: 40.0, down: 40.0 };
+    pub const BOAT: MoveBgSize = MoveBgSize {
+        right: 20.0,
+        left: 20.0,
+        up: 40.0,
+        down: 40.0,
+    };
 }
 
 /// Boat consumer constants (`mCoBG_MakeBoatCollision`).
@@ -139,7 +174,11 @@ type WallDef = ([f32; 2], [f32; 2], [f32; 2], i16, u8);
 /// point OUTWARD from the rectangle. Rotation applies at ≥ 0.05°, but
 /// `normal_angle += angleY` always runs. Base offset (when present) is
 /// added before rotation; world translation after.
-pub fn make_move_bg_walls(size: &MoveBgSize, t: &MoveBgTransform, check_type: u8) -> [MoveBgWall; 4] {
+pub fn make_move_bg_walls(
+    size: &MoveBgSize,
+    t: &MoveBgTransform,
+    check_type: u8,
+) -> [MoveBgWall; 4] {
     let (t0, _t1) = tab_t(check_type);
     let rate = t.scale;
     let rad = short_to_rad(t.angle_y);
@@ -226,7 +265,11 @@ pub fn make_move_bg_walls(size: &MoveBgSize, t: &MoveBgTransform, check_type: u8
 /// within the segment's slab (front-line test at both endpoints).
 pub fn range_check_line_point(start: [f32; 2], end: [f32; 2], point: [f32; 2]) -> bool {
     crate::segment_map::point_info_front_line(start, point, [end[0] - start[0], end[1] - start[1]])
-        && crate::segment_map::point_info_front_line(end, point, [start[0] - end[0], start[1] - end[1]])
+        && crate::segment_map::point_info_front_line(
+            end,
+            point,
+            [start[0] - end[0], start[1] - end[1]],
+        )
 }
 
 /// Broad phase for the ground test (`mCoBG_JudgeMoveBgGroundCheck`):
@@ -308,7 +351,10 @@ pub struct MoveBgContact {
 /// `mCoBG_SetMoveBgContactSide` verbatim: capped at 5, no dedup.
 pub fn set_side_contact(c: &mut MoveBgContact, actor_id: i16, angle: i16) {
     if c.side_count < 5 {
-        c.side[c.side_count] = Some(SideContact { name: actor_id, angle });
+        c.side[c.side_count] = Some(SideContact {
+            name: actor_id,
+            angle,
+        });
         c.side_count += 1;
     }
 }
@@ -375,8 +421,19 @@ pub unsafe extern "C" fn pc_make_move_bg_walls(
         Some([b[0], b[1], b[2]])
     };
     let walls = make_move_bg_walls(
-        &MoveBgSize { right, left, up, down },
-        &MoveBgTransform { pos: [pos_x, pos_y, pos_z], angle_y, base_ofs: bo, scale, height },
+        &MoveBgSize {
+            right,
+            left,
+            up,
+            down,
+        },
+        &MoveBgTransform {
+            pos: [pos_x, pos_y, pos_z],
+            angle_y,
+            base_ofs: bo,
+            scale,
+            height,
+        },
         check_type,
     );
     let dst = unsafe { core::slice::from_raw_parts_mut(out, 4) };
@@ -421,7 +478,13 @@ mod tests {
     use super::*;
 
     fn flat_transform() -> MoveBgTransform {
-        MoveBgTransform { pos: [100.0, 5.0, 200.0], angle_y: 0, base_ofs: None, scale: 1.0, height: 30.0 }
+        MoveBgTransform {
+            pos: [100.0, 5.0, 200.0],
+            angle_y: 0,
+            base_ofs: None,
+            scale: 1.0,
+            height: 30.0,
+        }
     }
 
     #[test]
@@ -467,7 +530,10 @@ mod tests {
         // UP wall normal (0,-1) rotated 90° by RotateY: x' = z*sin = -1*1 = -1... check sign convention.
         let n = walls[0].normal;
         assert!((n[0] - -1.0).abs() < 1e-5 && n[1].abs() < 1e-5, "got {n:?}");
-        assert_eq!(walls[0].normal_angle, deg_to_short(180.0).wrapping_add(deg_to_short(90.0)));
+        assert_eq!(
+            walls[0].normal_angle,
+            deg_to_short(180.0).wrapping_add(deg_to_short(90.0))
+        );
         // Below 0.05°: no geometry rotation, but the angle still accumulates.
         let mut t2 = flat_transform();
         t2.angle_y = 1; // 1 short-angle step ≈ 0.0055°, below threshold
@@ -491,7 +557,10 @@ mod tests {
 
     #[test]
     fn carry_delta_is_translation_only() {
-        assert_eq!(move_bg_delta([10.0, 5.0, 0.0], [7.0, 5.0, -2.0]), [3.0, 0.0, 2.0]);
+        assert_eq!(
+            move_bg_delta([10.0, 5.0, 0.0], [7.0, 5.0, -2.0]),
+            [3.0, 0.0, 2.0]
+        );
         let mut d = [0.0f32; 3];
         unsafe { pc_move_bg_delta(10.0, 5.0, 0.0, 7.0, 5.0, -2.0, d.as_mut_ptr()) };
         assert_eq!(d, [3.0, 0.0, 2.0]);
@@ -529,7 +598,11 @@ mod tests {
         assert!(!judge_move_bg_ground_check([0.0, 0.0], [15.0, 0.0], 10.0));
         // Slab test: point inside segment band.
         assert!(range_check_line_point([0.0, 0.0], [10.0, 0.0], [5.0, 2.0]));
-        assert!(!range_check_line_point([0.0, 0.0], [10.0, 0.0], [15.0, 0.0]));
+        assert!(!range_check_line_point(
+            [0.0, 0.0],
+            [10.0, 0.0],
+            [15.0, 0.0]
+        ));
     }
 
     #[test]
@@ -537,11 +610,17 @@ mod tests {
         let mut out = [PcMoveBgWall::default(); 4];
         let n = unsafe {
             pc_make_move_bg_walls(
-                20.0, 20.0, 20.0, 20.0,
-                100.0, 5.0, 200.0,
+                20.0,
+                20.0,
+                20.0,
+                20.0,
+                100.0,
+                5.0,
+                200.0,
                 0,
                 core::ptr::null(),
-                1.0, 30.0,
+                1.0,
+                30.0,
                 0,
                 out.as_mut_ptr(),
             )
@@ -549,6 +628,25 @@ mod tests {
         assert_eq!(n, 4);
         assert_eq!((out[0].start_x, out[0].start_z), (75.0, 180.0));
         assert_eq!((out[0].bottom, out[0].top), (5.0, 35.0));
-        assert_eq!(unsafe { pc_make_move_bg_walls(20.0, 20.0, 20.0, 20.0, 0.0, 0.0, 0.0, 0, core::ptr::null(), 1.0, 0.0, 0, core::ptr::null_mut()) }, 0);
+        assert_eq!(
+            unsafe {
+                pc_make_move_bg_walls(
+                    20.0,
+                    20.0,
+                    20.0,
+                    20.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0,
+                    core::ptr::null(),
+                    1.0,
+                    0.0,
+                    0,
+                    core::ptr::null_mut(),
+                )
+            },
+            0
+        );
     }
 }

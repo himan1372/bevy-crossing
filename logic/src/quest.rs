@@ -74,11 +74,11 @@ pub const REGIST_NUM: usize = 35;
 //  + 10-byte RTC time_limit.
 #[derive(Clone, Copy, Default)]
 pub struct QuestBase {
-    pub quest_type: u8,       // 2 bits
-    pub quest_kind: u8,       // 6 bits
+    pub quest_type: u8, // 2 bits
+    pub quest_kind: u8, // 6 bits
     pub time_limit_enabled: bool,
-    pub progress: u8,         // 4 bits; meaning is kind-dependent
-    pub give_reward: bool,    // reward could not be delivered; retry later
+    pub progress: u8,      // 4 bits; meaning is kind-dependent
+    pub give_reward: bool, // reward could not be delivered; retry later
 }
 
 /// Generic completion rule: progress == 0 means complete (delivery and
@@ -95,6 +95,7 @@ pub fn is_free(base: &QuestBase) -> bool {
 /// Delivery reward percentages: [FTR, STATIONERY, CLOTH, CARPET,
 /// WALLPAPER, MONEY, WORN_CLOTH, _] per delivery kind, plus max pay.
 /// From l_set_delivery_data.
+#[rustfmt::skip]
 pub const DELIVERY_REWARDS: [[u8; 8]; 4] = [
     [40, 0, 0, 0, 0, 30, 30, 0],   // NORMAL
     [40, 0, 0, 10, 10, 40, 0, 0],  // FOREIGN
@@ -105,6 +106,7 @@ pub const DELIVERY_MAX_PAY: [u32; 4] = [200, 1000, 1000, 0];
 
 /// Contest reward percentages per contest kind, plus max pay.
 /// From l_set_contest_data.
+#[rustfmt::skip]
 pub const CONTEST_REWARDS: [[u8; 8]; 7] = [
     [0, 0, 0, 30, 30, 40, 0, 0],  // FRUIT
     [40, 0, 0, 30, 30, 0, 0, 0],  // SOCCER
@@ -130,7 +132,11 @@ pub const ERRAND_PAY: [u32; 4] = [0, 500, 750, 1000];
 /// Errand reward tier from chain used_num: (used_num-1) clamped 0..3.
 pub fn errand_tier(used_num: u8) -> usize {
     let t = used_num.saturating_sub(1) as usize;
-    if t > 3 { 3 } else { t }
+    if t > 3 {
+        3
+    } else {
+        t
+    }
 }
 
 /// Build the 100-slot 1%-granularity probability table from 8
@@ -153,8 +159,7 @@ pub fn prob_table_select(percentages: &[u8; 8], roll: u8) -> u8 {
 
 /// Timeout day tables (m_quest.c).
 pub const DELIVERY_LIMIT_DAYS: [i32; 4] = [2, 2, 2, 2];
-pub const ERRAND_LIMIT_DAYS: [i32; 15] =
-    [2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+pub const ERRAND_LIMIT_DAYS: [i32; 15] = [2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 pub const CONTEST_LIMIT_DAYS: [i32; 7] = [1, 1, 1, 3, 3, 3, 2];
 /// Extra days added for contests whose progress == 0.
 pub const CONTEST_FIN_LIMIT_DAYS: [i32; 7] = [3, 3, 3, 3, 3, 3, 2];
@@ -297,12 +302,7 @@ pub extern "C" fn pc_quest_free(quest_type: u8) -> u8 {
 
 /// C ABI: reward category from percentages + roll (0..99).
 #[no_mangle]
-pub extern "C" fn pc_reward_select(
-    quest_type: u8,
-    kind: u8,
-    used_num: u8,
-    roll: u8,
-) -> u8 {
+pub extern "C" fn pc_reward_select(quest_type: u8, kind: u8, used_num: u8, roll: u8) -> u8 {
     let pcts: &[u8; 8] = match quest_type {
         qtype::DELIVERY => &DELIVERY_REWARDS[(kind % 4) as usize],
         qtype::CONTEST => &CONTEST_REWARDS[(kind % 7) as usize],
@@ -359,7 +359,10 @@ mod tests {
         assert!(!is_free(&q));
         let done = QuestBase { progress: 0, ..q };
         assert!(is_complete(&done));
-        let free = QuestBase { quest_type: qtype::NONE, ..q };
+        let free = QuestBase {
+            quest_type: qtype::NONE,
+            ..q
+        };
         assert!(is_free(&free));
         assert_eq!(REGIST_NUM, 35);
         // Attempt roll: 75%.
@@ -388,8 +391,14 @@ mod tests {
         assert_eq!(prob_table_select(&DELIVERY_REWARDS[0], 39), reward::FTR);
         assert_eq!(prob_table_select(&DELIVERY_REWARDS[0], 40), reward::MONEY);
         assert_eq!(prob_table_select(&DELIVERY_REWARDS[0], 69), reward::MONEY);
-        assert_eq!(prob_table_select(&DELIVERY_REWARDS[0], 70), reward::WORN_CLOTH);
-        assert_eq!(prob_table_select(&DELIVERY_REWARDS[0], 99), reward::WORN_CLOTH);
+        assert_eq!(
+            prob_table_select(&DELIVERY_REWARDS[0], 70),
+            reward::WORN_CLOTH
+        );
+        assert_eq!(
+            prob_table_select(&DELIVERY_REWARDS[0], 99),
+            reward::WORN_CLOTH
+        );
         // C ABI.
         assert_eq!(pc_reward_select(qtype::DELIVERY, 0, 0, 0), reward::FTR);
         assert_eq!(pc_reward_select(qtype::ERRAND, 0, 1, 0), reward::STATIONERY);
@@ -446,9 +455,16 @@ mod tests {
         assert_eq!(pc_quest_limit_days(qtype::CONTEST, 6, 1), 2); // letter
         assert_eq!(pc_contest_complete(ckind::SOCCER, 1, 0), 1);
         assert_eq!(pc_contest_complete(ckind::FRUIT, 1, 0), 0); // needs item
-        assert_eq!(pc_contest_complete(ckind::FRUIT, 1, cqual::ITEM_POSSESSED), 1);
         assert_eq!(
-            pc_contest_complete(ckind::SNOWMAN, 1, cqual::PLAYER_ID_SET | cqual::PLAYER_ID_CURRENT),
+            pc_contest_complete(ckind::FRUIT, 1, cqual::ITEM_POSSESSED),
+            1
+        );
+        assert_eq!(
+            pc_contest_complete(
+                ckind::SNOWMAN,
+                1,
+                cqual::PLAYER_ID_SET | cqual::PLAYER_ID_CURRENT
+            ),
             1
         );
         // Money scaling: base 200, +10%, no money power.

@@ -789,7 +789,10 @@ pub const TRIGRAM_PAIRS: &[[u8; 2]] = &[
 
 /// Start index of each table (A=0 .. Z=25) within `TRIGRAM_PAIRS`;
 /// index 26 marks the end of the Z table.
-pub const TRIGRAM_TABLE_STARTS: [usize; 27] = [0, 57, 106, 150, 199, 227, 266, 292, 328, 347, 356, 366, 406, 444, 468, 493, 531, 534, 568, 655, 706, 717, 727, 767, 768, 775, 776];
+pub const TRIGRAM_TABLE_STARTS: [usize; 27] = [
+    0, 57, 106, 150, 199, 227, 266, 292, 328, 347, 356, 366, 406, 444, 468, 493, 531, 534, 568,
+    655, 706, 717, 727, 767, 768, 775, 776,
+];
 
 // ---------------------------------------------------------------------------
 // Post-Z RAM tail (NTSC-U bug): pairs from the 5,858 bytes following the Z

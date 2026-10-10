@@ -36,8 +36,8 @@
 //! the state machine, the texture-format conversions, and the frame
 //! organization.
 
-pub mod command;
 pub mod combine;
+pub mod command;
 pub mod frame;
 pub mod gx_backend;
 pub mod interpreter;

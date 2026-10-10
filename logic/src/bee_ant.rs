@@ -81,7 +81,10 @@ pub fn is_bee_tree(fg_item: u16) -> bool {
 }
 
 pub fn bee_tree_revert(fg_item: u16) -> Option<u16> {
-    BEE_TREE_TABLE.iter().find(|&&(t, _)| t == fg_item).map(|&(_, n)| n)
+    BEE_TREE_TABLE
+        .iter()
+        .find(|&&(t, _)| t == fg_item)
+        .map(|&(_, n)| n)
 }
 
 /// Insect spawn areas for the runtime overlay.
@@ -191,6 +194,7 @@ pub struct SpawnCandidate {
 
 /// Appended to every normal town/island range
 /// (`aSOI_ins_add_range_info`).
+#[rustfmt::skip]
 pub const ANT_OVERLAY: [SpawnCandidate; 3] = [
     SpawnCandidate { insect: insect_type::ANT, area: spawn_area::ON_CANDY, weight: 1.0 },
     SpawnCandidate { insect: insect_type::ANT, area: spawn_area::ON_TRASH, weight: 1.0 },
@@ -384,7 +388,12 @@ impl BeeActor {
         };
         let angle = (90.0 - self.start_frame).abs() * 7.5;
         let d_angle = base_angle - angle;
-        add_angle_calc(&mut self.add_angle_deg, d_angle, 0.4, 250.0 * 360.0 / 65536.0);
+        add_angle_calc(
+            &mut self.add_angle_deg,
+            d_angle,
+            0.4,
+            250.0 * 360.0 / 65536.0,
+        );
         let d = player_angle_y_deg - self.angle_y_deg;
         add_angle_calc(&mut self.angle_y_deg, d, 0.4, self.add_angle_deg * 0.5);
         let mut speed_angle = (self.angle_y_deg - player_angle_y_deg).abs();
@@ -491,11 +500,10 @@ impl BeeActor {
                             self.set_action(bee_action::DISAPPEAR);
                             return;
                         }
-                        bee_player_status::ATTACK
-                            if env.dist_xz < bee::ATTACK_DIST => {
-                                events.push(BeeEvent::RequestSting);
-                                self.set_action(bee_action::ATTACK);
-                            }
+                        bee_player_status::ATTACK if env.dist_xz < bee::ATTACK_DIST => {
+                            events.push(BeeEvent::RequestSting);
+                            self.set_action(bee_action::ATTACK);
+                        }
                         _ => {}
                     }
                     self.fly_move_common(env.player_angle_y_deg);
@@ -515,7 +523,11 @@ impl BeeActor {
                 }
             }
             bee_action::DISAPPEAR => {
-                self.size = Xyz::new(bee::DISAPPEAR_SCALE, bee::DISAPPEAR_SCALE, bee::DISAPPEAR_SCALE);
+                self.size = Xyz::new(
+                    bee::DISAPPEAR_SCALE,
+                    bee::DISAPPEAR_SCALE,
+                    bee::DISAPPEAR_SCALE,
+                );
                 self.alpha -= bee::DISAPPEAR_ALPHA_STEP;
                 if self.alpha < 0.0 {
                     self.alpha = 0.0;
@@ -828,9 +840,21 @@ mod tests {
     #[test]
     fn ant_overlay_override() {
         let mut cands = vec![
-            SpawnCandidate { insect: 3, area: 9, weight: 5.0 },
-            SpawnCandidate { insect: insect_type::ANT, area: spawn_area::ON_CANDY, weight: 1.0 },
-            SpawnCandidate { insect: insect_type::ANT, area: spawn_area::ON_TRASH, weight: 1.0 },
+            SpawnCandidate {
+                insect: 3,
+                area: 9,
+                weight: 5.0,
+            },
+            SpawnCandidate {
+                insect: insect_type::ANT,
+                area: spawn_area::ON_CANDY,
+                weight: 1.0,
+            },
+            SpawnCandidate {
+                insect: insect_type::ANT,
+                area: spawn_area::ON_TRASH,
+                weight: 1.0,
+            },
         ];
         limit_insect_data(&mut cands, true, false);
         assert_eq!(cands[0].weight, 0.0);
@@ -859,13 +883,21 @@ mod tests {
         assert_eq!(bee.catch_delay_frames, bee::CATCH_DELAY_FRAMES);
         // Catch delay counts down once the bee has leveled out (retail
         // gates it on rotation.x <= 22.5 deg); keep the player far away.
-        let fly_env = BeeEnv { leveled: true, dist_xz: 100.0, ..BeeEnv::default() };
+        let fly_env = BeeEnv {
+            leveled: true,
+            dist_xz: 100.0,
+            ..BeeEnv::default()
+        };
         for _ in 0..60 {
             bee.step(&fly_env, &mut ev);
         }
         assert_eq!(bee.catch_delay_frames, 0.0);
         // Net catch -> CAUGHT -> conversion -> DISAPPEAR.
-        let catch_env = BeeEnv { catch_label_is_me: true, leveled: true, ..BeeEnv::default() };
+        let catch_env = BeeEnv {
+            catch_label_is_me: true,
+            leveled: true,
+            ..BeeEnv::default()
+        };
         bee.step(&catch_env, &mut ev);
         assert_eq!(bee.action, bee_action::CAUGHT);
         // Conversion is requested on the next tick (aBEE_caught).
@@ -896,7 +928,11 @@ mod tests {
         }
         assert_eq!(bee.action, bee_action::FLY);
         // Player close -> ATTACK_WAIT.
-        let mut close = BeeEnv { leveled: true, dist_xz: 20.0, ..BeeEnv::default() };
+        let mut close = BeeEnv {
+            leveled: true,
+            dist_xz: 20.0,
+            ..BeeEnv::default()
+        };
         bee.step(&close, &mut ev);
         assert_eq!(bee.action, bee_action::ATTACK_WAIT);
         // Player enters BEE_ATTACK status -> ATTACK + sting request.
@@ -923,11 +959,17 @@ mod tests {
         let mut ant = AntActor::new(Xyz::new(5.0, 0.0, 5.0), Some(item::FOOD_CANDY));
         let mut ev = Vec::new();
         // Persists on candy.
-        let env = AntEnv { below_fg: Some(item::FOOD_CANDY), ..AntEnv::default() };
+        let env = AntEnv {
+            below_fg: Some(item::FOOD_CANDY),
+            ..AntEnv::default()
+        };
         ant.step(&env, &mut ev);
         assert_eq!(ant.action, ant_action::WAIT);
         // Substrate removed -> DISAPPEAR.
-        let gone = AntEnv { below_fg: Some(0x1234), ..AntEnv::default() };
+        let gone = AntEnv {
+            below_fg: Some(0x1234),
+            ..AntEnv::default()
+        };
         ant.step(&gone, &mut ev);
         assert_eq!(ant.action, ant_action::DISAPPEAR);
         // Fresh ant, caught by the net.
@@ -970,7 +1012,10 @@ mod tests {
         assert!(is_bee_tree(item::GOLD_TREE_BEES));
         assert!(!is_bee_tree(item::TREE));
         assert_eq!(bee_tree_revert(item::TREE_BEES), Some(item::TREE));
-        assert_eq!(bee_tree_revert(item::CEDAR_TREE_BEES), Some(item::CEDAR_TREE));
+        assert_eq!(
+            bee_tree_revert(item::CEDAR_TREE_BEES),
+            Some(item::CEDAR_TREE)
+        );
         assert_eq!(bee_tree_revert(item::GOLD_TREE_BEES), Some(item::GOLD_TREE));
         assert_eq!(item::HONEYCOMB, 0x0062);
         assert_eq!(item::FOOD_CANDY, 0x2806);

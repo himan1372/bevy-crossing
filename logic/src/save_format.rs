@@ -282,7 +282,11 @@ pub enum SaveSlot {
 /// (`mCD_LoadLand`): main first, then backup. `outdated` is true when the
 /// backup was the copy that validated (retail raises
 /// `mCD_ERROR_OUTDATED`, "loaded backup").
-pub fn select_slot(main: &[u8; SAVE_SLOT_SIZE], backup: &[u8; SAVE_SLOT_SIZE], land_id: u16) -> Option<(SaveSlot, bool)> {
+pub fn select_slot(
+    main: &[u8; SAVE_SLOT_SIZE],
+    backup: &[u8; SAVE_SLOT_SIZE],
+    land_id: u16,
+) -> Option<(SaveSlot, bool)> {
     if candidate_valid(main, land_id) {
         return Some((SaveSlot::Main, false));
     }
@@ -331,9 +335,14 @@ pub fn check_broken_land(
 
 /// `mCD_repair_land`: rewrite the broken copy from the surviving good one.
 /// Returns the repaired image, or `None` when there is nothing to repair.
-pub fn repair_land(image: &[u8; LAND_FILE_SIZE], land_id: u16) -> Option<Box<[u8; LAND_FILE_SIZE]>> {
+pub fn repair_land(
+    image: &[u8; LAND_FILE_SIZE],
+    land_id: u16,
+) -> Option<Box<[u8; LAND_FILE_SIZE]>> {
     let main: &[u8; SAVE_SLOT_SIZE] = image[MAIN_OFS..MAIN_OFS + SAVE_SLOT_SIZE].try_into().ok()?;
-    let backup: &[u8; SAVE_SLOT_SIZE] = image[BACKUP_OFS..BACKUP_OFS + SAVE_SLOT_SIZE].try_into().ok()?;
+    let backup: &[u8; SAVE_SLOT_SIZE] = image[BACKUP_OFS..BACKUP_OFS + SAVE_SLOT_SIZE]
+        .try_into()
+        .ok()?;
     let st = check_broken_land(main, backup, land_id);
     if !st.needs_repair() {
         return None;
@@ -425,7 +434,12 @@ pub fn load_others(image: &[u8; LAND_FILE_SIZE], diary: bool) -> (bool, bool, bo
 /// (`mCD_SaveHome_bg_set_others`): comment/banner/icon header bytes come
 /// from the provider (they are ROM resources in retail), then the three
 /// keep blocks verbatim (checksums must already be stamped by the caller).
-pub fn build_others(header: &[u8; aux::HEADER_LEN], mail: &[u8], original: &[u8], diary: &[u8]) -> [u8; SAVE_SLOT_SIZE] {
+pub fn build_others(
+    header: &[u8; aux::HEADER_LEN],
+    mail: &[u8],
+    original: &[u8],
+    diary: &[u8],
+) -> [u8; SAVE_SLOT_SIZE] {
     let mut out = [0u8; SAVE_SLOT_SIZE];
     out[..aux::HEADER_LEN].copy_from_slice(header);
     out[aux::MAIL_OFS..aux::MAIL_OFS + mail.len().min(aux::MAIL_SIZE)]
@@ -502,8 +516,14 @@ pub unsafe extern "C" fn pc_savef_broken_land(
     let m: &[u8; SAVE_SLOT_SIZE] = &*(main as *const [u8; SAVE_SLOT_SIZE]);
     let b: &[u8; SAVE_SLOT_SIZE] = &*(backup as *const [u8; SAVE_SLOT_SIZE]);
     match check_broken_land(m, b, land_id) {
-        BrokenLand { ok: Some(SaveSlot::Main), broken: Some(SaveSlot::Backup) } => 1,
-        BrokenLand { ok: Some(SaveSlot::Backup), broken: Some(SaveSlot::Main) } => 2,
+        BrokenLand {
+            ok: Some(SaveSlot::Main),
+            broken: Some(SaveSlot::Backup),
+        } => 1,
+        BrokenLand {
+            ok: Some(SaveSlot::Backup),
+            broken: Some(SaveSlot::Main),
+        } => 2,
         _ => 0,
     }
 }
@@ -621,8 +641,14 @@ mod tests {
         let good = good_slot();
         let mut bad = good;
         bad[0x100] ^= 0x01;
-        assert_eq!(select_slot(&good, &bad, land_id()), Some((SaveSlot::Main, false)));
-        assert_eq!(select_slot(&bad, &good, land_id()), Some((SaveSlot::Backup, true)));
+        assert_eq!(
+            select_slot(&good, &bad, land_id()),
+            Some((SaveSlot::Main, false))
+        );
+        assert_eq!(
+            select_slot(&bad, &good, land_id()),
+            Some((SaveSlot::Backup, true))
+        );
         assert_eq!(select_slot(&bad, &bad, land_id()), None);
     }
 
@@ -717,8 +743,22 @@ mod tests {
 
     #[test]
     fn land_id_bitmask() {
-        assert!(SaveCheck { version: 6, code: SAVE_ID, land_id: 0x3001, time: [0; 8], checksum: 0 }.land_id_ok());
-        assert!(!SaveCheck { version: 6, code: SAVE_ID, land_id: 0x2001, time: [0; 8], checksum: 0 }.land_id_ok());
+        assert!(SaveCheck {
+            version: 6,
+            code: SAVE_ID,
+            land_id: 0x3001,
+            time: [0; 8],
+            checksum: 0
+        }
+        .land_id_ok());
+        assert!(!SaveCheck {
+            version: 6,
+            code: SAVE_ID,
+            land_id: 0x2001,
+            time: [0; 8],
+            checksum: 0
+        }
+        .land_id_ok());
     }
 
     #[test]

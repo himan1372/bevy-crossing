@@ -64,9 +64,8 @@ pub mod present {
     pub const FOOD_APPLE: u16 = 0x2800;
     pub const FOOD_MUSHROOM: u16 = 0x2805;
     /// December monthly second-variant shirt table.
-    pub const DECEMBER_SHIRTS: [u16; 6] = [
-        CLOTH108, CLOTH109, CLOTH110, CLOTH144, CLOTH145, CLOTH156,
-    ];
+    pub const DECEMBER_SHIRTS: [u16; 6] =
+        [CLOTH108, CLOTH109, CLOTH110, CLOTH144, CLOTH145, CLOTH156];
 }
 
 /// Months (lbRTC_*).
@@ -92,7 +91,11 @@ pub struct RtcYmd {
     pub day: u8,
 }
 
-pub const CLEAR_DATE: RtcYmd = RtcYmd { year: 0xFFFF, month: 0xFF, day: 0xFF };
+pub const CLEAR_DATE: RtcYmd = RtcYmd {
+    year: 0xFFFF,
+    month: 0xFF,
+    day: 0xFF,
+};
 
 /// `mPr_mother_mail_data_c`: the 10-byte persistent bitfield block.
 ///
@@ -162,13 +165,13 @@ pub fn clear_mother_mail_info(info: &mut MotherMailInfo) {
 pub enum PresentSpec {
     None,
     Item(u16),
-    RandomClothing,   // mSP_KIND_CLOTH, mSP_LISTTYPE_ABC
-    RandomUmbrella,   // mSP_RandomUmbSelect
-    RandomFurniture,  // mSP_KIND_FURNITURE, mSP_LISTTYPE_ABC (Toy Day)
-    OtherFruit,       // mFI_GetOtherFruit
-    BirthdayCake,     // FTR_START(FTR_SUM_BDCAKE01)
-    Doll,             // FTR_START(FTR_SUM_DOLL02)
-    Dracaena,         // FTR_START(FTR_SUM_PL_DRACAENA)
+    RandomClothing,  // mSP_KIND_CLOTH, mSP_LISTTYPE_ABC
+    RandomUmbrella,  // mSP_RandomUmbSelect
+    RandomFurniture, // mSP_KIND_FURNITURE, mSP_LISTTYPE_ABC (Toy Day)
+    OtherFruit,      // mFI_GetOtherFruit
+    BirthdayCake,    // FTR_START(FTR_SUM_BDCAKE01)
+    Doll,            // FTR_START(FTR_SUM_DOLL02)
+    Dracaena,        // FTR_START(FTR_SUM_PL_DRACAENA)
 }
 
 impl PresentSpec {
@@ -261,12 +264,20 @@ pub fn set_monthly(data: &mut MotherMailData, month: u8, idx: usize) {
 
 /// mPr_GetMotherMailMonthlyNotSendNum.
 pub fn monthly_not_send_num(data: &MotherMailData, month: u8) -> usize {
-    let max = if month == month::AUGUST { AUGUST_VARIANTS } else { 2 };
+    let max = if month == month::AUGUST {
+        AUGUST_VARIANTS
+    } else {
+        2
+    };
     (0..max).filter(|&i| !check_monthly(data, month, i)).count()
 }
 
 /// Uniform selection among unsent indices (retail's count + RANDOM + scan).
-fn select_unsent(max: usize, is_sent: &dyn Fn(usize) -> bool, rng: &mut dyn FnMut(u32) -> u32) -> usize {
+fn select_unsent(
+    max: usize,
+    is_sent: &dyn Fn(usize) -> bool,
+    rng: &mut dyn FnMut(u32) -> u32,
+) -> usize {
     let mut selected = rng(max as u32 - (0..max).filter(|&i| is_sent(i)).count() as u32) as usize;
     for i in 0..max {
         if !is_sent(i) {
@@ -334,10 +345,15 @@ pub fn monthly_letter_data(
     } else {
         3
     };
-    let max = if month == month::AUGUST { AUGUST_VARIANTS } else { 2 };
+    let max = if month == month::AUGUST {
+        AUGUST_VARIANTS
+    } else {
+        2
+    };
     let event_no = select_unsent(max, &|i| check_monthly(data, month, i), rng);
     // Signed arithmetic like retail: (month - 1 - idx*3) goes negative for Jan/Feb.
-    let mail_no = MAIL_START_NO_TABLE[mail_start_idx] as i32 + event_no as i32
+    let mail_no = MAIL_START_NO_TABLE[mail_start_idx] as i32
+        + event_no as i32
         + (month as i32 - 1 - mail_start_idx as i32 * 3) * 2;
     let mail_no = mail_no as u16;
     let present = if month == month::MAY && event_no == 1 {
@@ -587,7 +603,11 @@ mod tests {
     fn first_startup_stamps_date_only() {
         let mut info = MotherMailInfo::default();
         clear_mother_mail_info(&mut info);
-        let today = RtcYmd { year: 2026, month: 10, day: 8 };
+        let today = RtcYmd {
+            year: 2026,
+            month: 10,
+            day: 8,
+        };
         let mut r = rng0();
         let c = ctx();
         match send_mail_from_mother(&mut info, &today, &c, &mut r) {
@@ -599,8 +619,15 @@ mod tests {
 
     #[test]
     fn same_day_noop() {
-        let today = RtcYmd { year: 2026, month: 10, day: 8 };
-        let mut info = MotherMailInfo { date: today, ..Default::default() };
+        let today = RtcYmd {
+            year: 2026,
+            month: 10,
+            day: 8,
+        };
+        let mut info = MotherMailInfo {
+            date: today,
+            ..Default::default()
+        };
         let mut r = rng0();
         let c = ctx();
         assert!(matches!(
@@ -612,10 +639,18 @@ mod tests {
     #[test]
     fn birthday_letter_and_cake() {
         let mut info = MotherMailInfo {
-            date: RtcYmd { year: 2026, month: 6, day: 14 },
+            date: RtcYmd {
+                year: 2026,
+                month: 6,
+                day: 14,
+            },
             ..Default::default()
         };
-        let today = RtcYmd { year: 2026, month: 6, day: 15 };
+        let today = RtcYmd {
+            year: 2026,
+            month: 6,
+            day: 15,
+        };
         let mut r = rng0();
         let c = ctx();
         match send_mail_from_mother(&mut info, &today, &c, &mut r) {
@@ -632,10 +667,18 @@ mod tests {
     #[test]
     fn month_day_letter_jan1_bells() {
         let mut info = MotherMailInfo {
-            date: RtcYmd { year: 2026, month: 1, day: 2 },
+            date: RtcYmd {
+                year: 2026,
+                month: 1,
+                day: 2,
+            },
             ..Default::default()
         };
-        let today = RtcYmd { year: 2026, month: 1, day: 1 };
+        let today = RtcYmd {
+            year: 2026,
+            month: 1,
+            day: 1,
+        };
         let mut r = rng0();
         let mut c = ctx();
         c.birthday = (3, 3);
@@ -652,10 +695,18 @@ mod tests {
     #[test]
     fn birthday_beats_month_day() {
         let mut info = MotherMailInfo {
-            date: RtcYmd { year: 2026, month: 1, day: 2 },
+            date: RtcYmd {
+                year: 2026,
+                month: 1,
+                day: 2,
+            },
             ..Default::default()
         };
-        let today = RtcYmd { year: 2026, month: 1, day: 1 };
+        let today = RtcYmd {
+            year: 2026,
+            month: 1,
+            day: 1,
+        };
         let mut r = rng0();
         let mut c = ctx();
         c.birthday = (1, 1);
@@ -697,7 +748,7 @@ mod tests {
         assert!(!check_monthly(&data, month::AUGUST, 3));
         set_monthly(&mut data, month::AUGUST, 7);
         assert!(check_monthly(&data, 12, 1)); // December event 1 -> bit 7
-        // Jan-Aug still use their own bytes.
+                                              // Jan-Aug still use their own bytes.
         set_monthly(&mut data, 3, 1);
         assert!(!check_monthly(&data, month::AUGUST, 0));
     }
@@ -705,7 +756,11 @@ mod tests {
     #[test]
     fn exhaustion_clears_all_and_sends_monthly() {
         let mut info = MotherMailInfo {
-            date: RtcYmd { year: 2026, month: 10, day: 7 },
+            date: RtcYmd {
+                year: 2026,
+                month: 10,
+                day: 7,
+            },
             ..Default::default()
         };
         // Mark all 56 normal letters sent.
@@ -714,7 +769,11 @@ mod tests {
         }
         // And mark October's monthly letters sent too, to prove the clear.
         set_monthly(&mut info.data, 10, 0);
-        let today = RtcYmd { year: 2026, month: 10, day: 8 };
+        let today = RtcYmd {
+            year: 2026,
+            month: 10,
+            day: 8,
+        };
         let mut r = rng0();
         let c = ctx();
         match send_mail_from_mother(&mut info, &today, &c, &mut r) {
@@ -732,10 +791,18 @@ mod tests {
     #[test]
     fn normal_failure_still_consumes_day() {
         let mut info = MotherMailInfo {
-            date: RtcYmd { year: 2026, month: 10, day: 7 },
+            date: RtcYmd {
+                year: 2026,
+                month: 10,
+                day: 7,
+            },
             ..Default::default()
         };
-        let today = RtcYmd { year: 2026, month: 10, day: 8 };
+        let today = RtcYmd {
+            year: 2026,
+            month: 10,
+            day: 8,
+        };
         let mut r = rng0(); // 20% roll succeeds
         let mut c = ctx();
         c.house_mailbox_has_room = false;
@@ -751,10 +818,18 @@ mod tests {
     #[test]
     fn special_failure_retries_same_day() {
         let mut info = MotherMailInfo {
-            date: RtcYmd { year: 2026, month: 6, day: 14 },
+            date: RtcYmd {
+                year: 2026,
+                month: 6,
+                day: 14,
+            },
             ..Default::default()
         };
-        let today = RtcYmd { year: 2026, month: 6, day: 15 };
+        let today = RtcYmd {
+            year: 2026,
+            month: 6,
+            day: 15,
+        };
         let mut r = rng0();
         let mut c = ctx();
         c.house_mailbox_has_room = false;
@@ -789,7 +864,11 @@ mod tests {
     fn inactive_for_foreigner() {
         let mut info = MotherMailInfo::default();
         clear_mother_mail_info(&mut info);
-        let today = RtcYmd { year: 2026, month: 10, day: 8 };
+        let today = RtcYmd {
+            year: 2026,
+            month: 10,
+            day: 8,
+        };
         let mut r = rng0();
         let mut c = ctx();
         c.is_local_player = false;

@@ -149,12 +149,15 @@ pub fn calendar_time_to_ticks(td: &CalendarTime) -> i64 {
         YEAR_DAYS
     };
     let secs = 365i64 * 86_400 * year as i64
-        + 86_400i64 * (leap_days_before(year) as i64 + md[mon as usize] as i64 + td.mday as i64 - 1)
+        + 86_400i64
+            * (leap_days_before(year) as i64 + md[mon as usize] as i64 + td.mday as i64 - 1)
         + 3600i64 * td.hour as i64
         + 60i64 * td.min as i64
         + td.sec as i64
         - 0xEB1E1BF80i64;
-    secs * TIMER_CLOCK + (td.msec as i64) * (TIMER_CLOCK / 1000) + ((td.usec as i64) * (TIMER_CLOCK / 125_000)) / 8
+    secs * TIMER_CLOCK
+        + (td.msec as i64) * (TIMER_CLOCK / 1000)
+        + ((td.usec as i64) * (TIMER_CLOCK / 125_000)) / 8
 }
 
 // ---------------------------------------------------------------------------
@@ -327,8 +330,7 @@ pub fn weekly_day(year: u16, month: u8, weeks: i32, weekday: u8) -> u8 {
     let month_first_weekday = rtc_week(year, month, 1);
     let month_days = get_days_by_month(year, month);
     let mut weeks = weeks - 1;
-    let mut t_weekday =
-        (((weekday as i32 - month_first_weekday as i32) + 7) % 7) + 1;
+    let mut t_weekday = (((weekday as i32 - month_first_weekday as i32) + 7) % 7) + 1;
     while weeks > 0 {
         t_weekday += 7;
         if t_weekday > month_days as i32 {
@@ -464,6 +466,7 @@ pub struct CalendarTerm {
 }
 
 /// The 18-term season calendar (`mTM_calender` in m_time.c).
+#[rustfmt::skip]
 pub const CALENDAR_TERMS: [CalendarTerm; 18] = [
     CalendarTerm { month: 2, day: 3, season: Season::Winter, bgitem_profile: 0x0050, bgitem_bank: 0x0025 },
     CalendarTerm { month: 2, day: 17, season: Season::Winter, bgitem_profile: 0x0050, bgitem_bank: 0x0025 },
@@ -581,9 +584,17 @@ pub fn game_day_ymd(t: &RtcTime) -> RtcYmd {
     if t.hour < FIELD_RENEW_HOUR {
         let mut shifted = *t;
         sub_days(&mut shifted, 1);
-        RtcYmd { year: shifted.year, month: shifted.month, day: shifted.day }
+        RtcYmd {
+            year: shifted.year,
+            month: shifted.month,
+            day: shifted.day,
+        }
     } else {
-        RtcYmd { year: t.year, month: t.month, day: t.day }
+        RtcYmd {
+            year: t.year,
+            month: t.month,
+            day: t.day,
+        }
     }
 }
 
@@ -610,6 +621,7 @@ pub fn autumnal_equinox_day(year: i32) -> i32 {
 /// here. Out-of-range years return None; the original falls back to a
 /// lunisolar conversion.)
 pub fn harvest_moon_day(year: i32) -> Option<(u8, u8)> {
+    #[rustfmt::skip]
     const TABLE: [(u8, u8); 29] = [
         (9, 21), (9, 10), (9, 28), (9, 18), (10, 7), (9, 26), (9, 15),
         (10, 4), (9, 23), (9, 12), (9, 30), (9, 19), (9, 9), (9, 28),
@@ -659,7 +671,11 @@ impl DatePredicate {
                     None
                 }
             }
-            DatePredicate::NthWeekday { month: m, weeks, weekday } => {
+            DatePredicate::NthWeekday {
+                month: m,
+                weeks,
+                weekday,
+            } => {
                 if m == month {
                     Some(weekly_day(year, month, weeks, weekday))
                 } else {
@@ -672,13 +688,15 @@ impl DatePredicate {
                 Some(first)
             }
             DatePredicate::HarvestMoon => {
-                harvest_moon_day(year as i32).and_then(|(m, d)| {
-                    if m == month {
-                        Some(d)
-                    } else {
-                        None
-                    }
-                })
+                harvest_moon_day(year as i32).and_then(
+                    |(m, d)| {
+                        if m == month {
+                            Some(d)
+                        } else {
+                            None
+                        }
+                    },
+                )
             }
             DatePredicate::VernalEquinox => {
                 if month == 3 {
@@ -726,9 +744,19 @@ impl EventWindow {
             None => return false,
         };
         // Build the window's date range by shifting the base day.
-        let mut start = RtcTime { day: base_day as u8, month: t.month, year: t.year, ..RtcTime::default() };
+        let mut start = RtcTime {
+            day: base_day as u8,
+            month: t.month,
+            year: t.year,
+            ..RtcTime::default()
+        };
         add_days(&mut start, self.day_offset_start);
-        let mut end = RtcTime { day: base_day as u8, month: t.month, year: t.year, ..RtcTime::default() };
+        let mut end = RtcTime {
+            day: base_day as u8,
+            month: t.month,
+            year: t.year,
+            ..RtcTime::default()
+        };
         add_days(&mut end, self.day_offset_end);
         let today = (t.year, t.month, t.day);
         let in_range = (start.year, start.month, start.day) <= today
@@ -750,7 +778,12 @@ mod tests {
     use super::*;
 
     fn ymd(year: u16, month: u8, day: u8) -> RtcTime {
-        RtcTime { year, month, day, ..RtcTime::default() }
+        RtcTime {
+            year,
+            month,
+            day,
+            ..RtcTime::default()
+        }
     }
 
     #[test]
@@ -764,7 +797,12 @@ mod tests {
     #[test]
     fn calendar_roundtrip() {
         let ct = CalendarTime {
-            year: 2026, mon: 9, mday: 6, hour: 21, min: 30, sec: 15,
+            year: 2026,
+            mon: 9,
+            mday: 6,
+            hour: 21,
+            min: 30,
+            sec: 15,
             ..CalendarTime::default()
         };
         let ticks = calendar_time_to_ticks(&ct);
@@ -779,7 +817,12 @@ mod tests {
     fn leap_day_roundtrip() {
         // 2000-02-29 (leap year) and the day after
         for (mon, mday, yday) in [(1, 29, 59), (2, 1, 60)] {
-            let ct = CalendarTime { year: 2000, mon, mday, ..CalendarTime::default() };
+            let ct = CalendarTime {
+                year: 2000,
+                mon,
+                mday,
+                ..CalendarTime::default()
+            };
             let back = ticks_to_calendar_time(calendar_time_to_ticks(&ct));
             assert_eq!((back.mon, back.mday, back.yday), (mon, mday, yday));
         }
@@ -804,10 +847,21 @@ mod tests {
         let b = ymd(2026, 10, 6);
         assert_eq!(interval_days(&a, &b), 5);
         assert_eq!(interval_days(&b, &a), 0); // later first -> 0
-        assert_eq!(interval_days_ymd(
-            &RtcYmd { year: 2026, month: 10, day: 6 },
-            &RtcYmd { year: 2026, month: 10, day: 1 },
-        ), -5);
+        assert_eq!(
+            interval_days_ymd(
+                &RtcYmd {
+                    year: 2026,
+                    month: 10,
+                    day: 6
+                },
+                &RtcYmd {
+                    year: 2026,
+                    month: 10,
+                    day: 1
+                },
+            ),
+            -5
+        );
     }
 
     #[test]
@@ -852,14 +906,32 @@ mod tests {
         let mut t = ymd(2026, 10, 7);
         t.hour = 5;
         // 5:59 AM Oct 7 is still the Oct 6 game day
-        assert_eq!(game_day_ymd(&t), RtcYmd { year: 2026, month: 10, day: 6 });
+        assert_eq!(
+            game_day_ymd(&t),
+            RtcYmd {
+                year: 2026,
+                month: 10,
+                day: 6
+            }
+        );
         t.hour = 6;
-        assert_eq!(game_day_ymd(&t), RtcYmd { year: 2026, month: 10, day: 7 });
+        assert_eq!(
+            game_day_ymd(&t),
+            RtcYmd {
+                year: 2026,
+                month: 10,
+                day: 7
+            }
+        );
     }
 
     #[test]
     fn renewal_detection() {
-        let saved = RtcYmd { year: 2026, month: 10, day: 5 };
+        let saved = RtcYmd {
+            year: 2026,
+            month: 10,
+            day: 5,
+        };
         let mut now = ymd(2026, 10, 6);
         now.hour = 7;
         assert!(renewal_needed(&saved, &now));
@@ -881,8 +953,14 @@ mod tests {
     fn set_clock_uses_delta_not_hardware() {
         let mut clock = GameClock::default();
         let hard = 1_000_000 * TIMER_CLOCK; // arbitrary hardware ticks
-        // Point the game clock at a specific time; hardware is untouched.
-        let target = RtcTime { year: 2004, month: 9, day: 15, hour: 20, ..RtcTime::default() };
+                                            // Point the game clock at a specific time; hardware is untouched.
+        let target = RtcTime {
+            year: 2004,
+            month: 9,
+            day: 15,
+            hour: 20,
+            ..RtcTime::default()
+        };
         clock.set_game_time(&target, hard);
         let got = clock.game_time(hard);
         assert_eq!((got.year, got.month, got.day), (2004, 9, 15));
@@ -907,7 +985,11 @@ mod tests {
 
     #[test]
     fn event_predicates() {
-        let thanksgiving = DatePredicate::NthWeekday { month: 11, weeks: 4, weekday: THURSDAY };
+        let thanksgiving = DatePredicate::NthWeekday {
+            month: 11,
+            weeks: 4,
+            weekday: THURSDAY,
+        };
         let mut t = ymd(2026, 11, 26);
         t.weekday = rtc_week(2026, 11, 26);
         assert!(thanksgiving.matches(&t));

@@ -159,7 +159,10 @@ pub struct ForceCallInstall {
 
 pub fn set_talk_info_force_call(msg_no: i32, camera_type: u8) -> (ForceCallInstall, u8) {
     (
-        ForceCallInstall { msg_no, camera_type },
+        ForceCallInstall {
+            msg_no,
+            camera_type,
+        },
         force_call::SET,
     )
 }
@@ -204,8 +207,7 @@ pub extern "C" fn pc_force_call_req_proc(
     in_talk_demo: u8,
 ) -> u8 {
     let can_talk = demo_can_actor_talk(in_speak_demo != 0, in_talk_demo != 0);
-    force_call_req_proc(force_call_flag, talk_condition_none != 0, can_talk)
-        .is_some() as u8
+    force_call_req_proc(force_call_flag, talk_condition_none != 0, can_talk).is_some() as u8
 }
 
 /// C ABI: `aNPC_force_talk_request` path. 0 = none/fallback,
@@ -297,7 +299,10 @@ mod tests {
         i.force_call_msg_no = 0x0D8B;
         assert_eq!(force_talk_request(&i), Some(ForceTalkPath::ForcedMessage));
         // Friendship path at the boundary values.
-        assert_eq!(force_talk_request(&friendship_inputs()), Some(ForceTalkPath::FriendshipGreeting));
+        assert_eq!(
+            force_talk_request(&friendship_inputs()),
+            Some(ForceTalkPath::FriendshipGreeting)
+        );
         // Each gate failing kills it.
         let mut i = friendship_inputs();
         i.effective_friendship = 128;
@@ -339,7 +344,10 @@ mod tests {
             pc_force_talk_request(i.force_call_msg_no, 1, 129, 1, 1, 0.0, 79.9, -59.9),
             2
         );
-        assert_eq!(pc_force_talk_request(0x0D8B, 1, 129, 1, 1, 0.0, 79.9, -59.9), 1);
+        assert_eq!(
+            pc_force_talk_request(0x0D8B, 1, 129, 1, 1, 0.0, 79.9, -59.9),
+            1
+        );
         assert_eq!(pc_force_talk_request(-1, 1, 128, 1, 1, 0.0, 79.9, -59.9), 0);
         assert_eq!(pc_auto_greeting_msg_no(0, 5, 2), 0x075F + 15 + 2);
     }

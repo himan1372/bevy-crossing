@@ -244,17 +244,109 @@ pub fn column_check_attr(
 /// IS_ITEM_*_TREE predicates are verbatim membership lists (the S0/S1/S2 macros
 /// even repeat three entries, deduped here).
 fn is_small_tree(item: u16) -> bool {
-    matches!(item, 0x0801 | 0x0806 | 0x080E | 0x0816 | 0x081E | 0x0826 | 0x082E | 0x0833 | 0x0838 | 0x0850 | 0x0855 | 0x085E | 0x0864)
+    matches!(
+        item,
+        0x0801
+            | 0x0806
+            | 0x080E
+            | 0x0816
+            | 0x081E
+            | 0x0826
+            | 0x082E
+            | 0x0833
+            | 0x0838
+            | 0x0850
+            | 0x0855
+            | 0x085E
+            | 0x0864
+    )
 }
 fn is_med_tree(item: u16) -> bool {
-    matches!(item, 0x0802 | 0x0807 | 0x080F | 0x0817 | 0x081F | 0x0827 | 0x082F | 0x0834 | 0x0839 | 0x0851 | 0x0856 | 0x085F | 0x0865)
+    matches!(
+        item,
+        0x0802
+            | 0x0807
+            | 0x080F
+            | 0x0817
+            | 0x081F
+            | 0x0827
+            | 0x082F
+            | 0x0834
+            | 0x0839
+            | 0x0851
+            | 0x0856
+            | 0x085F
+            | 0x0865
+    )
 }
 fn is_large_tree(item: u16) -> bool {
-    matches!(item, 0x0803 | 0x0808 | 0x0810 | 0x0818 | 0x0820 | 0x0828 | 0x0830 | 0x0835 | 0x083A | 0x0852 | 0x0857 | 0x0860 | 0x0866)
+    matches!(
+        item,
+        0x0803
+            | 0x0808
+            | 0x0810
+            | 0x0818
+            | 0x0820
+            | 0x0828
+            | 0x0830
+            | 0x0835
+            | 0x083A
+            | 0x0852
+            | 0x0857
+            | 0x0860
+            | 0x0866
+    )
 }
 fn is_full_tree(item: u16) -> bool {
     // Retail: IS_ITEM_FULL_TREE(item) || item == RSV_TREE.
-    item == 0xFE1A || matches!(item, 0x005E | 0x005F | 0x0060 | 0x0061 | 0x0069 | 0x0078 | 0x0079 | 0x007A | 0x007F | 0x0080 | 0x0081 | 0x0082 | 0x0804 | 0x0809 | 0x080A | 0x080B | 0x080C | 0x0811 | 0x0812 | 0x0813 | 0x0814 | 0x0819 | 0x081A | 0x081B | 0x081C | 0x0821 | 0x0822 | 0x0823 | 0x0824 | 0x0829 | 0x082A | 0x082B | 0x082C | 0x0831 | 0x0836 | 0x083B | 0x0853 | 0x0858 | 0x0859 | 0x085A | 0x085B | 0x0861 | 0x0867 | 0x0868)
+    item == 0xFE1A
+        || matches!(
+            item,
+            0x005E
+                | 0x005F
+                | 0x0060
+                | 0x0061
+                | 0x0069
+                | 0x0078
+                | 0x0079
+                | 0x007A
+                | 0x007F
+                | 0x0080
+                | 0x0081
+                | 0x0082
+                | 0x0804
+                | 0x0809
+                | 0x080A
+                | 0x080B
+                | 0x080C
+                | 0x0811
+                | 0x0812
+                | 0x0813
+                | 0x0814
+                | 0x0819
+                | 0x081A
+                | 0x081B
+                | 0x081C
+                | 0x0821
+                | 0x0822
+                | 0x0823
+                | 0x0824
+                | 0x0829
+                | 0x082A
+                | 0x082B
+                | 0x082C
+                | 0x0831
+                | 0x0836
+                | 0x083B
+                | 0x0853
+                | 0x0858
+                | 0x0859
+                | 0x085A
+                | 0x085B
+                | 0x0861
+                | 0x0867
+                | 0x0868
+        )
 }
 fn is_tree_stump(item: u16) -> bool {
     // Retail: four inclusive ranges (the macro has a missing-parens quirk
@@ -269,9 +361,7 @@ fn is_narrow_stump(item: u16) -> bool {
     matches!(item, 0x0001 | 0x0070 | 0x0074 | 0x007B)
 }
 fn is_rock(item: u16) -> bool {
-    (0x0063..=0x0067).contains(&item)
-        || (0x006A..=0x006E).contains(&item)
-        || item == 0x006F
+    (0x0063..=0x0067).contains(&item) || (0x006A..=0x006E).contains(&item) || item == 0x006F
 }
 fn is_hole(item: u16) -> bool {
     (0x0011..=0x0029).contains(&item) || item == 0x005D || item == 0xFE19
@@ -416,26 +506,83 @@ mod tests {
     #[test]
     fn item_id_classification() {
         // Spot checks against m_name_table.h values.
-        assert_eq!(column_kind_for_item(0x0801, true), Some(ColumnItemKind::SmallTree)); // TREE_S0
-        assert_eq!(column_kind_for_item(0x0807, true), Some(ColumnItemKind::MedTree)); // TREE_APPLE_S1
-        assert_eq!(column_kind_for_item(0x0803, true), Some(ColumnItemKind::LargeTree)); // TREE_S2
-        assert_eq!(column_kind_for_item(0x0804, true), Some(ColumnItemKind::FullTree)); // TREE
-        assert_eq!(column_kind_for_item(0xFE1A, true), Some(ColumnItemKind::FullTree)); // RSV_TREE
-        assert_eq!(column_kind_for_item(0x0001, true), Some(ColumnItemKind::StumpNarrow)); // TREE_STUMP001
-        assert_eq!(column_kind_for_item(0x0070, true), Some(ColumnItemKind::StumpNarrow)); // TREE_PALM_STUMP001
-        assert_eq!(column_kind_for_item(0x0002, true), Some(ColumnItemKind::StumpWide)); // TREE_STUMP002
-        assert_eq!(column_kind_for_item(0x0063, true), Some(ColumnItemKind::Rock)); // ROCK_A
-        assert_eq!(column_kind_for_item(0x006F, true), Some(ColumnItemKind::Rock)); // MONEY_FLOWER_SEED
-        assert_eq!(column_kind_for_item(0x0011, true), Some(ColumnItemKind::Hole)); // HOLE_START
-        assert_eq!(column_kind_for_item(0x005D, true), Some(ColumnItemKind::Hole)); // HOLE_SHINE
-        assert_eq!(column_kind_for_item(0xFE19, true), Some(ColumnItemKind::Hole)); // RSV_HOLE
+        assert_eq!(
+            column_kind_for_item(0x0801, true),
+            Some(ColumnItemKind::SmallTree)
+        ); // TREE_S0
+        assert_eq!(
+            column_kind_for_item(0x0807, true),
+            Some(ColumnItemKind::MedTree)
+        ); // TREE_APPLE_S1
+        assert_eq!(
+            column_kind_for_item(0x0803, true),
+            Some(ColumnItemKind::LargeTree)
+        ); // TREE_S2
+        assert_eq!(
+            column_kind_for_item(0x0804, true),
+            Some(ColumnItemKind::FullTree)
+        ); // TREE
+        assert_eq!(
+            column_kind_for_item(0xFE1A, true),
+            Some(ColumnItemKind::FullTree)
+        ); // RSV_TREE
+        assert_eq!(
+            column_kind_for_item(0x0001, true),
+            Some(ColumnItemKind::StumpNarrow)
+        ); // TREE_STUMP001
+        assert_eq!(
+            column_kind_for_item(0x0070, true),
+            Some(ColumnItemKind::StumpNarrow)
+        ); // TREE_PALM_STUMP001
+        assert_eq!(
+            column_kind_for_item(0x0002, true),
+            Some(ColumnItemKind::StumpWide)
+        ); // TREE_STUMP002
+        assert_eq!(
+            column_kind_for_item(0x0063, true),
+            Some(ColumnItemKind::Rock)
+        ); // ROCK_A
+        assert_eq!(
+            column_kind_for_item(0x006F, true),
+            Some(ColumnItemKind::Rock)
+        ); // MONEY_FLOWER_SEED
+        assert_eq!(
+            column_kind_for_item(0x0011, true),
+            Some(ColumnItemKind::Hole)
+        ); // HOLE_START
+        assert_eq!(
+            column_kind_for_item(0x005D, true),
+            Some(ColumnItemKind::Hole)
+        ); // HOLE_SHINE
+        assert_eq!(
+            column_kind_for_item(0xFE19, true),
+            Some(ColumnItemKind::Hole)
+        ); // RSV_HOLE
         assert!(column_kind_for_item(0x0011, false).is_none()); // hole needs old_on_ground
-        assert_eq!(column_kind_for_item(0xF001, true), Some(ColumnItemKind::Mailbox)); // DUMMY_MAILBOX0
-        assert_eq!(column_kind_for_item(0xF102, true), Some(ColumnItemKind::Sign)); // DUMMY_RESERVE
-        assert_eq!(column_kind_for_item(0x0900, true), Some(ColumnItemKind::Sign)); // SIGNBOARD_START
-        assert_eq!(column_kind_for_item(0xFE30, true), Some(ColumnItemKind::SpecialSignboard)); // RSV_SIGNBOARD
-        assert_eq!(column_kind_for_item(0xF114, true), Some(ColumnItemKind::Koinobori)); // DUMMY_KOINOBORI
-        assert_eq!(column_kind_for_item(0xF122, true), Some(ColumnItemKind::Koinobori)); // DUMMY_FLAG
+        assert_eq!(
+            column_kind_for_item(0xF001, true),
+            Some(ColumnItemKind::Mailbox)
+        ); // DUMMY_MAILBOX0
+        assert_eq!(
+            column_kind_for_item(0xF102, true),
+            Some(ColumnItemKind::Sign)
+        ); // DUMMY_RESERVE
+        assert_eq!(
+            column_kind_for_item(0x0900, true),
+            Some(ColumnItemKind::Sign)
+        ); // SIGNBOARD_START
+        assert_eq!(
+            column_kind_for_item(0xFE30, true),
+            Some(ColumnItemKind::SpecialSignboard)
+        ); // RSV_SIGNBOARD
+        assert_eq!(
+            column_kind_for_item(0xF114, true),
+            Some(ColumnItemKind::Koinobori)
+        ); // DUMMY_KOINOBORI
+        assert_eq!(
+            column_kind_for_item(0xF122, true),
+            Some(ColumnItemKind::Koinobori)
+        ); // DUMMY_FLAG
         assert!(column_kind_for_item(0x0000, true).is_none()); // EMPTY_NO: no column
         assert!(column_kind_for_item(0xFFFF, true).is_none());
     }
@@ -443,16 +590,46 @@ mod tests {
     #[test]
     fn item_recipes() {
         let t = |k| make_one_column(k, 1, 2, 100.0, true).unwrap();
-        assert_eq!((t(ColumnItemKind::SmallTree).radius, t(ColumnItemKind::SmallTree).height), (19.0, 130.0));
+        assert_eq!(
+            (
+                t(ColumnItemKind::SmallTree).radius,
+                t(ColumnItemKind::SmallTree).height
+            ),
+            (19.0, 130.0)
+        );
         assert_eq!(t(ColumnItemKind::MedTree).height, 140.0);
         assert_eq!(t(ColumnItemKind::LargeTree).height, 160.0);
         assert_eq!(t(ColumnItemKind::FullTree).height, 180.0);
-        assert_eq!((t(ColumnItemKind::StumpNarrow).radius, t(ColumnItemKind::StumpNarrow).height), (10.0, 130.0));
-        assert_eq!((t(ColumnItemKind::StumpWide).radius, t(ColumnItemKind::StumpWide).height), (18.0, 130.0));
+        assert_eq!(
+            (
+                t(ColumnItemKind::StumpNarrow).radius,
+                t(ColumnItemKind::StumpNarrow).height
+            ),
+            (10.0, 130.0)
+        );
+        assert_eq!(
+            (
+                t(ColumnItemKind::StumpWide).radius,
+                t(ColumnItemKind::StumpWide).height
+            ),
+            (18.0, 130.0)
+        );
         assert_eq!(t(ColumnItemKind::Rock).height, 131.5);
-        assert_eq!((t(ColumnItemKind::Mailbox).radius, t(ColumnItemKind::Mailbox).height), (15.0, 150.0));
+        assert_eq!(
+            (
+                t(ColumnItemKind::Mailbox).radius,
+                t(ColumnItemKind::Mailbox).height
+            ),
+            (15.0, 150.0)
+        );
         assert_eq!(t(ColumnItemKind::Sign).height, 145.0);
-        assert_eq!((t(ColumnItemKind::SpecialSignboard).radius, t(ColumnItemKind::SpecialSignboard).height), (10.0, 145.0));
+        assert_eq!(
+            (
+                t(ColumnItemKind::SpecialSignboard).radius,
+                t(ColumnItemKind::SpecialSignboard).height
+            ),
+            (10.0, 145.0)
+        );
         assert_eq!(t(ColumnItemKind::Koinobori).height, 260.0);
         let h = t(ColumnItemKind::Hole);
         assert!(h.atr_wall && (h.height - 100.0).abs() < 1e-6);
@@ -469,11 +646,8 @@ mod tests {
         assert_eq!(cols.len(), COLUMN_MAX);
         let cols = make_column_collision_data(&units, 5, 0, true);
         assert_eq!(cols.len(), COLUMN_MAX); // own unit skipped before counting
-        // Unrecognized slot counts as an examined slot.
-        let units = [
-            (None, 0, 0, 0.0),
-            (Some(ColumnItemKind::Rock), 1, 0, 0.0),
-        ];
+                                            // Unrecognized slot counts as an examined slot.
+        let units = [(None, 0, 0, 0.0), (Some(ColumnItemKind::Rock), 1, 0, 0.0)];
         let cols = make_column_collision_data(&units, 99, 99, true);
         assert_eq!(cols.len(), 2);
         assert!(cols[0].is_none());

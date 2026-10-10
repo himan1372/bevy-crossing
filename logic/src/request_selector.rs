@@ -97,7 +97,10 @@ pub fn pick_random_eligible(
     for (i, (&item, &e)) in pockets.iter().zip(eligible.iter()).enumerate() {
         if e != 0 {
             if sel == 0 {
-                return Some(CarriedItem { pocket_idx: i, item });
+                return Some(CarriedItem {
+                    pocket_idx: i,
+                    item,
+                });
             }
             sel -= 1;
         }
@@ -113,7 +116,10 @@ pub fn pick_first_eligible(pockets: &[u16], eligible: &[u8]) -> Option<CarriedIt
         .zip(eligible.iter())
         .enumerate()
         .find(|(_, (&_, &e))| e != 0)
-        .map(|(i, (&item, _))| CarriedItem { pocket_idx: i, item })
+        .map(|(i, (&item, _))| CarriedItem {
+            pocket_idx: i,
+            item,
+        })
 }
 
 /// Bind a possession result to dialogue
@@ -141,10 +147,7 @@ pub fn decide_msg_check_possession(
 /// callback. The 61-call RNG stream (`30*2 + 1`) is then exactly
 /// retail's. Delegates to the shared implementation in `talk_topics`
 /// so the two call sites cannot diverge.
-pub fn decide_idx_prob_table(
-    probs: &[u8],
-    rng: &mut dyn FnMut(u32) -> u32,
-) -> Option<usize> {
+pub fn decide_idx_prob_table(probs: &[u8], rng: &mut dyn FnMut(u32) -> u32) -> Option<usize> {
     if probs.is_empty() {
         return None;
     }
@@ -202,7 +205,12 @@ pub fn build_trade_offer(
         TradeItemMode::Pitfall => PITFALL_ITEM,
         TradeItemMode::Random => goods[(rng_value as usize) % goods.len()],
     };
-    TradeOffer { wanted, goods, goods_source, offered }
+    TradeOffer {
+        wanted,
+        goods,
+        goods_source,
+        offered,
+    }
 }
 
 /// C ABI: uniform-random pick among eligible carried items; returns
@@ -244,7 +252,9 @@ pub extern "C" fn pc_request_dispatch(
     };
     let p = unsafe { core::slice::from_raw_parts(probs, n) };
     let mut cb = move |bound: u32| rng_cb(bound);
-    decide_idx_prob_table(p, &mut cb).map(|i| i as i32).unwrap_or(-1)
+    decide_idx_prob_table(p, &mut cb)
+        .map(|i| i as i32)
+        .unwrap_or(-1)
 }
 
 #[cfg(test)]
@@ -258,22 +268,25 @@ mod tests {
         // 3 eligible; rng 0 -> first eligible (pocket 1).
         assert_eq!(
             pick_random_eligible(&pockets, &eligible, 0),
-            Some(CarriedItem { pocket_idx: 1, item: 20 })
+            Some(CarriedItem {
+                pocket_idx: 1,
+                item: 20
+            })
         );
         // rng 2 -> third eligible (pocket 4).
         assert_eq!(
             pick_random_eligible(&pockets, &eligible, 2),
-            Some(CarriedItem { pocket_idx: 4, item: 50 })
+            Some(CarriedItem {
+                pocket_idx: 4,
+                item: 50
+            })
         );
         // Out-of-range rng is rejected, not wrapped (retail passes
         // RANDOM(item_cnt) directly).
         assert_eq!(pick_random_eligible(&pockets, &eligible, 3), None);
         assert_eq!(pick_random_eligible(&pockets, &eligible, 5), None);
         // No eligible -> None.
-        assert_eq!(
-            pick_random_eligible(&pockets, &[0u8; 5], 0),
-            None
-        );
+        assert_eq!(pick_random_eligible(&pockets, &[0u8; 5], 0), None);
     }
 
     #[test]
@@ -282,16 +295,25 @@ mod tests {
         let eligible = [0u8, 1, 1];
         assert_eq!(
             pick_first_eligible(&pockets, &eligible),
-            Some(CarriedItem { pocket_idx: 1, item: 20 })
+            Some(CarriedItem {
+                pocket_idx: 1,
+                item: 20
+            })
         );
         assert_eq!(pick_first_eligible(&pockets, &[0u8; 3]), None);
     }
 
     #[test]
     fn msg_binding() {
-        let found = Some(CarriedItem { pocket_idx: 3, item: 77 });
+        let found = Some(CarriedItem {
+            pocket_idx: 3,
+            item: 77,
+        });
         // base + rng%count.
-        assert_eq!(decide_msg_check_possession(found, 1000, 3, 4), Some((1001, 3)));
+        assert_eq!(
+            decide_msg_check_possession(found, 1000, 3, 4),
+            Some((1001, 3))
+        );
         assert_eq!(decide_msg_check_possession(None, 1000, 3, 4), None);
     }
 
@@ -338,7 +360,10 @@ mod tests {
 
     #[test]
     fn trade_offer_modes() {
-        let wanted = Some(CarriedItem { pocket_idx: 1, item: 55 });
+        let wanted = Some(CarriedItem {
+            pocket_idx: 1,
+            item: 55,
+        });
         // roll 0 -> house furniture for slot 0.
         let offer = build_trade_offer(wanted, [(7, 0), (8, 5), (9, 9)], TradeItemMode::Random, 1);
         assert_eq!(offer.goods_source[0], GoodsSource::VillagerHouse);

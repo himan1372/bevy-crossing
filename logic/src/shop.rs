@@ -217,9 +217,7 @@ impl ShopState {
     /// Mirrors `mSP_GetRealShopLevel`, including the PC-port visitor
     /// requirement toggle.
     pub fn real_level(&self) -> ShopTier {
-        if self.sales_sum >= DSUPER_SUM
-            && (self.visitor_flag || self.disable_visitor_req)
-        {
+        if self.sales_sum >= DSUPER_SUM && (self.visitor_flag || self.disable_visitor_req) {
             ShopTier::Dsuper
         } else if self.sales_sum >= SUPER_SUM {
             ShopTier::Super
@@ -439,7 +437,7 @@ mod tests {
         assert_eq!(shop.tool_slots(), 3); // + rod (8000 cumulative)
         shop.plus_sales(4_000);
         assert_eq!(shop.tool_slots(), 4); // + axe (12000 cumulative)
-        // Higher tiers ignore the lockout.
+                                          // Higher tiers ignore the lockout.
         shop.shop_level = ShopTier::Combini;
         shop.sales_sum = 0;
         assert_eq!(shop.tool_slots(), 4);
@@ -469,7 +467,7 @@ mod tests {
     fn renovation_scheduler() {
         let mut shop = ShopState::default();
         shop.plus_sales(25_000); // earn Nook 'n Go
-        // Schedule: +2 days, no bargain collision.
+                                 // Schedule: +2 days, no bargain collision.
         assert!(shop.schedule_renewal((2026, 10, 7), 9, None));
         assert_eq!(shop.renewal_ymd, (2026, 10, 9));
         assert!(shop.send_upgrade_notice);
@@ -478,7 +476,7 @@ mod tests {
         assert!(!shop.renewal_due((2026, 10, 8)));
         assert!(!shop.complete_renewal((2026, 10, 8)));
         assert_eq!(shop.shop_level, ShopTier::Zakka); // still old tier
-        // Due on the renewal date.
+                                                      // Due on the renewal date.
         assert!(shop.renewal_due((2026, 10, 9)));
         assert!(shop.complete_renewal((2026, 10, 9)));
         assert_eq!(shop.shop_level, ShopTier::Combini);

@@ -205,7 +205,7 @@ mod tests {
         assert_eq!(f0b, 0xFF); // flags0 untouched by OCC clear
         assert_eq!(f1b & flag1::TRIS_HIT, 0); // latch cleared
         assert!(!has_actor_b); // payload cleared
-        // Flag values match the header.
+                               // Flag values match the header.
         assert_eq!(flag1::TRIS_HIT, 0x04);
         assert_eq!(flag0::COLLIDED, 0x02);
         assert_eq!(OCC_WORK_CAP, 10);

@@ -70,7 +70,9 @@ pub struct ReservedLot {
 /// Scan helper: collect lots from a predicate over the 7680 FG cells.
 /// The source walks acres z,x then units z,x; the order defines the
 /// pre-shuffle lot order.
-pub fn collect_reserved_lots(is_reserve: impl Fn(usize, usize, usize, usize) -> bool) -> Vec<ReservedLot> {
+pub fn collect_reserved_lots(
+    is_reserve: impl Fn(usize, usize, usize, usize) -> bool,
+) -> Vec<ReservedLot> {
     let mut lots = Vec::new();
     for bz in 0..FG_BLOCK_Z_NUM {
         for bx in 0..FG_BLOCK_X_NUM {
@@ -145,6 +147,7 @@ pub fn assign_homes(
 
 /// The 3x3 house footprint offsets (`ut_d`), in source order:
 /// center, then the ring.
+#[rustfmt::skip]
 pub const HOUSE_FOOTPRINT: [(i32, i32); 9] = [
     (0, 0),
     (-1, 1), (0, 1), (1, 1),
@@ -339,12 +342,27 @@ mod tests {
         assert_eq!(lots.len(), 1);
         assert_eq!(
             lots[0],
-            ReservedLot { block_x: 1, block_z: 2, ut_x: 3, ut_z: 4 }
+            ReservedLot {
+                block_x: 1,
+                block_z: 2,
+                ut_x: 3,
+                ut_z: 4
+            }
         );
         // Assignment: ut_z + 1 offset, shuffled order consumed in order.
         let lots = vec![
-            ReservedLot { block_x: 0, block_z: 0, ut_x: 5, ut_z: 5 },
-            ReservedLot { block_x: 1, block_z: 1, ut_x: 6, ut_z: 6 },
+            ReservedLot {
+                block_x: 0,
+                block_z: 0,
+                ut_x: 5,
+                ut_z: 5,
+            },
+            ReservedLot {
+                block_x: 1,
+                block_z: 1,
+                ut_x: 6,
+                ut_z: 6,
+            },
         ];
         let homes = assign_homes(&lots, &[1, 0], 2);
         assert_eq!(homes.len(), 2);
@@ -357,7 +375,9 @@ mod tests {
         assert_eq!(HOUSE_FOOTPRINT[0], (0, 0));
         assert_eq!(HOUSE_FOOTPRINT_CELLS[0], FootprintCell::House);
         assert_eq!(HOUSE_FOOTPRINT_CELLS[1], FootprintCell::Signboard);
-        assert!(HOUSE_FOOTPRINT_CELLS[2..].iter().all(|&c| c == FootprintCell::Reserved));
+        assert!(HOUSE_FOOTPRINT_CELLS[2..]
+            .iter()
+            .all(|&c| c == FootprintCell::Reserved));
         assert!(house_footprint_in_bounds(1, 1));
         assert!(!house_footprint_in_bounds(0, 1));
         assert!(!house_footprint_in_bounds(15, 15));
@@ -373,7 +393,13 @@ mod tests {
         // Shuffled defs: (idx, looks, perm).
         let order = [5usize, 2, 8, 1, 9, 3, 7, 0];
         let looks = |i: usize| [0, 1, 2, 0, 1, 2, 3, 4, 5, 3][i];
-        let perm = |i: usize| if i == 7 { grow_perm::MOVE_IN } else { grow_perm::STARTER };
+        let perm = |i: usize| {
+            if i == 7 {
+                grow_perm::MOVE_IN
+            } else {
+                grow_perm::STARTER
+            }
+        };
         let sel = decide_living_npc_max(&order, looks, perm, 6);
         // Walk order: 5(looks2), 2(looks2 dup, skip), 8(looks5), 1(looks1),
         // 9(looks3), 3(looks0), 7(MOVE_IN skip), 0(looks0 dup skip).
@@ -383,7 +409,7 @@ mod tests {
             covered[looks(i)] = true;
         }
         assert!(covered.iter().take(6).all(|&c| c || true)); // 5 of 6 covered by this input
-        // Growth probability table.
+                                                             // Growth probability table.
         assert_eq!(GROW_PROB, [40, 50, 60, 70, 80, 90, 100]);
         assert!(check_grow_field_rank(0, 39));
         assert!(!check_grow_field_rank(0, 40));
@@ -403,7 +429,7 @@ mod tests {
         assert_eq!(min_looks_bitfield(&pop, &elig), 0b101000); // looks 3,5 at pop 0
         let elig2 = [true, true, true, false, true, true];
         assert_eq!(min_looks_bitfield(&pop, &elig2), 0b100000); // looks 5 at pop 0
-        // Candidate eligibility.
+                                                                // Candidate eligibility.
         assert!(grow_candidate_eligible(false, false, grow_perm::STARTER));
         assert!(grow_candidate_eligible(false, false, grow_perm::MOVE_IN));
         assert!(!grow_candidate_eligible(true, false, grow_perm::STARTER));
@@ -416,6 +442,9 @@ mod tests {
         assert_eq!(pc_check_grow(15, 1, 1, 1, 1), 0);
         let pop_arr = [1usize, 1, 3, 0, 1, 0];
         let elig_arr = [1u8, 1, 1, 1, 1, 1];
-        assert_eq!(pc_min_looks_bitfield(pop_arr.as_ptr(), elig_arr.as_ptr()), 0b101000);
+        assert_eq!(
+            pc_min_looks_bitfield(pop_arr.as_ptr(), elig_arr.as_ptr()),
+            0b101000
+        );
     }
 }

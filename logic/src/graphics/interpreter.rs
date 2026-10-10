@@ -137,22 +137,37 @@ impl Emu64 {
             let idx = opcode.wrapping_sub(command::G_FIRST_CMD) as usize;
             if idx < command::NUM_COMMANDS {
                 let dl_level = stack.level;
-                self.dispatch(mem, backend, lists, gfx, &mut stack, &mut list_addr, &mut pc, &mut end_dl);
-                let dirty: Vec<&'static str> = self.state.dirty.all().iter().map(|d| match d {
-                    Dirty::Projection => "projection",
-                    Dirty::PrimColor => "prim",
-                    Dirty::EnvColor => "env",
-                    Dirty::FillColor => "fill",
-                    Dirty::Combine => "combine",
-                    Dirty::OthermodeH => "othermode_h",
-                    Dirty::OthermodeL => "othermode_l",
-                    Dirty::GeometryMode => "geomode",
-                    Dirty::Texture => "texture",
-                    Dirty::Texture1 => "texture1",
-                    Dirty::Texture2 => "texture2",
-                    Dirty::TextureMatrix => "texmtx",
-                    Dirty::Lighting => "lighting",
-                }).collect();
+                self.dispatch(
+                    mem,
+                    backend,
+                    lists,
+                    gfx,
+                    &mut stack,
+                    &mut list_addr,
+                    &mut pc,
+                    &mut end_dl,
+                );
+                let dirty: Vec<&'static str> = self
+                    .state
+                    .dirty
+                    .all()
+                    .iter()
+                    .map(|d| match d {
+                        Dirty::Projection => "projection",
+                        Dirty::PrimColor => "prim",
+                        Dirty::EnvColor => "env",
+                        Dirty::FillColor => "fill",
+                        Dirty::Combine => "combine",
+                        Dirty::OthermodeH => "othermode_h",
+                        Dirty::OthermodeL => "othermode_l",
+                        Dirty::GeometryMode => "geomode",
+                        Dirty::Texture => "texture",
+                        Dirty::Texture1 => "texture1",
+                        Dirty::Texture2 => "texture2",
+                        Dirty::TextureMatrix => "texmtx",
+                        Dirty::Lighting => "lighting",
+                    })
+                    .collect();
                 let p = self.state.prim_color;
                 self.trace.push(CmdTrace {
                     list_addr,
@@ -445,7 +460,13 @@ impl Emu64 {
         }
     }
 
-    fn h_tri<M: GfxMemory, B: GxBackend>(&mut self, _mem: &M, backend: &mut B, gfx: Gfx, count: u8) {
+    fn h_tri<M: GfxMemory, B: GxBackend>(
+        &mut self,
+        _mem: &M,
+        backend: &mut B,
+        gfx: Gfx,
+        count: u8,
+    ) {
         for i in 0..count {
             let (a, b, c) = if i == 0 {
                 (
@@ -461,9 +482,11 @@ impl Emu64 {
                 )
             };
             // Retail divides N64 indices by 2 into the vertex array.
-            if let (Some(&va), Some(&vb), Some(&vc)) =
-                (self.vtx_cache.get(a), self.vtx_cache.get(b), self.vtx_cache.get(c))
-            {
+            if let (Some(&va), Some(&vb), Some(&vc)) = (
+                self.vtx_cache.get(a),
+                self.vtx_cache.get(b),
+                self.vtx_cache.get(c),
+            ) {
                 backend.emit_triangle(EmittedTri { v: [va, vb, vc] });
             }
         }
@@ -525,9 +548,11 @@ impl Emu64 {
                     unpack_5b(g, f)
                 };
                 // TRIN indices are NOT halved (unlike TRI1/TRI2/QUAD).
-                if let (Some(&va), Some(&vb), Some(&vc)) =
-                    (self.vtx_cache.get_raw(a), self.vtx_cache.get_raw(b), self.vtx_cache.get_raw(c))
-                {
+                if let (Some(&va), Some(&vb), Some(&vc)) = (
+                    self.vtx_cache.get_raw(a),
+                    self.vtx_cache.get_raw(b),
+                    self.vtx_cache.get_raw(c),
+                ) {
                     backend.emit_triangle(EmittedTri { v: [va, vb, vc] });
                 }
                 n_faces -= 1;
@@ -797,13 +822,20 @@ mod tests {
     }
 
     fn gfx(opcode: u8, param: u8, len: u16, addr: u32) -> Gfx {
-        Gfx::new(((opcode as u32) << 24) | ((param as u32) << 16) | (len as u32), addr)
+        Gfx::new(
+            ((opcode as u32) << 24) | ((param as u32) << 16) | (len as u32),
+            addr,
+        )
     }
 
     #[test]
     fn dl_push_nopush_enddl() {
         let mut emu = Emu64::new();
-        let mut be = TestBackend { tris: 0, gxdl: 0, texrects: 0 };
+        let mut be = TestBackend {
+            tris: 0,
+            gxdl: 0,
+            texrects: 0,
+        };
         emu.segments.set(1, 0x0000);
         // list at 0x1000: color, DL_PUSH to 0x2000, end
         // list at 0x2000: color, ENDDL
@@ -818,7 +850,10 @@ mod tests {
         );
         lists.insert(
             0x2000,
-            vec![gfx(op::G_SETPRIMCOLOR, 0, 0, 0xAABB_CCDD), gfx(op::G_ENDDL, 0, 0, 0)],
+            vec![
+                gfx(op::G_SETPRIMCOLOR, 0, 0, 0xAABB_CCDD),
+                gfx(op::G_ENDDL, 0, 0, 0),
+            ],
         );
         emu.taskstart(&TestMem, &mut be, &lists, 0x1000);
         assert_eq!(emu.state.env_color.r, 0x11);
@@ -829,7 +864,11 @@ mod tests {
     #[test]
     fn gxdl_passthrough() {
         let mut emu = Emu64::new();
-        let mut be = TestBackend { tris: 0, gxdl: 0, texrects: 0 };
+        let mut be = TestBackend {
+            tris: 0,
+            gxdl: 0,
+            texrects: 0,
+        };
         emu.segments.set(1, 0x0000);
         let mut lists = HashMap::new();
         lists.insert(
@@ -853,13 +892,29 @@ mod tests {
     #[test]
     fn trin_variable_length() {
         let mut emu = Emu64::new();
-        let mut be = TestBackend { tris: 0, gxdl: 0, texrects: 0 };
+        let mut be = TestBackend {
+            tris: 0,
+            gxdl: 0,
+            texrects: 0,
+        };
         // Load 4 verts via cache directly.
         let src = [
-            Vtx { x: 0, ..Default::default() },
-            Vtx { x: 1, ..Default::default() },
-            Vtx { x: 2, ..Default::default() },
-            Vtx { x: 3, ..Default::default() },
+            Vtx {
+                x: 0,
+                ..Default::default()
+            },
+            Vtx {
+                x: 1,
+                ..Default::default()
+            },
+            Vtx {
+                x: 2,
+                ..Default::default()
+            },
+            Vtx {
+                x: 3,
+                ..Default::default()
+            },
         ];
         emu.vtx_cache.load(0, 4, &src, false, false);
         // G_TRIN, 5-bit, n_faces = 1: one packed word follows the header.
@@ -867,7 +922,10 @@ mod tests {
         let header = Gfx::new(((op::G_TRIN as u32) << 24) | (0 << 17), 0);
         let data = Gfx::new(0, (0 << 4) | (1 << 9) | (2 << 14)); // v0=0,v1=1,v2=2
         let mut lists = HashMap::new();
-        lists.insert(0x7000, vec![header, data, Gfx::new((op::G_ENDDL as u32) << 24, 0)]);
+        lists.insert(
+            0x7000,
+            vec![header, data, Gfx::new((op::G_ENDDL as u32) << 24, 0)],
+        );
         emu.taskstart(&TestMem, &mut be, &lists, 0x7000);
         assert_eq!(be.tris, 1);
     }

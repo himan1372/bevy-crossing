@@ -13,6 +13,7 @@ pub const STEP3_COUNT: usize = 10;
 pub const STEP3_LEN: usize = 70;
 
 /// Step-3 body "3".
+#[rustfmt::skip]
 pub const STEP3_3: [u8; 70] = [
       5,   1,   0,   0,   0,   0,   8,
       9,  13,  12,  11,  12,  12,  10,
@@ -27,6 +28,7 @@ pub const STEP3_3: [u8; 70] = [
 ];
 
 /// Step-3 body "7".
+#[rustfmt::skip]
 pub const STEP3_7: [u8; 70] = [
       5,   1,   0,   0,   0,   0,   8,
       9,  13,  12,  11,  12,  12,  10,
@@ -41,6 +43,7 @@ pub const STEP3_7: [u8; 70] = [
 ];
 
 /// Step-3 body "7R".
+#[rustfmt::skip]
 pub const STEP3_7R: [u8; 70] = [
       5,   0,   0,   0,   0,   1,   8,
       9,  12,  12,  11,  12,  13,  10,
@@ -55,6 +58,7 @@ pub const STEP3_7R: [u8; 70] = [
 ];
 
 /// Step-3 body "8".
+#[rustfmt::skip]
 pub const STEP3_8: [u8; 70] = [
       5,   0,   0,   0,   0,   1,   8,
       9,  12,  12,  11,  12,  13,  10,
@@ -69,6 +73,7 @@ pub const STEP3_8: [u8; 70] = [
 ];
 
 /// Step-3 body "B".
+#[rustfmt::skip]
 pub const STEP3_B: [u8; 70] = [
       5,   0,   0,   0,   1,   0,   8,
       9,  12,  12,  11,  13,  12,  10,
@@ -83,6 +88,7 @@ pub const STEP3_B: [u8; 70] = [
 ];
 
 /// Step-3 body "BR".
+#[rustfmt::skip]
 pub const STEP3_BR: [u8; 70] = [
       5,   0,   1,   0,   0,   0,   8,
       9,  12,  13,  11,  12,  12,  10,
@@ -97,6 +103,7 @@ pub const STEP3_BR: [u8; 70] = [
 ];
 
 /// Step-3 body "E".
+#[rustfmt::skip]
 pub const STEP3_E: [u8; 70] = [
       5,   0,   1,   0,   0,   0,   8,
       9,  12,  13,  11,  12,  12,  10,
@@ -111,6 +118,7 @@ pub const STEP3_E: [u8; 70] = [
 ];
 
 /// Step-3 body "ER".
+#[rustfmt::skip]
 pub const STEP3_ER: [u8; 70] = [
       5,   0,   0,   0,   1,   0,   8,
       9,  12,  12,  11,  13,  12,  10,
@@ -125,6 +133,7 @@ pub const STEP3_ER: [u8; 70] = [
 ];
 
 /// Step-3 body "F".
+#[rustfmt::skip]
 pub const STEP3_F: [u8; 70] = [
       5,   0,   1,   0,   0,   0,   8,
       9,  12,  13,  11,  12,  12,  10,
@@ -139,6 +148,7 @@ pub const STEP3_F: [u8; 70] = [
 ];
 
 /// Step-3 body "FR".
+#[rustfmt::skip]
 pub const STEP3_FR: [u8; 70] = [
       5,   0,   0,   0,   1,   0,   8,
       9,  12,  12,  11,  13,  12,  10,
@@ -154,15 +164,7 @@ pub const STEP3_FR: [u8; 70] = [
 
 /// Selection table (l_mRF_step3_blockss), index 0..9.
 pub const STEP3_BLOCKS: [&[u8; 70]; 10] = [
-    &STEP3_3,
-    &STEP3_7,
-    &STEP3_7R,
-    &STEP3_8,
-    &STEP3_B,
-    &STEP3_BR,
-    &STEP3_E,
-    &STEP3_ER,
-    &STEP3_F,
+    &STEP3_3, &STEP3_7, &STEP3_7R, &STEP3_8, &STEP3_B, &STEP3_BR, &STEP3_E, &STEP3_ER, &STEP3_F,
     &STEP3_FR,
 ];
 
@@ -187,11 +189,7 @@ pub fn make_base_landform_step3(
 /// buffers (each 70 bytes). r10 = pre-rolled mRF_GetRandom(10) result.
 /// Returns the body index used.
 #[no_mangle]
-pub extern "C" fn pc_step3_select(
-    cliff_ptr: *mut u8,
-    river_ptr: *mut u8,
-    r10: usize,
-) -> usize {
+pub extern "C" fn pc_step3_select(cliff_ptr: *mut u8, river_ptr: *mut u8, r10: usize) -> usize {
     if cliff_ptr.is_null() || river_ptr.is_null() {
         return usize::MAX;
     }
@@ -215,7 +213,7 @@ mod tests {
         assert_eq!(STEP3_BLOCKS.len(), 10);
         // All bodies are 70 entries; player house at (3,2) in body 3.
         assert_eq!(STEP3_3[2 * 7 + 3], 14); // PLAYER_HOUSE = 14
-        // Row 7 is all SEA_EXCEPTIONAL (101).
+                                            // Row 7 is all SEA_EXCEPTIONAL (101).
         assert!(STEP3_3[7 * 7..8 * 7].iter().all(|&b| b == 101));
         // Selection copies into both buffers; single RNG call.
         let mut cliff = [0u8; 70];

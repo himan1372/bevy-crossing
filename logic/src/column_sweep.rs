@@ -127,7 +127,11 @@ pub fn get_bg_height_normal_column(
     column_ground_y: f32,
     directed_excluded: bool,
 ) -> (f32, bool) {
-    let cy = if directed_excluded { 0.0 } else { column_ground_y };
+    let cy = if directed_excluded {
+        0.0
+    } else {
+        column_ground_y
+    };
     if normal_ground_y > cy {
         (normal_ground_y, false)
     } else {
@@ -412,13 +416,7 @@ pub extern "C" fn pc_line_wall_check_column_one(
     height: f32,
     out_rev: *mut f32,
 ) -> u8 {
-    match line_wall_check_column_one(
-        [sx, sy, sz],
-        [ex, ey, ez],
-        [cx, 0.0, cz],
-        radius,
-        height,
-    ) {
+    match line_wall_check_column_one([sx, sy, sz], [ex, ey, ez], [cx, 0.0, cz], radius, height) {
         Some(rev) => {
             if !out_rev.is_null() {
                 unsafe {
@@ -583,7 +581,10 @@ mod tests {
         assert_eq!(column_spec(ColumnKind::StumpWide), (18.0, 30.0, false));
         assert_eq!(column_spec(ColumnKind::Rock), (19.0, 31.5, false));
         assert_eq!(column_spec(ColumnKind::Mailbox), (15.0, 50.0, false));
-        assert_eq!(column_spec(ColumnKind::SignboardReserve), (10.0, 45.0, false));
+        assert_eq!(
+            column_spec(ColumnKind::SignboardReserve),
+            (10.0, 45.0, false)
+        );
         assert_eq!(column_spec(ColumnKind::Flag), (19.0, 160.0, false));
         // Holes are flat and attribute-walled.
         assert_eq!(column_spec(ColumnKind::Hole), (19.0, 0.0, true));
@@ -616,12 +617,24 @@ mod tests {
             0.0
         );
         // Selection: column only ever raises the ground.
-        assert_eq!(get_bg_height_normal_column(100.0, 130.0, false), (130.0, true));
-        assert_eq!(get_bg_height_normal_column(100.0, 80.0, false), (100.0, false));
+        assert_eq!(
+            get_bg_height_normal_column(100.0, 130.0, false),
+            (130.0, true)
+        );
+        assert_eq!(
+            get_bg_height_normal_column(100.0, 80.0, false),
+            (100.0, false)
+        );
         // Tie goes to the column (strict > for normal).
-        assert_eq!(get_bg_height_normal_column(100.0, 100.0, false), (100.0, true));
+        assert_eq!(
+            get_bg_height_normal_column(100.0, 100.0, false),
+            (100.0, true)
+        );
         // Directed-unit exclusion forces the column to 0.0.
-        assert_eq!(get_bg_height_normal_column(100.0, 130.0, true), (100.0, false));
+        assert_eq!(
+            get_bg_height_normal_column(100.0, 130.0, true),
+            (100.0, false)
+        );
         assert_eq!(get_bg_height_normal_column(0.0, 0.0, true), (0.0, true));
         // AdjustActorY ground branch: feet placed exactly on the ground.
         assert_eq!(adjust_actor_y_ground(130.0, 100.0, 5.0), Some(25.0));
@@ -652,32 +665,46 @@ mod tests {
             wpos2bg_ut_center_height_add_column(Some(180.0), 3.0, 100.0),
             180.0
         );
-        assert_eq!(
-            wpos2bg_ut_center_height_add_column(None, 3.0, 100.0),
-            130.0
-        );
+        assert_eq!(wpos2bg_ut_center_height_add_column(None, 3.0, 100.0), 130.0);
         // Height gap + existence.
         assert_eq!(bg_height_gap_between_now_default(180.0, 130.0), 50.0);
         assert!(exist_height_gap_keep_and_now(50.0));
         assert!(!exist_height_gap_keep_and_now(-0.5)); // (int)-0.5 truncates to 0
         assert!(!exist_height_gap_keep_and_now(0.0));
         assert!(!exist_height_gap_keep_and_now(0.5)); // (int)0.5 = 0
-        // Layer thresholds.
+                                                      // Layer thresholds.
         assert_eq!(height2get_layer(99.9, true), layer::LAYER0);
         assert_eq!(height2get_layer(100.0, false), layer::LAYER1);
         assert_eq!(height2get_layer(219.9, true), layer::LAYER1);
         assert_eq!(height2get_layer(220.0, true), layer::LAYER2);
         // Three-way select: normal wins ties (>=); else the max.
-        assert_eq!(bg_y_angles_from_wpos_select(100.0, 100.0, 90.0, 0.0), (100.0, true));
-        assert_eq!(bg_y_angles_from_wpos_select(90.0, 100.0, 95.0, 5.0), (95.0, false));
-        assert_eq!(bg_y_angles_from_wpos_select(90.0, 80.0, 100.0, 0.0), (100.0, false));
+        assert_eq!(
+            bg_y_angles_from_wpos_select(100.0, 100.0, 90.0, 0.0),
+            (100.0, true)
+        );
+        assert_eq!(
+            bg_y_angles_from_wpos_select(90.0, 100.0, 95.0, 5.0),
+            (95.0, false)
+        );
+        assert_eq!(
+            bg_y_angles_from_wpos_select(90.0, 80.0, 100.0, 0.0),
+            (100.0, false)
+        );
     }
 
     #[test]
     fn multi_column_first_accept_wins() {
         let cols = [
-            Column { pos: [50.0, 0.0, 0.0], height: 10.0, radius: 1.0 }, // no hit
-            Column { pos: [5.0, 0.0, 0.0], height: 10.0, radius: 1.0 },  // hit
+            Column {
+                pos: [50.0, 0.0, 0.0],
+                height: 10.0,
+                radius: 1.0,
+            }, // no hit
+            Column {
+                pos: [5.0, 0.0, 0.0],
+                height: 10.0,
+                radius: 1.0,
+            }, // hit
         ];
         let rev = line_wall_check_column([0.0, 0.0, 0.0], [10.0, 0.0, 0.0], &cols).unwrap();
         assert!((rev[0] - -6.0).abs() < 1e-4);

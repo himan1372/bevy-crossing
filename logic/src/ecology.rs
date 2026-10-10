@@ -218,10 +218,18 @@ pub const NET_CATCH_TABLE_COUNT: usize = 8;
 /// Normal net: 50.0 sweep, 15.0 + radius envelope.
 /// Golden net: 60.0 sweep, 21.0 + radius envelope.
 pub fn net_sweep_len(golden: bool) -> f32 {
-    if golden { 60.0 } else { 50.0 }
+    if golden {
+        60.0
+    } else {
+        50.0
+    }
 }
 pub fn net_capture_len(golden: bool, radius: f32) -> f32 {
-    if golden { 21.0 + radius } else { 15.0 + radius }
+    if golden {
+        21.0 + radius
+    } else {
+        15.0 + radius
+    }
 }
 
 /// Capture window opens after animation frame 6.0.
@@ -393,7 +401,7 @@ mod tests {
         assert_eq!(insect_select(&w, 0.2), Some(0));
         assert_eq!(insect_select(&w, 0.5), Some(1));
         assert_eq!(insect_select(&w, 0.7), None); // no-spawn mass
-        // Total > 100: normalized.
+                                                  // Total > 100: normalized.
         let w2 = [60.0, 60.0];
         assert_eq!(insect_select(&w2, 0.9), Some(1));
         // Birth counts.
@@ -417,8 +425,8 @@ mod tests {
         assert!(!net_capture_test(top, bot, (0.0, -25.0, 100.0), 8.0, false));
         // Insertion order: first hit wins, not nearest.
         let reqs = [
-            (0.0, -25.0, 5.0, 8.0),  // hits
-            (0.0, -25.0, 1.0, 8.0),  // also hits, nearer
+            (0.0, -25.0, 5.0, 8.0), // hits
+            (0.0, -25.0, 1.0, 8.0), // also hits, nearer
         ];
         assert_eq!(net_capture_pick(None, &reqs, top, bot, false), Some(0));
         // Force takes precedence.

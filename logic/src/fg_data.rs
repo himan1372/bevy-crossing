@@ -50,7 +50,11 @@ pub fn parse_fg_records(data: &[u8]) -> Result<Vec<FgRecord>, &'static str> {
             *slot = u16::from_be_bytes([chunk[o], chunk[o + 1]]);
         }
         let haniwa_step = [chunk[514], chunk[515], chunk[516], chunk[517]];
-        out.push(FgRecord { fg_id, items, haniwa_step });
+        out.push(FgRecord {
+            fg_id,
+            items,
+            haniwa_step,
+        });
     }
     Ok(out)
 }
@@ -106,7 +110,11 @@ pub const DISTINCT_FG_TYPES: usize = 267;
 /// ids; this maps an FG id to its SIGN locations once `fgdata.bin` is
 /// parsed. `fg_index` maps fg_id -> record index in the parsed vec.
 pub fn build_fg_index(records: &[FgRecord]) -> std::collections::HashMap<u16, usize> {
-    records.iter().enumerate().map(|(i, r)| (r.fg_id, i)).collect()
+    records
+        .iter()
+        .enumerate()
+        .map(|(i, r)| (r.fg_id, i))
+        .collect()
 }
 
 // ---- C ABI ----
@@ -152,7 +160,7 @@ mod tests {
         let o = 2 + 115 * 2;
         buf[o] = 0x58;
         buf[o + 1] = 0x15; // 0x5815 = SIGN05
-        // SIGN20 at (x=0, z=0)
+                           // SIGN20 at (x=0, z=0)
         buf[2] = 0x58;
         buf[3] = 0x24;
         buf[514] = 7; // haniwa_step untouched by swap

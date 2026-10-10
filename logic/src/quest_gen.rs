@@ -148,14 +148,14 @@ pub mod fjekind {
 /// Context for `aQMgr_actor_check_occur()` kind-eligibility checks.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct OccurCtx {
-    pub month: u8,         // 1..12
-    pub day: u8,           // 1..31
-    pub hour: u8,          // 0..23
+    pub month: u8, // 1..12
+    pub day: u8,   // 1..31
+    pub hour: u8,  // 0..23
     pub empty_acre_spaces: u8,
     pub flower_count: u8,
     pub local_player: bool, // mLd_PlayerManKindCheck() == FALSE (resident player)
-    pub foreign_ok: bool, // no existing foreign quest + valid stored_anm_id
-    pub removed_ok: bool, // valid last_removed_animal_id
+    pub foreign_ok: bool,   // no existing foreign quest + valid stored_anm_id
+    pub removed_ok: bool,   // valid last_removed_animal_id
     /// Whether this contest kind is already active
     /// (`mQst_GetOccuredContestIdx(kind) != -1` blocks generation).
     pub contest_active: bool,
@@ -404,8 +404,8 @@ pub const DELIVERY_SET_DATA: [QuestSetData; 4] = [
         reward_percentages: [40, 0, 0, 0, 0, 30, 30, 0],
         max_pay: 200,
         msg_start: [
-            0x0151, 0x024C, 0x0163, 0x025E, 0x0175, 0x0294, 0x0187, 0x02B8, 0x0440, 0x035E,
-            0x034C, 0x0370, 0x033A,
+            0x0151, 0x024C, 0x0163, 0x025E, 0x0175, 0x0294, 0x0187, 0x02B8, 0x0440, 0x035E, 0x034C,
+            0x0370, 0x033A,
         ],
     },
     QuestSetData {
@@ -419,8 +419,8 @@ pub const DELIVERY_SET_DATA: [QuestSetData; 4] = [
         reward_percentages: [40, 0, 0, 10, 10, 40, 0, 0],
         max_pay: 1000,
         msg_start: [
-            0x0199, 0x024C, 0x01AB, 0x025E, 0x01BD, 0x0294, 0x01CF, 0x02CA, 0x0440, 0x035E,
-            0x034C, 0x0370, 0x033A,
+            0x0199, 0x024C, 0x01AB, 0x025E, 0x01BD, 0x0294, 0x01CF, 0x02CA, 0x0440, 0x035E, 0x034C,
+            0x0370, 0x033A,
         ],
     },
     QuestSetData {
@@ -434,8 +434,8 @@ pub const DELIVERY_SET_DATA: [QuestSetData; 4] = [
         reward_percentages: [20, 0, 0, 20, 20, 40, 0, 0],
         max_pay: 1000,
         msg_start: [
-            0x0205, 0x024C, 0x0217, 0x025E, 0x10BF, 0x0294, 0x023A, 0x02CA, 0x0440, 0x035E,
-            0x034C, 0x0370, 0x033A,
+            0x0205, 0x024C, 0x0217, 0x025E, 0x10BF, 0x0294, 0x023A, 0x02CA, 0x0440, 0x035E, 0x034C,
+            0x0370, 0x033A,
         ],
     },
     QuestSetData {
@@ -449,8 +449,8 @@ pub const DELIVERY_SET_DATA: [QuestSetData; 4] = [
         reward_percentages: [40, 0, 40, 10, 10, 0, 0, 0],
         max_pay: 0,
         msg_start: [
-            0x0A74, 0x024C, 0x0A86, 0x025E, 0x0A98, 0x0294, 0x0AAA, 0x02B8, 0x0440, 0x035E,
-            0x034C, 0x0370, 0x033A,
+            0x0A74, 0x024C, 0x0A86, 0x025E, 0x0A98, 0x0294, 0x0AAA, 0x02B8, 0x0440, 0x035E, 0x034C,
+            0x0370, 0x033A,
         ],
     },
 ];
@@ -473,8 +473,8 @@ pub const ERRAND_SET_DATA: [QuestSetData; 15] = [
         reward_percentages: [50, 0, 0, 0, 0, 0, 0, 0],
         max_pay: 500,
         msg_start: [
-            0x038C, 0x024C, 0x03D4, 0x025E, 0x03F8, 0x0294, 0x2B73, 0x02CA, 0x0440, 0x035E,
-            0x034C, 0x0370, 0x033A,
+            0x038C, 0x024C, 0x03D4, 0x025E, 0x03F8, 0x0294, 0x2B73, 0x02CA, 0x0440, 0x035E, 0x034C,
+            0x0370, 0x033A,
         ],
     },
     QuestSetData {
@@ -488,8 +488,8 @@ pub const ERRAND_SET_DATA: [QuestSetData; 15] = [
         reward_percentages: [50, 0, 0, 0, 0, 0, 0, 0],
         max_pay: 500,
         msg_start: [
-            0x03B0, 0x024C, 0x03E6, 0x025E, 0x03F8, 0x0294, 0x041C, 0x02CA, 0x0440, 0x035E,
-            0x034C, 0x0370, 0x033A,
+            0x03B0, 0x024C, 0x03E6, 0x025E, 0x03F8, 0x0294, 0x041C, 0x02CA, 0x0440, 0x035E, 0x034C,
+            0x0370, 0x033A,
         ],
     },
     QuestSetData {
@@ -503,8 +503,8 @@ pub const ERRAND_SET_DATA: [QuestSetData; 15] = [
         reward_percentages: [50, 0, 0, 0, 0, 0, 0, 0],
         max_pay: 500,
         msg_start: [
-            0x039E, 0x024C, 0x03C2, 0x025E, 0x03F8, 0x0294, 0x040A, 0x0452, 0x17B8, 0x035E,
-            0x034C, 0x0370, 0x033A,
+            0x039E, 0x024C, 0x03C2, 0x025E, 0x03F8, 0x0294, 0x040A, 0x0452, 0x17B8, 0x035E, 0x034C,
+            0x0370, 0x033A,
         ],
     },
     QuestSetData {
@@ -518,8 +518,8 @@ pub const ERRAND_SET_DATA: [QuestSetData; 15] = [
         reward_percentages: [0, 0, 0, 0, 0, 0, 0, 100],
         max_pay: 0,
         msg_start: [
-            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0440, 0x035E,
-            0x034C, 0x0370, 0x033A,
+            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0440, 0x035E, 0x034C,
+            0x0370, 0x033A,
         ],
     },
     QuestSetData {
@@ -533,8 +533,8 @@ pub const ERRAND_SET_DATA: [QuestSetData; 15] = [
         reward_percentages: [0, 0, 0, 0, 0, 0, 0, 100],
         max_pay: 0,
         msg_start: [
-            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0440, 0x035E,
-            0x034C, 0x0370, 0x033A,
+            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0440, 0x035E, 0x034C,
+            0x0370, 0x033A,
         ],
     },
     QuestSetData {
@@ -548,8 +548,8 @@ pub const ERRAND_SET_DATA: [QuestSetData; 15] = [
         reward_percentages: [0, 0, 0, 0, 0, 0, 0, 100],
         max_pay: 0,
         msg_start: [
-            0x0000, 0x0000, 0x0000, 0x0000, 0x08EF, 0x08F0, 0x0000, 0x0000, 0x0440, 0x035E,
-            0x034C, 0x0370, 0x033A,
+            0x0000, 0x0000, 0x0000, 0x0000, 0x08EF, 0x08F0, 0x0000, 0x0000, 0x0440, 0x035E, 0x034C,
+            0x0370, 0x033A,
         ],
     },
     QuestSetData {
@@ -563,8 +563,8 @@ pub const ERRAND_SET_DATA: [QuestSetData; 15] = [
         reward_percentages: [0, 0, 0, 0, 0, 0, 0, 100],
         max_pay: 0,
         msg_start: [
-            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0440, 0x035E,
-            0x034C, 0x0370, 0x033A,
+            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0440, 0x035E, 0x034C,
+            0x0370, 0x033A,
         ],
     },
     QuestSetData {
@@ -578,8 +578,8 @@ pub const ERRAND_SET_DATA: [QuestSetData; 15] = [
         reward_percentages: [0, 0, 0, 0, 0, 0, 0, 100],
         max_pay: 0,
         msg_start: [
-            0x0000, 0x0000, 0x0000, 0x0000, 0x08FB, 0x08FC, 0x0000, 0x0000, 0x0440, 0x035E,
-            0x034C, 0x0370, 0x033A,
+            0x0000, 0x0000, 0x0000, 0x0000, 0x08FB, 0x08FC, 0x0000, 0x0000, 0x0440, 0x035E, 0x034C,
+            0x0370, 0x033A,
         ],
     },
     QuestSetData {
@@ -593,8 +593,8 @@ pub const ERRAND_SET_DATA: [QuestSetData; 15] = [
         reward_percentages: [0, 0, 0, 0, 0, 0, 0, 100],
         max_pay: 0,
         msg_start: [
-            0x0000, 0x0000, 0x0000, 0x0000, 0x0907, 0x0908, 0x0000, 0x0000, 0x0440, 0x035E,
-            0x034C, 0x0370, 0x033A,
+            0x0000, 0x0000, 0x0000, 0x0000, 0x0907, 0x0908, 0x0000, 0x0000, 0x0440, 0x035E, 0x034C,
+            0x0370, 0x033A,
         ],
     },
     QuestSetData {
@@ -608,8 +608,8 @@ pub const ERRAND_SET_DATA: [QuestSetData; 15] = [
         reward_percentages: [0, 0, 0, 0, 0, 0, 0, 100],
         max_pay: 0,
         msg_start: [
-            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0440, 0x035E,
-            0x034C, 0x0370, 0x033A,
+            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0440, 0x035E, 0x034C,
+            0x0370, 0x033A,
         ],
     },
     QuestSetData {
@@ -623,8 +623,8 @@ pub const ERRAND_SET_DATA: [QuestSetData; 15] = [
         reward_percentages: [0, 0, 0, 0, 0, 0, 0, 100],
         max_pay: 0,
         msg_start: [
-            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0440, 0x035E,
-            0x034C, 0x0370, 0x033A,
+            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0440, 0x035E, 0x034C,
+            0x0370, 0x033A,
         ],
     },
     QuestSetData {
@@ -638,8 +638,8 @@ pub const ERRAND_SET_DATA: [QuestSetData; 15] = [
         reward_percentages: [0, 0, 0, 0, 0, 0, 0, 100],
         max_pay: 0,
         msg_start: [
-            0x0000, 0x0000, 0x0000, 0x0000, 0x0907, 0x0908, 0x0000, 0x0000, 0x0440, 0x035E,
-            0x034C, 0x0370, 0x033A,
+            0x0000, 0x0000, 0x0000, 0x0000, 0x0907, 0x0908, 0x0000, 0x0000, 0x0440, 0x035E, 0x034C,
+            0x0370, 0x033A,
         ],
     },
     QuestSetData {
@@ -653,8 +653,8 @@ pub const ERRAND_SET_DATA: [QuestSetData; 15] = [
         reward_percentages: [0, 0, 0, 0, 0, 0, 0, 100],
         max_pay: 0,
         msg_start: [
-            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0440, 0x035E,
-            0x034C, 0x0370, 0x033A,
+            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0440, 0x035E, 0x034C,
+            0x0370, 0x033A,
         ],
     },
     QuestSetData {
@@ -668,8 +668,8 @@ pub const ERRAND_SET_DATA: [QuestSetData; 15] = [
         reward_percentages: [0, 0, 0, 0, 0, 0, 0, 100],
         max_pay: 0,
         msg_start: [
-            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0440, 0x035E,
-            0x034C, 0x0370, 0x033A,
+            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0440, 0x035E, 0x034C,
+            0x0370, 0x033A,
         ],
     },
     QuestSetData {
@@ -683,8 +683,8 @@ pub const ERRAND_SET_DATA: [QuestSetData; 15] = [
         reward_percentages: [0, 0, 0, 0, 0, 0, 0, 100],
         max_pay: 0,
         msg_start: [
-            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0440, 0x035E,
-            0x034C, 0x0370, 0x033A,
+            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0440, 0x035E, 0x034C,
+            0x0370, 0x033A,
         ],
     },
 ];
@@ -705,8 +705,8 @@ pub const CONTEST_SET_DATA: [QuestSetData; 7] = [
         reward_percentages: [0, 0, 0, 30, 30, 40, 0, 0],
         max_pay: 500,
         msg_start: [
-            0x01E1, 0x0000, 0x01E1, 0x025E, 0x01F3, 0x117C, 0x0000, 0x02CA, 0x0440, 0x035E,
-            0x034C, 0x0370, 0x033A,
+            0x01E1, 0x0000, 0x01E1, 0x025E, 0x01F3, 0x117C, 0x0000, 0x02CA, 0x0440, 0x035E, 0x034C,
+            0x0370, 0x033A,
         ],
     },
     QuestSetData {
@@ -720,8 +720,8 @@ pub const CONTEST_SET_DATA: [QuestSetData; 7] = [
         reward_percentages: [40, 0, 0, 30, 30, 0, 0, 0],
         max_pay: 0,
         msg_start: [
-            0x0D79, 0x0000, 0x0D79, 0x025E, 0x0D91, 0x0DD9, 0x0000, 0x02CA, 0x0440, 0x0DFD,
-            0x0DD9, 0x0DEB, 0x0E0F,
+            0x0D79, 0x0000, 0x0D79, 0x025E, 0x0D91, 0x0DD9, 0x0000, 0x02CA, 0x0440, 0x0DFD, 0x0DD9,
+            0x0DEB, 0x0E0F,
         ],
     },
     QuestSetData {
@@ -735,8 +735,8 @@ pub const CONTEST_SET_DATA: [QuestSetData; 7] = [
         reward_percentages: [60, 0, 0, 20, 20, 0, 0, 0],
         max_pay: 0,
         msg_start: [
-            0x0E33, 0x0000, 0x0E33, 0x025E, 0x0E45, 0x0E8D, 0x0000, 0x02CA, 0x0440, 0x0EB1,
-            0x0E8D, 0x0E9F, 0x0EC3,
+            0x0E33, 0x0000, 0x0E33, 0x025E, 0x0E45, 0x0E8D, 0x0000, 0x02CA, 0x0440, 0x0EB1, 0x0E8D,
+            0x0E9F, 0x0EC3,
         ],
     },
     QuestSetData {
@@ -750,8 +750,8 @@ pub const CONTEST_SET_DATA: [QuestSetData; 7] = [
         reward_percentages: [60, 0, 0, 20, 20, 0, 0, 0],
         max_pay: 0,
         msg_start: [
-            0x0FB5, 0x0000, 0x0FB5, 0x025E, 0x0FC7, 0x100F, 0x0000, 0x02CA, 0x0440, 0x1033,
-            0x100F, 0x1021, 0x1045,
+            0x0FB5, 0x0000, 0x0FB5, 0x025E, 0x0FC7, 0x100F, 0x0000, 0x02CA, 0x0440, 0x1033, 0x100F,
+            0x1021, 0x1045,
         ],
     },
     QuestSetData {
@@ -765,8 +765,8 @@ pub const CONTEST_SET_DATA: [QuestSetData; 7] = [
         reward_percentages: [80, 0, 0, 10, 10, 0, 0, 0],
         max_pay: 0,
         msg_start: [
-            0x158C, 0x0000, 0x158C, 0x025E, 0x159E, 0x15B0, 0x0000, 0x02CA, 0x0440, 0x035E,
-            0x034C, 0x0370, 0x033A,
+            0x158C, 0x0000, 0x158C, 0x025E, 0x159E, 0x15B0, 0x0000, 0x02CA, 0x0440, 0x035E, 0x034C,
+            0x0370, 0x033A,
         ],
     },
     QuestSetData {
@@ -780,8 +780,8 @@ pub const CONTEST_SET_DATA: [QuestSetData; 7] = [
         reward_percentages: [80, 0, 0, 10, 10, 0, 0, 0],
         max_pay: 0,
         msg_start: [
-            0x160A, 0x0000, 0x160A, 0x025E, 0x161C, 0x162E, 0x0000, 0x02CA, 0x0440, 0x035E,
-            0x034C, 0x0370, 0x033A,
+            0x160A, 0x0000, 0x160A, 0x025E, 0x161C, 0x162E, 0x0000, 0x02CA, 0x0440, 0x035E, 0x034C,
+            0x0370, 0x033A,
         ],
     },
     QuestSetData {
@@ -795,8 +795,8 @@ pub const CONTEST_SET_DATA: [QuestSetData; 7] = [
         reward_percentages: [80, 0, 0, 10, 10, 0, 0, 0],
         max_pay: 0,
         msg_start: [
-            0x1AE1, 0x0000, 0x1AE1, 0x025E, 0x1B17, 0x0294, 0x0000, 0x02CA, 0x0440, 0x035E,
-            0x034C, 0x0370, 0x033A,
+            0x1AE1, 0x0000, 0x1AE1, 0x025E, 0x1B17, 0x0294, 0x0000, 0x02CA, 0x0440, 0x035E, 0x034C,
+            0x0370, 0x033A,
         ],
     },
 ];
@@ -860,8 +860,7 @@ pub fn find_free_delivery(
     records: &[DeliveryRecord; DELIVERY_SLOT_COUNT],
     pockets: &[u16; POCKET_COUNT],
 ) -> Option<usize> {
-    (0..DELIVERY_SLOT_COUNT)
-        .find(|&i| !records[i].occupied && pockets[i] == EMPTY_NO)
+    (0..DELIVERY_SLOT_COUNT).find(|&i| !records[i].occupied && pockets[i] == EMPTY_NO)
 }
 
 /// Errors from quest generation.
@@ -873,10 +872,7 @@ pub enum QuestGenError {
 
 /// Bind an entrusted item: find the pocket, record the quest/pocket binding.
 /// Mirrors the handover half of quest generation.
-pub fn handover_item(
-    pockets: &mut [u16; POCKET_COUNT],
-    item: u16,
-) -> Result<usize, QuestGenError> {
+pub fn handover_item(pockets: &mut [u16; POCKET_COUNT], item: u16) -> Result<usize, QuestGenError> {
     let idx = first_empty_pocket(pockets).ok_or(QuestGenError::NoSpace)?;
     pockets[idx] = item;
     Ok(idx)
@@ -1214,10 +1210,26 @@ mod tests {
 
     fn villagers() -> Vec<VillagerRef> {
         vec![
-            VillagerRef { id: 101, acre_x: 0, acre_z: 0 }, // giver
-            VillagerRef { id: 102, acre_x: 0, acre_z: 0 }, // same acre -> excluded
-            VillagerRef { id: 103, acre_x: 1, acre_z: 0 },
-            VillagerRef { id: 104, acre_x: 2, acre_z: 1 },
+            VillagerRef {
+                id: 101,
+                acre_x: 0,
+                acre_z: 0,
+            }, // giver
+            VillagerRef {
+                id: 102,
+                acre_x: 0,
+                acre_z: 0,
+            }, // same acre -> excluded
+            VillagerRef {
+                id: 103,
+                acre_x: 1,
+                acre_z: 0,
+            },
+            VillagerRef {
+                id: 104,
+                acre_x: 2,
+                acre_z: 1,
+            },
         ]
     }
 
@@ -1235,7 +1247,7 @@ mod tests {
         assert_eq!(select_quest_type(true, 1), qtype::ERRAND);
         assert_eq!(select_quest_type(false, 2), qtype::CONTEST);
         assert_eq!(select_quest_type(false, 3), qtype::DELIVERY); // wraps
-        // Kind tables.
+                                                                  // Kind tables.
         assert_eq!(quest_kind_count(qtype::DELIVERY, true), 2);
         assert_eq!(quest_kind_count(qtype::DELIVERY, false), 4);
         assert_eq!(quest_kind_count(qtype::ERRAND, false), 1);
@@ -1267,74 +1279,138 @@ mod tests {
             ..OccurCtx::default()
         };
         // Snowman: Jan / Feb 1-17 / Dec 25-31, hour 8 through 16 (16:59).
-        let jan = OccurCtx { month: 1, day: 15, hour: 10, ..base };
+        let jan = OccurCtx {
+            month: 1,
+            day: 15,
+            hour: 10,
+            ..base
+        };
         assert!(occur_ok(qtype::CONTEST, ckind::SNOWMAN, &jan));
         let jan16 = OccurCtx { hour: 16, ..jan };
         assert!(occur_ok(qtype::CONTEST, ckind::SNOWMAN, &jan16));
         let jan17 = OccurCtx { hour: 17, ..jan };
         assert!(!occur_ok(qtype::CONTEST, ckind::SNOWMAN, &jan17));
-        let feb18 = OccurCtx { month: 2, day: 18, hour: 10, ..base };
+        let feb18 = OccurCtx {
+            month: 2,
+            day: 18,
+            hour: 10,
+            ..base
+        };
         assert!(!occur_ok(qtype::CONTEST, ckind::SNOWMAN, &feb18));
-        let night = OccurCtx { month: 1, day: 15, hour: 20, ..base };
+        let night = OccurCtx {
+            month: 1,
+            day: 15,
+            hour: 20,
+            ..base
+        };
         assert!(!occur_ok(qtype::CONTEST, ckind::SNOWMAN, &night));
-        let dec24 = OccurCtx { month: 12, day: 24, hour: 10, ..base };
+        let dec24 = OccurCtx {
+            month: 12,
+            day: 24,
+            hour: 10,
+            ..base
+        };
         assert!(!occur_ok(qtype::CONTEST, ckind::SNOWMAN, &dec24));
         // Flower: Feb 25+ through Aug, >=4 empty, <=20 flowers.
         let mar = OccurCtx {
-            month: 3, day: 1, empty_acre_spaces: 4, flower_count: 20, ..base
+            month: 3,
+            day: 1,
+            empty_acre_spaces: 4,
+            flower_count: 20,
+            ..base
         };
         assert!(occur_ok(qtype::CONTEST, ckind::FLOWER, &mar));
-        let crowded = OccurCtx { flower_count: 21, ..mar };
+        let crowded = OccurCtx {
+            flower_count: 21,
+            ..mar
+        };
         assert!(!occur_ok(qtype::CONTEST, ckind::FLOWER, &crowded));
-        let feb20 = OccurCtx { month: 2, day: 20, ..mar };
+        let feb20 = OccurCtx {
+            month: 2,
+            day: 20,
+            ..mar
+        };
         assert!(!occur_ok(qtype::CONTEST, ckind::FLOWER, &feb20));
         // Insect: Mar-Oct, Nov 1-28.
         assert!(occur_ok(
             qtype::CONTEST,
             ckind::INSECT,
-            &OccurCtx { month: 11, day: 28, ..base }
+            &OccurCtx {
+                month: 11,
+                day: 28,
+                ..base
+            }
         ));
         assert!(!occur_ok(
             qtype::CONTEST,
             ckind::INSECT,
-            &OccurCtx { month: 11, day: 29, ..base }
+            &OccurCtx {
+                month: 11,
+                day: 29,
+                ..base
+            }
         ));
         assert!(!occur_ok(
             qtype::CONTEST,
             ckind::INSECT,
-            &OccurCtx { month: 12, day: 1, ..base }
+            &OccurCtx {
+                month: 12,
+                day: 1,
+                ..base
+            }
         ));
         // Letter needs a local player.
         assert!(!occur_ok(
             qtype::CONTEST,
             ckind::LETTER,
-            &OccurCtx { local_player: false, ..base }
+            &OccurCtx {
+                local_player: false,
+                ..base
+            }
         ));
         // Foreign/remove gates.
         assert!(!occur_ok(
             qtype::DELIVERY,
             dkind::FOREIGN,
-            &OccurCtx { foreign_ok: false, ..base }
+            &OccurCtx {
+                foreign_ok: false,
+                ..base
+            }
         ));
         assert!(!occur_ok(
             qtype::DELIVERY,
             dkind::REMOVE,
-            &OccurCtx { removed_ok: false, ..base }
+            &OccurCtx {
+                removed_ok: false,
+                ..base
+            }
         ));
         // A contest kind already active blocks generation.
         assert!(!occur_ok(
             qtype::CONTEST,
             ckind::FRUIT,
-            &OccurCtx { contest_active: true, ..base }
+            &OccurCtx {
+                contest_active: true,
+                ..base
+            }
         ));
         assert!(occur_ok(
             qtype::CONTEST,
             ckind::FRUIT,
-            &OccurCtx { contest_active: false, ..base }
+            &OccurCtx {
+                contest_active: false,
+                ..base
+            }
         ));
         // C ABI spot check.
-        assert_eq!(pc_quest_occur_ok(qtype::CONTEST, ckind::SNOWMAN, 1, 15, 10, 0, 0, 1, 1, 1, 0), 1);
-        assert_eq!(pc_quest_occur_ok(qtype::CONTEST, ckind::SNOWMAN, 1, 15, 20, 0, 0, 1, 1, 1, 0), 0);
+        assert_eq!(
+            pc_quest_occur_ok(qtype::CONTEST, ckind::SNOWMAN, 1, 15, 10, 0, 0, 1, 1, 1, 0),
+            1
+        );
+        assert_eq!(
+            pc_quest_occur_ok(qtype::CONTEST, ckind::SNOWMAN, 1, 15, 20, 0, 0, 1, 1, 1, 0),
+            0
+        );
     }
 
     #[test]
@@ -1352,7 +1428,7 @@ mod tests {
         assert_eq!(resolve_recipient(QuestTarget::Random, &ctx, 0), Ok(103));
         assert_eq!(resolve_recipient(QuestTarget::Random, &ctx, 1), Ok(104));
         assert_eq!(resolve_recipient(QuestTarget::Random, &ctx, 2), Ok(103)); // wraps
-        // RANDOM_EXCLUDED: also excludes chain 103 -> {104}.
+                                                                              // RANDOM_EXCLUDED: also excludes chain 103 -> {104}.
         assert_eq!(
             resolve_recipient(QuestTarget::RandomExcluded, &ctx, 0),
             Ok(104)
@@ -1373,10 +1449,7 @@ mod tests {
         );
         // FOREIGN / LAST_REMOVE.
         assert_eq!(resolve_recipient(QuestTarget::Foreign, &ctx, 0), Ok(201));
-        assert_eq!(
-            resolve_recipient(QuestTarget::LastRemove, &ctx, 0),
-            Ok(202)
-        );
+        assert_eq!(resolve_recipient(QuestTarget::LastRemove, &ctx, 0), Ok(202));
         let ctx3 = RecipientCtx {
             foreign_id: None,
             last_removed_id: None,
@@ -1495,7 +1568,10 @@ mod tests {
         let idx = handover_item(&mut pockets, 0x3001).unwrap();
         assert_eq!(idx, 1);
         assert_eq!(pockets[1], 0x3001);
-        assert_eq!(handover_item(&mut full.clone(), 0x3001), Err(QuestGenError::NoSpace));
+        assert_eq!(
+            handover_item(&mut full.clone(), 0x3001),
+            Err(QuestGenError::NoSpace)
+        );
 
         // Grab/put: delivery keeps the pocket index.
         let mut errands = [ErrandRecord::default(); ERRAND_SLOT_COUNT];
@@ -1527,7 +1603,7 @@ mod tests {
         let d = displaced.expect("destination quest item is displaced");
         assert!(!d.is_errand && d.index == 9 && d.item == 0x1234);
         assert_eq!(deliveries[9].item, 0x5555); // moved record wins the slot
-        // Item-condition values.
+                                                // Item-condition values.
         assert_eq!(item_cond::QUEST, 2);
         assert_eq!(pc_item_condition_quest(), 2);
         // C ABI pocket scan.
@@ -1556,7 +1632,10 @@ mod tests {
         assert_eq!(letter_reply_present(8), letter_present::RARE_CLOTHING);
         assert_eq!(letter_reply_present(9), letter_present::FOREIGN_FRUIT);
         assert_eq!(letter_reply_present(10), letter_present::RARE_FURNITURE);
-        assert_eq!(letter_reply_present(11), letter_present::CARPET_OR_WALLPAPER);
+        assert_eq!(
+            letter_reply_present(11),
+            letter_present::CARPET_OR_WALLPAPER
+        );
         assert!(carpet_or_wallpaper(0));
         assert!(!carpet_or_wallpaper(1));
         // Handbill: 0x75 + rank*6 + looks.
@@ -1567,7 +1646,7 @@ mod tests {
         body[..60].fill(b'a');
         assert_eq!(letter_quest_rank(&body, false), 2); // 60 chars, no present
         assert_eq!(letter_quest_rank(&body, true), 8); // +6 present
-        // First-job letters are ERRAND/FIRST_JOB, not contest letters.
+                                                       // First-job letters are ERRAND/FIRST_JOB, not contest letters.
         let mut fj = FirstJobLetter::new(FirstJobLetterKind::SendLetter, 555, Some(444));
         assert_eq!(fj.progress, 2);
         assert_eq!(fj.used_ids, [Some(444), Some(555)]);
@@ -1575,7 +1654,10 @@ mod tests {
         fj.complete();
         assert_eq!(fj.progress, 3);
         // C ABI.
-        assert_eq!(pc_letter_present_category(10), letter_present::RARE_FURNITURE);
+        assert_eq!(
+            pc_letter_present_category(10),
+            letter_present::RARE_FURNITURE
+        );
         assert_eq!(pc_letter_carpet_or_wallpaper(2), 1);
         assert_eq!(pc_letter_carpet_or_wallpaper(3), 0);
         assert_eq!(pc_letter_handbill(11, 5), 0x75 + 66 + 5);

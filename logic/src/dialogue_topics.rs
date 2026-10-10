@@ -72,7 +72,11 @@ pub fn msg_body_param(offsets: &[u32], index: usize) -> Option<(u32, u32)> {
 /// (`aNPC_set_talk_info_talk_request_check`):
 /// `base + looks * 3 + RANDOM(3)`.
 pub fn talk_check_msg(looks: u8, rng3: u32, island: bool) -> u32 {
-    let base = if island { TALK_CHECK_BASE_ISLAND } else { TALK_CHECK_BASE_MAINLAND };
+    let base = if island {
+        TALK_CHECK_BASE_ISLAND
+    } else {
+        TALK_CHECK_BASE_MAINLAND
+    };
     base + looks as u32 * TALK_CHECK_VARIANTS + (rng3 % TALK_CHECK_VARIANTS)
 }
 
@@ -122,7 +126,13 @@ pub struct TalkInfo {
 
 impl TalkInfo {
     pub fn new() -> Self {
-        Self { timer: 0, talk_num: 0, quest_request: true, unlock_timer: 0, reset_timer: 0 }
+        Self {
+            timer: 0,
+            talk_num: 0,
+            quest_request: true,
+            unlock_timer: 0,
+            reset_timer: 0,
+        }
     }
 
     /// `mNpc_TalkEndMove`: timer = 1000, count the talk.
@@ -153,6 +163,7 @@ pub struct Temper {
 
 /// Verbatim `l_npc_temper` table, indexed by feeling
 /// (Normal/Happy/Angry/Sad/Sleepy/Pitfall).
+#[rustfmt::skip]
 pub const NPC_TEMPER: [Temper; 6] = [
     Temper { unlock_timer: 4000, over_impatient_num: 12, talk_num_max: 15 },
     Temper { unlock_timer: 3000, over_impatient_num: 10, talk_num_max: 13 },
@@ -172,7 +183,9 @@ pub struct ConversationFlags {
 
 impl ConversationFlags {
     pub fn pack(&self) -> u8 {
-        (self.beesting as u8) | ((self.fish_complete as u8) << 1) | ((self.insect_complete as u8) << 2)
+        (self.beesting as u8)
+            | ((self.fish_complete as u8) << 1)
+            | ((self.insect_complete as u8) << 2)
     }
 }
 
@@ -269,7 +282,11 @@ pub extern "C" fn pc_talk_count_allowed(talk_num: u8, talk_num_max: u8, timer: u
 
 /// C ABI: patience classification (0/1/2).
 #[no_mangle]
-pub extern "C" fn pc_talk_patience_raw(talk_num: u8, over_impatient_num: u8, talk_num_max: u8) -> u8 {
+pub extern "C" fn pc_talk_patience_raw(
+    talk_num: u8,
+    over_impatient_num: u8,
+    talk_num_max: u8,
+) -> u8 {
     talk_patience(talk_num, over_impatient_num, talk_num_max) as u8
 }
 
@@ -302,7 +319,10 @@ mod tests {
 
     #[test]
     fn talk_gate() {
-        assert_eq!(force_talk_gate(5, 0, 0, false, 0.0, 0.0, 0.0), TalkGate::Forced);
+        assert_eq!(
+            force_talk_gate(5, 0, 0, false, 0.0, 0.0, 0.0),
+            TalkGate::Forced
+        );
         assert_eq!(
             force_talk_gate(-1, 0x81, 0, true, 0.0, 79.0, 59.0),
             TalkGate::Spontaneous
@@ -331,14 +351,39 @@ mod tests {
 
     #[test]
     fn temper_values() {
-        assert_eq!(NPC_TEMPER[0], Temper { unlock_timer: 4000, over_impatient_num: 12, talk_num_max: 15 });
-        assert_eq!(NPC_TEMPER[1], Temper { unlock_timer: 3000, over_impatient_num: 10, talk_num_max: 13 });
-        assert_eq!(NPC_TEMPER[4], Temper { unlock_timer: 5000, over_impatient_num: 9, talk_num_max: 12 });
+        assert_eq!(
+            NPC_TEMPER[0],
+            Temper {
+                unlock_timer: 4000,
+                over_impatient_num: 12,
+                talk_num_max: 15
+            }
+        );
+        assert_eq!(
+            NPC_TEMPER[1],
+            Temper {
+                unlock_timer: 3000,
+                over_impatient_num: 10,
+                talk_num_max: 13
+            }
+        );
+        assert_eq!(
+            NPC_TEMPER[4],
+            Temper {
+                unlock_timer: 5000,
+                over_impatient_num: 9,
+                talk_num_max: 12
+            }
+        );
     }
 
     #[test]
     fn conversation_flags_pack() {
-        let f = ConversationFlags { beesting: true, fish_complete: false, insect_complete: true };
+        let f = ConversationFlags {
+            beesting: true,
+            fish_complete: false,
+            insect_complete: true,
+        };
         assert_eq!(f.pack(), 0b101);
     }
 

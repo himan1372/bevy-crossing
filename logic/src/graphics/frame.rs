@@ -125,7 +125,9 @@ pub fn material_preset_cmds(preset: MaterialPreset) -> Vec<Gfx> {
         MaterialPreset::TexturedOpaque => {
             geo::G_ZBUFFER | geo::G_SHADE | geo::G_CULL_BACK | geo::G_SHADING_SMOOTH
         }
-        MaterialPreset::TexturedTranslucent => geo::G_ZBUFFER | geo::G_SHADE | geo::G_SHADING_SMOOTH,
+        MaterialPreset::TexturedTranslucent => {
+            geo::G_ZBUFFER | geo::G_SHADE | geo::G_SHADING_SMOOTH
+        }
         MaterialPreset::FoggedOpaque => {
             geo::G_ZBUFFER | geo::G_SHADE | geo::G_CULL_BACK | geo::G_FOG | geo::G_SHADING_SMOOTH
         }
@@ -136,7 +138,10 @@ pub fn material_preset_cmds(preset: MaterialPreset) -> Vec<Gfx> {
         MaterialPreset::UntexturedTranslucent => geo::G_ZBUFFER | geo::G_SHADE,
     };
     // G_GEOMETRYMODE: w1 carries the set bits (simplified packing).
-    v.push(Gfx::new(((op::G_GEOMETRYMODE as u32) << 24) | (geo_bits & 0xFF), geo_bits >> 8));
+    v.push(Gfx::new(
+        ((op::G_GEOMETRYMODE as u32) << 24) | (geo_bits & 0xFF),
+        geo_bits >> 8,
+    ));
     v
 }
 
@@ -223,7 +228,10 @@ mod tests {
 
     #[test]
     fn render_mode_constants() {
-        assert_eq!(RenderMode::NTSC_480_INT_DF.vfilter, [8, 8, 10, 12, 10, 8, 8]);
+        assert_eq!(
+            RenderMode::NTSC_480_INT_DF.vfilter,
+            [8, 8, 10, 12, 10, 8, 8]
+        );
         assert_eq!(RenderMode::NTSC_480_PROG.xfb_mode, XfbMode::SingleField);
         assert_eq!(SCREEN_WIDTH, 640);
         assert_eq!(SCREEN_HEIGHT, 480);

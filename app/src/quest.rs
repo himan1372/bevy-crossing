@@ -367,10 +367,7 @@ fn hide_panel(panel: &mut Query<&mut Visibility, (With<QuestPanel>, Without<Ques
 fn notify(
     msg: &str,
     timer: &mut ResMut<QuestNotifyTimer>,
-    query: &mut Query<
-        (&mut Visibility, &mut Text),
-        (With<QuestNotifyText>, Without<QuestPanel>),
-    >,
+    query: &mut Query<(&mut Visibility, &mut Text), (With<QuestNotifyText>, Without<QuestPanel>)>,
 ) {
     if let Ok((mut vis, mut text)) = query.single_mut() {
         text.0 = msg.to_string();
@@ -529,7 +526,10 @@ fn quest_ui_input(
     markers: Query<Entity, With<QuestMarker>>,
     mut panel: Query<&mut Visibility, (With<QuestPanel>, Without<QuestNotifyText>)>,
     mut timer: ResMut<QuestNotifyTimer>,
-    mut notify_query: Query<(&mut Visibility, &mut Text), (With<QuestNotifyText>, Without<QuestPanel>)>,
+    mut notify_query: Query<
+        (&mut Visibility, &mut Text),
+        (With<QuestNotifyText>, Without<QuestPanel>),
+    >,
 ) {
     if !ui.open {
         return;
@@ -539,13 +539,14 @@ fn quest_ui_input(
     if !accepted && !declined {
         return;
     }
-    let close = |ui: &mut ResMut<QuestUi>,
-                 claim: &mut ResMut<QuestClaim>,
-                 panel: &mut Query<&mut Visibility, (With<QuestPanel>, Without<QuestNotifyText>)>| {
-        ui.open = false;
-        claim.0 = None;
-        hide_panel(panel);
-    };
+    let close =
+        |ui: &mut ResMut<QuestUi>,
+         claim: &mut ResMut<QuestClaim>,
+         panel: &mut Query<&mut Visibility, (With<QuestPanel>, Without<QuestNotifyText>)>| {
+            ui.open = false;
+            claim.0 = None;
+            hide_panel(panel);
+        };
     match ui.mode {
         QuestUiMode::Offer => {
             if accepted {

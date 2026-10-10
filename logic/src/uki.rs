@@ -138,6 +138,7 @@ pub struct GyoeiType {
     pub bite_time: u8,
 }
 
+#[rustfmt::skip]
 pub const GYOEI_TYPES: [GyoeiType; 45] = [
     GyoeiType { size: 1, search_area: 3, bite_time: 4 }, // CRUCIAN_CARP
     GyoeiType { size: 2, search_area: 3, bite_time: 2 }, // BROOK_TROUT
@@ -220,8 +221,16 @@ pub const TRASH_BY_SIZE: [u8; 8] = [41, 41, 42, 42, 42, 43, 43, 43];
 
 /// BITE angular wobble (degrees) and drift speed by fish size.
 #[allow(clippy::excessive_precision)] // verbatim decomp values; each is exact in f32
-pub const BITE_ANGLE_DEG: [f32; 8] = [10.1513671875, 9.4647216796875, 8.778076171875, 8.778076171875,
-    8.0914306640625, 7.40478515625, 7.03125, 7.03125];
+pub const BITE_ANGLE_DEG: [f32; 8] = [
+    10.1513671875,
+    9.4647216796875,
+    8.778076171875,
+    8.778076171875,
+    8.0914306640625,
+    7.40478515625,
+    7.03125,
+    7.03125,
+];
 pub const BITE_SPEED: [f32; 8] = [0.1, 0.2, 0.3, 0.3, 0.4, 0.6, 0.8, 0.8];
 
 /// Fish type -> inventory item (`aUKI_get_fish_type` table): 0..39 map to
@@ -250,7 +259,10 @@ pub fn reel_timer_for(gyo_type: u8) -> i16 {
     if is_trash_gyo_type(gyo_type) {
         return 26;
     }
-    let size = GYOEI_TYPES.get(gyo_type as usize).map(|t| t.size).unwrap_or(3);
+    let size = GYOEI_TYPES
+        .get(gyo_type as usize)
+        .map(|t| t.size)
+        .unwrap_or(3);
     REEL_TIMER[size as usize] * 2
 }
 
@@ -539,8 +551,7 @@ impl UkiActor {
             }
             proc::HIT => {
                 self.frame_timer = 52;
-                let (vec, _) =
-                    parabola_init(&self.pos, &self.right_hand_pos, self.frame_timer, 1);
+                let (vec, _) = parabola_init(&self.pos, &self.right_hand_pos, self.frame_timer, 1);
                 self.parabola_vec = vec;
                 self.status = status::COMEBACK;
                 if self.coast_flag {
@@ -585,8 +596,7 @@ impl UkiActor {
             command::FORCE_COMEBACK => {
                 self.clear_spd();
                 self.frame_timer = 52;
-                let (vec, _) =
-                    parabola_init(&self.pos, &self.right_hand_pos, self.frame_timer, 1);
+                let (vec, _) = parabola_init(&self.pos, &self.right_hand_pos, self.frame_timer, 1);
                 self.parabola_vec = vec;
                 self.status = status::COMEBACK;
                 events.push(UkiEvent::Splash { arg: 1 });
@@ -745,10 +755,9 @@ impl UkiActor {
             proc::CARRY => {
                 self.pos = self.right_hand_pos;
                 self.uki_pos = self.right_hand_pos;
-                if self.command == command::READY
-                    && timer_step(&mut self.frame_timer) == 0 {
-                        self.set_proc(proc::READY, 0, events);
-                    }
+                if self.command == command::READY && timer_step(&mut self.frame_timer) == 0 {
+                    self.set_proc(proc::READY, 0, events);
+                }
             }
             proc::READY => {
                 if timer_step(&mut self.frame_timer) == 0 {
@@ -790,7 +799,11 @@ impl UkiActor {
             proc::WAIT => {
                 self.hit_water_flag = false;
                 self.uki_pos = self.pos;
-                chase_f(&mut self.position_speed.y, self.max_velocity_y, self.gravity);
+                chase_f(
+                    &mut self.position_speed.y,
+                    self.max_velocity_y,
+                    self.gravity,
+                );
                 if !self.force_command(events) {
                     if timer_step(&mut self.cast_timer) == 0
                         && self.gyo_command == gyo_command::ENGAGED
@@ -827,7 +840,11 @@ impl UkiActor {
                 }
             }
             proc::TOUCH => {
-                chase_f(&mut self.position_speed.y, self.max_velocity_y, self.gravity);
+                chase_f(
+                    &mut self.position_speed.y,
+                    self.max_velocity_y,
+                    self.gravity,
+                );
                 if !self.force_command(events) {
                     if self.gyo_command == gyo_command::BITTEN {
                         events.push(UkiEvent::TouchVib);
@@ -846,7 +863,11 @@ impl UkiActor {
                 self.water_state(env, events);
             }
             proc::BITE => {
-                chase_f(&mut self.position_speed.y, self.max_velocity_y, self.gravity);
+                chase_f(
+                    &mut self.position_speed.y,
+                    self.max_velocity_y,
+                    self.gravity,
+                );
                 if !self.force_command(events) {
                     if self.gyo_command == gyo_command::BITTEN {
                         if self.command == command::REEL {
@@ -867,7 +888,8 @@ impl UkiActor {
                                 let size = GYOEI_TYPES
                                     .get(self.gyo_type.max(0) as usize)
                                     .map(|t| t.size)
-                                    .unwrap_or(3) as usize;
+                                    .unwrap_or(3)
+                                    as usize;
                                 self.angle_y += (BITE_ANGLE_DEG[size] * 0.5) * PI / 180.0;
                                 self.speed = BITE_SPEED[size];
                                 self.position_speed.x = self.speed * self.angle_y.sin();
@@ -1079,7 +1101,7 @@ mod tests {
         assert_eq!(u.proc, proc::BITE);
         assert_eq!(u.gyo_status, gyo_status::BITE);
         assert_eq!(u.frame_timer, reel_timer_for(22)); // salmon: L -> 52*2
-        // Active reel.
+                                                       // Active reel.
         u.command = command::REEL;
         u.step(&env, &mut ev);
         assert_eq!(u.status, status::VIB);
@@ -1159,7 +1181,7 @@ mod tests {
         assert_eq!(reel_timer_for(22), 104);
         assert_eq!(reel_timer_for(41), 26);
         assert_eq!(reel_timer_for(0), 78); // crucian carp XS -> 39*2
-        // Item conversion incl. the duplicate 39 and FISH22.
+                                           // Item conversion incl. the duplicate 39 and FISH22.
         assert_eq!(fish_item_index(0), Some(0));
         assert_eq!(fish_item_index(39), Some(39));
         assert_eq!(fish_item_index(40), Some(39));

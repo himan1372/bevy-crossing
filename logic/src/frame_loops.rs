@@ -19,7 +19,11 @@ pub const DT_MAX_FRAMES: f64 = 4.0;
 
 /// Clamp accumulated 60-Hz frames to the engine maximum.
 pub fn clamp_dt_frames(frames: f64) -> f64 {
-    if frames > DT_MAX_FRAMES { DT_MAX_FRAMES } else { frames }
+    if frames > DT_MAX_FRAMES {
+        DT_MAX_FRAMES
+    } else {
+        frames
+    }
 }
 
 /// graph_main() phase order (per frame).
@@ -104,7 +108,11 @@ pub mod reverse_slot {
 /// NPC route trace: returns false when the movement action completed.
 /// avoid_direction is the route-node cursor; when it reaches
 /// route_node_count the destination is set and the trace returns FALSE.
-pub fn npc_route_step(arrived: bool, avoid_direction: usize, route_node_count: usize) -> (bool, usize, bool) {
+pub fn npc_route_step(
+    arrived: bool,
+    avoid_direction: usize,
+    route_node_count: usize,
+) -> (bool, usize, bool) {
     // (trace_continues, new_avoid_direction, set_destination)
     if !arrived {
         return (true, avoid_direction, false);

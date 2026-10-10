@@ -19,7 +19,9 @@ pub struct SegmentTable {
 
 impl SegmentTable {
     pub fn new() -> SegmentTable {
-        SegmentTable { segments: [0; NUM_SEGMENTS] }
+        SegmentTable {
+            segments: [0; NUM_SEGMENTS],
+        }
     }
 
     /// `gSPSegment(seg, base)`.
@@ -67,7 +69,11 @@ pub struct DlStack {
 
 impl DlStack {
     pub fn new() -> DlStack {
-        DlStack { stack: [0; DL_MAX_STACK_LEVEL], level: 0, overflow_count: 0 }
+        DlStack {
+            stack: [0; DL_MAX_STACK_LEVEL],
+            level: 0,
+            overflow_count: 0,
+        }
     }
 
     /// Push a return address. Returns `false` on overflow.

@@ -23,7 +23,6 @@
 //! This module ports the selection formulas, message-number math,
 //! scheduling quirks, and RNG structure.
 
-
 // ---------------------------------------------------------------------------
 // RNG
 // ---------------------------------------------------------------------------
@@ -100,7 +99,10 @@ pub struct GeneratedMail {
 pub enum PresentRequest {
     None,
     /// (shop kind, list type) for `mSP_SelectRandomItem_New`.
-    Catalog { kind: u8, listtype: u8 },
+    Catalog {
+        kind: u8,
+        listtype: u8,
+    },
     Umbrella,
     FixedItem(u16),
 }
@@ -248,9 +250,18 @@ pub fn classify_event_friend(
 /// `category_table` (FURNITURE/FURNITURE/CLOTH), indexed by type.
 pub fn event_present_request(t: EventMailType) -> PresentRequest {
     match t {
-        EventMailType::BestFriend => PresentRequest::Catalog { kind: SHOP_KIND_FURNITURE, listtype: LISTTYPE_RARE },
-        EventMailType::OkFriend => PresentRequest::Catalog { kind: SHOP_KIND_FURNITURE, listtype: LISTTYPE_UNCOMMON },
-        EventMailType::NotFriend => PresentRequest::Catalog { kind: SHOP_KIND_CLOTH, listtype: LISTTYPE_COMMON },
+        EventMailType::BestFriend => PresentRequest::Catalog {
+            kind: SHOP_KIND_FURNITURE,
+            listtype: LISTTYPE_RARE,
+        },
+        EventMailType::OkFriend => PresentRequest::Catalog {
+            kind: SHOP_KIND_FURNITURE,
+            listtype: LISTTYPE_UNCOMMON,
+        },
+        EventMailType::NotFriend => PresentRequest::Catalog {
+            kind: SHOP_KIND_CLOTH,
+            listtype: LISTTYPE_COMMON,
+        },
     }
 }
 
@@ -291,7 +302,11 @@ pub fn send_valentine_mails(
 ) -> u32 {
     let mut player_bitfield: u8 = 0b1111;
     let mut sent = 0u32;
-    for class in [EventMailType::BestFriend, EventMailType::OkFriend, EventMailType::NotFriend] {
+    for class in [
+        EventMailType::BestFriend,
+        EventMailType::OkFriend,
+        EventMailType::NotFriend,
+    ] {
         for slot in classify.iter().flatten() {
             let (player_no, t) = *slot;
             if t != class {
@@ -334,8 +349,14 @@ pub fn birthday_mail_no<R: MailRng>(rng: &mut R, looks: u8) -> u16 {
 /// [FURNITURE, FURNITURE, CLOTH, CLOTH, umbrella] = 40/40/20.
 pub fn birthday_present_request<R: MailRng>(rng: &mut R) -> PresentRequest {
     match rng.random(5) {
-        0 | 1 => PresentRequest::Catalog { kind: SHOP_KIND_FURNITURE, listtype: LISTTYPE_RARE },
-        2 | 3 => PresentRequest::Catalog { kind: SHOP_KIND_CLOTH, listtype: LISTTYPE_RARE },
+        0 | 1 => PresentRequest::Catalog {
+            kind: SHOP_KIND_FURNITURE,
+            listtype: LISTTYPE_RARE,
+        },
+        2 | 3 => PresentRequest::Catalog {
+            kind: SHOP_KIND_CLOTH,
+            listtype: LISTTYPE_RARE,
+        },
         _ => PresentRequest::Umbrella,
     }
 }
@@ -447,7 +468,11 @@ pub struct GoodbyePending {
 
 impl GoodbyePending {
     pub fn new(npc_id: u32, looks: u8, active_players: u8) -> GoodbyePending {
-        GoodbyePending { npc_id, looks, deliver_to_bitfield: active_players & 0xF }
+        GoodbyePending {
+            npc_id,
+            looks,
+            deliver_to_bitfield: active_players & 0xF,
+        }
     }
 
     pub fn is_done(&self) -> bool {
@@ -499,11 +524,10 @@ pub fn send_goodbye_mails(
 ) -> u32 {
     let mut sent = 0u32;
     for player_no in 0..4u8 {
-        if (pending.deliver_to_bitfield >> player_no) & 1 == 1
-            && try_send(player_no) {
-                pending.deliver_to_bitfield &= !(1 << player_no);
-                sent += 1;
-            }
+        if (pending.deliver_to_bitfield >> player_no) & 1 == 1 && try_send(player_no) {
+            pending.deliver_to_bitfield &= !(1 << player_no);
+            sent += 1;
+        }
     }
     sent
 }
@@ -529,7 +553,11 @@ pub struct HpMailSlot {
 
 impl HpMailSlot {
     pub fn empty() -> HpMailSlot {
-        HpMailSlot { receive_day: 0, password: [0; HP_PASSWORD_LEN], occupied: false }
+        HpMailSlot {
+            receive_day: 0,
+            password: [0; HP_PASSWORD_LEN],
+            occupied: false,
+        }
     }
 
     /// Store a password. Retail quirk (commented `@BUG`):
@@ -742,11 +770,21 @@ pub fn make_famicom_response(
         famicom_mail_no(looks, valid),
         sender_npc,
         recipient_player,
-        if valid { PresentRequest::FixedItem(0) } else { PresentRequest::None },
+        if valid {
+            PresentRequest::FixedItem(0)
+        } else {
+            PresentRequest::None
+        },
         PaperSpec::RandomAbc,
         free,
     );
-    PasswordResponse { mail, sender_override: None, recipient_override: None, special_npc: false, keep_present: valid }
+    PasswordResponse {
+        mail,
+        sender_override: None,
+        recipient_override: None,
+        special_npc: false,
+        keep_present: valid,
+    }
 }
 
 /// The delayed scheduler: for each due HP-mail slot, analyze the
@@ -856,7 +894,12 @@ mod tests {
     use super::*;
 
     fn mem(player_no: u8, sex: u8, friendship: i16) -> MemoryEntry {
-        MemoryEntry { is_player: true, player_sex: sex, friendship, player_no }
+        MemoryEntry {
+            is_player: true,
+            player_sex: sex,
+            friendship,
+            player_no,
+        }
     }
 
     #[test]
@@ -872,19 +915,35 @@ mod tests {
             mem(5, 0, 20),
             mem(6, 1, 5),
         ];
-        assert_eq!(classify_event_friend(&memories, Some(0), 0), Some((0, EventMailType::BestFriend)));
+        assert_eq!(
+            classify_event_friend(&memories, Some(0), 0),
+            Some((0, EventMailType::BestFriend))
+        );
         // Best friend is same-sex player 2 -> opposite-sex best is
         // player 0 with friendship 200 >= 80 -> OK_FRIEND.
-        assert_eq!(classify_event_friend(&memories, Some(2), 0), Some((0, EventMailType::OkFriend)));
+        assert_eq!(
+            classify_event_friend(&memories, Some(2), 0),
+            Some((0, EventMailType::OkFriend))
+        );
         // Low friendship opposite-sex best -> NOT_FRIEND.
         let mut low = memories;
         low[0].friendship = 10;
         // With player 0 lowered to 10, the top opposite-sex friend is now
         // player 1 (index 1, friendship 50 < 80) -> NOT_FRIEND.
-        assert_eq!(classify_event_friend(&low, Some(2), 0), Some((1, EventMailType::NotFriend)));
+        assert_eq!(
+            classify_event_friend(&low, Some(2), 0),
+            Some((1, EventMailType::NotFriend))
+        );
         // No opposite-sex friend -> None.
-        let none: [MemoryEntry; 7] = [mem(0, 0, 10), mem(1, 0, 10), mem(2, 0, 10), mem(3, 0, 10),
-                                     mem(4, 0, 10), mem(5, 0, 10), mem(6, 0, 10)];
+        let none: [MemoryEntry; 7] = [
+            mem(0, 0, 10),
+            mem(1, 0, 10),
+            mem(2, 0, 10),
+            mem(3, 0, 10),
+            mem(4, 0, 10),
+            mem(5, 0, 10),
+            mem(6, 0, 10),
+        ];
         assert_eq!(classify_event_friend(&none, Some(0), 0), None);
     }
 
@@ -896,11 +955,17 @@ mod tests {
         // Present tables.
         assert_eq!(
             event_present_request(EventMailType::BestFriend),
-            PresentRequest::Catalog { kind: SHOP_KIND_FURNITURE, listtype: LISTTYPE_RARE }
+            PresentRequest::Catalog {
+                kind: SHOP_KIND_FURNITURE,
+                listtype: LISTTYPE_RARE
+            }
         );
         assert_eq!(
             event_present_request(EventMailType::NotFriend),
-            PresentRequest::Catalog { kind: SHOP_KIND_CLOTH, listtype: LISTTYPE_COMMON }
+            PresentRequest::Catalog {
+                kind: SHOP_KIND_CLOTH,
+                listtype: LISTTYPE_COMMON
+            }
         );
     }
 
@@ -936,8 +1001,14 @@ mod tests {
         let mut rng = TestRng::new(7);
         for _ in 0..50 {
             match birthday_present_request(&mut rng) {
-                PresentRequest::Catalog { kind: SHOP_KIND_FURNITURE, .. } => {}
-                PresentRequest::Catalog { kind: SHOP_KIND_CLOTH, .. } => {}
+                PresentRequest::Catalog {
+                    kind: SHOP_KIND_FURNITURE,
+                    ..
+                } => {}
+                PresentRequest::Catalog {
+                    kind: SHOP_KIND_CLOTH,
+                    ..
+                } => {}
                 PresentRequest::Umbrella => {}
                 other => panic!("unexpected present {:?}", other),
             }
@@ -946,8 +1017,15 @@ mod tests {
 
     #[test]
     fn birthday_eligibility() {
-        let memories = [mem(0, 1, 100), mem(1, 0, 200), mem(2, 1, 50), mem(3, 0, 10),
-                        mem(4, 1, 5), mem(5, 0, 1), mem(6, 1, 0)];
+        let memories = [
+            mem(0, 1, 100),
+            mem(1, 0, 200),
+            mem(2, 1, 50),
+            mem(3, 0, 10),
+            mem(4, 1, 5),
+            mem(5, 0, 1),
+            mem(6, 1, 0),
+        ];
         // Player 1 is highest friendship -> eligible.
         assert!(birthday_eligible(&memories, 1, 999, 7));
         // Player 0 is not highest -> ineligible.
@@ -962,9 +1040,18 @@ mod tests {
         assert_eq!(m.mail_no, 0xD7);
         assert_eq!(m.mail_type, NpcMailType::Xmas);
         assert_eq!(m.paper, PaperSpec::Fixed(22));
-        assert_eq!(delivery_policy_for(MailSystem::Christmas), DeliveryPolicy::MailboxOnly);
-        assert_eq!(delivery_policy_for(MailSystem::Birthday), DeliveryPolicy::MailboxThenPostOffice);
-        assert_eq!(delivery_policy_for(MailSystem::Password), DeliveryPolicy::PostOfficeOnly);
+        assert_eq!(
+            delivery_policy_for(MailSystem::Christmas),
+            DeliveryPolicy::MailboxOnly
+        );
+        assert_eq!(
+            delivery_policy_for(MailSystem::Birthday),
+            DeliveryPolicy::MailboxThenPostOffice
+        );
+        assert_eq!(
+            delivery_policy_for(MailSystem::Password),
+            DeliveryPolicy::PostOfficeOnly
+        );
     }
 
     #[test]
@@ -1003,7 +1090,12 @@ mod tests {
 
     #[test]
     fn hp_mail_delay_and_retain() {
-        let mut slots = [HpMailSlot::empty(), HpMailSlot::empty(), HpMailSlot::empty(), HpMailSlot::empty()];
+        let mut slots = [
+            HpMailSlot::empty(),
+            HpMailSlot::empty(),
+            HpMailSlot::empty(),
+            HpMailSlot::empty(),
+        ];
         slots[0].store(100, &[1u8; 20]);
         // Same day: not due.
         assert!(!slots[0].due(100));
@@ -1024,7 +1116,7 @@ mod tests {
         let sent = send_hp_mails(&mut rng, &mut slots, 101, &analyze, &fail);
         assert_eq!(sent, 0);
         assert!(slots[0].occupied); // retained
-        // Successful delivery clears.
+                                    // Successful delivery clears.
         let ok = |_: &GeneratedMail| true;
         let sent = send_hp_mails(&mut rng, &mut slots, 101, &analyze, &ok);
         assert_eq!(sent, 1);

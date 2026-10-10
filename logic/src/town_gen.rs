@@ -353,7 +353,7 @@ pub static BLOCK_KIND_TABLE: [u32; BLOCK_TYPE_NUM] = [
     BK_MARINE | BK_OCEAN | BK_OFFING,
     BK_CLIFF | BK_RIVER | BK_BRIDGE | BK_RIVER1,
     BK_CLIFF | BK_RIVER | BK_BRIDGE | BK_RIVER1,
-    BK_CLIFF | BK_RIVER | BK_BRIDGE | BK_RIVER1
+    BK_CLIFF | BK_RIVER | BK_BRIDGE | BK_RIVER1,
 ];
 
 /// Kind bitmask for a block type; mirrors `mRF_Type2BlockInfo`.
@@ -875,8 +875,7 @@ fn place_residents(plan: &mut TownPlan, pool: &[u16], count: usize, rng: &mut Rn
         })
         .flat_map(|acre| {
             (1..UNITS_PER_SIDE - 1).flat_map(move |z| {
-                (1..UNITS_PER_SIDE - 1)
-                    .map(move |x| (acre, z * UNITS_PER_SIDE + x))
+                (1..UNITS_PER_SIDE - 1).map(move |x| (acre, z * UNITS_PER_SIDE + x))
             })
         })
         .collect();

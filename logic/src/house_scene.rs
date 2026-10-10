@@ -91,9 +91,17 @@ pub struct NpcActorLinks {
 /// slot; `-ANIMAL_NUM_MAX` selects the island fallback.
 pub fn resolve_npc_links(npc_info_idx: i32, animal_num_max: i32) -> Option<NpcActorLinks> {
     if (0..animal_num_max).contains(&npc_info_idx) {
-        Some(NpcActorLinks { animal_idx: npc_info_idx, list_idx: npc_info_idx, is_island: false })
+        Some(NpcActorLinks {
+            animal_idx: npc_info_idx,
+            list_idx: npc_info_idx,
+            is_island: false,
+        })
     } else if npc_info_idx == -animal_num_max {
-        Some(NpcActorLinks { animal_idx: -1, list_idx: 0, is_island: true })
+        Some(NpcActorLinks {
+            animal_idx: -1,
+            list_idx: 0,
+            is_island: true,
+        })
     } else {
         None
     }
@@ -126,10 +134,7 @@ pub fn resolve_house_owner(
 /// Room wall/floor from the owner's runtime house data
 /// (`mNpc_RenewalNpcRoom`): for an NPC-room field with a valid owner,
 /// `(wall_id, floor_id)`; otherwise `None`.
-pub fn renewal_npc_room(
-    is_npc_room_field: bool,
-    owner: Option<&NpcListEntry>,
-) -> Option<(u8, u8)> {
+pub fn renewal_npc_room(is_npc_room_field: bool, owner: Option<&NpcListEntry>) -> Option<(u8, u8)> {
     if !is_npc_room_field {
         return None;
     }
@@ -154,9 +159,7 @@ pub fn scan_house_furniture(
 ) -> u16 {
     let data_idx = (main_layer_id as i32 - fg_base_id).max(0) as usize;
     let base = data_idx * row_stride * 10;
-    let cell = |z: usize, x: usize| -> Option<u16> {
-        grid.get(base + z * row_stride + x).copied()
-    };
+    let cell = |z: usize, x: usize| -> Option<u16> { grid.get(base + z * row_stride + x).copied() };
 
     let mut num = 0u32;
     for z in 0..10usize {
@@ -204,11 +207,7 @@ pub fn request_proc_id(looks: u8) -> u32 {
 /// The `force_call_req_proc` dispatcher: the implementation behind
 /// the function pointer is untraced, so it is modeled as a caller
 /// supplied callback `(npc_actor, req_id) -> success`.
-pub fn force_call_req_proc(
-    npc_actor: u32,
-    req_id: u32,
-    proc_: &dyn Fn(u32, u32) -> bool,
-) -> bool {
+pub fn force_call_req_proc(npc_actor: u32, req_id: u32, proc_: &dyn Fn(u32, u32) -> bool) -> bool {
     proc_(npc_actor, req_id)
 }
 
@@ -275,12 +274,21 @@ mod tests {
     fn house_owner_resolution() {
         let search = |id: u32| if id == 42 { 5 } else { -1 };
         let joint = |_: u32| false;
-        assert_eq!(resolve_house_owner(42, 0, 0xFFFF, &search, &joint), Some((5, 4, 7)));
+        assert_eq!(
+            resolve_house_owner(42, 0, 0xFFFF, &search, &joint),
+            Some((5, 4, 7))
+        );
         assert_eq!(resolve_house_owner(0, 0, 0xFFFF, &search, &joint), None);
-        assert_eq!(resolve_house_owner(0xFFFF, 0, 0xFFFF, &search, &joint), None);
+        assert_eq!(
+            resolve_house_owner(0xFFFF, 0, 0xFFFF, &search, &joint),
+            None
+        );
         assert_eq!(resolve_house_owner(99, 0, 0xFFFF, &search, &joint), None);
         let joint_true = |_: u32| true;
-        assert_eq!(resolve_house_owner(42, 0, 0xFFFF, &search, &joint_true), None);
+        assert_eq!(
+            resolve_house_owner(42, 0, 0xFFFF, &search, &joint_true),
+            None
+        );
     }
 
     fn classify(item: u16) -> (bool, Option<ExcludedFurniture>) {

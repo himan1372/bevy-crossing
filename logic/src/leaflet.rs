@@ -70,12 +70,7 @@ pub mod shop_cat {
 pub const BROKER_HANDBILLS: [u16; 3] = [0x031, 0x032, 0x033];
 
 /// Rare-furniture chirashi templates: `rare_chirashi_bunmen[shop_level][type & 1]`.
-pub const RARE_CHIRASHI: [[u16; 2]; 4] = [
-    [18, 18],
-    [19, 19],
-    [21, 20],
-    [23, 22],
-];
+pub const RARE_CHIRASHI: [[u16; 2]; 4] = [[18, 18], [19, 19], [21, 20], [23, 22]];
 
 /// Paper offsets relative to `ITM_PAPER_START` (0x2000) used for handbills.
 pub mod paper_offset {
@@ -181,7 +176,9 @@ pub const HOUSE_MAILBOX_SIZE: usize = 10;
 
 impl Default for LeafletMailbox {
     fn default() -> Self {
-        LeafletMailbox { slots: [const { None }; HOUSE_MAILBOX_SIZE] }
+        LeafletMailbox {
+            slots: [const { None }; HOUSE_MAILBOX_SIZE],
+        }
     }
 }
 
@@ -402,7 +399,13 @@ mod tests {
     }
 
     fn houses(n: usize) -> (Vec<HouseInfo>, Vec<LeafletMailbox>) {
-        let h = vec![HouseInfo { land_id: 1, ..Default::default() }; n];
+        let h = vec![
+            HouseInfo {
+                land_id: 1,
+                ..Default::default()
+            };
+            n
+        ];
         let mb = (0..n).map(|_| LeafletMailbox::default()).collect();
         (h, mb)
     }
@@ -453,7 +456,7 @@ mod tests {
         deliver_leaflets(&mut s, &houses, &mut mailboxes, -1);
         assert_eq!(s.leaflet_flags & 1, 0); // house 0 still pending
         assert_eq!(s.leaflet_flags & 2, 2); // house 1 delivered
-        // Free a slot; next pass delivers.
+                                            // Free a slot; next pass delivers.
         mailboxes[0].slots[0] = None;
         deliver_leaflets(&mut s, &houses, &mut mailboxes, -1);
         assert_eq!(s.leaflet_flags, 0x3); // both houses (2-house test)
@@ -463,7 +466,10 @@ mod tests {
     fn unclaimed_house_marked_without_mail() {
         let mut s = LeafletState::init();
         s.receive(&sample_mail(mtype::MAIL), send_type::LEAFLET);
-        let houses = vec![HouseInfo { land_id: UNCLAIMED_LAND_ID, ..Default::default() }];
+        let houses = vec![HouseInfo {
+            land_id: UNCLAIMED_LAND_ID,
+            ..Default::default()
+        }];
         let mut mailboxes = vec![LeafletMailbox::default()];
         deliver_leaflets(&mut s, &houses, &mut mailboxes, -1);
         assert_eq!(s.leaflet_flags, 0x1); // single house
@@ -475,8 +481,16 @@ mod tests {
         let mut s = LeafletState::init();
         s.receive(&sample_mail(mtype::MAIL), send_type::LEAFLET);
         let houses = vec![
-            HouseInfo { land_id: 1, is_arbeit: true, ..Default::default() },
-            HouseInfo { land_id: 2, is_foreign_player: true, ..Default::default() },
+            HouseInfo {
+                land_id: 1,
+                is_arbeit: true,
+                ..Default::default()
+            },
+            HouseInfo {
+                land_id: 2,
+                is_foreign_player: true,
+                ..Default::default()
+            },
         ];
         let mut mailboxes = vec![LeafletMailbox::default(), LeafletMailbox::default()];
         deliver_leaflets(&mut s, &houses, &mut mailboxes, -1);
@@ -486,7 +500,10 @@ mod tests {
     #[test]
     fn event_leaflet_needs_matching_event() {
         let mut s = LeafletState::init();
-        s.receive(&sample_mail(mtype::SHOP_SALE_LEAFLET), send_type::EVENT_LEAFLET);
+        s.receive(
+            &sample_mail(mtype::SHOP_SALE_LEAFLET),
+            send_type::EVENT_LEAFLET,
+        );
         let (houses, mut mailboxes) = houses(1);
         // Wrong / no event: not delivered, bit stays 0.
         deliver_leaflets(&mut s, &houses, &mut mailboxes, event::BROKER_SALE);
@@ -500,8 +517,14 @@ mod tests {
 
     #[test]
     fn event_filter_recognizes_only_two_types() {
-        assert_eq!(event_leaflet_event_type(mtype::SHOP_SALE_LEAFLET), event::SHOP_SALE);
-        assert_eq!(event_leaflet_event_type(mtype::BROKER_SALE_LEAFLET), event::BROKER_SALE);
+        assert_eq!(
+            event_leaflet_event_type(mtype::SHOP_SALE_LEAFLET),
+            event::SHOP_SALE
+        );
+        assert_eq!(
+            event_leaflet_event_type(mtype::BROKER_SALE_LEAFLET),
+            event::BROKER_SALE
+        );
         assert_eq!(event_leaflet_event_type(mtype::MAIL), -1);
         assert_eq!(event_leaflet_event_type(mtype::XMAS), -1);
     }

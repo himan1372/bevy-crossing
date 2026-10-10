@@ -120,13 +120,34 @@ pub struct SceneManifest {
 }
 
 const fn m(
-    s0: u8, s1: u8, doors: u8, ftr: u8, arc: bool, ctrl: u8, act: u8, bank: u8,
-    it: u8, bg: u8, disp: u16, rt: u8, dt: u8,
+    s0: u8,
+    s1: u8,
+    doors: u8,
+    ftr: u8,
+    arc: bool,
+    ctrl: u8,
+    act: u8,
+    bank: u8,
+    it: u8,
+    bg: u8,
+    disp: u16,
+    rt: u8,
+    dt: u8,
 ) -> SceneManifest {
     SceneManifest {
-        sound0: s0, sound1: s1, doors, arrange_ftr: ftr, arrange_room_ct: arc,
-        ctrl_actors: ctrl, actors: act, obj_banks: bank, item_type: it,
-        bg_num: bg, bg_disp_size: disp, room_type: rt, draw_type: dt,
+        sound0: s0,
+        sound1: s1,
+        doors,
+        arrange_ftr: ftr,
+        arrange_room_ct: arc,
+        ctrl_actors: ctrl,
+        actors: act,
+        obj_banks: bank,
+        item_type: it,
+        bg_num: bg,
+        bg_disp_size: disp,
+        room_type: rt,
+        draw_type: dt,
     }
 }
 
@@ -190,6 +211,7 @@ pub const SCENE_MANIFESTS: [SceneManifest; SCENE_NUM] = [
 /// 1: MY_ROOM_S. 2: NPC_HOUSE, SHOP0, BROKER_SHOP, POST_OFFICE, BUGGY,
 /// MY_ROOM_M, KAMAKURA, MY_ROOM_LL2, TENT. 3: MY_ROOM_L, CONVENI, SUPER,
 /// DEPART, DEPART_2, MY_ROOM_LL1, COTTAGE_MY, POLICE_BOX. 0: everything else.
+#[rustfmt::skip]
 pub const SOUND_ROOM_TYPE: [u8; SCENE_NUM] = [
     0,0,0,0,0,0,
     2,0,0,2,0,0,
@@ -219,7 +241,13 @@ pub extern "C" fn pc_fieldct_unpack(ty: u8, p0: u8, p1: u8, param3: u32, out: *m
     if out.is_null() {
         return;
     }
-    let w = SceneWord { ty, p0, p1, p2: 0, param3 };
+    let w = SceneWord {
+        ty,
+        p0,
+        p1,
+        p2: 0,
+        param3,
+    };
     let f = fieldct_unpack(&w);
     unsafe {
         *out.add(0) = f.item_type;
@@ -283,11 +311,32 @@ mod tests {
     fn fieldct_unpack_pc_logic() {
         // npc_room01 FIELDCT(DUMMY, 1, 0xA000, NPC_ROOM, INDOORS)
         let packed = (0xA000u32 << 16) | (2u32 << 8) | 1u32;
-        let w = SceneWord { ty: 5, p0: 1, p1: 1, p2: 0, param3: packed };
+        let w = SceneWord {
+            ty: 5,
+            p0: 1,
+            p1: 1,
+            p2: 0,
+            param3: packed,
+        };
         let f = fieldct_unpack(&w);
-        assert_eq!(f, FieldCtParams { item_type: 1, bg_num: 1, bg_disp_size: 0xA000, room_type: 2, draw_type: 1 });
+        assert_eq!(
+            f,
+            FieldCtParams {
+                item_type: 1,
+                bg_num: 1,
+                bg_disp_size: 0xA000,
+                room_type: 2,
+                draw_type: 1
+            }
+        );
         // Outdoor test scene: (BGITEM, 4, 0x5000, OUTDOORS, OUTDOORS)
-        let w2 = SceneWord { ty: 5, p0: 0, p1: 4, p2: 0, param3: (0x5000u32 << 16) };
+        let w2 = SceneWord {
+            ty: 5,
+            p0: 0,
+            p1: 4,
+            p2: 0,
+            param3: (0x5000u32 << 16),
+        };
         let f2 = fieldct_unpack(&w2);
         assert_eq!(f2.bg_disp_size, 0x5000);
         assert_eq!(f2.room_type, 0);
@@ -297,13 +346,23 @@ mod tests {
     fn manifest_spot_checks() {
         // 6 npc_room01
         let m = &SCENE_MANIFESTS[6];
-        assert_eq!((m.doors, m.arrange_ftr, m.ctrl_actors, m.actors, m.obj_banks), (1, 30, 12, 2, 1));
+        assert_eq!(
+            (m.doors, m.arrange_ftr, m.ctrl_actors, m.actors, m.obj_banks),
+            (1, 30, 12, 2, 1)
+        );
         // 35 museum_entrance: 4 doors
         assert_eq!(SCENE_MANIFESTS[35].doors, 4);
         // 38 museum_insect: 0xB000 disp
         assert_eq!(SCENE_MANIFESTS[38].bg_disp_size, 0xB000);
         // 20 player_room_s: SOUND(0,1), 30 ftr
-        assert_eq!((SCENE_MANIFESTS[20].sound0, SCENE_MANIFESTS[20].sound1, SCENE_MANIFESTS[20].arrange_ftr), (0, 1, 30));
+        assert_eq!(
+            (
+                SCENE_MANIFESTS[20].sound0,
+                SCENE_MANIFESTS[20].sound1,
+                SCENE_MANIFESTS[20].arrange_ftr
+            ),
+            (0, 1, 30)
+        );
         // 49 start_demo3: TRAIN draw type
         assert_eq!(SCENE_MANIFESTS[49].draw_type, draw_type::TRAIN);
         // Sound room types

@@ -196,12 +196,7 @@ pub fn weather_time_msg_no(base: i32, time_kind: i32, weather: i32, rand2: i32) 
 
 /// Normal-3 weather leaf: `base + weather*5 + RANDOM(msg_cnt) + ofs`,
 /// with `msg_cnt = 4, ofs = 1` when `player_man_kind`, else `5, 0`.
-pub fn normal3_weather_msg_no(
-    base: i32,
-    weather: i32,
-    player_man_kind: bool,
-    rand_n: i32,
-) -> i32 {
+pub fn normal3_weather_msg_no(base: i32, weather: i32, player_man_kind: bool, rand_n: i32) -> i32 {
     let (msg_cnt, ofs) = if player_man_kind { (4, 1) } else { (5, 0) };
     let _ = msg_cnt;
     base + weather * 5 + rand_n + ofs
@@ -264,7 +259,12 @@ pub extern "C" fn pc_fj_hint_msg_no(hint_type: i32, looks: u8) -> i32 {
 
 /// C ABI: weather/time message ID.
 #[no_mangle]
-pub extern "C" fn pc_weather_time_msg_no(base: i32, time_kind: i32, weather: i32, rand2: i32) -> i32 {
+pub extern "C" fn pc_weather_time_msg_no(
+    base: i32,
+    time_kind: i32,
+    weather: i32,
+    rand2: i32,
+) -> i32 {
     weather_time_msg_no(base, time_kind, weather, rand2)
 }
 
@@ -306,11 +306,31 @@ mod tests {
         }
         // Expect ~40/30/10/10/10 within tolerance.
         let pct = |c: u32| c as f64 / 200.0;
-        assert!((pct(counts[0]) - 40.0).abs() < 2.0, "ki0={}", pct(counts[0]));
-        assert!((pct(counts[1]) - 30.0).abs() < 2.0, "ki1={}", pct(counts[1]));
-        assert!((pct(counts[2]) - 10.0).abs() < 2.0, "ki2={}", pct(counts[2]));
-        assert!((pct(counts[3]) - 10.0).abs() < 2.0, "ki3={}", pct(counts[3]));
-        assert!((pct(counts[4]) - 10.0).abs() < 2.0, "ki4={}", pct(counts[4]));
+        assert!(
+            (pct(counts[0]) - 40.0).abs() < 2.0,
+            "ki0={}",
+            pct(counts[0])
+        );
+        assert!(
+            (pct(counts[1]) - 30.0).abs() < 2.0,
+            "ki1={}",
+            pct(counts[1])
+        );
+        assert!(
+            (pct(counts[2]) - 10.0).abs() < 2.0,
+            "ki2={}",
+            pct(counts[2])
+        );
+        assert!(
+            (pct(counts[3]) - 10.0).abs() < 2.0,
+            "ki3={}",
+            pct(counts[3])
+        );
+        assert!(
+            (pct(counts[4]) - 10.0).abs() < 2.0,
+            "ki4={}",
+            pct(counts[4])
+        );
         // Degenerate: all weight on one category.
         let mut rng = |_: u32| 0u32;
         assert_eq!(decide_idx_prob_table(&[0, 100, 0], &mut rng), 1);
@@ -327,7 +347,10 @@ mod tests {
         assert_eq!(weather_time_msg_no(0x1FE8, 2, 1, 1), 0x1FE8 + 12 + 2 + 1);
         // Normal-3 weather with/without the man-kind adjustment.
         assert_eq!(normal3_weather_msg_no(0x1FC1, 2, false, 3), 0x1FC1 + 10 + 3);
-        assert_eq!(normal3_weather_msg_no(0x1FC1, 2, true, 3), 0x1FC1 + 10 + 3 + 1);
+        assert_eq!(
+            normal3_weather_msg_no(0x1FC1, 2, true, 3),
+            0x1FC1 + 10 + 3 + 1
+        );
         // Season: month 1 -> add_table[0] = 10.
         assert_eq!(normal3_season_msg_no(0x1FD7, 1), 0x1FD7 + 10);
         assert_eq!(normal3_season_msg_no(0x1FD7, 12), 0x1FD7 + 9);

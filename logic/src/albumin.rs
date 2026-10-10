@@ -38,6 +38,7 @@ fn in_group(t: u8, g: (u8, u8)) -> bool {
 
 /// Albumin rows: river index 0..2 (SOUTH/EAST/WEST) x cliff index 0..6.
 /// Rows 3..6 (corner rivers) are all NONE.
+#[rustfmt::skip]
 pub const ALBUMIN: [[u8; 7]; 3] = [
     [22, 23, 24, 25, 26, 27, 28], // south river: all 7 valid
     [29, 30, 31, 32, 33, bt::NONE, bt::NONE], // east river: 5 valid
@@ -126,7 +127,7 @@ mod tests {
         assert_eq!(river_albumin_cliff(16, 42), bt::NONE); // BR
         assert_eq!(river_albumin_cliff(17, 42), bt::NONE); // VR
         assert_eq!(river_albumin_cliff(15, 42), 34); // H -> RIVER_WEST_CLIFF_HORIZONTAL
-        // Corner rivers: all NONE.
+                                                     // Corner rivers: all NONE.
         for r in 43..47u8 {
             for c in 0..7u8 {
                 assert_eq!(river_albumin_cliff(15 + c, r), bt::NONE);
@@ -135,7 +136,7 @@ mod tests {
         // Out-of-group inputs -> NONE.
         assert_eq!(river_albumin_cliff(39, 40), bt::NONE); // FLAT cliff
         assert_eq!(river_albumin_cliff(15, 39), bt::NONE); // FLAT river
-        // Group ranges.
+                                                           // Group ranges.
         assert_eq!(group::RIVER_CLIFF_ANY, (22, 38));
         assert_eq!(group::RIVER_CLIFF_1, (22, 28));
         assert_eq!(group::RIVER_CLIFF_2, (29, 33));
@@ -146,7 +147,7 @@ mod tests {
         assert_eq!(decide_albumin_cell(15, 1), Some(1)); // BORDER_CLIFF_RIVER copied
         assert_eq!(decide_albumin_cell(15, 13), Some(13)); // TRACKS_RIVER copied
         assert_eq!(decide_albumin_cell(15, 39), None); // unchanged
-        // C ABI.
+                                                       // C ABI.
         assert_eq!(pc_river_albumin_cliff(15, 40), 22);
         let mut out = 0u8;
         assert_eq!(pc_decide_albumin_cell(15, 40, &mut out as *mut u8), 1);

@@ -153,9 +153,7 @@ pub unsafe extern "C" fn DVDFastOpen(entry_num: i32, file_info: *mut c_void) -> 
         let Some(path) = c_path(&path) else { return 0 };
         let (mut disc_offset, mut file_size) = (0u32, 0u32);
         // SAFETY: The C string and output pointers are valid for this call.
-        if unsafe {
-            super::pc_disc_find_file(path.as_ptr(), &mut disc_offset, &mut file_size)
-        } != 0
+        if unsafe { super::pc_disc_find_file(path.as_ptr(), &mut disc_offset, &mut file_size) } != 0
         {
             // SAFETY: The caller supplies the complete writable DVDFileInfo.
             unsafe {
@@ -219,7 +217,9 @@ pub unsafe extern "C" fn DVDClose(file_info: *mut c_void) -> i32 {
         unsafe { fclose(file) };
     }
     // SAFETY: The field lies within the writable DVDFileInfo.
-    unsafe { file_info_field::<*mut c_void>(file_info, FILE_POINTER_OFFSET).write(ptr::null_mut()) };
+    unsafe {
+        file_info_field::<*mut c_void>(file_info, FILE_POINTER_OFFSET).write(ptr::null_mut())
+    };
     1
 }
 

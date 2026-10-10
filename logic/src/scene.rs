@@ -103,16 +103,46 @@ pub struct SceneEntry {
 
 /// The scene table in decomp order, mirroring `game_dlftbls[]`.
 pub static SCENE_TABLE: [SceneEntry; 10] = [
-    SceneEntry { id: SceneId::FirstGame, init_fn: "first_game_init" },
-    SceneEntry { id: SceneId::Select, init_fn: "select_init" },
-    SceneEntry { id: SceneId::Play, init_fn: "play_init" },
-    SceneEntry { id: SceneId::SecondGame, init_fn: "second_game_init" },
-    SceneEntry { id: SceneId::Trademark, init_fn: "trademark_init" },
-    SceneEntry { id: SceneId::PlayerSelect, init_fn: "player_select_init" },
-    SceneEntry { id: SceneId::SaveMenu, init_fn: "save_menu_init" },
-    SceneEntry { id: SceneId::FamicomEmu, init_fn: "famicom_emu_init" },
-    SceneEntry { id: SceneId::Prenmi, init_fn: "prenmi_init" },
-    SceneEntry { id: SceneId::ModelViewer, init_fn: "pc_model_viewer_init" },
+    SceneEntry {
+        id: SceneId::FirstGame,
+        init_fn: "first_game_init",
+    },
+    SceneEntry {
+        id: SceneId::Select,
+        init_fn: "select_init",
+    },
+    SceneEntry {
+        id: SceneId::Play,
+        init_fn: "play_init",
+    },
+    SceneEntry {
+        id: SceneId::SecondGame,
+        init_fn: "second_game_init",
+    },
+    SceneEntry {
+        id: SceneId::Trademark,
+        init_fn: "trademark_init",
+    },
+    SceneEntry {
+        id: SceneId::PlayerSelect,
+        init_fn: "player_select_init",
+    },
+    SceneEntry {
+        id: SceneId::SaveMenu,
+        init_fn: "save_menu_init",
+    },
+    SceneEntry {
+        id: SceneId::FamicomEmu,
+        init_fn: "famicom_emu_init",
+    },
+    SceneEntry {
+        id: SceneId::Prenmi,
+        init_fn: "prenmi_init",
+    },
+    SceneEntry {
+        id: SceneId::ModelViewer,
+        init_fn: "pc_model_viewer_init",
+    },
 ];
 
 /// What a scene's per-frame `exec` can request.
@@ -153,7 +183,12 @@ pub struct SceneManager {
 impl SceneManager {
     /// Boot: the dispatcher starts at `game_dlftbls[0]` (`first_game`).
     pub fn new() -> Self {
-        Self { current: Some(SceneId::FirstGame), doing: true, next_init: None, frame: 0 }
+        Self {
+            current: Some(SceneId::FirstGame),
+            doing: true,
+            next_init: None,
+            frame: 0,
+        }
     }
 
     pub fn current(&self) -> Option<SceneId> {
@@ -284,6 +319,7 @@ pub struct SceneExec {
     pub cleanup_fn: Option<&'static str>,
 }
 
+#[rustfmt::skip]
 pub static SCENE_EXEC_TABLE: [SceneExec; 10] = [
     SceneExec { id: SceneId::FirstGame, exec_fn: None, cleanup_fn: Some("first_game_cleanup") },
     SceneExec { id: SceneId::Select, exec_fn: Some("select_main"), cleanup_fn: None },
@@ -439,12 +475,20 @@ mod tests {
     #[test]
     fn goto_next_resolves_through_table() {
         let mut mgr = SceneManager::new();
-        let mut scene = ScriptedScene { frames_before_goto: 3, goto: SceneId::SecondGame, frames: 0, cleaned: false };
+        let mut scene = ScriptedScene {
+            frames_before_goto: 3,
+            goto: SceneId::SecondGame,
+            frames: 0,
+            cleaned: false,
+        };
         scene.init();
         // first_game -> second_game, as in the decomp.
         assert_eq!(mgr.run_frame(&mut scene), SceneRequest::Continue);
         assert_eq!(mgr.run_frame(&mut scene), SceneRequest::Continue);
-        assert_eq!(mgr.run_frame(&mut scene), SceneRequest::Goto(SceneId::SecondGame));
+        assert_eq!(
+            mgr.run_frame(&mut scene),
+            SceneRequest::Goto(SceneId::SecondGame)
+        );
         assert!(!mgr.is_doing());
         scene.cleanup();
         assert!(scene.cleaned);
@@ -479,11 +523,17 @@ mod tests {
 
     #[test]
     fn per_scene_exec_names_match_source() {
-        let play = SCENE_EXEC_TABLE.iter().find(|e| e.id == SceneId::Play).unwrap();
+        let play = SCENE_EXEC_TABLE
+            .iter()
+            .find(|e| e.id == SceneId::Play)
+            .unwrap();
         assert_eq!(play.exec_fn, Some("play_main"));
         assert_eq!(play.cleanup_fn, Some("play_cleanup"));
         // first_game never installs an exec: init transitions directly.
-        let first = SCENE_EXEC_TABLE.iter().find(|e| e.id == SceneId::FirstGame).unwrap();
+        let first = SCENE_EXEC_TABLE
+            .iter()
+            .find(|e| e.id == SceneId::FirstGame)
+            .unwrap();
         assert_eq!(first.exec_fn, None);
         // The NULL slot has no entry.
         assert_eq!(SCENE_TABLE_NULL_INDEX, 4);

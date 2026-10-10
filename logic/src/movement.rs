@@ -82,6 +82,7 @@ pub enum WanderChoice {
 /// `ac_npc_think_wander.c_inc` (roll is `RANDOM(10)`; roll <= border[0]
 /// → wait, <= border[1] → walk, else run). Source comments give the
 /// resulting probabilities.
+#[rustfmt::skip]
 pub const DECIDE_BORDERS: [(Personality, [i32; 2]); 6] = [
     (Personality::Girl, [3, 6]),       // 40% wait, 30% walk, 30% run
     (Personality::KoGirl, [6, 8]),    // 70% wait, 20% walk, 10% run
@@ -310,13 +311,23 @@ mod tests {
     #[test]
     fn decide_borders_match_source_probabilities() {
         // Jock (sport_man): 30% wait, 20% walk, 50% run.
-        let waits = (0..10).filter(|&r| decide_wander(Personality::SportMan, r) == WanderChoice::Wait).count();
-        let walks = (0..10).filter(|&r| decide_wander(Personality::SportMan, r) == WanderChoice::Walk).count();
-        let runs = (0..10).filter(|&r| decide_wander(Personality::SportMan, r) == WanderChoice::Run).count();
+        let waits = (0..10)
+            .filter(|&r| decide_wander(Personality::SportMan, r) == WanderChoice::Wait)
+            .count();
+        let walks = (0..10)
+            .filter(|&r| decide_wander(Personality::SportMan, r) == WanderChoice::Walk)
+            .count();
+        let runs = (0..10)
+            .filter(|&r| decide_wander(Personality::SportMan, r) == WanderChoice::Run)
+            .count();
         assert_eq!((waits, walks, runs), (3, 2, 5));
         // Peppy (ko_girl): 70% wait, 20% walk, 10% run.
-        let waits = (0..10).filter(|&r| decide_wander(Personality::KoGirl, r) == WanderChoice::Wait).count();
-        let runs = (0..10).filter(|&r| decide_wander(Personality::KoGirl, r) == WanderChoice::Run).count();
+        let waits = (0..10)
+            .filter(|&r| decide_wander(Personality::KoGirl, r) == WanderChoice::Wait)
+            .count();
+        let runs = (0..10)
+            .filter(|&r| decide_wander(Personality::KoGirl, r) == WanderChoice::Run)
+            .count();
         assert_eq!((waits, runs), (7, 1));
     }
 
@@ -334,7 +345,12 @@ mod tests {
 
     #[test]
     fn wander_destination_is_circular() {
-        let m = Movement { range_center_x: 10.0, range_center_z: 20.0, range_radius: 30.0, ..Movement::default() };
+        let m = Movement {
+            range_center_x: 10.0,
+            range_center_z: 20.0,
+            range_radius: 30.0,
+            ..Movement::default()
+        };
         for deg in [0.0, 90.0, 180.0, 270.0] {
             let (x, z) = m.wander_destination(deg);
             let dx = x - 10.0;

@@ -293,14 +293,7 @@ pub extern "C" fn pc_house_next_loan(size: u8, basement_ordered: i32) -> u32 {
 
 /// C ABI: 1 if the order date has passed (any calendar component differs).
 #[no_mangle]
-pub extern "C" fn pc_order_date_passed(
-    oy: u16,
-    om: u8,
-    od: u8,
-    ty: u16,
-    tm: u8,
-    td: u8,
-) -> u8 {
+pub extern "C" fn pc_order_date_passed(oy: u16, om: u8, od: u8, ty: u16, tm: u8, td: u8) -> u8 {
     order_date_passed((oy, om, od), (ty, tm, td)) as u8
 }
 
@@ -326,7 +319,7 @@ mod tests {
         assert_eq!(house.size_info.next_size, HouseSize::Medium);
         assert_eq!(house.size_info.size, HouseSize::Small); // NOT changed
         assert!(!house.size_info.renew); // NOT set
-        // Same date: no construction.
+                                         // Same date: no construction.
         assert!(!house.check_rehouse_order((2026, 10, 7)));
         // Next date: Phase B builds.
         assert!(house.check_rehouse_order((2026, 10, 8)));
@@ -343,7 +336,7 @@ mod tests {
         let mut house = House::default();
         house.size_info.size = HouseSize::Medium;
         house.size_info.next_size = HouseSize::Medium; // no expansion pending
-        // Basement allowed from MEDIUM (retail correction).
+                                                       // Basement allowed from MEDIUM (retail correction).
         assert!(house.order_basement((2026, 10, 7)));
         assert!(!house.size_info.has_basement); // not yet built
         assert!(house.check_rehouse_order((2026, 10, 8)));

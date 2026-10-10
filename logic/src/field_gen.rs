@@ -158,37 +158,47 @@ pub mod direct {
 
 /// `l_cliff_next_direct`: where the cliff continues from each shape.
 pub const CLIFF_NEXT_DIRECT: [u8; 7] = [
-    direct::EAST,   // horizontal
-    direct::NORTH,  // bottom-right
-    direct::NORTH,  // vertical-right
-    direct::EAST,   // top-right
-    direct::SOUTH,  // top-left
-    direct::SOUTH,  // vertical-left
-    direct::EAST,   // bottom-left
+    direct::EAST,  // horizontal
+    direct::NORTH, // bottom-right
+    direct::NORTH, // vertical-right
+    direct::EAST,  // top-right
+    direct::SOUTH, // top-left
+    direct::SOUTH, // vertical-left
+    direct::EAST,  // bottom-left
 ];
 
 /// Legal successor shapes per current shape (`l_cliffN_next`).
 /// Indexed by shape class 0-6; each entry lists block types.
 pub const CLIFF_NEXT_SHAPES: [&[u8]; 7] = [
-    &[block::CLIFF_HORIZONTAL, block::CLIFF_BOTTOM_RIGHT_CORNER, block::CLIFF_TOP_LEFT_CORNER],
+    &[
+        block::CLIFF_HORIZONTAL,
+        block::CLIFF_BOTTOM_RIGHT_CORNER,
+        block::CLIFF_TOP_LEFT_CORNER,
+    ],
     &[block::CLIFF_VERTICAL_RIGHT, block::CLIFF_TOP_RIGHT_CORNER],
     &[block::CLIFF_VERTICAL_RIGHT, block::CLIFF_TOP_RIGHT_CORNER],
-    &[block::CLIFF_HORIZONTAL, block::CLIFF_BOTTOM_RIGHT_CORNER, block::CLIFF_TOP_LEFT_CORNER],
+    &[
+        block::CLIFF_HORIZONTAL,
+        block::CLIFF_BOTTOM_RIGHT_CORNER,
+        block::CLIFF_TOP_LEFT_CORNER,
+    ],
     &[block::CLIFF_VERTICAL_LEFT, block::CLIFF_BOTTOM_LEFT_CORNER],
     &[block::CLIFF_VERTICAL_LEFT, block::CLIFF_BOTTOM_LEFT_CORNER],
-    &[block::CLIFF_HORIZONTAL, block::CLIFF_BOTTOM_RIGHT_CORNER, block::CLIFF_TOP_LEFT_CORNER],
+    &[
+        block::CLIFF_HORIZONTAL,
+        block::CLIFF_BOTTOM_RIGHT_CORNER,
+        block::CLIFF_TOP_LEFT_CORNER,
+    ],
 ];
 
 /// Cliff start tables A/B/C (`l_cliff_startA/B/C`).
-pub const CLIFF_START_A: &[u8] =
-    &[block::CLIFF_HORIZONTAL, block::CLIFF_TOP_LEFT_CORNER];
+pub const CLIFF_START_A: &[u8] = &[block::CLIFF_HORIZONTAL, block::CLIFF_TOP_LEFT_CORNER];
 pub const CLIFF_START_B: &[u8] = &[
     block::CLIFF_HORIZONTAL,
     block::CLIFF_BOTTOM_RIGHT_CORNER,
     block::CLIFF_TOP_LEFT_CORNER,
 ];
-pub const CLIFF_START_C: &[u8] =
-    &[block::CLIFF_HORIZONTAL, block::CLIFF_BOTTOM_RIGHT_CORNER];
+pub const CLIFF_START_C: &[u8] = &[block::CLIFF_HORIZONTAL, block::CLIFF_BOTTOM_RIGHT_CORNER];
 
 /// Start-row (0-3, z = row+2) → start table.
 pub fn cliff_start_table(start_row: usize) -> &'static [u8] {
@@ -232,6 +242,7 @@ pub const RIVER_NEXT_DIRECT: [u8; 7] = [
 
 /// The fixed outer frame every generation starts from
 /// (`l_base_blocks`), 7x10 in row-major (x fastest) order.
+#[rustfmt::skip]
 pub const BASE_BLOCKS: [u8; BLOCK_TOTAL_NUM] = [
     5, 0, 0, 0, 0, 0, 8,
     9, 12, 12, 11, 12, 12, 10,
@@ -275,7 +286,9 @@ pub fn acre_height_table(blocks: &[u8; BLOCK_TOTAL_NUM]) -> [u8; BLOCK_TOTAL_NUM
             let t = blocks[idx];
             base[idx] = height;
             let bits = block_cliff_shape_bits(t);
-            if bits & 0x01 != 0 || bits & 0x08 != 0 || bits & 0x10 != 0
+            if bits & 0x01 != 0
+                || bits & 0x08 != 0
+                || bits & 0x10 != 0
                 || t == block::BORDER_CLIFF_LEFT_TRANSITION
                 || t == block::BORDER_CLIFF_RIGHT_TRANSITION
             {
@@ -432,7 +445,15 @@ mod tests {
         // Direction table verbatim.
         assert_eq!(
             CLIFF_NEXT_DIRECT,
-            [direct::EAST, direct::NORTH, direct::NORTH, direct::EAST, direct::SOUTH, direct::SOUTH, direct::EAST]
+            [
+                direct::EAST,
+                direct::NORTH,
+                direct::NORTH,
+                direct::EAST,
+                direct::SOUTH,
+                direct::SOUTH,
+                direct::EAST
+            ]
         );
         // Successor tables verbatim.
         assert_eq!(CLIFF_NEXT_SHAPES[0], &[15u8, 16, 19]);
@@ -465,7 +486,15 @@ mod tests {
         assert_eq!(RIVER_NEXT_SHAPES[2], &[2usize, 6]);
         assert_eq!(
             RIVER_NEXT_DIRECT,
-            [direct::SOUTH, direct::EAST, direct::WEST, direct::EAST, direct::SOUTH, direct::WEST, direct::SOUTH]
+            [
+                direct::SOUTH,
+                direct::EAST,
+                direct::WEST,
+                direct::EAST,
+                direct::SOUTH,
+                direct::WEST,
+                direct::SOUTH
+            ]
         );
         assert_eq!(river_shape_block(0), block::RIVER_SOUTH);
         assert_eq!(river_shape_block(6), block::RIVER_WEST_SOUTH);
@@ -493,7 +522,7 @@ mod tests {
         assert_eq!(h[0 * 7 + 3], 2);
         assert_eq!(h[5 * 7 + 3], 1); // south unaffected
         assert_eq!(h[3 * 7 + 0], 1); // other columns unaffected
-        // Step-3 detection.
+                                     // Step-3 detection.
         assert!(is_field_step3(3));
         assert!(!is_field_step3(2));
         // C ABI.

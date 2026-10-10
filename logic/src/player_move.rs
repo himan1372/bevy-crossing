@@ -186,7 +186,13 @@ impl PlayerMovement {
 
 impl Default for PlayerMovement {
     fn default() -> Self {
-        Self { facing_deg: 0.0, speed: 0.0, state: LocomotionState::Wait, pos_x: 0.0, pos_z: 0.0 }
+        Self {
+            facing_deg: 0.0,
+            speed: 0.0,
+            state: LocomotionState::Wait,
+            pos_x: 0.0,
+            pos_z: 0.0,
+        }
     }
 }
 

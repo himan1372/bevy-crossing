@@ -57,7 +57,13 @@ pub fn strlen_new(body: &[u8], len: usize) -> usize {
 fn cmp_sep(c: u8) -> bool {
     matches!(
         c,
-        CHAR_SPACE | CHAR_COMMA | CHAR_QUESTIONMARK | CHAR_EXCLAMATION | CHAR_PERIOD | CHAR_INTERPUNCT | CHAR_NEW_LINE
+        CHAR_SPACE
+            | CHAR_COMMA
+            | CHAR_QUESTIONMARK
+            | CHAR_EXCLAMATION
+            | CHAR_PERIOD
+            | CHAR_INTERPUNCT
+            | CHAR_NEW_LINE
     )
 }
 
@@ -192,9 +198,11 @@ fn key_type_d(body: &[u8], len: usize) -> i32 {
     let mut left = len;
     while left > 2 {
         if (check_alpha(body[i], false) || check_alpha(body[i], true))
-            && body[i] == body[i + 1] && body[i] == body[i + 2] {
-                return -50;
-            }
+            && body[i] == body[i + 1]
+            && body[i] == body[i + 2]
+        {
+            return -50;
+        }
         left -= 1;
         i += 1;
     }
@@ -438,7 +446,11 @@ pub enum ReplyAttempt {
 
 /// Attempt one pending reply. `post_office_has_room` mirrors
 /// `mPO_get_keep_mail_sum() < mPO_MAIL_STORAGE_SIZE`.
-pub fn attempt_reply(pending: &PendingReply, today: (u16, u8, u8), post_office_has_room: bool) -> ReplyAttempt {
+pub fn attempt_reply(
+    pending: &PendingReply,
+    today: (u16, u8, u8),
+    post_office_has_room: bool,
+) -> ReplyAttempt {
     if !pending.send_reply {
         return ReplyAttempt::Skipped;
     }
@@ -466,7 +478,11 @@ pub const BAD_OTHER_BASE: u16 = 0xD8;
 
 /// mNpc_GetRemailWrongData message selection.
 pub fn bad_reply_msg_no(foreign: bool, looks: usize, rng: &mut dyn FnMut(u32) -> u32) -> u16 {
-    let base = if foreign { BAD_OTHER_BASE } else { BAD_THIS_BASE };
+    let base = if foreign {
+        BAD_OTHER_BASE
+    } else {
+        BAD_THIS_BASE
+    };
     base + looks as u16 * 3 + rng(3) as u16
 }
 
@@ -738,7 +754,8 @@ impl HandbillzComposer {
     ) -> usize {
         let code_size = 2usize;
         let free_len = Self::msg_len(&self.free_str[str_no]);
-        let mut cut_len = Self::move_data_cut(buf, start + free_len, start + code_size, data_len, fill);
+        let mut cut_len =
+            Self::move_data_cut(buf, start + free_len, start + code_size, data_len, fill);
         let room = buf.len() - start;
         let copy_len = if cut_len >= buf.len() && free_len > room {
             room
@@ -837,7 +854,8 @@ impl HandbillzComposer {
                 let now = len;
                 len = self.put_string(res, buf, pos, len, fill);
                 if pos < *header_back_start {
-                    *header_back_start = (*header_back_start as isize + (len as isize - now as isize)) as usize;
+                    *header_back_start =
+                        (*header_back_start as isize + (len as isize - now as isize)) as usize;
                 }
             } else {
                 pos += 1;
@@ -972,7 +990,12 @@ pub extern "C" fn pc_npc_letter_rank(body: *const u8) -> i32 {
 /// C ABI: BAD-reply message number for foreign flag + looks + 0..3 roll.
 #[no_mangle]
 pub extern "C" fn pc_npc_bad_msg_no(foreign: i32, looks: i32, roll3: i32) -> i32 {
-    (if foreign != 0 { BAD_OTHER_BASE } else { BAD_THIS_BASE } + looks as u16 * 3 + roll3 as u16) as i32
+    (if foreign != 0 {
+        BAD_OTHER_BASE
+    } else {
+        BAD_THIS_BASE
+    } + looks as u16 * 3
+        + roll3 as u16) as i32
 }
 
 /// C ABI: GOOD-reply base message number for foreign flag + looks.
@@ -1101,10 +1124,17 @@ mod tests {
         let today = (2026u16, 10u8, 8u8);
         assert_eq!(attempt_reply(&p, today, true), ReplyAttempt::Sent);
         assert_eq!(attempt_reply(&p, today, false), ReplyAttempt::Blocked);
-        let same_day = PendingReply { letter_date: today, ..p };
+        let same_day = PendingReply {
+            letter_date: today,
+            ..p
+        };
         assert_eq!(attempt_reply(&same_day, today, true), ReplyAttempt::Skipped);
         // Foreign skips the date check.
-        let f = PendingReply { foreign: true, letter_date: today, ..p };
+        let f = PendingReply {
+            foreign: true,
+            letter_date: today,
+            ..p
+        };
         assert_eq!(attempt_reply(&f, today, true), ReplyAttempt::Sent);
     }
 

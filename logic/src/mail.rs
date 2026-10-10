@@ -142,10 +142,7 @@ impl Mail {
     }
 
     pub fn is_received_unread(&self) -> bool {
-        matches!(
-            self.content.font,
-            font::RECV | font::RECV_PLAYER_PRESENT
-        )
+        matches!(self.content.font, font::RECV | font::RECV_PLAYER_PRESENT)
     }
 
     /// Reading transitions RECV -> RECV_READ (present variants likewise).
@@ -354,7 +351,7 @@ mod tests {
         assert!(m.mark_read());
         assert_eq!(m.content.font, font::RECV_PLAYER_PRESENT_READ);
         assert!(!m.mark_read()); // already read
-        // Clear.
+                                 // Clear.
         m.clear();
         assert!(m.is_unused());
         assert_eq!(m.content.font, font::UNUSED);
@@ -402,7 +399,7 @@ mod tests {
         assert_eq!(count_used(&mbox), 1);
         assert_eq!(po.keep_mail_sum(), 4);
         assert!(po.queue[0].is_unused()); // cleared after success
-        // Mailbox full: stays queued.
+                                          // Mailbox full: stays queued.
         let mut full: Mailbox = Default::default();
         for s in full.iter_mut() {
             s.content.font = font::RECV;

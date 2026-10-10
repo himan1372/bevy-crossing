@@ -22,7 +22,7 @@ pub enum GxTexFormat {
     RGB5A3,
     RGBA8,
     CMPR,
-    A8,   // GX_CTF_A8
+    A8, // GX_CTF_A8
     Z8,
     Z16,
     Z24X8,
@@ -36,19 +36,49 @@ pub enum GxTexFormat {
 /// 0=4b, 1=8b, 2=16b, 3=32b].
 pub const FMTXTBL: [[GxTexFormat; 4]; 8] = [
     // G_IM_FMT_RGBA
-    [GxTexFormat::CMPR, GxTexFormat::Unsupported, GxTexFormat::RGB5A3, GxTexFormat::RGBA8],
+    [
+        GxTexFormat::CMPR,
+        GxTexFormat::Unsupported,
+        GxTexFormat::RGB5A3,
+        GxTexFormat::RGBA8,
+    ],
     // G_IM_FMT_YUV
     [GxTexFormat::Unsupported; 4],
     // G_IM_FMT_CI
-    [GxTexFormat::C4, GxTexFormat::C8, GxTexFormat::Ci16Special, GxTexFormat::Unsupported],
+    [
+        GxTexFormat::C4,
+        GxTexFormat::C8,
+        GxTexFormat::Ci16Special,
+        GxTexFormat::Unsupported,
+    ],
     // G_IM_FMT_IA
-    [GxTexFormat::Unsupported, GxTexFormat::IA4, GxTexFormat::IA8, GxTexFormat::Unsupported],
+    [
+        GxTexFormat::Unsupported,
+        GxTexFormat::IA4,
+        GxTexFormat::IA8,
+        GxTexFormat::Unsupported,
+    ],
     // G_IM_FMT_I
-    [GxTexFormat::I4, GxTexFormat::I8, GxTexFormat::RGB565, GxTexFormat::Unsupported],
+    [
+        GxTexFormat::I4,
+        GxTexFormat::I8,
+        GxTexFormat::RGB565,
+        GxTexFormat::Unsupported,
+    ],
     // (row 5)
-    [GxTexFormat::CMPR, GxTexFormat::A8, GxTexFormat::RGB5A3, GxTexFormat::Unsupported],
+    [
+        GxTexFormat::CMPR,
+        GxTexFormat::A8,
+        GxTexFormat::RGB5A3,
+        GxTexFormat::Unsupported,
+    ],
     // (row 6)
-    [GxTexFormat::Unsupported, GxTexFormat::Z8, GxTexFormat::Z16, GxTexFormat::Z24X8],
+    [
+        GxTexFormat::Unsupported,
+        GxTexFormat::Z8,
+        GxTexFormat::Z16,
+        GxTexFormat::Z24X8,
+    ],
     // (row 7)
     [GxTexFormat::Unsupported; 4],
 ];
@@ -112,7 +142,14 @@ pub fn ia8_rearrange(src: &[u8], dst: &mut [u8]) {
 /// `src` is the N64 source (TMEM-swizzled indexing applied by the
 /// caller via [`tmem_swizzle`]); `dst` receives GX-tiled texels.
 /// `width`/`height` are in texels. Returns the bytes written.
-pub fn texconv_tile(src: &[u8], dst: &mut [u8], width: u32, height: u32, fmt: u8, siz: u8) -> usize {
+pub fn texconv_tile(
+    src: &[u8],
+    dst: &mut [u8],
+    width: u32,
+    height: u32,
+    fmt: u8,
+    siz: u8,
+) -> usize {
     let (blk_w, blk_h) = block_dims(siz);
     let mut out = 0usize;
     let texel_bytes: usize = match siz {
@@ -151,7 +188,8 @@ pub fn texconv_tile(src: &[u8], dst: &mut [u8], width: u32, height: u32, fmt: u8
                             dst[out] = src[src_ofs].rotate_right(4);
                         }
                         _ => {
-                            dst[out..out + texel_bytes].copy_from_slice(&src[src_ofs..src_ofs + texel_bytes]);
+                            dst[out..out + texel_bytes]
+                                .copy_from_slice(&src[src_ofs..src_ofs + texel_bytes]);
                         }
                     }
                     out += texel_bytes;
@@ -215,7 +253,9 @@ pub struct TextureCache {
 
 impl TextureCache {
     pub fn new() -> TextureCache {
-        TextureCache { entries: HashMap::new() }
+        TextureCache {
+            entries: HashMap::new(),
+        }
     }
 
     /// Look up a converted texture by source address.
@@ -246,7 +286,9 @@ pub struct TextureConverter {
 
 impl TextureConverter {
     pub fn new() -> TextureConverter {
-        TextureConverter { cache: TextureCache::new() }
+        TextureConverter {
+            cache: TextureCache::new(),
+        }
     }
 
     /// `texconv_tile_new`: convert (or fetch from cache) one texture.
@@ -271,7 +313,11 @@ impl TextureConverter {
             let mut converted = vec![0u8; (width as usize) * (height as usize) * texel_bytes];
             texconv_tile(src, &mut converted, width, height, fmt, siz);
             // Retail: DCStoreRange(converted_addr, len) here.
-            self.cache.insert(CacheEntry { src_addr, converted, gx_format: gx });
+            self.cache.insert(CacheEntry {
+                src_addr,
+                converted,
+                gx_format: gx,
+            });
         }
         &self.cache.entries[&src_addr].converted
     }
@@ -300,7 +346,10 @@ pub struct DesignTexture {
 
 impl DesignTexture {
     pub fn new() -> DesignTexture {
-        DesignTexture { data: [0; DESIGN_TEX_SIZE], palette: [0; 16] }
+        DesignTexture {
+            data: [0; DESIGN_TEX_SIZE],
+            palette: [0; 16],
+        }
     }
 
     /// Read one 4-bit texel.
@@ -344,18 +393,51 @@ mod tests {
 
     #[test]
     fn fmtxtbl_spot_checks() {
-        assert_eq!(cvt_n64_to_gx(img_fmt::G_IM_FMT_RGBA, img_siz::G_IM_SIZ_4B), GxTexFormat::CMPR);
-        assert_eq!(cvt_n64_to_gx(img_fmt::G_IM_FMT_RGBA, img_siz::G_IM_SIZ_16B), GxTexFormat::RGB5A3);
-        assert_eq!(cvt_n64_to_gx(img_fmt::G_IM_FMT_RGBA, img_siz::G_IM_SIZ_32B), GxTexFormat::RGBA8);
-        assert_eq!(cvt_n64_to_gx(img_fmt::G_IM_FMT_CI, img_siz::G_IM_SIZ_4B), GxTexFormat::C4);
-        assert_eq!(cvt_n64_to_gx(img_fmt::G_IM_FMT_CI, img_siz::G_IM_SIZ_8B), GxTexFormat::C8);
-        assert_eq!(cvt_n64_to_gx(img_fmt::G_IM_FMT_IA, img_siz::G_IM_SIZ_8B), GxTexFormat::IA4);
-        assert_eq!(cvt_n64_to_gx(img_fmt::G_IM_FMT_IA, img_siz::G_IM_SIZ_16B), GxTexFormat::IA8);
-        assert_eq!(cvt_n64_to_gx(img_fmt::G_IM_FMT_I, img_siz::G_IM_SIZ_4B), GxTexFormat::I4);
-        assert_eq!(cvt_n64_to_gx(img_fmt::G_IM_FMT_I, img_siz::G_IM_SIZ_8B), GxTexFormat::I8);
+        assert_eq!(
+            cvt_n64_to_gx(img_fmt::G_IM_FMT_RGBA, img_siz::G_IM_SIZ_4B),
+            GxTexFormat::CMPR
+        );
+        assert_eq!(
+            cvt_n64_to_gx(img_fmt::G_IM_FMT_RGBA, img_siz::G_IM_SIZ_16B),
+            GxTexFormat::RGB5A3
+        );
+        assert_eq!(
+            cvt_n64_to_gx(img_fmt::G_IM_FMT_RGBA, img_siz::G_IM_SIZ_32B),
+            GxTexFormat::RGBA8
+        );
+        assert_eq!(
+            cvt_n64_to_gx(img_fmt::G_IM_FMT_CI, img_siz::G_IM_SIZ_4B),
+            GxTexFormat::C4
+        );
+        assert_eq!(
+            cvt_n64_to_gx(img_fmt::G_IM_FMT_CI, img_siz::G_IM_SIZ_8B),
+            GxTexFormat::C8
+        );
+        assert_eq!(
+            cvt_n64_to_gx(img_fmt::G_IM_FMT_IA, img_siz::G_IM_SIZ_8B),
+            GxTexFormat::IA4
+        );
+        assert_eq!(
+            cvt_n64_to_gx(img_fmt::G_IM_FMT_IA, img_siz::G_IM_SIZ_16B),
+            GxTexFormat::IA8
+        );
+        assert_eq!(
+            cvt_n64_to_gx(img_fmt::G_IM_FMT_I, img_siz::G_IM_SIZ_4B),
+            GxTexFormat::I4
+        );
+        assert_eq!(
+            cvt_n64_to_gx(img_fmt::G_IM_FMT_I, img_siz::G_IM_SIZ_8B),
+            GxTexFormat::I8
+        );
         // Unsupported -> GX_TF_I4 fallback.
-        assert_eq!(cvt_n64_to_gx(img_fmt::G_IM_FMT_RGBA, img_siz::G_IM_SIZ_8B), GxTexFormat::I4);
-        assert_eq!(cvt_n64_to_gx(img_fmt::G_IM_FMT_YUV, img_siz::G_IM_SIZ_16B), GxTexFormat::I4);
+        assert_eq!(
+            cvt_n64_to_gx(img_fmt::G_IM_FMT_RGBA, img_siz::G_IM_SIZ_8B),
+            GxTexFormat::I4
+        );
+        assert_eq!(
+            cvt_n64_to_gx(img_fmt::G_IM_FMT_YUV, img_siz::G_IM_SIZ_16B),
+            GxTexFormat::I4
+        );
     }
 
     #[test]
@@ -382,8 +464,26 @@ mod tests {
     fn cache_hit_avoids_reconvert() {
         let mut c = TextureConverter::new();
         let src = vec![0xABu8; 64];
-        let a = c.convert(&src, 0x8000_1000, 8, 8, img_fmt::G_IM_FMT_I, img_siz::G_IM_SIZ_4B).as_ptr();
-        let b = c.convert(&src, 0x8000_1000, 8, 8, img_fmt::G_IM_FMT_I, img_siz::G_IM_SIZ_4B).as_ptr();
+        let a = c
+            .convert(
+                &src,
+                0x8000_1000,
+                8,
+                8,
+                img_fmt::G_IM_FMT_I,
+                img_siz::G_IM_SIZ_4B,
+            )
+            .as_ptr();
+        let b = c
+            .convert(
+                &src,
+                0x8000_1000,
+                8,
+                8,
+                img_fmt::G_IM_FMT_I,
+                img_siz::G_IM_SIZ_4B,
+            )
+            .as_ptr();
         assert_eq!(a, b);
         c.cache.invalidate(0x8000_1000);
         assert!(c.cache.select(0x8000_1000).is_none());

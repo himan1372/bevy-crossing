@@ -64,6 +64,7 @@ pub fn river_to_bridge_block(t: u8) -> Option<u8> {
 
 /// `pluss_bridge` (m_map_ovl.c, verbatim): block type -> bridge counterpart,
 /// 255 (NONE) when the type has no bridge variant.
+#[rustfmt::skip]
 pub const PLUSS_BRIDGE: [u8; 108] = [
     255, 255, 255, 255, 255, 255, 255, 255,
     255, 255, 255, 255, 255,  86, 255, 255,
@@ -172,9 +173,21 @@ mod tests {
         let before = vec![3, 7, 11];
         let after = vec![20, 25];
         // Picks are ordinals among river blocks.
-        assert_eq!(select_bridge_blocks(&before, &after, 1, 0, true), (Some(7), Some(20)));
-        assert_eq!(select_bridge_blocks(&before, &after, 0, 1, false), (Some(3), None));
-        assert_eq!(select_bridge_blocks(&[], &after, 0, 0, true), (None, Some(20)));
-        assert_eq!(select_bridge_blocks(&before, &[], 2, 0, true), (Some(11), None));
+        assert_eq!(
+            select_bridge_blocks(&before, &after, 1, 0, true),
+            (Some(7), Some(20))
+        );
+        assert_eq!(
+            select_bridge_blocks(&before, &after, 0, 1, false),
+            (Some(3), None)
+        );
+        assert_eq!(
+            select_bridge_blocks(&[], &after, 0, 0, true),
+            (None, Some(20))
+        );
+        assert_eq!(
+            select_bridge_blocks(&before, &[], 2, 0, true),
+            (Some(11), None)
+        );
     }
 }

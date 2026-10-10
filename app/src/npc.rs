@@ -168,9 +168,9 @@ fn villager_wander(
 
             // Don't walk into unwalkable cells, the shop building, or
             // through the player.
-            let shop_blocked = shop_building.as_ref().is_some_and(|s| {
-                crate::shop::point_blocked(s, candidate.x, candidate.z)
-            });
+            let shop_blocked = shop_building
+                .as_ref()
+                .is_some_and(|s| crate::shop::point_blocked(s, candidate.x, candidate.z));
             if town.is_walkable(Vec3::new(candidate.x, 0.0, candidate.z))
                 && !shop_blocked
                 && candidate.distance(player_pos) > 1.2

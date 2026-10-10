@@ -40,9 +40,7 @@ pub fn type_comb_count(types: &[u8], ty: u8, use_data: &[i16; USE_DATA_LEN], reu
     types
         .iter()
         .enumerate()
-        .filter(|(i, t)| {
-            **t == ty && (reuse || !search_already_use(use_data, *i as i16))
-        })
+        .filter(|(i, t)| **t == ty && (reuse || !search_already_use(use_data, *i as i16)))
         .count()
 }
 
@@ -190,7 +188,10 @@ mod tests {
         assert!(search_already_use(&used, 0));
         assert_eq!(type_comb_count(&types, 39, &used, false), 2);
         // Index lookup skips used.
-        assert_eq!(index_in_type_2_block_no(&types, 39, 0, &used, false), Some(1));
+        assert_eq!(
+            index_in_type_2_block_no(&types, 39, 0, &used, false),
+            Some(1)
+        );
         assert_eq!(index_in_type_2_block_no(&types, 39, 5, &used, false), None);
         // Exhaust FLAT, then reuse allowed.
         used[1] = 1;
@@ -198,7 +199,7 @@ mod tests {
         assert_eq!(type_comb_count(&types, 39, &used, false), 0);
         let (c1, _) = select_block_type(&types, 39, &used, |_| 0);
         assert_eq!(c1, 0); // reuse pool
-        // NONE type never selected as FLAT.
+                           // NONE type never selected as FLAT.
         assert_eq!(type_comb_count(&types, 109, &used, false), 1);
         // Fallback when no candidates at all.
         let (c2, mark2) = select_block_type(&types, 41, &used, |_| 0);

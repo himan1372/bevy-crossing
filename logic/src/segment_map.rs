@@ -110,7 +110,8 @@ pub fn unit_no_name_2_start_end(
 /// Front-side test (`mCoBG_GetPointInfoFrontLine`):
 /// `n·point − n·start ≥ 0`.
 pub fn point_info_front_line(start: [f32; 2], point: [f32; 2], normal: [f32; 2]) -> bool {
-    normal[0] * point[0] + normal[1] * point[1] - (normal[0] * start[0] + normal[1] * start[1]) >= 0.0
+    normal[0] * point[0] + normal[1] * point[1] - (normal[0] * start[0] + normal[1] * start[1])
+        >= 0.0
 }
 
 /// The four corner height offsets used by the normal selectors.
@@ -232,7 +233,12 @@ pub struct PcSegment {
 /// Safe value-returning kernel: wall name → segment.
 pub fn segment_for_wall(ux: f32, uz: f32, wall_name: WallName, check_type: CheckType) -> PcSegment {
     let (s, e) = unit_no_name_2_start_end(ux, uz, wall_name, check_type);
-    PcSegment { start_x: s[0], start_z: s[1], end_x: e[0], end_z: e[1] }
+    PcSegment {
+        start_x: s[0],
+        start_z: s[1],
+        end_x: e[0],
+        end_z: e[1],
+    }
 }
 
 /// C ABI: segment placement; writes start[2], end[2].
@@ -257,7 +263,11 @@ pub unsafe extern "C" fn pc_unit_no_name_2_start_end(
         5 => WallName::SlateDown,
         _ => return,
     };
-    let ct = if check_type == 1 { CheckType::Player } else { CheckType::Normal };
+    let ct = if check_type == 1 {
+        CheckType::Player
+    } else {
+        CheckType::Normal
+    };
     let seg = segment_for_wall(ux, uz, name, ct);
     if !out_start.is_null() {
         let d = unsafe { core::slice::from_raw_parts_mut(out_start, 2) };
@@ -276,7 +286,10 @@ mod tests {
     use super::*;
 
     fn approx(a: [f32; 2], b: [f32; 2]) {
-        assert!((a[0] - b[0]).abs() < 1e-4 && (a[1] - b[1]).abs() < 1e-4, "{a:?} vs {b:?}");
+        assert!(
+            (a[0] - b[0]).abs() < 1e-4 && (a[1] - b[1]).abs() < 1e-4,
+            "{a:?} vs {b:?}"
+        );
     }
 
     #[test]
@@ -340,21 +353,54 @@ mod tests {
 
     #[test]
     fn normal_selection() {
-        let low = CornerOffsets { left_up: 0.0, right_up: 0.0, left_down: 0.0, right_down: 0.0 };
-        let high = CornerOffsets { left_up: 10.0, right_up: 10.0, left_down: 10.0, right_down: 10.0 };
+        let low = CornerOffsets {
+            left_up: 0.0,
+            right_up: 0.0,
+            left_down: 0.0,
+            right_down: 0.0,
+        };
+        let high = CornerOffsets {
+            left_up: 10.0,
+            right_up: 10.0,
+            left_down: 10.0,
+            right_down: 10.0,
+        };
         // UP: higher neighbor to the north -> (0,+1)/0°.
-        assert_eq!(search_wall_flag(WallName::Up, low, high), Some(([0.0, 1.0], 0.0)));
-        assert_eq!(search_wall_flag(WallName::Up, high, low), Some(([0.0, -1.0], 180.0)));
+        assert_eq!(
+            search_wall_flag(WallName::Up, low, high),
+            Some(([0.0, 1.0], 0.0))
+        );
+        assert_eq!(
+            search_wall_flag(WallName::Up, high, low),
+            Some(([0.0, -1.0], 180.0))
+        );
         assert_eq!(search_wall_flag(WallName::Up, low, low), None);
         // LEFT: higher neighbor to the west -> (+1,0)/90°.
-        assert_eq!(search_wall_flag(WallName::Left, low, high), Some(([1.0, 0.0], 90.0)));
+        assert_eq!(
+            search_wall_flag(WallName::Left, low, high),
+            Some(([1.0, 0.0], 90.0))
+        );
         // DOWN/RIGHT mirror.
-        assert_eq!(search_wall_flag(WallName::Down, low, high), Some(([0.0, -1.0], 180.0)));
-        assert_eq!(search_wall_flag(WallName::Right, low, high), Some(([-1.0, 0.0], -90.0)));
+        assert_eq!(
+            search_wall_flag(WallName::Down, low, high),
+            Some(([0.0, -1.0], 180.0))
+        );
+        assert_eq!(
+            search_wall_flag(WallName::Right, low, high),
+            Some(([-1.0, 0.0], -90.0))
+        );
         // Slate: height relationship picks the diagonal.
-        let o = CornerOffsets { left_up: 5.0, right_down: 1.0, ..Default::default() };
+        let o = CornerOffsets {
+            left_up: 5.0,
+            right_down: 1.0,
+            ..Default::default()
+        };
         assert_eq!(slate_normal(WallName::SlateUp, o).1, 45.0);
-        let o = CornerOffsets { left_down: 5.0, right_up: 1.0, ..Default::default() };
+        let o = CornerOffsets {
+            left_down: 5.0,
+            right_up: 1.0,
+            ..Default::default()
+        };
         assert_eq!(slate_normal(WallName::SlateDown, o).1, 135.0);
     }
 

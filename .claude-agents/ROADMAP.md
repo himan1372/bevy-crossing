@@ -13,7 +13,7 @@ and questions on `comms.txt` on the **main** branch (append-only).
 
 ## Code health
 - [x] **logic-clippy-cleanup** — done (claude): `cargo clippy --workspace --all-targets -- -D warnings` passes (with and without `--features remote`); 475 tests pass.
-- [ ] **workspace-fmt** (backlog) — Philip chose: rustfmt the whole workspace, `#[rustfmt::skip]` on hand-laid decomp tables.
+- [x] **workspace-fmt** — done (claude): `cargo fmt --all --check` clean. 38 hand-laid decomp tables and the two generated modules (fish/insect tables) are `#[rustfmt::skip]`. The full rust-workflow gate now passes.
 
 ## Candidates (needs Philip's decision)
 - Title screen port — `port-title-screen` sits in rustimal-crossing's backlog (reworded for the PC port); decide which repo should own the Bevy title screen.

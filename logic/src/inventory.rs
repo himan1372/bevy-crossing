@@ -51,7 +51,10 @@ pub struct Inventory {
 
 impl Default for Inventory {
     fn default() -> Self {
-        Self { pockets: [EMPTY_NO; POCKETS_SLOT_COUNT], item_conditions: 0 }
+        Self {
+            pockets: [EMPTY_NO; POCKETS_SLOT_COUNT],
+            item_conditions: 0,
+        }
     }
 }
 
@@ -64,8 +67,7 @@ impl Inventory {
     /// Set a slot's condition (`mPr_SET_ITEM_COND`).
     pub fn set_item_cond(&mut self, slot: usize, cond: u32) {
         let shift = (slot as u32) << 1;
-        self.item_conditions =
-            (self.item_conditions & !(0x3 << shift)) | ((cond & 0x3) << shift);
+        self.item_conditions = (self.item_conditions & !(0x3 << shift)) | ((cond & 0x3) << shift);
     }
 
     /// First pocket containing `item`, or `None`
@@ -165,7 +167,11 @@ pub extern "C" fn pc_inventory_find(pockets: *const u16, item: u16) -> i32 {
         return -1;
     }
     let slots = unsafe { core::slice::from_raw_parts(pockets, POCKETS_SLOT_COUNT) };
-    slots.iter().position(|&it| it == item).map(|i| i as i32).unwrap_or(-1)
+    slots
+        .iter()
+        .position(|&it| it == item)
+        .map(|i| i as i32)
+        .unwrap_or(-1)
 }
 
 /// C ABI: count of pockets containing `item`.
@@ -236,7 +242,10 @@ mod tests {
     fn furniture_filter() {
         assert!(selectable_furniture(true, None));
         assert!(!selectable_furniture(true, Some(ExcludedFurniture::Fish)));
-        assert!(!selectable_furniture(true, Some(ExcludedFurniture::NesGame)));
+        assert!(!selectable_furniture(
+            true,
+            Some(ExcludedFurniture::NesGame)
+        ));
         assert!(!selectable_furniture(false, None));
     }
 

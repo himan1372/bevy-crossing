@@ -87,7 +87,10 @@ impl FishType {
 
     /// Trash fish: Empty Can ..= Old Tire (`aGYO_IS_FISH_TRASH`).
     pub fn is_trash(self) -> bool {
-        matches!(self, FishType::EmptyCan | FishType::Boot | FishType::OldTire)
+        matches!(
+            self,
+            FishType::EmptyCan | FishType::Boot | FishType::OldTire
+        )
     }
 }
 
@@ -160,7 +163,11 @@ pub fn blend_fish_tables(
     rate: f32,
 ) -> Vec<(FishType, FishArea, f32)> {
     let mut out = Vec::with_capacity(current.len() + next.len());
-    out.extend(current.iter().map(|e| (e.fish, e.area, e.weight as f32 * rate)));
+    out.extend(
+        current
+            .iter()
+            .map(|e| (e.fish, e.area, e.weight as f32 * rate)),
+    );
     out.extend(
         next.iter()
             .map(|e| (e.fish, e.area, e.weight as f32 * (1.0 - rate))),
@@ -513,7 +520,9 @@ mod tests {
         // Island term tables: the brief's 1-indexed "term 1" is index 0
         // (l_insect_isl_t1), which carries the explicit NONE entry.
         let isl1 = crate::insect_tables::INSECT_ISLAND[0];
-        assert!(isl1.iter().any(|e| e.insect == InsectType::None && e.weight == 78));
+        assert!(isl1
+            .iter()
+            .any(|e| e.insect == InsectType::None && e.weight == 78));
     }
 
     #[test]
@@ -523,7 +532,10 @@ mod tests {
         let blended = blend_fish_tables(a, b, 5.0 / 6.0);
         assert_eq!(blended.len(), a.len() + b.len());
         // Same species can appear twice (ordered concatenation, no merge).
-        let crucian = blended.iter().filter(|(f, _, _)| *f == FishType::CrucianCarp).count();
+        let crucian = blended
+            .iter()
+            .filter(|(f, _, _)| *f == FishType::CrucianCarp)
+            .count();
         assert_eq!(crucian, 2);
     }
 

@@ -86,6 +86,7 @@ pub struct DefenceWallInfo {
 const R: f32 = std::f32::consts::FRAC_1_SQRT_2;
 
 /// `defence_wall_info[8]` — verbatim.
+#[rustfmt::skip]
 pub const DEFENCE_WALL_INFO: [DefenceWallInfo; 8] = [
     DefenceWallInfo { dx: 1, dz: 0, normal_angle0_deg: 0.0, normal0: [0.0, 1.0], wall_name0: WallName::Up, normal_angle1_deg: 180.0, normal1: [0.0, -1.0], wall_name1: WallName::Up },
     DefenceWallInfo { dx: -1, dz: 0, normal_angle0_deg: 0.0, normal0: [0.0, 1.0], wall_name0: WallName::Up, normal_angle1_deg: 180.0, normal1: [0.0, -1.0], wall_name1: WallName::Up },
@@ -214,7 +215,8 @@ impl DecalCircleSystem {
         }
         if reg.start_timer != -100 {
             let now_a = reg.start_timer - reg.now_timer;
-            reg.now_radius = calc_adjust(now_a, 0, reg.start_timer, reg.start_radius, reg.end_radius);
+            reg.now_radius =
+                calc_adjust(now_a, 0, reg.start_timer, reg.start_radius, reg.end_radius);
             let col = &mut self.circles[i];
             col.pos = reg.pos;
             col.height = reg.pos[1];

@@ -243,7 +243,11 @@ pub struct Favor {
 
 impl Default for Favor {
     fn default() -> Self {
-        Self { state: FavorState::None, via_npc: false, days_left: 0 }
+        Self {
+            state: FavorState::None,
+            via_npc: false,
+            days_left: 0,
+        }
     }
 }
 
@@ -366,14 +370,21 @@ pub fn select_move_out(
     may_leave: &[bool],
     rand: &mut dyn FnMut(usize) -> usize,
 ) -> Option<usize> {
-    let eligible: Vec<usize> =
-        may_leave.iter().enumerate().filter(|(_, m)| **m).map(|(i, _)| i).collect();
+    let eligible: Vec<usize> = may_leave
+        .iter()
+        .enumerate()
+        .filter(|(_, m)| **m)
+        .map(|(i, _)| i)
+        .collect();
     if eligible.is_empty() {
         return None;
     }
     for mask in [0x01u8, 0x02u8] {
-        let pool: Vec<usize> =
-            eligible.iter().copied().filter(|&i| met[i] & mask != 0).collect();
+        let pool: Vec<usize> = eligible
+            .iter()
+            .copied()
+            .filter(|&i| met[i] & mask != 0)
+            .collect();
         if !pool.is_empty() {
             return Some(pool[rand(pool.len())]);
         }
@@ -449,12 +460,30 @@ mod tests {
     #[test]
     fn action_request_priority_wins() {
         let mut r = ActionRequest::default();
-        assert!(r.request(1, BehaviorAction::Walk, ActionKind::Default, ActionTarget::Default, None));
+        assert!(r.request(
+            1,
+            BehaviorAction::Walk,
+            ActionKind::Default,
+            ActionTarget::Default,
+            None
+        ));
         // Lower priority is rejected.
-        assert!(!r.request(0, BehaviorAction::Run, ActionKind::Default, ActionTarget::Default, None));
+        assert!(!r.request(
+            0,
+            BehaviorAction::Run,
+            ActionKind::Default,
+            ActionTarget::Default,
+            None
+        ));
         assert_eq!(r.action, BehaviorAction::Walk);
         // Equal priority replaces (matches `>=` in the C code).
-        assert!(r.request(1, BehaviorAction::Greeting, ActionKind::Default, ActionTarget::Player, None));
+        assert!(r.request(
+            1,
+            BehaviorAction::Greeting,
+            ActionKind::Default,
+            ActionTarget::Player,
+            None
+        ));
         assert_eq!(r.action, BehaviorAction::Greeting);
         assert_eq!(r.target, ActionTarget::Player);
     }
@@ -469,10 +498,22 @@ mod tests {
 
     #[test]
     fn world_events_map_to_reactions() {
-        assert_eq!(reaction_for(WorldEvent::FishCaughtNearby), BehaviorAction::Clap);
-        assert_eq!(reaction_for(WorldEvent::BugCaughtNearby), BehaviorAction::Clap);
-        assert_eq!(reaction_for(WorldEvent::FellInPitfall), BehaviorAction::Pitfall);
-        assert_eq!(reaction_for(WorldEvent::ToolUsedNearby), BehaviorAction::ReactTool);
+        assert_eq!(
+            reaction_for(WorldEvent::FishCaughtNearby),
+            BehaviorAction::Clap
+        );
+        assert_eq!(
+            reaction_for(WorldEvent::BugCaughtNearby),
+            BehaviorAction::Clap
+        );
+        assert_eq!(
+            reaction_for(WorldEvent::FellInPitfall),
+            BehaviorAction::Pitfall
+        );
+        assert_eq!(
+            reaction_for(WorldEvent::ToolUsedNearby),
+            BehaviorAction::ReactTool
+        );
     }
 
     #[test]

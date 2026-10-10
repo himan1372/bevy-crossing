@@ -67,9 +67,8 @@ pub fn judge_point_in_circle(center: [f32; 2], p: [f32; 2], radius: f32) -> bool
 /// Normal-plane distance (`mCoBG_GetDistPointAndLine2D_Norm`):
 /// `|n·point − n·line0|`, no normalization.
 pub fn dist_point_and_line_2d_norm(line0: [f32; 2], point: [f32; 2], normal: [f32; 2]) -> f32 {
-    (normal[0] * point[0] + normal[1] * point[1]
-        - (normal[0] * line0[0] + normal[1] * line0[1]))
-    .abs()
+    (normal[0] * point[0] + normal[1] * point[1] - (normal[0] * line0[0] + normal[1] * line0[1]))
+        .abs()
 }
 
 /// Parametric line/circle intersection
@@ -82,8 +81,7 @@ pub fn cross_circle_and_line_2dvector(
     radius: f32,
 ) -> Option<([f32; 2], [f32; 2])> {
     let a = vec[0] * vec[0] + vec[1] * vec[1];
-    let b = 2.0
-        * (vec[0] * point[0] - vec[0] * center[0] + vec[1] * point[1] - vec[1] * center[1]);
+    let b = 2.0 * (vec[0] * point[0] - vec[0] * center[0] + vec[1] * point[1] - vec[1] * center[1]);
     let c = (point[0] - center[0]).powi(2) + (point[1] - center[1]).powi(2) - radius * radius;
     let r = b * b - 4.0 * a * c;
     if r >= 0.0 {
@@ -328,7 +326,6 @@ pub fn attribute_wall_special_collision(
 #[allow(unused_imports)] // decomp-named alias; used by tests, kept for future callers
 pub use crate::wall_priority::check_dist_sp_suppress as check_dist_sp_check;
 
-
 /// C ABI: attribute-wall special path; writes reverse[2]; returns 1 on hit.
 #[no_mangle]
 pub extern "C" fn pc_attribute_wall_special(
@@ -433,7 +430,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(r, [0.0, 3.0]); // edge - cross1, parallel to normal
-        // Both in front -> None.
+                                   // Both in front -> None.
         assert!(get_special_distance_reverse(
             [0.0, 0.0],
             [0.0, 2.0],
@@ -450,19 +447,64 @@ mod tests {
         let we = [40.0, 0.0];
         let n = [0.0, 1.0];
         // Actor in front, near the start endpoint, inside circle.
-        let ok = endpoint_circle_collision(ws, we, n, [2.0, 6.0], [2.0, 4.0], 18.0, 0.0, 100.0, false);
+        let ok =
+            endpoint_circle_collision(ws, we, n, [2.0, 6.0], [2.0, 4.0], 18.0, 0.0, 100.0, false);
         let (choice, rev) = ok.unwrap();
         assert_eq!(choice, EndpointChoice::Start);
         // Reverse is parallel to the normal (x-component ~ 0).
         assert!(rev[0].abs() < 1e-3 && rev[1] > 0.0);
         // Behind the wall -> None.
-        assert!(endpoint_circle_collision(ws, we, n, [2.0, -6.0], [2.0, -4.0], 18.0, 0.0, 100.0, false).is_none());
+        assert!(endpoint_circle_collision(
+            ws,
+            we,
+            n,
+            [2.0, -6.0],
+            [2.0, -4.0],
+            18.0,
+            0.0,
+            100.0,
+            false
+        )
+        .is_none());
         // Suppressed -> None.
-        assert!(endpoint_circle_collision(ws, we, n, [2.0, 6.0], [2.0, 4.0], 18.0, 0.0, 100.0, true).is_none());
+        assert!(endpoint_circle_collision(
+            ws,
+            we,
+            n,
+            [2.0, 6.0],
+            [2.0, 4.0],
+            18.0,
+            0.0,
+            100.0,
+            true
+        )
+        .is_none());
         // Too low a wall -> None.
-        assert!(endpoint_circle_collision(ws, we, n, [2.0, 6.0], [2.0, 4.0], 18.0, 0.0, -10.0, false).is_none());
+        assert!(endpoint_circle_collision(
+            ws,
+            we,
+            n,
+            [2.0, 6.0],
+            [2.0, 4.0],
+            18.0,
+            0.0,
+            -10.0,
+            false
+        )
+        .is_none());
         // Endpoint outside the circle -> None.
-        assert!(endpoint_circle_collision(ws, we, n, [60.0, 6.0], [60.0, 4.0], 18.0, 0.0, 100.0, false).is_none());
+        assert!(endpoint_circle_collision(
+            ws,
+            we,
+            n,
+            [60.0, 6.0],
+            [60.0, 4.0],
+            18.0,
+            0.0,
+            100.0,
+            false
+        )
+        .is_none());
     }
 
     #[test]
@@ -480,15 +522,21 @@ mod tests {
     }
 
     #[test]
-    fn attribute_wall_special_exact_differences() {        let ws = [0.0, 0.0];
+    fn attribute_wall_special_exact_differences() {
+        let ws = [0.0, 0.0];
         let we = [10.0, 0.0];
         let n = [0.0, 1.0];
         // Same horizontal setup the normal path accepts.
         let args = (ws, we, n, [2.0, 6.0], [2.0, 4.0], 18.0);
         // Normal path: too low a wall -> None (height gate).
-        assert!(endpoint_circle_collision(args.0, args.1, args.2, args.3, args.4, args.5, 0.0, -10.0, false).is_none());
+        assert!(endpoint_circle_collision(
+            args.0, args.1, args.2, args.3, args.4, args.5, 0.0, -10.0, false
+        )
+        .is_none());
         // Attribute path: NO height gate -> hit even with a very low wall top.
-        let (choice, rev) = attribute_wall_special_collision(ws, we, n, [2.0, 6.0], [2.0, 4.0], 18.0, false).unwrap();
+        let (choice, rev) =
+            attribute_wall_special_collision(ws, we, n, [2.0, 6.0], [2.0, 4.0], 18.0, false)
+                .unwrap();
         assert_eq!(choice, EndpointChoice::Start);
         // Same reverse math as the normal path: parallel to the normal.
         assert!(rev[0].abs() < 1e-3 && rev[1] > 0.0);
@@ -499,8 +547,14 @@ mod tests {
         assert!(normal_special_height_gate(10.0, 8.0));
         assert!(!normal_special_height_gate(10.0, 7.9));
         // Attribute path still respects the horizontal gates.
-        assert!(attribute_wall_special_collision(ws, we, n, [2.0, -6.0], [2.0, -4.0], 18.0, false).is_none());
-        assert!(attribute_wall_special_collision(ws, we, n, [2.0, 6.0], [2.0, 4.0], 18.0, true).is_none());
+        assert!(
+            attribute_wall_special_collision(ws, we, n, [2.0, -6.0], [2.0, -4.0], 18.0, false)
+                .is_none()
+        );
+        assert!(
+            attribute_wall_special_collision(ws, we, n, [2.0, 6.0], [2.0, 4.0], 18.0, true)
+                .is_none()
+        );
         // Wall-kind dispatch.
         assert_eq!(get_wall_kind(false, false), wall_kind::NORMAL);
         assert_eq!(get_wall_kind(false, true), wall_kind::ATTRIBUTE);
@@ -510,10 +564,17 @@ mod tests {
 
     #[test]
     fn dist_norm_and_circle() {
-        assert!((dist_point_and_line_2d_norm([0.0, 0.0], [3.0, 4.0], [0.0, 1.0]) - 4.0).abs() < 1e-6);
+        assert!(
+            (dist_point_and_line_2d_norm([0.0, 0.0], [3.0, 4.0], [0.0, 1.0]) - 4.0).abs() < 1e-6
+        );
         assert!(judge_point_in_circle([0.0, 0.0], [3.0, 4.0], 5.0));
         assert!(!judge_point_in_circle([0.0, 0.0], [3.0, 4.0], 4.9));
         // check_dist_sp_check re-export works.
-        assert!(check_dist_sp_check([1.0, 1.0], [1.05, 1.02], [9.0, 9.0], 0x1000));
+        assert!(check_dist_sp_check(
+            [1.0, 1.0],
+            [1.05, 1.02],
+            [9.0, 9.0],
+            0x1000
+        ));
     }
 }

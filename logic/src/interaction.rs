@@ -82,7 +82,10 @@ pub struct TalkInfo {
 
 impl TalkInfo {
     pub fn new() -> Self {
-        Self { quest_request: true, ..Self::default() }
+        Self {
+            quest_request: true,
+            ..Self::default()
+        }
     }
 
     /// Count one conversation (`mNpc_CountTalkNum`). Returns false when
@@ -229,7 +232,10 @@ impl InteractionContext {
 /// `mNpc_CountTalkNum`.
 #[no_mangle]
 pub extern "C" fn pc_npc_patience(talk_num: u8, looks: u8) -> u8 {
-    let info = TalkInfo { talk_num, ..TalkInfo::default() };
+    let info = TalkInfo {
+        talk_num,
+        ..TalkInfo::default()
+    };
     info.patience(looks as usize) as u8
 }
 
@@ -293,13 +299,31 @@ mod tests {
         };
         assert_eq!(annoyed.select(), InteractionKind::Refused);
 
-        let request = InteractionContext { patience: Patience::Normal, has_pending_request: true, player_holding_item: true, feel: Feel::Normal, talked_recently: false };
+        let request = InteractionContext {
+            patience: Patience::Normal,
+            has_pending_request: true,
+            player_holding_item: true,
+            feel: Feel::Normal,
+            talked_recently: false,
+        };
         assert_eq!(request.select(), InteractionKind::Request);
 
-        let item = InteractionContext { patience: Patience::Normal, has_pending_request: false, player_holding_item: true, feel: Feel::Normal, talked_recently: false };
+        let item = InteractionContext {
+            patience: Patience::Normal,
+            has_pending_request: false,
+            player_holding_item: true,
+            feel: Feel::Normal,
+            talked_recently: false,
+        };
         assert_eq!(item.select(), InteractionKind::ItemTrade);
 
-        let plain = InteractionContext { patience: Patience::Normal, has_pending_request: false, player_holding_item: false, feel: Feel::Happy, talked_recently: false };
+        let plain = InteractionContext {
+            patience: Patience::Normal,
+            has_pending_request: false,
+            player_holding_item: false,
+            feel: Feel::Happy,
+            talked_recently: false,
+        };
         assert_eq!(plain.select(), InteractionKind::Conversation);
     }
 

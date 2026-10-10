@@ -81,7 +81,10 @@ impl CombinerExpr {
             c.contains(&MuxC::Texel1) || a.contains(&MuxA::Texel1Alpha)
         };
         mentions_texel1(&self.cyc1.0, &self.cyc1.1)
-            || self.cyc2.map(|(c, a)| mentions_texel1(&c, &a)).unwrap_or(false)
+            || self
+                .cyc2
+                .map(|(c, a)| mentions_texel1(&c, &a))
+                .unwrap_or(false)
     }
 }
 
@@ -89,7 +92,10 @@ impl CombinerExpr {
 /// 1-cycle -> one/few stages; 2-cycle -> multiple stages.
 pub fn combine_auto(expr: CombinerExpr, two_cycle: bool) -> TevProgram {
     if expr.needs_notev() {
-        return TevProgram { stages: Vec::new(), path: CombinePath::NotEv };
+        return TevProgram {
+            stages: Vec::new(),
+            path: CombinePath::NotEv,
+        };
     }
     let mut stages = Vec::new();
     stages.push(tev_stage_for(&expr.cyc1.0, &expr.cyc1.1));
@@ -100,7 +106,10 @@ pub fn combine_auto(expr: CombinerExpr, two_cycle: bool) -> TevProgram {
             stages.push(tev_stage_for(&expr.cyc1.0, &expr.cyc1.1));
         }
     }
-    TevProgram { stages, path: CombinePath::Auto }
+    TevProgram {
+        stages,
+        path: CombinePath::Auto,
+    }
 }
 
 fn tev_stage_for(c: &[MuxC; 4], a: &[MuxA; 4]) -> TevStage {
@@ -141,16 +150,20 @@ pub mod presets {
     /// common textured-opaque preset.
     pub fn texel0_opaque() -> CombinerExpr {
         CombinerExpr {
-            cyc1: ([MuxC::Zero, MuxC::Zero, MuxC::Zero, MuxC::Texel0],
-                   [MuxA::Zero, MuxA::Zero, MuxA::Zero, MuxA::One]),
+            cyc1: (
+                [MuxC::Zero, MuxC::Zero, MuxC::Zero, MuxC::Texel0],
+                [MuxA::Zero, MuxA::Zero, MuxA::Zero, MuxA::One],
+            ),
             cyc2: None,
         }
     }
 
     pub fn texel1_example() -> CombinerExpr {
         CombinerExpr {
-            cyc1: ([MuxC::Zero, MuxC::Zero, MuxC::Zero, MuxC::Texel1],
-                   [MuxA::Zero, MuxA::Zero, MuxA::Zero, MuxA::One]),
+            cyc1: (
+                [MuxC::Zero, MuxC::Zero, MuxC::Zero, MuxC::Texel1],
+                [MuxA::Zero, MuxA::Zero, MuxA::Zero, MuxA::One],
+            ),
             cyc2: None,
         }
     }

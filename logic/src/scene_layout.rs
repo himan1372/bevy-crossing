@@ -101,11 +101,22 @@ pub struct DoorData {
 /// One decoded scene word.
 #[derive(Clone, Debug)]
 pub enum SceneWord {
-    PlayerPtr { num_actors: u8 },
-    CtrlActorPtr { num_ctrl_actors: u8 },
-    ActorPtr { num_actors: u8 },
-    ObjectBank { num_banks: u8 },
-    DoorData { num_doors: u8, doors: Vec<DoorData> },
+    PlayerPtr {
+        num_actors: u8,
+    },
+    CtrlActorPtr {
+        num_ctrl_actors: u8,
+    },
+    ActorPtr {
+        num_actors: u8,
+    },
+    ObjectBank {
+        num_banks: u8,
+    },
+    DoorData {
+        num_doors: u8,
+        doors: Vec<DoorData>,
+    },
     FieldCt {
         item_type: u8,
         bg_num: u8,
@@ -115,8 +126,15 @@ pub enum SceneWord {
     },
     MyRoomCt,
     ArrangeRoomCt,
-    ArrangeFurnitureCt { arrange_ftr_num: u8 },
-    Sound { param0: u8, param1: u8, param2: u8, param3: u32 },
+    ArrangeFurnitureCt {
+        arrange_ftr_num: u8,
+    },
+    Sound {
+        param0: u8,
+        param1: u8,
+        param2: u8,
+        param3: u32,
+    },
     End,
 }
 
@@ -157,7 +175,14 @@ pub struct FieldInit {
 
 impl FieldInit {
     pub fn from_word(w: &SceneWord) -> Option<Self> {
-        if let SceneWord::FieldCt { item_type, bg_num, bg_disp_size, room_type, draw_type } = w {
+        if let SceneWord::FieldCt {
+            item_type,
+            bg_num,
+            bg_disp_size,
+            room_type,
+            draw_type,
+        } = w
+        {
             Some(Self {
                 bg_num: *bg_num,
                 bg_disp_size: *bg_disp_size,
@@ -176,10 +201,7 @@ impl FieldInit {
 
 /// Interpret a scene description (`Scene_ct`): walk words until END,
 /// calling the handler for each known record type.
-pub fn interpret_scene(
-    words: &[SceneWord],
-    handle: &mut dyn FnMut(&SceneWord),
-) {
+pub fn interpret_scene(words: &[SceneWord], handle: &mut dyn FnMut(&SceneWord)) {
     for w in words {
         if w.word_type() == SceneWordType::End {
             break;
@@ -223,7 +245,9 @@ pub fn goto_other_scene(door: &DoorData) -> SceneTransition {
 /// C ABI: record-type tag of a raw scene word's first byte, or -1.
 #[no_mangle]
 pub extern "C" fn pc_scene_word_type(first_byte: u8) -> i32 {
-    SceneWordType::from_u8(first_byte).map(|t| t as i32).unwrap_or(-1)
+    SceneWordType::from_u8(first_byte)
+        .map(|t| t as i32)
+        .unwrap_or(-1)
 }
 
 /// C ABI: next scene number for a door's next_scene_id.
@@ -250,8 +274,11 @@ mod tests {
         let words = vec![
             SceneWord::ActorPtr { num_actors: 3 },
             SceneWord::FieldCt {
-                item_type: 1, bg_num: 2, bg_disp_size: 100,
-                room_type: RoomType::NpcRoom, draw_type: 0,
+                item_type: 1,
+                bg_num: 2,
+                bg_disp_size: 100,
+                room_type: RoomType::NpcRoom,
+                draw_type: 0,
             },
             SceneWord::End,
             SceneWord::ActorPtr { num_actors: 9 },
@@ -264,8 +291,11 @@ mod tests {
     #[test]
     fn field_ct_produces_init_flags() {
         let w = SceneWord::FieldCt {
-            item_type: 1, bg_num: 4, bg_disp_size: 200,
-            room_type: RoomType::MyRoom, draw_type: 2,
+            item_type: 1,
+            bg_num: 4,
+            bg_disp_size: 200,
+            room_type: RoomType::MyRoom,
+            draw_type: 2,
         };
         let init = FieldInit::from_word(&w).unwrap();
         assert_eq!((init.bg_num, init.bg_disp_size), (4, 200));
@@ -277,15 +307,22 @@ mod tests {
     #[test]
     fn door_transition() {
         let door = DoorData {
-            next_scene_id: 7, exit_orientation: 2, exit_type: 0,
-            extra_data: 0, exit_position: [0, 0, 0],
-            door_actor_name: 0, wipe_type: WIPE_TYPE_NORMAL,
+            next_scene_id: 7,
+            exit_orientation: 2,
+            exit_type: 0,
+            extra_data: 0,
+            exit_position: [0, 0, 0],
+            door_actor_name: 0,
+            wipe_type: WIPE_TYPE_NORMAL,
         };
         let t = goto_other_scene(&door);
         assert_eq!(t.next_scene_no, 8);
         assert_eq!(t.wipe_type, WIPE_TYPE_FADE_BLACK);
         assert!(t.restore_fgdata);
-        let custom = DoorData { wipe_type: 5, ..door };
+        let custom = DoorData {
+            wipe_type: 5,
+            ..door
+        };
         assert_eq!(goto_other_scene(&custom).wipe_type, 5);
     }
 

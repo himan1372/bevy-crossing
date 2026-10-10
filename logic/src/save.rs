@@ -171,6 +171,7 @@ pub struct SaveFileEntry {
 /// Mirrors `l_mcd_file_table`: the MURA file holds the main save, its backup,
 /// and the mail/original/diary regions; presents and travel are separate files.
 #[allow(dead_code)] // Public save-system API for the rewrite and future adapters.
+#[rustfmt::skip]
 pub static SAVE_FILE_TABLE: [SaveFileEntry; 8] = [
     SaveFileEntry { kind: SaveFileKind::Misc,       file_size: MAIN_SAVE_SIZE,    entry_size: SAVE_T_SIZE,        in_main_file: true },
     SaveFileEntry { kind: SaveFileKind::Main,       file_size: MAIN_SAVE_SIZE,    entry_size: SAVE_T_SIZE,        in_main_file: true },
@@ -339,9 +340,15 @@ mod tests {
     fn block_math_matches_documented_sizes() {
         assert_eq!(blocks_for_bytes(MAIN_SAVE_SIZE), MAIN_BLOCK_COUNT);
         assert_eq!(gci_len_for_blocks(MAIN_BLOCK_COUNT), GCI_TOTAL_SIZE);
-        assert_eq!(SAVE_DATA_OFFSET, CARD_COMMENT_LEN + CARD_BANNER_LEN + CARD_ICON_LEN);
+        assert_eq!(
+            SAVE_DATA_OFFSET,
+            CARD_COMMENT_LEN + CARD_BANNER_LEN + CARD_ICON_LEN
+        );
         assert_eq!(SAVED_LETTER_COUNT, KEEP_MAIL_PAGES * KEEP_MAIL_PER_PAGE);
-        assert_eq!(SAVED_PATTERN_COUNT, KEEP_ORIGINAL_PAGES * KEEP_ORIGINAL_PER_PAGE);
+        assert_eq!(
+            SAVED_PATTERN_COUNT,
+            KEEP_ORIGINAL_PAGES * KEEP_ORIGINAL_PER_PAGE
+        );
     }
 
     #[test]

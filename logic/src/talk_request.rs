@@ -126,7 +126,13 @@ pub fn normal_talk_request_gate(clip_proc_present: bool, clip_proc_result: bool)
 /// (`aCD0_set_norm_talk_info`): `msg_base[looks] + RANDOM(3)`, plus 17
 /// for the NEW_YEAR / AFTER_10_SEC terms, else `term * 4`.
 /// `random3` is the caller's `RANDOM(3)` sample.
-pub fn countdown_norm_msg_no(msg_base_looks: i32, term: i32, random3: i32, term_new_year: i32, term_after_10_sec: i32) -> i32 {
+pub fn countdown_norm_msg_no(
+    msg_base_looks: i32,
+    term: i32,
+    random3: i32,
+    term_new_year: i32,
+    term_after_10_sec: i32,
+) -> i32 {
     let mut msg_no = msg_base_looks + random3;
     if term == term_new_year || term == term_after_10_sec {
         msg_no += 17;
@@ -176,7 +182,11 @@ impl TalkSession {
             face_player: false,
             talk_condition: talk_condition::NONE,
             feel: 0xFF,
-            ignore_timer: if previous_ignore_timer >= 0 { 600 } else { previous_ignore_timer },
+            ignore_timer: if previous_ignore_timer >= 0 {
+                600
+            } else {
+                previous_ignore_timer
+            },
             force_call_cleared: true,
         }
     }
@@ -238,11 +248,17 @@ mod tests {
     #[test]
     fn dispatch_branches() {
         // Idle submenu + hook -> InvokeProc.
-        assert_eq!(talk_request_dispatch(&idle()), TalkRequestAction::InvokeProc);
+        assert_eq!(
+            talk_request_dispatch(&idle()),
+            TalkRequestAction::InvokeProc
+        );
         // Idle submenu, no hook -> RequestTalkDemo.
         let mut i = idle();
         i.has_talk_request_proc = false;
-        assert_eq!(talk_request_dispatch(&i), TalkRequestAction::RequestTalkDemo);
+        assert_eq!(
+            talk_request_dispatch(&i),
+            TalkRequestAction::RequestTalkDemo
+        );
         // Active non-listenable talk demo -> SetupTalkStart (even if submenu idle).
         let mut i = idle();
         i.demo_talk_active = true;

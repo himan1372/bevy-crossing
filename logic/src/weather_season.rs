@@ -75,6 +75,7 @@ pub mod intensity {
 }
 
 /// 20 weather-term end dates (mEnv_GetWeatherChangeStep).
+#[rustfmt::skip]
 pub const WEATHER_TERMS: [(u8, u8); 20] = [
     (1, 7), (2, 24), (3, 31), (4, 4), (4, 7), (4, 8), (4, 19), (4, 20),
     (6, 25), (7, 15), (8, 31), (9, 30), (10, 30), (10, 31), (11, 15),
@@ -118,7 +119,11 @@ pub fn weather_term(month: u8, day: u8) -> usize {
 /// entry. Returns (weather, intensity). `bugfix_sakura` selects the
 /// BUGFIXES behavior (sakura field); without it the original bug reads
 /// the snow field again for sakura probability.
-pub fn weather_roll(entry: (u8, u8, u8, u8, u8, u8, u8), selected: f32, bugfix_sakura: bool) -> (u8, u8) {
+pub fn weather_roll(
+    entry: (u8, u8, u8, u8, u8, u8, u8),
+    selected: f32,
+    bugfix_sakura: bool,
+) -> (u8, u8) {
     let (clear, rain, thunder, snow, blizzard, sakura, _) = entry;
     let c5 = if bugfix_sakura { sakura } else { snow }; // @BUG: original reads snow field
     let c = [clear, rain, thunder, snow, blizzard, c5];
@@ -173,7 +178,11 @@ pub const FIELD_RENEW_HOUR: u8 = 6;
 /// base power ranges each class maps to.
 pub const WIND_TERMS: [(u8, u8); 4] = [(1, 7), (4, 5), (8, 19), (9, 30)];
 pub const WIND_PERCENTS: [(u8, u8, u8); 5] = [
-    (10, 80, 10), (0, 70, 30), (10, 80, 10), (0, 70, 30), (10, 80, 10),
+    (10, 80, 10),
+    (0, 70, 30),
+    (10, 80, 10),
+    (0, 70, 30),
+    (10, 80, 10),
 ];
 pub const WIND_POWER_RANGES: [(f32, f32); 3] = [(0.0, 0.4), (0.4, 0.6), (0.6, 1.0)];
 
@@ -195,7 +204,9 @@ pub const KOINOBORI_WIND_POWER: f32 = 1.0;
 /// Returns 255 if no term matches.
 #[no_mangle]
 pub extern "C" fn pc_term_idx(month: u8, day: u8, is_island: u8) -> u8 {
-    term_idx(month, day, is_island != 0).map(|t| t as u8).unwrap_or(255)
+    term_idx(month, day, is_island != 0)
+        .map(|t| t as u8)
+        .unwrap_or(255)
 }
 
 /// C ABI: weather term for a date.
@@ -275,22 +286,49 @@ mod tests {
         assert_eq!(weather_term(12, 31), 19);
         // Entry 1: {7,0,0,2,1,0,0}: 70% clear, 20% light snow, 10% blizzard.
         let e = WEATHER_TABLE[1];
-        assert_eq!(weather_roll(e, 0.0, true), (weather::CLEAR, intensity::LIGHT));
-        assert_eq!(weather_roll(e, 7.5, true), (weather::SNOW, intensity::LIGHT));
-        assert_eq!(weather_roll(e, 9.5, true), (weather::SNOW, intensity::HEAVY));
+        assert_eq!(
+            weather_roll(e, 0.0, true),
+            (weather::CLEAR, intensity::LIGHT)
+        );
+        assert_eq!(
+            weather_roll(e, 7.5, true),
+            (weather::SNOW, intensity::LIGHT)
+        );
+        assert_eq!(
+            weather_roll(e, 9.5, true),
+            (weather::SNOW, intensity::HEAVY)
+        );
         // Entry 4: 100% light sakura with the fix; without it the bug
         // reads the snow field (0) so it falls through to heavy sakura.
         let e4 = WEATHER_TABLE[4];
-        assert_eq!(weather_roll(e4, 5.0, true), (weather::SAKURA, intensity::LIGHT));
-        assert_eq!(weather_roll(e4, 5.0, false), (weather::SAKURA, intensity::HEAVY));
+        assert_eq!(
+            weather_roll(e4, 5.0, true),
+            (weather::SAKURA, intensity::LIGHT)
+        );
+        assert_eq!(
+            weather_roll(e4, 5.0, false),
+            (weather::SAKURA, intensity::HEAVY)
+        );
         // C ABI returns packed save byte.
-        assert_eq!(pc_weather_roll(0, 5.0, 1), pack_weather_save(weather::CLEAR, intensity::LIGHT));
+        assert_eq!(
+            pc_weather_roll(0, 5.0, 1),
+            pack_weather_save(weather::CLEAR, intensity::LIGHT)
+        );
         assert_eq!(unpack_weather_type(0x21), 2);
         assert_eq!(unpack_weather_intensity(0x21), 1);
         // Event override precedence.
-        assert_eq!(event_weather_override(true, true, true), Some((weather::CLEAR, intensity::HEAVY)));
-        assert_eq!(event_weather_override(false, true, true), Some((weather::SNOW, intensity::HEAVY)));
-        assert_eq!(event_weather_override(false, false, true), Some((weather::CLEAR, intensity::HEAVY)));
+        assert_eq!(
+            event_weather_override(true, true, true),
+            Some((weather::CLEAR, intensity::HEAVY))
+        );
+        assert_eq!(
+            event_weather_override(false, true, true),
+            Some((weather::SNOW, intensity::HEAVY))
+        );
+        assert_eq!(
+            event_weather_override(false, false, true),
+            Some((weather::CLEAR, intensity::HEAVY))
+        );
         assert_eq!(event_weather_override(false, false, false), None);
     }
 

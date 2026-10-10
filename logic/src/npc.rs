@@ -215,7 +215,10 @@ pub struct Mood {
 
 impl Mood {
     pub fn new(index: u8) -> Self {
-        Self { index: index % MOOD_NUM as u8, time: 0 }
+        Self {
+            index: index % MOOD_NUM as u8,
+            time: 0,
+        }
     }
 }
 
@@ -231,7 +234,10 @@ pub struct Catchphrase {
 
 impl Default for Catchphrase {
     fn default() -> Self {
-        Self { chars: [0; CATCHPHRASE_LEN], len: 0 }
+        Self {
+            chars: [0; CATCHPHRASE_LEN],
+            len: 0,
+        }
     }
 }
 
@@ -423,11 +429,19 @@ pub fn resolve_answer(answer: PlayerAnswer, mood: &mut Mood) -> ConvoOutcome {
     match answer {
         PlayerAnswer::Good => {
             mood.time = mood.time.saturating_add(10);
-            ConvoOutcome { mood_delta: 1, friendship_delta: 1, conversation_over: false }
+            ConvoOutcome {
+                mood_delta: 1,
+                friendship_delta: 1,
+                conversation_over: false,
+            }
         }
         PlayerAnswer::Bad => {
             mood.time = 0;
-            ConvoOutcome { mood_delta: -2, friendship_delta: -1, conversation_over: true }
+            ConvoOutcome {
+                mood_delta: -2,
+                friendship_delta: -1,
+                conversation_over: true,
+            }
         }
         PlayerAnswer::Neutral => ConvoOutcome::default(),
     }
@@ -529,9 +543,18 @@ mod tests {
 
     #[test]
     fn schedule_state_transitions() {
-        assert_eq!(schedule_state_at(Personality::Girl, 4 * 3600), ScheduleState::Sleep);
-        assert_eq!(schedule_state_at(Personality::Girl, 5 * 3600 + 1800), ScheduleState::InHouse);
-        assert_eq!(schedule_state_at(Personality::Girl, 7 * 3600), ScheduleState::Field);
+        assert_eq!(
+            schedule_state_at(Personality::Girl, 4 * 3600),
+            ScheduleState::Sleep
+        );
+        assert_eq!(
+            schedule_state_at(Personality::Girl, 5 * 3600 + 1800),
+            ScheduleState::InHouse
+        );
+        assert_eq!(
+            schedule_state_at(Personality::Girl, 7 * 3600),
+            ScheduleState::Field
+        );
     }
 
     #[test]
@@ -550,7 +573,13 @@ mod tests {
             MsgOp::WaitInput,
             MsgOp::End,
         ];
-        let mut w = MsgWindow { script: &[], cursor: 0, timer: 0.0, waiting_input: false, finished: true };
+        let mut w = MsgWindow {
+            script: &[],
+            cursor: 0,
+            timer: 0.0,
+            waiting_input: false,
+            finished: true,
+        };
         assert!(w.load(SCRIPT));
         assert_eq!(w.timer, MSG_WINDOW_TIMER);
         assert_eq!(w.step(), Some(MsgOp::Text("Hi")));

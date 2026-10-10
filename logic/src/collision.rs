@@ -97,7 +97,10 @@ impl CollisionData {
     /// Flat-unit test: all five height samples equal.
     pub fn is_flat(self) -> bool {
         let c = self.center();
-        c == self.top_left() && c == self.bot_left() && c == self.bot_right() && c == self.top_right()
+        c == self.top_left()
+            && c == self.bot_left()
+            && c == self.bot_right()
+            && c == self.top_right()
     }
 }
 
@@ -382,9 +385,17 @@ mod tests {
     #[test]
     fn wall_correction_pushes_along_normal() {
         let wall = WallSeg {
-            start_x: 0.0, start_z: 0.0, end_x: 10.0, end_z: 0.0,
-            start_top: 50.0, start_bottom: 0.0, end_top: 50.0, end_bottom: 0.0,
-            normal_x: 0.0, normal_z: 1.0, normal_angle_deg: 0.0,
+            start_x: 0.0,
+            start_z: 0.0,
+            end_x: 10.0,
+            end_z: 0.0,
+            start_top: 50.0,
+            start_bottom: 0.0,
+            end_top: 50.0,
+            end_bottom: 0.0,
+            normal_x: 0.0,
+            normal_z: 1.0,
+            normal_angle_deg: 0.0,
             kind: WallKind::Normal,
         };
         assert!((wall.signed_distance(3.0, 4.0) - 4.0).abs() < 1e-5);
@@ -423,7 +434,10 @@ mod tests {
 
     #[test]
     fn sphere_overlap_depth() {
-        assert_eq!(sphere_overlap(0.0, 0.0, 0.0, 2.0, 3.0, 0.0, 0.0, 2.0), Some(1.0));
+        assert_eq!(
+            sphere_overlap(0.0, 0.0, 0.0, 2.0, 3.0, 0.0, 0.0, 2.0),
+            Some(1.0)
+        );
         assert_eq!(sphere_overlap(0.0, 0.0, 0.0, 1.0, 5.0, 0.0, 0.0, 1.0), None);
     }
 }

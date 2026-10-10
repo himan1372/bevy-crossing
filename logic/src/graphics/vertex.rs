@@ -132,7 +132,13 @@ mod tests {
 
     #[test]
     fn tex_gen_forces_shared() {
-        let v = Vtx { flag: 1, nx: 100, ny: 0, nz: 0, ..Default::default() };
+        let v = Vtx {
+            flag: 1,
+            nx: 100,
+            ny: 0,
+            nz: 0,
+            ..Default::default()
+        };
         let d = decode_vtx(&v, true, false);
         assert_eq!(d.mtx_flag, mtx_share::MTX_SHARED);
         assert_eq!(d.gx_pnmtx, mtx_share::SHARED_MTX);
@@ -142,7 +148,12 @@ mod tests {
 
     #[test]
     fn normal_normalized_under_texgen() {
-        let v = Vtx { nx: 100, ny: 100, nz: 0, ..Default::default() };
+        let v = Vtx {
+            nx: 100,
+            ny: 100,
+            nz: 0,
+            ..Default::default()
+        };
         let d = decode_vtx(&v, true, false);
         let len = (d.normal[0] * d.normal[0] + d.normal[1] * d.normal[1]).sqrt();
         assert!((len - 1.0).abs() < 1e-4);
@@ -151,7 +162,16 @@ mod tests {
     #[test]
     fn tri1_index_halved() {
         let mut c = VtxCache::new();
-        let src = [Vtx { x: 1, ..Default::default() }, Vtx { x: 2, ..Default::default() }];
+        let src = [
+            Vtx {
+                x: 1,
+                ..Default::default()
+            },
+            Vtx {
+                x: 2,
+                ..Default::default()
+            },
+        ];
         c.load(0, 2, &src, false, false);
         assert_eq!(c.get(2).unwrap().pos[0], 2.0); // N64 index 2 -> slot 1
     }

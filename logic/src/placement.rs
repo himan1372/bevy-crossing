@@ -386,23 +386,71 @@ mod tests {
         // Flat classification.
         assert_eq!(
             classify_river_row(&[false, false, true, false, false]),
-            [side::LEFT, side::LEFT, side::RIGHT, side::RIGHT, side::RIGHT]
+            [
+                side::LEFT,
+                side::LEFT,
+                side::RIGHT,
+                side::RIGHT,
+                side::RIGHT
+            ]
         );
         assert_eq!(
             classify_cliff_col(&[false, false, true, false, false, false, false, false]),
             [
-                cheight::ABOVE, cheight::ABOVE, cheight::BELOW, cheight::BELOW,
-                cheight::BELOW, cheight::BELOW, cheight::BELOW, cheight::BELOW
+                cheight::ABOVE,
+                cheight::ABOVE,
+                cheight::BELOW,
+                cheight::BELOW,
+                cheight::BELOW,
+                cheight::BELOW,
+                cheight::BELOW,
+                cheight::BELOW
             ]
         );
         // Judge predicate.
-        assert!(judge_flat_block(true, side::LEFT, cheight::BELOW, side::LEFT, cheight::BELOW));
-        assert!(!judge_flat_block(true, side::LEFT, cheight::BELOW, side::RIGHT, cheight::BELOW));
-        assert!(judge_flat_block(true, side::BOTH, cheight::BELOW, side::RIGHT, cheight::BELOW));
-        assert!(!judge_flat_block(false, side::LEFT, cheight::BELOW, side::LEFT, cheight::BELOW));
+        assert!(judge_flat_block(
+            true,
+            side::LEFT,
+            cheight::BELOW,
+            side::LEFT,
+            cheight::BELOW
+        ));
+        assert!(!judge_flat_block(
+            true,
+            side::LEFT,
+            cheight::BELOW,
+            side::RIGHT,
+            cheight::BELOW
+        ));
+        assert!(judge_flat_block(
+            true,
+            side::BOTH,
+            cheight::BELOW,
+            side::RIGHT,
+            cheight::BELOW
+        ));
+        assert!(!judge_flat_block(
+            false,
+            side::LEFT,
+            cheight::BELOW,
+            side::LEFT,
+            cheight::BELOW
+        ));
         // BOTH request only matches BOTH info (border cells).
-        assert!(!judge_flat_block(true, side::LEFT, cheight::BOTH, side::LEFT, cheight::BELOW));
-        assert!(judge_flat_block(true, side::BOTH, cheight::BOTH, side::BOTH, cheight::BOTH));
+        assert!(!judge_flat_block(
+            true,
+            side::LEFT,
+            cheight::BOTH,
+            side::LEFT,
+            cheight::BELOW
+        ));
+        assert!(judge_flat_block(
+            true,
+            side::BOTH,
+            cheight::BOTH,
+            side::BOTH,
+            cheight::BOTH
+        ));
         // Rewrite selection.
         assert_eq!(rewrite_flat_idx(2, 5), Some(2));
         assert_eq!(rewrite_flat_idx(5, 5), None);
@@ -418,7 +466,9 @@ mod tests {
         let xs = [1usize, 2, 4];
         assert_eq!(pc_needlework_pick(xs.as_ptr(), 3, 1), 2);
         // Base height column: bottom-up, increments after cliff bits.
-        let col = base_height_column(&[false, false, true, false, false, false, false, false, false, false]);
+        let col = base_height_column(&[
+            false, false, true, false, false, false, false, false, false, false,
+        ]);
         assert_eq!(col[0], 0);
         assert_eq!(col[2], 0);
         assert_eq!(col[3], 1);

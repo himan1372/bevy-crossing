@@ -165,10 +165,7 @@ pub fn reconstruct_priority(dist_table: &[f32], sorted: &[f32]) -> Vec<u8> {
 }
 
 /// Squared midpoint distances from the actor start.
-pub fn midpoint_dist2(
-    walls: &[([f32; 2], [f32; 2])],
-    actor_start: [f32; 2],
-) -> Vec<f32> {
+pub fn midpoint_dist2(walls: &[([f32; 2], [f32; 2])], actor_start: [f32; 2]) -> Vec<f32> {
     walls
         .iter()
         .map(|(s, e)| {
@@ -181,10 +178,7 @@ pub fn midpoint_dist2(
 
 /// Full faithful priority construction: midpoint dist² → merge sort
 /// → u64-mask reconstruction → wall indices in priority order.
-pub fn priority_order(
-    walls: &[([f32; 2], [f32; 2])],
-    actor_start: [f32; 2],
-) -> Vec<usize> {
+pub fn priority_order(walls: &[([f32; 2], [f32; 2])], actor_start: [f32; 2]) -> Vec<usize> {
     let dist_table = midpoint_dist2(walls, actor_start);
     let mut sorted = dist_table.clone();
     merge_sort_float(&mut sorted);
@@ -223,9 +217,7 @@ pub fn check_dist_sp_suppress(
     other_end: [f32; 2],
     angle_diff_u16: u16,
 ) -> bool {
-    let near = |p: [f32; 2]| {
-        (p[0] - point[0]).abs() < 0.1 && (p[1] - point[1]).abs() < 0.1
-    };
+    let near = |p: [f32; 2]| (p[0] - point[0]).abs() < 0.1 && (p[1] - point[1]).abs() < 0.1;
     (near(other_start) || near(other_end)) && (angle_diff_u16 as u32) < 0x3F00
 }
 
@@ -252,7 +244,10 @@ pub unsafe extern "C" fn pc_make_tab_2_move_tail(dst_xz: *mut f32, src_x: f32, s
     }
     let dst = unsafe { core::slice::from_raw_parts_mut(dst_xz, 2) };
     let r = make_tab_2_move_tail_v(
-        PcVec2 { x: dst[0], z: dst[1] },
+        PcVec2 {
+            x: dst[0],
+            z: dst[1],
+        },
         PcVec2 { x: src_x, z: src_z },
     );
     dst[0] = r.x;
@@ -360,9 +355,24 @@ mod tests {
 
     #[test]
     fn sp_suppression() {
-        assert!(check_dist_sp_suppress([1.0, 1.0], [1.05, 1.02], [9.0, 9.0], 0x1000));
-        assert!(!check_dist_sp_suppress([1.0, 1.0], [5.0, 5.0], [9.0, 9.0], 0x1000));
-        assert!(!check_dist_sp_suppress([1.0, 1.0], [1.05, 1.02], [9.0, 9.0], 0x4000));
+        assert!(check_dist_sp_suppress(
+            [1.0, 1.0],
+            [1.05, 1.02],
+            [9.0, 9.0],
+            0x1000
+        ));
+        assert!(!check_dist_sp_suppress(
+            [1.0, 1.0],
+            [5.0, 5.0],
+            [9.0, 9.0],
+            0x1000
+        ));
+        assert!(!check_dist_sp_suppress(
+            [1.0, 1.0],
+            [1.05, 1.02],
+            [9.0, 9.0],
+            0x4000
+        ));
         assert!(player_special_front_gate(true, true));
         assert!(!player_special_front_gate(true, false));
         assert!(point_in_circle([0.0, 0.0], [3.0, 4.0], 5.0));

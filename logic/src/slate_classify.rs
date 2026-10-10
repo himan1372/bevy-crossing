@@ -29,9 +29,7 @@ pub fn check_cliff_attr(attr: u32) -> bool {
 /// when `check_attr` is set (and slate_flag is clear):
 /// wood-bridge pieces 27-30 (NOT the 31 center), wave_se/sw 37-38
 /// (NOT wave_s 36), river banks 39-42, grass3 cliff 55-58.
-pub const SLATE_COL_ATTRS: [u32; 14] = [
-    27, 28, 29, 30, 37, 38, 39, 40, 41, 42, 55, 56, 57, 58,
-];
+pub const SLATE_COL_ATTRS: [u32; 14] = [27, 28, 29, 30, 37, 38, 39, 40, 41, 42, 55, 56, 57, 58];
 
 /// `mCoBG_Wpos2CheckSlateCol` verbatim (minus the unit lookup, which the
 /// caller supplies): slate_flag => TRUE; else if check_attr, TRUE iff
@@ -221,23 +219,50 @@ mod tests {
     #[test]
     fn slate_polygon_equalization() {
         // N: leftUp < rightUp -> all collapse to center.
-        assert_eq!(slate_area_polygon_y(0, 10.0, 0.0, 0.0, 30.0, 20.0), (20.0, 20.0, 20.0));
+        assert_eq!(
+            slate_area_polygon_y(0, 10.0, 0.0, 0.0, 30.0, 20.0),
+            (20.0, 20.0, 20.0)
+        );
         // N: leftUp > rightUp -> all collapse to rightUp.
-        assert_eq!(slate_area_polygon_y(0, 30.0, 0.0, 0.0, 10.0, 20.0), (10.0, 10.0, 10.0));
+        assert_eq!(
+            slate_area_polygon_y(0, 30.0, 0.0, 0.0, 10.0, 20.0),
+            (10.0, 10.0, 10.0)
+        );
         // N: equal -> untouched.
-        assert_eq!(slate_area_polygon_y(0, 10.0, 0.0, 0.0, 10.0, 20.0), (10.0, 20.0, 10.0));
+        assert_eq!(
+            slate_area_polygon_y(0, 10.0, 0.0, 0.0, 10.0, 20.0),
+            (10.0, 20.0, 10.0)
+        );
         // W: leftUp > leftDown -> @BUG: v0=v1=leftDown, v2 stays center.
-        assert_eq!(slate_area_polygon_y(1, 30.0, 10.0, 0.0, 0.0, 20.0), (10.0, 10.0, 20.0));
+        assert_eq!(
+            slate_area_polygon_y(1, 30.0, 10.0, 0.0, 0.0, 20.0),
+            (10.0, 10.0, 20.0)
+        );
         // W: leftUp < leftDown -> v1=v2=v0.
-        assert_eq!(slate_area_polygon_y(1, 10.0, 30.0, 0.0, 0.0, 20.0), (10.0, 10.0, 10.0));
+        assert_eq!(
+            slate_area_polygon_y(1, 10.0, 30.0, 0.0, 0.0, 20.0),
+            (10.0, 10.0, 10.0)
+        );
         // S: leftDown < rightDown -> all leftDown.
-        assert_eq!(slate_area_polygon_y(2, 0.0, 10.0, 30.0, 0.0, 20.0), (10.0, 10.0, 10.0));
+        assert_eq!(
+            slate_area_polygon_y(2, 0.0, 10.0, 30.0, 0.0, 20.0),
+            (10.0, 10.0, 10.0)
+        );
         // S: leftDown > rightDown -> all rightDown.
-        assert_eq!(slate_area_polygon_y(2, 0.0, 30.0, 10.0, 0.0, 20.0), (10.0, 10.0, 10.0));
+        assert_eq!(
+            slate_area_polygon_y(2, 0.0, 30.0, 10.0, 0.0, 20.0),
+            (10.0, 10.0, 10.0)
+        );
         // E: rightUp < rightDown -> all rightUp.
-        assert_eq!(slate_area_polygon_y(3, 0.0, 0.0, 30.0, 10.0, 20.0), (10.0, 10.0, 10.0));
+        assert_eq!(
+            slate_area_polygon_y(3, 0.0, 0.0, 30.0, 10.0, 20.0),
+            (10.0, 10.0, 10.0)
+        );
         // E: rightUp > rightDown -> all rightDown.
-        assert_eq!(slate_area_polygon_y(3, 0.0, 0.0, 10.0, 30.0, 20.0), (10.0, 10.0, 10.0));
+        assert_eq!(
+            slate_area_polygon_y(3, 0.0, 0.0, 10.0, 30.0, 20.0),
+            (10.0, 10.0, 10.0)
+        );
         // C ABI writes.
         let (mut a, mut b, mut c) = (0.0f32, 0.0f32, 0.0f32);
         unsafe { pc_slate_area_polygon_y(0, 10.0, 0.0, 0.0, 30.0, 20.0, &mut a, &mut b, &mut c) };

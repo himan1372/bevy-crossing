@@ -230,11 +230,7 @@ pub fn count_tickets(pockets: &[u16], month: u8) -> u8 {
 /// loop: `req -= count` runs even when `count > req` (negative req ends
 /// the loop via the `req > 0` condition). Returns per-slot removals as
 /// (slot, removed_count, leftover_count).
-pub fn consume_tickets(
-    pockets: &mut [u16],
-    month: u8,
-    mut req: i16,
-) -> Vec<(usize, u8, u8)> {
+pub fn consume_tickets(pockets: &mut [u16], month: u8, mut req: i16) -> Vec<(usize, u8, u8)> {
     let mut out = Vec::new();
     let mut i = 0;
     while i < pockets.len() && req > 0 {
@@ -266,12 +262,10 @@ pub struct SpecialMail {
 }
 
 /// Minimal mailbox model: `mPO_copy_contents` needs one free slot.
-#[derive(Clone, Debug)]
-#[derive(Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Mailbox {
     pub slots: [Option<SpecialMail>; MAILBOX_SIZE],
 }
-
 
 impl Mailbox {
     pub fn free_slot(&self) -> Option<usize> {
@@ -485,7 +479,10 @@ mod tests {
 
     #[test]
     fn special_delivery_tickets_first_then_orders() {
-        let mut tickets = TicketOverflow { expiry_month: 5, mail_storage: 7 };
+        let mut tickets = TicketOverflow {
+            expiry_month: 5,
+            mail_storage: 7,
+        };
         let mut orders = CatalogOrders::default();
         orders.place(0x3001, 2).unwrap();
         orders.place(0x3002, 4).unwrap();
@@ -498,11 +495,17 @@ mod tests {
         assert_eq!(tickets.mail_storage, 0);
         assert!(orders.slots.iter().all(|o| o.item == EMPTY_NO));
         // Ticket mail used 0x057; order mail used 0x049 + shop_level.
-        let mut templates: Vec<u16> = mb.slots.iter().filter_map(|s| s.as_ref().map(|m| m.template)).collect();
+        let mut templates: Vec<u16> = mb
+            .slots
+            .iter()
+            .filter_map(|s| s.as_ref().map(|m| m.template))
+            .collect();
         templates.sort();
         assert_eq!(templates, vec![0x049 + 2, 0x049 + 4, 0x057, 0x057]);
         // Ticket presents encode stacks 5 and 2.
-        let mut counts: Vec<u8> = mb.slots.iter()
+        let mut counts: Vec<u8> = mb
+            .slots
+            .iter()
             .filter_map(|s| s.as_ref())
             .filter(|m| m.template == 0x057)
             .map(|m| ticket_count(m.present))
@@ -513,13 +516,19 @@ mod tests {
 
     #[test]
     fn special_delivery_stops_at_full_mailbox() {
-        let mut tickets = TicketOverflow { expiry_month: 5, mail_storage: 12 };
+        let mut tickets = TicketOverflow {
+            expiry_month: 5,
+            mail_storage: 12,
+        };
         let mut orders = CatalogOrders::default();
         orders.place(0x3001, 1).unwrap();
         let mut mb = Mailbox::default();
         // Fill 9 of 10 slots: only one ticket mail fits.
         for i in 0..9 {
-            mb.slots[i] = Some(SpecialMail { template: 0, present: 0 });
+            mb.slots[i] = Some(SpecialMail {
+                template: 0,
+                present: 0,
+            });
         }
         let out = deliver_special_mail(&mut tickets, &mut orders, &mut mb);
         assert_eq!(out.ticket_mails, 1);

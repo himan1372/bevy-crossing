@@ -26,6 +26,7 @@ pub struct AlbuminAsset {
 
 /// The 17 albumin outputs with their authored assets, in table order:
 /// south row (7), east row (5), west row (5).
+#[rustfmt::skip]
 pub const ALBUMIN_ASSETS: [AlbuminAsset; 17] = [
     AlbuminAsset { block_type: 22, bg: "GRD_S_C1_R1_1", fg: "GRD_S_C1_R1_1_29", variants: 3 },
     AlbuminAsset { block_type: 23, bg: "GRD_S_C2_R1_1", fg: "GRD_S_C2_R1_1", variants: 2 },
@@ -78,7 +79,12 @@ pub fn world_y(corner: i8, base_height: f32) -> f32 {
 
 /// Collision unit for one albumin asset (by ALBUMIN_ASSETS index 0..16)
 /// at unit (x, z), each 0..16. Returns (slate, center, tl, bl, br, tr, attr).
-pub fn albumin_unit(asset_idx: usize, x: usize, z: usize) -> Option<crate::albumin_collision_data::ColUnit> {    if asset_idx < 17 && x < 16 && z < 16 {
+pub fn albumin_unit(
+    asset_idx: usize,
+    x: usize,
+    z: usize,
+) -> Option<crate::albumin_collision_data::ColUnit> {
+    if asset_idx < 17 && x < 16 && z < 16 {
         Some(crate::albumin_collision_data::ALBUMIN_COLLISION[asset_idx][z * 16 + x])
     } else {
         None
@@ -97,7 +103,15 @@ pub fn keep_h_init(asset_idx: usize, x: usize, z: usize) -> Option<u8> {
 /// bit 31: slate_flag (1), bits 30..26: center (5), 25..21: top_left (5),
 /// 20..16: bot_left (5), 15..11: bot_right (5), 10..6: top_right (5),
 /// bits 5..0: unit_attribute (6). Heights are 5-bit (max 31).
-pub fn pack_col_unit(slate: u32, center: u32, tl: u32, bl: u32, br: u32, tr: u32, attr: u32) -> u32 {
+pub fn pack_col_unit(
+    slate: u32,
+    center: u32,
+    tl: u32,
+    bl: u32,
+    br: u32,
+    tr: u32,
+    attr: u32,
+) -> u32 {
     ((slate & 1) << 31)
         | ((center & 31) << 26)
         | ((tl & 31) << 21)
@@ -214,7 +228,7 @@ mod tests {
         assert_eq!(unpack_col_unit(raw), (1, 16, 12, 4, 8, 20, 13));
         assert_eq!(raw >> 31, 1); // slate at bit 31
         assert_eq!(raw & 63, 13); // attribute in low 6 bits
-        // C ABI.
+                                  // C ABI.
         assert_eq!(pc_albumin_asset_idx(22), 0);
         assert_eq!(pc_albumin_asset_idx(38), 16);
         assert_eq!(pc_albumin_asset_idx(40), 255);

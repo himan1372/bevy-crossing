@@ -418,10 +418,22 @@ pub fn cardinal_wall_from_units(
     use crate::segment_map::WallName;
     use crate::terrain_walls::wall_name as wn;
     let (h0, h1): ([f32; 2], [f32; 2]) = match wall_name {
-        wn::UP => ([unit0.left_up, unit0.right_up], [unit1.left_down, unit1.right_down]),
-        wn::LEFT => ([unit0.left_up, unit0.left_down], [unit1.right_up, unit1.right_down]),
-        wn::DOWN => ([unit0.left_down, unit0.right_down], [unit1.left_up, unit1.right_up]),
-        wn::RIGHT => ([unit0.right_up, unit0.right_down], [unit1.left_up, unit1.left_down]),
+        wn::UP => (
+            [unit0.left_up, unit0.right_up],
+            [unit1.left_down, unit1.right_down],
+        ),
+        wn::LEFT => (
+            [unit0.left_up, unit0.left_down],
+            [unit1.right_up, unit1.right_down],
+        ),
+        wn::DOWN => (
+            [unit0.left_down, unit0.right_down],
+            [unit1.left_up, unit1.right_up],
+        ),
+        wn::RIGHT => (
+            [unit0.right_up, unit0.right_down],
+            [unit1.left_up, unit1.left_down],
+        ),
         _ => return None,
     };
     let (normal, angle) = search_wall_flag(wall_name, h0, h1)?;
@@ -435,11 +447,20 @@ pub fn cardinal_wall_from_units(
     };
     let (start, end) = crate::segment_map::unit_no_name_2_start_end(ux, uz, name, check_type);
     // Faithful @BUG: UP does not overwrite wall_name.
-    let final_name = if wall_name == wn::UP { existing_wall_name } else { wall_name };
+    let final_name = if wall_name == wn::UP {
+        existing_wall_name
+    } else {
+        wall_name
+    };
     Some(TerrainWall {
         start,
         end,
-        bounds: WallBounds { start_top: s0t, start_btm: s0b, end_top: e0t, end_btm: e0b },
+        bounds: WallBounds {
+            start_top: s0t,
+            start_btm: s0b,
+            end_top: e0t,
+            end_btm: e0b,
+        },
         normal,
         normal_angle_deg: angle,
         wall_name: final_name,
@@ -576,11 +597,13 @@ pub fn bridge_should_make_slate(attribute: u8, old_in_water: bool) -> bool {
 // Canonical edge-ownership tables (`l_make33/55/77_coldata`, verbatim).
 // Bit 0=UP, 1=LEFT, 2=DOWN, 3=RIGHT. Only UP/LEFT bits are ever set:
 // each shared edge is constructed once, from the canonical side.
+#[rustfmt::skip]
 const MAKE_33_COLDATA: [u8; 9] = [
     0x00, 0x02, 0x02,
     0x01, 0x03, 0x03,
     0x01, 0x03, 0x03,
 ];
+#[rustfmt::skip]
 const MAKE_55_COLDATA: [u8; 25] = [
     0x00, 0x02, 0x02, 0x02, 0x02,
     0x01, 0x03, 0x03, 0x03, 0x03,
@@ -588,6 +611,7 @@ const MAKE_55_COLDATA: [u8; 25] = [
     0x01, 0x03, 0x03, 0x03, 0x03,
     0x01, 0x03, 0x03, 0x03, 0x03,
 ];
+#[rustfmt::skip]
 const MAKE_77_COLDATA: [u8; 49] = [
     0x00, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
     0x01, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03,
@@ -633,18 +657,10 @@ pub fn cardinal_neighbor_index(index: usize, size: usize, wall_name: u8) -> Opti
 /// without the normal selection).
 pub fn cardinal_edge_exists(unit0: &TerrainUnit, unit1: &TerrainUnit, wall_name: u8) -> bool {
     match wall_name {
-        wall_name::UP => {
-            unit0.left_up != unit1.left_down || unit0.right_up != unit1.right_down
-        }
-        wall_name::LEFT => {
-            unit0.left_up != unit1.right_up || unit0.left_down != unit1.right_down
-        }
-        wall_name::DOWN => {
-            unit0.left_down != unit1.left_up || unit0.right_down != unit1.right_up
-        }
-        wall_name::RIGHT => {
-            unit0.right_up != unit1.left_up || unit0.right_down != unit1.left_down
-        }
+        wall_name::UP => unit0.left_up != unit1.left_down || unit0.right_up != unit1.right_down,
+        wall_name::LEFT => unit0.left_up != unit1.right_up || unit0.left_down != unit1.right_down,
+        wall_name::DOWN => unit0.left_down != unit1.left_up || unit0.right_down != unit1.right_up,
+        wall_name::RIGHT => unit0.right_up != unit1.left_up || unit0.right_down != unit1.left_down,
         _ => false,
     }
 }
@@ -748,7 +764,11 @@ pub fn check_height_exactly(
 ) -> Option<(f32, f32)> {
     if is_move_bg {
         let (top, bot) = (bounds.end_top, bounds.end_btm);
-        return if pos_y + 3.0 <= top { Some((top, bot)) } else { None };
+        return if pos_y + 3.0 <= top {
+            Some((top, bot))
+        } else {
+            None
+        };
     }
     let (axis, p, s) = match wall_name {
         wall_name::LEFT | wall_name::RIGHT => (end[1] - start[1], point[1], start[1]),
@@ -864,7 +884,12 @@ pub unsafe extern "C" fn pc_check_height_exactly(
     out_top: *mut f32,
     out_bot: *mut f32,
 ) -> u8 {
-    let bounds = WallBounds { start_top, start_btm, end_top, end_btm };
+    let bounds = WallBounds {
+        start_top,
+        start_btm,
+        end_top,
+        end_btm,
+    };
     match check_height_exactly(
         &bounds,
         [start_x, start_z],
@@ -938,7 +963,12 @@ pub extern "C" fn pc_bridge_quarter_attribute(bridge_attr: u8, quarter: u8) -> u
 
 /// C ABI: slate detail for raw corner samples. Returns 4 (SLATE_UP) or 5 (SLATE_DOWN).
 #[no_mangle]
-pub extern "C" fn pc_search_slate_detail(bot_right: u32, top_left: u32, top_right: u32, bot_left: u32) -> u8 {
+pub extern "C" fn pc_search_slate_detail(
+    bot_right: u32,
+    top_left: u32,
+    top_right: u32,
+    bot_left: u32,
+) -> u8 {
     search_slate_detail(bot_right, top_left, top_right, bot_left)
 }
 
@@ -976,27 +1006,56 @@ mod tests {
     use crate::terrain_walls::wall_name as wn;
 
     fn unit(attr: u8, lu: f32, ld: f32, rd: f32, ru: f32) -> TerrainUnit {
-        TerrainUnit { left_up: lu, left_down: ld, right_down: rd, right_up: ru, center: 0.0, slate: false, attribute: attr }
+        TerrainUnit {
+            left_up: lu,
+            left_down: ld,
+            right_down: rd,
+            right_up: ru,
+            center: 0.0,
+            slate: false,
+            attribute: attr,
+        }
     }
 
     #[test]
     fn wall_flag_normals_per_direction() {
         // UP: neighbor higher -> +Z/0deg.
-        assert_eq!(search_wall_flag(wn::UP, [10.0, 10.0], [30.0, 30.0]), Some(([0.0, 1.0], 0.0)));
+        assert_eq!(
+            search_wall_flag(wn::UP, [10.0, 10.0], [30.0, 30.0]),
+            Some(([0.0, 1.0], 0.0))
+        );
         // UP: current higher -> -Z/180deg.
-        assert_eq!(search_wall_flag(wn::UP, [30.0, 30.0], [10.0, 10.0]), Some(([0.0, -1.0], 180.0)));
+        assert_eq!(
+            search_wall_flag(wn::UP, [30.0, 30.0], [10.0, 10.0]),
+            Some(([0.0, -1.0], 180.0))
+        );
         // UP: equal heights -> no wall.
         assert_eq!(search_wall_flag(wn::UP, [10.0, 10.0], [10.0, 10.0]), None);
         // One endpoint differing is enough.
         assert!(search_wall_flag(wn::UP, [10.0, 10.0], [10.0, 30.0]).is_some());
         // LEFT: neighbor higher -> +X/90deg.
-        assert_eq!(search_wall_flag(wn::LEFT, [5.0, 5.0], [9.0, 9.0]), Some(([1.0, 0.0], 90.0)));
-        assert_eq!(search_wall_flag(wn::LEFT, [9.0, 9.0], [5.0, 5.0]), Some(([-1.0, 0.0], -90.0)));
+        assert_eq!(
+            search_wall_flag(wn::LEFT, [5.0, 5.0], [9.0, 9.0]),
+            Some(([1.0, 0.0], 90.0))
+        );
+        assert_eq!(
+            search_wall_flag(wn::LEFT, [9.0, 9.0], [5.0, 5.0]),
+            Some(([-1.0, 0.0], -90.0))
+        );
         // DOWN: neighbor higher -> -Z/180deg.
-        assert_eq!(search_wall_flag(wn::DOWN, [5.0, 5.0], [9.0, 9.0]), Some(([0.0, -1.0], 180.0)));
+        assert_eq!(
+            search_wall_flag(wn::DOWN, [5.0, 5.0], [9.0, 9.0]),
+            Some(([0.0, -1.0], 180.0))
+        );
         // RIGHT: neighbor higher -> -X/-90deg.
-        assert_eq!(search_wall_flag(wn::RIGHT, [5.0, 5.0], [9.0, 9.0]), Some(([-1.0, 0.0], -90.0)));
-        assert_eq!(search_wall_flag(wn::RIGHT, [9.0, 9.0], [5.0, 5.0]), Some(([1.0, 0.0], 90.0)));
+        assert_eq!(
+            search_wall_flag(wn::RIGHT, [5.0, 5.0], [9.0, 9.0]),
+            Some(([-1.0, 0.0], -90.0))
+        );
+        assert_eq!(
+            search_wall_flag(wn::RIGHT, [9.0, 9.0], [5.0, 5.0]),
+            Some(([1.0, 0.0], 90.0))
+        );
     }
 
     #[test]
@@ -1017,12 +1076,24 @@ mod tests {
     fn bridge_policy_matrix() {
         use attribute::*;
         // No water history: always normal.
-        assert_eq!(terrain_wall_policy(WOOD, BRIDGE_FIRST, false), WallPolicy::Normal);
+        assert_eq!(
+            terrain_wall_policy(WOOD, BRIDGE_FIRST, false),
+            WallPolicy::Normal
+        );
         assert_eq!(terrain_wall_policy(0, 0, false), WallPolicy::Normal);
         // WOOD <-> bridge: flatten the bridge side.
-        assert_eq!(terrain_wall_policy(WOOD, 27, true), WallPolicy::FlattenSecond);
-        assert_eq!(terrain_wall_policy(35, WOOD, true), WallPolicy::FlattenFirst);
-        assert_eq!(terrain_wall_policy(WOOD, 35, true), WallPolicy::FlattenSecond);
+        assert_eq!(
+            terrain_wall_policy(WOOD, 27, true),
+            WallPolicy::FlattenSecond
+        );
+        assert_eq!(
+            terrain_wall_policy(35, WOOD, true),
+            WallPolicy::FlattenFirst
+        );
+        assert_eq!(
+            terrain_wall_policy(WOOD, 35, true),
+            WallPolicy::FlattenSecond
+        );
         // Bridge <-> bridge: suppress.
         assert_eq!(terrain_wall_policy(27, 31, true), WallPolicy::Suppress);
         // Bridge <-> ordinary non-wood: suppress.
@@ -1042,7 +1113,10 @@ mod tests {
     fn bridge_flattening() {
         let u = unit(27, 40.0, 30.0, 50.0, 20.0);
         let f = flatten_bridge_unit(&u);
-        assert_eq!((f.left_up, f.left_down, f.right_down, f.right_up), (20.0, 20.0, 20.0, 20.0));
+        assert_eq!(
+            (f.left_up, f.left_down, f.right_down, f.right_up),
+            (20.0, 20.0, 20.0, 20.0)
+        );
         assert!(!f.slate);
         assert_eq!(f.attribute, 27); // attribute preserved
     }
@@ -1062,15 +1136,15 @@ mod tests {
     #[test]
     fn bridge_search_masks() {
         // Bits: 0=N,1=W,2=S,3=E,4=NW,5=NE,6=SE,7=SW.
-        assert_eq!(bridge_search_water_mask(27), Some(3));   // NW -> N+W
-        assert_eq!(bridge_search_water_mask(28), Some(6));   // SW -> W+S
-        assert_eq!(bridge_search_water_mask(29), Some(12));  // SE -> S+E
-        assert_eq!(bridge_search_water_mask(30), Some(9));   // NE -> N+E
+        assert_eq!(bridge_search_water_mask(27), Some(3)); // NW -> N+W
+        assert_eq!(bridge_search_water_mask(28), Some(6)); // SW -> W+S
+        assert_eq!(bridge_search_water_mask(29), Some(12)); // SE -> S+E
+        assert_eq!(bridge_search_water_mask(30), Some(9)); // NE -> N+E
         assert_eq!(bridge_search_water_mask(31), Some(240)); // center -> diagonals
-        assert_eq!(bridge_search_water_mask(32), Some(1));   // N
-        assert_eq!(bridge_search_water_mask(33), Some(8));   // E
-        assert_eq!(bridge_search_water_mask(34), Some(2));   // W
-        assert_eq!(bridge_search_water_mask(35), Some(4));   // S
+        assert_eq!(bridge_search_water_mask(32), Some(1)); // N
+        assert_eq!(bridge_search_water_mask(33), Some(8)); // E
+        assert_eq!(bridge_search_water_mask(34), Some(2)); // W
+        assert_eq!(bridge_search_water_mask(35), Some(4)); // S
         assert_eq!(bridge_search_water_mask(26), None);
         assert_eq!(pc_bridge_search_water_mask(31), 240);
     }
@@ -1096,7 +1170,8 @@ mod tests {
         // UP wall: current unit high side at 10, neighbor at 30 -> normal +Z.
         let u0 = unit(0, 10.0, 10.0, 10.0, 10.0);
         let u1 = unit(0, 30.0, 30.0, 30.0, 30.0);
-        let w = cardinal_wall_from_units(&u0, &u1, 1.0, 1.0, wn::UP, CheckType::Normal, 0xAA).unwrap();
+        let w =
+            cardinal_wall_from_units(&u0, &u1, 1.0, 1.0, wn::UP, CheckType::Normal, 0xAA).unwrap();
         assert_eq!(w.normal, [0.0, 1.0]);
         assert_eq!(w.normal_angle_deg, 0.0);
         assert_eq!((w.bounds.start_top, w.bounds.start_btm), (30.0, 10.0));
@@ -1105,10 +1180,13 @@ mod tests {
         // @BUG reproduced: UP keeps the pre-existing wall_name.
         assert_eq!(w.wall_name, 0xAA);
         // LEFT overwrites wall_name.
-        let w = cardinal_wall_from_units(&u0, &u1, 1.0, 1.0, wn::LEFT, CheckType::Normal, 0xAA).unwrap();
+        let w = cardinal_wall_from_units(&u0, &u1, 1.0, 1.0, wn::LEFT, CheckType::Normal, 0xAA)
+            .unwrap();
         assert_eq!(w.wall_name, wn::LEFT);
         // Equal heights -> no wall.
-        assert!(cardinal_wall_from_units(&u0, &u0, 1.0, 1.0, wn::UP, CheckType::Normal, 0).is_none());
+        assert!(
+            cardinal_wall_from_units(&u0, &u0, 1.0, 1.0, wn::UP, CheckType::Normal, 0).is_none()
+        );
     }
 
     #[test]
@@ -1169,8 +1247,8 @@ mod tests {
 
     #[test]
     fn bridge_water_search_kernel() {
-        use attribute::*;
         use super::BridgeWaterSearch;
+        use attribute::*;
         // Attr 27 (wood NW): mask 3 = N(0) + W(1).
         let mut n = [GRASS0; 8];
         n[0] = WATER; // north neighbor is water
@@ -1224,29 +1302,68 @@ mod tests {
         assert!(bridge_should_make_slate(26, true));
         // C ABI.
         let n = [WATER; 8];
-        assert_eq!(unsafe { pc_bridge_water_search(27, 1, 0, n.as_ptr()) }, WATER);
-        assert_eq!(unsafe { pc_bridge_water_search(27, 0, 0, n.as_ptr()) }, 0xFF);
+        assert_eq!(
+            unsafe { pc_bridge_water_search(27, 1, 0, n.as_ptr()) },
+            WATER
+        );
+        assert_eq!(
+            unsafe { pc_bridge_water_search(27, 0, 0, n.as_ptr()) },
+            0xFF
+        );
         let n = [GRASS0; 8];
-        assert_eq!(unsafe { pc_bridge_water_search(27, 1, 0, n.as_ptr()) }, 0xFE);
-        assert_eq!(unsafe { pc_bridge_water_search(27, 1, 0, core::ptr::null()) }, 0xFF);
+        assert_eq!(
+            unsafe { pc_bridge_water_search(27, 1, 0, n.as_ptr()) },
+            0xFE
+        );
+        assert_eq!(
+            unsafe { pc_bridge_water_search(27, 1, 0, core::ptr::null()) },
+            0xFF
+        );
     }
 
     #[test]
     fn slate_ground_height() {
         // SLATE_UP diagonal (top_left=4, bot_right=1): N/W areas -> top_left, S/E -> bot_right.
-        assert_eq!(get_area_y_slating_unit(4, 0, 1, 0, wall_name::SLATE_UP, 0), 40.0);
-        assert_eq!(get_area_y_slating_unit(4, 0, 1, 0, wall_name::SLATE_UP, 1), 40.0);
-        assert_eq!(get_area_y_slating_unit(4, 0, 1, 0, wall_name::SLATE_UP, 2), 10.0);
-        assert_eq!(get_area_y_slating_unit(4, 0, 1, 0, wall_name::SLATE_UP, 3), 10.0);
+        assert_eq!(
+            get_area_y_slating_unit(4, 0, 1, 0, wall_name::SLATE_UP, 0),
+            40.0
+        );
+        assert_eq!(
+            get_area_y_slating_unit(4, 0, 1, 0, wall_name::SLATE_UP, 1),
+            40.0
+        );
+        assert_eq!(
+            get_area_y_slating_unit(4, 0, 1, 0, wall_name::SLATE_UP, 2),
+            10.0
+        );
+        assert_eq!(
+            get_area_y_slating_unit(4, 0, 1, 0, wall_name::SLATE_UP, 3),
+            10.0
+        );
         // SLATE_DOWN diagonal (top_right=3, bot_left=2): N/E -> top_right, W/S -> bot_left.
-        assert_eq!(get_area_y_slating_unit(0, 2, 0, 3, wall_name::SLATE_DOWN, 0), 30.0);
-        assert_eq!(get_area_y_slating_unit(0, 2, 0, 3, wall_name::SLATE_DOWN, 3), 30.0);
-        assert_eq!(get_area_y_slating_unit(0, 2, 0, 3, wall_name::SLATE_DOWN, 1), 20.0);
-        assert_eq!(get_area_y_slating_unit(0, 2, 0, 3, wall_name::SLATE_DOWN, 2), 20.0);
+        assert_eq!(
+            get_area_y_slating_unit(0, 2, 0, 3, wall_name::SLATE_DOWN, 0),
+            30.0
+        );
+        assert_eq!(
+            get_area_y_slating_unit(0, 2, 0, 3, wall_name::SLATE_DOWN, 3),
+            30.0
+        );
+        assert_eq!(
+            get_area_y_slating_unit(0, 2, 0, 3, wall_name::SLATE_DOWN, 1),
+            20.0
+        );
+        assert_eq!(
+            get_area_y_slating_unit(0, 2, 0, 3, wall_name::SLATE_DOWN, 2),
+            20.0
+        );
         // SLATE_UP fallthrough: an invalid area falls into the SLATE_DOWN
         // inner switch, hits `default`, and the function returns 0.0.
         // (Real areas always come from GetUnitArea as 0-3.)
-        assert_eq!(get_area_y_slating_unit(4, 2, 1, 3, wall_name::SLATE_UP, 9), 0.0);
+        assert_eq!(
+            get_area_y_slating_unit(4, 2, 1, 3, wall_name::SLATE_UP, 9),
+            0.0
+        );
         // Ground dispatch uses a single comparison, unlike search_slate_detail.
         assert_eq!(slate_detail_for_ground(4, 1), wall_name::SLATE_UP);
         assert_eq!(slate_detail_for_ground(1, 1), wall_name::SLATE_DOWN);
@@ -1343,33 +1460,97 @@ mod tests {
 
     #[test]
     fn height_interpolation() {
-        let b = WallBounds { start_top: 20.0, start_btm: 10.0, end_top: 40.0, end_btm: 30.0 };
+        let b = WallBounds {
+            start_top: 20.0,
+            start_btm: 10.0,
+            end_top: 40.0,
+            end_btm: 30.0,
+        };
         // UP wall along X: midpoint interpolates to 30/20.
-        let r = check_height_exactly(&b, [0.0, 0.0], [100.0, 0.0], wall_name::UP, 0.0, [50.0, 0.0], false);
+        let r = check_height_exactly(
+            &b,
+            [0.0, 0.0],
+            [100.0, 0.0],
+            wall_name::UP,
+            0.0,
+            [50.0, 0.0],
+            false,
+        );
         assert_eq!(r, Some((30.0, 20.0)));
         // LEFT wall along Z.
-        let r = check_height_exactly(&b, [0.0, 0.0], [0.0, 100.0], wall_name::LEFT, 0.0, [0.0, 25.0], false);
+        let r = check_height_exactly(
+            &b,
+            [0.0, 0.0],
+            [0.0, 100.0],
+            wall_name::LEFT,
+            0.0,
+            [0.0, 25.0],
+            false,
+        );
         assert_eq!(r, Some((25.0, 15.0)));
         // Gate: pos_y + 3 > top -> None.
-        let r = check_height_exactly(&b, [0.0, 0.0], [100.0, 0.0], wall_name::UP, 38.0, [50.0, 0.0], false);
+        let r = check_height_exactly(
+            &b,
+            [0.0, 0.0],
+            [100.0, 0.0],
+            wall_name::UP,
+            38.0,
+            [50.0, 0.0],
+            false,
+        );
         assert_eq!(r, None);
         // Zero-length axis -> None.
-        let r = check_height_exactly(&b, [5.0, 0.0], [5.0, 0.0], wall_name::UP, 0.0, [5.0, 0.0], false);
+        let r = check_height_exactly(
+            &b,
+            [5.0, 0.0],
+            [5.0, 0.0],
+            wall_name::UP,
+            0.0,
+            [5.0, 0.0],
+            false,
+        );
         assert_eq!(r, None);
         // Moving wall: end bounds directly.
-        let r = check_height_exactly(&b, [0.0, 0.0], [100.0, 0.0], wall_name::UP, 0.0, [50.0, 0.0], true);
+        let r = check_height_exactly(
+            &b,
+            [0.0, 0.0],
+            [100.0, 0.0],
+            wall_name::UP,
+            0.0,
+            [50.0, 0.0],
+            true,
+        );
         assert_eq!(r, Some((40.0, 30.0)));
         // Slate wall names are not handled here (GetWallHeight path).
-        let r = check_height_exactly(&b, [0.0, 0.0], [100.0, 0.0], wall_name::SLATE_UP, 0.0, [50.0, 0.0], false);
+        let r = check_height_exactly(
+            &b,
+            [0.0, 0.0],
+            [100.0, 0.0],
+            wall_name::SLATE_UP,
+            0.0,
+            [50.0, 0.0],
+            false,
+        );
         assert_eq!(r, None);
         // C ABI.
         let (mut top, mut bot) = (0.0f32, 0.0f32);
         let ok = unsafe {
             pc_check_height_exactly(
-                20.0, 10.0, 40.0, 30.0,
-                0.0, 0.0, 100.0, 0.0,
-                wall_name::UP, 0.0, 50.0, 0.0, 0,
-                &mut top as *mut f32, &mut bot as *mut f32,
+                20.0,
+                10.0,
+                40.0,
+                30.0,
+                0.0,
+                0.0,
+                100.0,
+                0.0,
+                wall_name::UP,
+                0.0,
+                50.0,
+                0.0,
+                0,
+                &mut top as *mut f32,
+                &mut bot as *mut f32,
             )
         };
         assert_eq!(ok, 1);

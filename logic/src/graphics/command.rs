@@ -81,7 +81,8 @@ pub mod op {
     pub const G_DMA_IO: u8 = 0xD6;
     pub const G_SPECIAL_1: u8 = 0xD5;
     pub const G_SPECIAL_2: u8 = 0xD4;
-    pub const G_SPECIAL_3: u8 = 0xD3;    pub const G_SPNOOP: u8 = 0xE0;
+    pub const G_SPECIAL_3: u8 = 0xD3;
+    pub const G_SPNOOP: u8 = 0xE0;
     pub const G_SETOTHERMODE_L: u8 = 0xE2;
     pub const G_SETOTHERMODE_H: u8 = 0xE3;
     pub const G_TEXRECT: u8 = 0xE4;
