@@ -18,26 +18,21 @@ use bevy::text::FontSize;
 use rustimal_logic::shop::{self, ShopTier};
 use serde::{Deserialize, Serialize};
 
-use crate::dialogue::DialogueState;
 use crate::ecology::EquippedTool;
+use crate::input::{Action, Actions, InputFocus, InteractSet};
 use crate::interaction::{Facing, PlayerInventory};
 use crate::player::Player;
+use crate::states::{AppState, GameplaySet};
 use crate::town::Town;
 
-/// Town map vs. shop interior.
-#[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+/// Town map vs. shop interior. Lives only while in game.
+#[derive(SubStates, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[source(AppState = AppState::InGame)]
 pub enum ShopLocation {
     #[default]
     Town,
     Inside,
 }
-
-/// System set for the shop-door E handler. Runs before the town `interact`
-/// system (same slot pattern as `HouseInputSet`/`MailInputSet`) so a
-/// successful enter (which teleports the player far away) can't double-fire
-/// talk/pickup that frame.
-#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ShopInputSet;
 
 /// Exterior shop building: door position plus the blocked footprint the
 /// player and villagers can't walk through.
@@ -533,16 +528,13 @@ fn can_enter_door(building: &ShopBuilding, pos: Vec3, facing_dir: Vec3) -> bool 
 
 /// E at the exterior shop door: teleport into the interior.
 ///
-/// Runs in [`ShopInputSet`], before the town `interact` system, so a
-/// successful enter (which moves the player far away) means the talk/pickup
-/// query finds nothing that same frame.
+/// Runs in [`InteractSet::Doors`]: a successful enter consumes the press,
+/// so talk/pickup can't also fire on it.
 fn shop_enter(
-    keyboard: Res<ButtonInput<KeyCode>>,
+    mut actions: ResMut<Actions>,
+    focus: Res<InputFocus>,
     state: Res<State<ShopLocation>>,
-    dialogue: Res<DialogueState>,
     tool: Res<EquippedTool>,
-    mail_ui: Res<crate::mail::MailUi>,
-    quest_ui: Res<crate::quest::QuestUi>,
     building: Option<Res<ShopBuilding>>,
     mut next_state: ResMut<NextState<ShopLocation>>,
     mut commands: Commands,
@@ -551,11 +543,7 @@ fn shop_enter(
     if *state != ShopLocation::Town {
         return;
     }
-    if !keyboard.just_pressed(KeyCode::KeyE) || dialogue.active {
-        return;
-    }
-    // The mail or quest UI claims the E key while open.
-    if mail_ui.open || quest_ui.open {
+    if !actions.just_pressed(Action::Interact) || !focus.is_world() {
         return;
     }
     // A held tool claims E for the ecology plugin; the door needs empty hands.
@@ -569,7 +557,9 @@ fn shop_enter(
     let Ok((mut transform, mut facing)) = player_query.single_mut() else {
         return;
     };
-    if !can_enter_door(&building, transform.translation, facing.dir) {
+    if !can_enter_door(&building, transform.translation, facing.dir)
+        || !actions.consume(Action::Interact)
+    {
         return;
     }
     commands.insert_resource(ShopReturnPos(transform.translation));
@@ -583,17 +573,17 @@ fn shop_enter(
 /// E at the interior door: return to the town map. Only when the menu is
 /// closed — an open menu claims the E key.
 fn shop_exit(
-    keyboard: Res<ButtonInput<KeyCode>>,
+    mut actions: ResMut<Actions>,
+    focus: Res<InputFocus>,
     state: Res<State<ShopLocation>>,
-    ui: Res<ShopUi>,
     mut next_state: ResMut<NextState<ShopLocation>>,
     return_pos: Option<Res<ShopReturnPos>>,
     mut player_query: Query<(&mut Transform, &mut Facing), With<Player>>,
 ) {
-    if *state != ShopLocation::Inside || ui.open {
+    if *state != ShopLocation::Inside || !focus.is_world() {
         return;
     }
-    if !keyboard.just_pressed(KeyCode::KeyE) {
+    if !actions.just_pressed(Action::Interact) {
         return;
     }
     let Ok((mut transform, mut facing)) = player_query.single_mut() else {
@@ -612,7 +602,7 @@ fn shop_exit(
     if dist > DOOR_RANGE_IN || dist < 0.001 {
         return;
     }
-    if facing.dir.dot(to_door / dist) < 0.5 {
+    if facing.dir.dot(to_door / dist) < 0.5 || !actions.consume(Action::Interact) {
         return;
     }
     transform.translation = return_pos.map(|r| r.0).unwrap_or(Vec3::new(0.0, 1.0, 5.0));
@@ -624,17 +614,17 @@ fn shop_exit(
 
 /// E facing Tom Nook (behind the counter): open the shop menu.
 fn nook_interact(
-    keyboard: Res<ButtonInput<KeyCode>>,
+    mut actions: ResMut<Actions>,
+    focus: Res<InputFocus>,
     state: Res<State<ShopLocation>>,
-    dialogue: Res<DialogueState>,
     mut ui: ResMut<ShopUi>,
     player_query: Query<(&Transform, &Facing), With<Player>>,
     mut panel_query: Query<&mut Visibility, With<ShopPanel>>,
 ) {
-    if *state != ShopLocation::Inside || ui.open || dialogue.active {
+    if *state != ShopLocation::Inside || ui.open || !focus.is_world() {
         return;
     }
-    if !keyboard.just_pressed(KeyCode::KeyE) {
+    if !actions.just_pressed(Action::Interact) {
         return;
     }
     let Ok((transform, facing)) = player_query.single() else {
@@ -646,7 +636,7 @@ fn nook_interact(
     if dist > NOOK_RANGE || dist < 0.001 {
         return;
     }
-    if facing.dir.dot(to_nook / dist) < NOOK_DOT {
+    if facing.dir.dot(to_nook / dist) < NOOK_DOT || !actions.consume(Action::Interact) {
         return;
     }
     ui.open = true;
@@ -703,7 +693,7 @@ fn maybe_upgrade(shop: &mut shop::ShopState) -> Option<ShopTier> {
 
 /// Shop menu key handling: 1/2 switch tabs, Up/Down select, Enter confirms.
 fn shop_menu_input(
-    keyboard: Res<ButtonInput<KeyCode>>,
+    actions: Res<Actions>,
     mut ui: ResMut<ShopUi>,
     mut shop: ResMut<ShopData>,
     mut inventory: ResMut<PlayerInventory>,
@@ -712,7 +702,7 @@ fn shop_menu_input(
     if !ui.open {
         return;
     }
-    if keyboard.just_pressed(KeyCode::Escape) {
+    if actions.just_pressed(Action::Cancel) {
         ui.open = false;
         if let Ok(mut vis) = panel_query.single_mut() {
             *vis = Visibility::Hidden;
@@ -720,13 +710,13 @@ fn shop_menu_input(
         println!("Shop menu closed");
         return;
     }
-    if keyboard.just_pressed(KeyCode::Digit1) {
+    if actions.just_pressed(Action::Tab1) {
         ui.mode = ShopMode::Buy;
         ui.selected = 0;
         ui.message.clear();
         return;
     }
-    if keyboard.just_pressed(KeyCode::Digit2) {
+    if actions.just_pressed(Action::Tab2) {
         ui.mode = ShopMode::Sell;
         ui.selected = 0;
         ui.message.clear();
@@ -740,15 +730,15 @@ fn shop_menu_input(
     if list_len == 0 {
         return;
     }
-    if keyboard.just_pressed(KeyCode::ArrowUp) {
+    if actions.just_pressed(Action::MenuUp) {
         ui.selected = ui.selected.checked_sub(1).unwrap_or(list_len - 1);
         return;
     }
-    if keyboard.just_pressed(KeyCode::ArrowDown) {
+    if actions.just_pressed(Action::MenuDown) {
         ui.selected = (ui.selected + 1) % list_len;
         return;
     }
-    if !keyboard.just_pressed(KeyCode::Enter) {
+    if !actions.just_pressed(Action::Confirm) {
         return;
     }
 
@@ -883,33 +873,21 @@ fn refresh_shop_ui(
 
 /// WASD movement inside the shop: room bounds plus counter/pedestal collision.
 fn shop_interior_movement(
-    keyboard: Res<ButtonInput<KeyCode>>,
+    actions: Res<Actions>,
+    focus: Res<InputFocus>,
     state: Res<State<ShopLocation>>,
-    ui: Res<ShopUi>,
     mut player_query: Query<(&mut Transform, &mut Facing), With<Player>>,
     obstacles: Res<ShopObstacles>,
     time: Res<Time>,
 ) {
-    if *state != ShopLocation::Inside || ui.open {
+    if *state != ShopLocation::Inside || !focus.is_world() {
         return;
     }
     let Ok((mut transform, mut facing)) = player_query.single_mut() else {
         return;
     };
 
-    let mut direction = Vec3::ZERO;
-    if keyboard.pressed(KeyCode::KeyW) || keyboard.pressed(KeyCode::ArrowUp) {
-        direction.z -= 1.0;
-    }
-    if keyboard.pressed(KeyCode::KeyS) || keyboard.pressed(KeyCode::ArrowDown) {
-        direction.z += 1.0;
-    }
-    if keyboard.pressed(KeyCode::KeyA) || keyboard.pressed(KeyCode::ArrowLeft) {
-        direction.x -= 1.0;
-    }
-    if keyboard.pressed(KeyCode::KeyD) || keyboard.pressed(KeyCode::ArrowRight) {
-        direction.x += 1.0;
-    }
+    let mut direction = actions.move_dir();
 
     if direction.length() > 0.0 {
         direction = direction.normalize();
@@ -958,7 +936,7 @@ pub struct ShopPlugin;
 
 impl Plugin for ShopPlugin {
     fn build(&self, app: &mut App) {
-        app.init_state::<ShopLocation>()
+        app.add_sub_state::<ShopLocation>()
             .insert_resource(ShopData::default())
             .insert_resource(ShopUi::default())
             .add_systems(Startup, find_shop_spot.after(crate::town::generate_town))
@@ -971,11 +949,25 @@ impl Plugin for ShopPlugin {
                     apply_loaded_shop,
                 ),
             )
-            .add_systems(Update, shop_enter.in_set(ShopInputSet))
-            .add_systems(Update, (shop_exit, nook_interact, shop_menu_input))
             .add_systems(
                 Update,
-                (refresh_shop_ui, shop_interior_movement, update_shop_hud),
+                (shop_enter, shop_exit)
+                    .in_set(InteractSet::Doors)
+                    .in_set(GameplaySet),
+            )
+            .add_systems(
+                Update,
+                nook_interact
+                    .in_set(InteractSet::Objects)
+                    .in_set(GameplaySet),
+            )
+            .add_systems(
+                Update,
+                shop_menu_input.in_set(InteractSet::Ui).in_set(GameplaySet),
+            )
+            .add_systems(
+                Update,
+                (refresh_shop_ui, shop_interior_movement, update_shop_hud).in_set(GameplaySet),
             );
     }
 }

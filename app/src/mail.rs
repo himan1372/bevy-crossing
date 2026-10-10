@@ -23,11 +23,12 @@ use bevy::text::FontSize;
 use rustimal_logic::letter_score::{score_letter, LetterRank, TrigramMode, MAIL_BODY_LEN};
 use serde::{Deserialize, Serialize};
 
-use crate::dialogue::DialogueState;
 use crate::house::{HouseState, PlayerHouse};
+use crate::input::{Action, Actions, InputFocus, InteractSet};
 use crate::interaction::{Facing, TalkEvent};
 use crate::npc::Villager;
 use crate::player::Player;
+use crate::states::GameplaySet;
 
 /// Max letters the mailbox holds (decomp `cap::MAILBOX`).
 pub const MAILBOX_CAP: usize = 10;
@@ -68,11 +69,6 @@ pub struct MailUi {
     write_recipient: usize,
     write_text: String,
 }
-
-/// System set for the mailbox E-key check — runs before the town
-/// `interact` system (same slot as `HouseInputSet`).
-#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct MailInputSet;
 
 /// World position of the mailbox (set at startup).
 #[derive(Resource, Default)]
@@ -325,17 +321,15 @@ fn spawn_mailbox(
 
 /// E at the mailbox: open the mail UI.
 ///
-/// Runs in `MailInputSet`, before the town `interact` system, so the same
+/// Runs in [`InteractSet::Objects`]: opening consumes the press, so the same
 /// E press can't also trigger talk/pickup.
 fn mailbox_interact(
-    keyboard: Res<ButtonInput<KeyCode>>,
+    mut actions: ResMut<Actions>,
+    focus: Res<InputFocus>,
     state: Res<State<HouseState>>,
     shop_loc: Res<State<crate::shop::ShopLocation>>,
-    dialogue: Res<DialogueState>,
     tool: Res<crate::ecology::EquippedTool>,
     mut ui: ResMut<MailUi>,
-    shop_ui: Res<crate::shop::ShopUi>,
-    quest_ui: Res<crate::quest::QuestUi>,
     mailbox_pos: Option<Res<MailboxPos>>,
     player_query: Query<(&Transform, &Facing), With<Player>>,
     mut panel_query: Query<&mut Visibility, With<MailPanel>>,
@@ -344,14 +338,14 @@ fn mailbox_interact(
     if *state != HouseState::Town || *shop_loc != crate::shop::ShopLocation::Town {
         return;
     }
-    if ui.open || shop_ui.open || dialogue.active || quest_ui.open {
+    if ui.open || !focus.is_world() {
         return;
     }
     // A held tool claims the E press for the ecology plugin.
     if *tool != crate::ecology::EquippedTool::None {
         return;
     }
-    if !keyboard.just_pressed(KeyCode::KeyE) {
+    if !actions.just_pressed(Action::Interact) {
         return;
     }
     let Some(pos) = mailbox_pos else { return };
@@ -363,7 +357,7 @@ fn mailbox_interact(
     if dist > MAILBOX_RANGE || dist < 0.001 {
         return;
     }
-    if facing.dir.dot(to_box / dist) < MAILBOX_DOT {
+    if facing.dir.dot(to_box / dist) < MAILBOX_DOT || !actions.consume(Action::Interact) {
         return;
     }
     ui.open = true;
@@ -475,7 +469,7 @@ fn send_letter(
 /// Mail UI keyboard handling: list nav, reading, and composing.
 #[allow(clippy::too_many_arguments)]
 fn mail_ui_input(
-    keyboard: Res<ButtonInput<KeyCode>>,
+    actions: Res<Actions>,
     mut key_events: MessageReader<KeyboardInput>,
     mut ui: ResMut<MailUi>,
     mut mailbox: ResMut<Mailbox>,
@@ -493,7 +487,7 @@ fn mail_ui_input(
 
     // --- Reading view ---
     if let Some(idx) = ui.reading {
-        if keyboard.just_pressed(KeyCode::Escape) || keyboard.just_pressed(KeyCode::Backspace) {
+        if actions.just_pressed(Action::Cancel) || actions.just_pressed(Action::Back) {
             if let Some(letter) = mailbox.letters.get_mut(idx) {
                 letter.read = true;
             }
@@ -506,7 +500,7 @@ fn mail_ui_input(
     if ui.writing {
         // Drain typed characters from the key events (printable characters
         // arrive as `Key::Character`; control keys like Enter are handled
-        // via `ButtonInput` below).
+        // via `Actions` below).
         for ev in key_events.read() {
             if ev.state != ButtonState::Pressed {
                 continue;
@@ -521,33 +515,33 @@ fn mail_ui_input(
             }
         }
         let names: Vec<String> = villagers.iter().map(|v| v.name.to_string()).collect();
-        if keyboard.just_pressed(KeyCode::Escape) {
+        if actions.just_pressed(Action::Cancel) {
             ui.writing = false;
             ui.write_text.clear();
             return;
         }
         if !names.is_empty() {
-            if keyboard.just_pressed(KeyCode::ArrowUp) {
+            if actions.just_pressed(Action::MenuUp) {
                 ui.write_recipient = ui.write_recipient.saturating_sub(1);
                 return;
             }
-            if keyboard.just_pressed(KeyCode::ArrowDown) {
+            if actions.just_pressed(Action::MenuDown) {
                 ui.write_recipient = (ui.write_recipient + 1).min(names.len() - 1);
                 return;
             }
         }
-        if keyboard.just_pressed(KeyCode::Backspace) {
+        if actions.just_pressed(Action::Back) {
             ui.write_text.pop();
             return;
         }
-        if keyboard.just_pressed(KeyCode::Enter) {
+        if actions.just_pressed(Action::Confirm) {
             send_letter(&mut ui, &mut mailbox, &names, &mut timer, &mut notify_query);
         }
         return;
     }
 
     // --- List view ---
-    if keyboard.just_pressed(KeyCode::Escape) {
+    if actions.just_pressed(Action::Cancel) {
         ui.open = false;
         if let Ok(mut vis) = panel_query.single_mut() {
             *vis = Visibility::Hidden;
@@ -558,19 +552,19 @@ fn mail_ui_input(
     // Drain any stray key events so a queued 'n' can't leak into a
     // letter the player starts composing below.
     key_events.clear();
-    if keyboard.just_pressed(KeyCode::ArrowUp) {
+    if actions.just_pressed(Action::MenuUp) {
         ui.selected = ui.selected.saturating_sub(1);
         return;
     }
-    if keyboard.just_pressed(KeyCode::ArrowDown) {
+    if actions.just_pressed(Action::MenuDown) {
         ui.selected = (ui.selected + 1).min(mailbox.letters.len().saturating_sub(1));
         return;
     }
-    if keyboard.just_pressed(KeyCode::Enter) && !mailbox.letters.is_empty() {
+    if actions.just_pressed(Action::Confirm) && !mailbox.letters.is_empty() {
         ui.reading = Some(ui.selected.min(mailbox.letters.len() - 1));
         return;
     }
-    if keyboard.just_pressed(KeyCode::KeyN) {
+    if actions.just_pressed(Action::Compose) {
         ui.writing = true;
         ui.write_recipient = 0;
         ui.write_text.clear();
@@ -704,15 +698,19 @@ impl Plugin for MailPlugin {
                 Startup,
                 spawn_mailbox.after(crate::house::find_player_house),
             )
-            .add_systems(Update, mailbox_interact.in_set(MailInputSet))
             .add_systems(
                 Update,
-                (
-                    mail_ui_input,
-                    refresh_mail_ui,
-                    on_talk_maybe_letter,
-                    tick_mail_notify,
-                ),
+                mailbox_interact
+                    .in_set(InteractSet::Objects)
+                    .in_set(GameplaySet),
+            )
+            .add_systems(
+                Update,
+                mail_ui_input.in_set(InteractSet::Ui).in_set(GameplaySet),
+            )
+            .add_systems(
+                Update,
+                (refresh_mail_ui, on_talk_maybe_letter, tick_mail_notify).in_set(GameplaySet),
             );
     }
 }

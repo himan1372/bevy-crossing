@@ -194,6 +194,6 @@ pub struct NpcPlugin;
 impl Plugin for NpcPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, spawn_villagers.after(crate::town::generate_town))
-            .add_systems(Update, villager_wander);
+            .add_systems(Update, villager_wander.in_set(crate::states::GameplaySet));
     }
 }

@@ -20,8 +20,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::dialogue::DialogueState;
 use crate::house::HouseState;
+use crate::input::{Action, Actions, InteractSet};
 use crate::interaction::{PlayerInventory, TalkEvent};
 use crate::npc::Villager;
+use crate::states::GameplaySet;
 
 /// What kind of errand the player is running.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -515,7 +517,7 @@ fn quest_talk_intercept(
 /// Y/N (or Esc) handling for the quest panel.
 #[allow(clippy::too_many_arguments)]
 fn quest_ui_input(
-    keyboard: Res<ButtonInput<KeyCode>>,
+    actions: Res<Actions>,
     mut commands: Commands,
     mut ui: ResMut<QuestUi>,
     mut quest: ResMut<QuestState>,
@@ -534,8 +536,8 @@ fn quest_ui_input(
     if !ui.open {
         return;
     }
-    let accepted = keyboard.just_pressed(KeyCode::KeyY);
-    let declined = keyboard.just_pressed(KeyCode::KeyN) || keyboard.just_pressed(KeyCode::Escape);
+    let accepted = actions.just_pressed(Action::Yes);
+    let declined = actions.just_pressed(Action::No) || actions.just_pressed(Action::Cancel);
     if !accepted && !declined {
         return;
     }
@@ -659,17 +661,22 @@ impl Plugin for QuestPlugin {
                 Update,
                 quest_talk_intercept
                     .in_set(QuestInputSet)
-                    .after(crate::interaction::interact),
+                    .after(crate::interaction::interact)
+                    .in_set(GameplaySet),
+            )
+            .add_systems(
+                Update,
+                quest_ui_input.in_set(InteractSet::Ui).in_set(GameplaySet),
             )
             .add_systems(
                 Update,
                 (
                     quest_cooldown_tick,
                     marker_bob,
-                    quest_ui_input,
                     update_quest_hud,
                     tick_notify,
-                ),
+                )
+                    .in_set(GameplaySet),
             );
     }
 }

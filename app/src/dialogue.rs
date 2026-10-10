@@ -12,8 +12,10 @@ use bevy::prelude::*;
 use bevy::text::FontSize;
 use rustimal_logic::dialogue_topics::talk_check_msg;
 
+use crate::input::{Action, Actions, InteractSet};
 use crate::interaction::{PlayerInventory, TalkEvent};
 use crate::npc::Villager;
+use crate::states::GameplaySet;
 
 /// Dialogue box state.
 #[derive(Resource, Default)]
@@ -164,10 +166,10 @@ fn on_talk(
 
 /// Space or E advances the dialogue; the last line dismisses it.
 ///
-/// Runs after `interaction::interact` so the same E press that opens a
-/// talk can't also advance it in the same frame.
+/// Runs in [`InteractSet::Ui`], after talk: the E press that opened the
+/// talk was already consumed, so it can't also advance it.
 fn dialogue_input(
-    keyboard: Res<ButtonInput<KeyCode>>,
+    mut actions: ResMut<Actions>,
     mut dialogue: ResMut<DialogueState>,
     mut box_query: Query<&mut Visibility, With<DialogueBox>>,
     mut text_query: Query<&mut Text, With<DialogueText>>,
@@ -175,7 +177,7 @@ fn dialogue_input(
     if !dialogue.active {
         return;
     }
-    if !(keyboard.just_pressed(KeyCode::Space) || keyboard.just_pressed(KeyCode::KeyE)) {
+    if !(actions.just_pressed(Action::Advance) || actions.consume(Action::Interact)) {
         return;
     }
     dialogue.index += 1;
@@ -212,8 +214,16 @@ impl Plugin for DialoguePlugin {
         app.insert_resource(DialogueState::default())
             .insert_resource(TalkCounter::default())
             .add_systems(Startup, setup_ui)
-            .add_systems(Update, on_talk.after(crate::quest::QuestInputSet))
-            .add_systems(Update, dialogue_input.after(crate::interaction::interact))
-            .add_systems(Update, update_hud);
+            .add_systems(
+                Update,
+                on_talk
+                    .after(crate::quest::QuestInputSet)
+                    .in_set(GameplaySet),
+            )
+            .add_systems(
+                Update,
+                dialogue_input.in_set(InteractSet::Ui).in_set(GameplaySet),
+            )
+            .add_systems(Update, update_hud.in_set(GameplaySet));
     }
 }

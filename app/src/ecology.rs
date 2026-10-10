@@ -21,10 +21,11 @@ use bevy::text::FontSize;
 use rustimal_logic::species::{self, FishArea, FishType, InsectArea, InsectType};
 use rustimal_logic::town_gen::{CellKind, ACRE_WIDTH};
 
-use crate::dialogue::DialogueState;
 use crate::house::HouseState;
+use crate::input::{Action, Actions, InputFocus, InteractSet};
 use crate::interaction::{Facing, PlayerInventory};
 use crate::player::Player;
+use crate::states::GameplaySet;
 use crate::town::Town;
 
 /// How many fish shadows the river holds.
@@ -499,29 +500,23 @@ fn update_bugs(
 
 /// 1/2/3 to equip rod / net / nothing.
 fn tool_select(
-    keyboard: Res<ButtonInput<KeyCode>>,
+    actions: Res<Actions>,
+    focus: Res<InputFocus>,
     shop_loc: Res<State<crate::shop::ShopLocation>>,
-    shop_ui: Res<crate::shop::ShopUi>,
-    quest_ui: Res<crate::quest::QuestUi>,
     mut tool: ResMut<EquippedTool>,
 ) {
-    // No tools inside the shop, while its menu is open, or while the
-    // quest panel is open.
-    if quest_ui.open {
+    // Only while the world has focus (any open UI owns the number keys),
+    // and never inside the shop — you enter it empty-handed.
+    if !focus.is_world() || *shop_loc != crate::shop::ShopLocation::Town {
         return;
     }
-    // No tools inside the shop or while its menu is open — the shop
-    // force-unequips on entry, and this keeps it that way.
-    if *shop_loc != crate::shop::ShopLocation::Town || shop_ui.open {
-        return;
-    }
-    if keyboard.just_pressed(KeyCode::Digit1) {
+    if actions.just_pressed(Action::Tool1) {
         *tool = EquippedTool::Rod;
         println!("Equipped fishing rod");
-    } else if keyboard.just_pressed(KeyCode::Digit2) {
+    } else if actions.just_pressed(Action::Tool2) {
         *tool = EquippedTool::Net;
         println!("Equipped bug net");
-    } else if keyboard.just_pressed(KeyCode::Digit3) {
+    } else if actions.just_pressed(Action::Tool3) {
         *tool = EquippedTool::None;
         println!("Unequipped tool");
     }
@@ -530,11 +525,10 @@ fn tool_select(
 /// E with a tool equipped: cast the rod near water, or swing the net at bugs.
 #[allow(clippy::too_many_arguments)]
 fn tool_interact(
-    keyboard: Res<ButtonInput<KeyCode>>,
+    mut actions: ResMut<Actions>,
+    focus: Res<InputFocus>,
     state: Res<State<HouseState>>,
     tool: Res<EquippedTool>,
-    dialogue: Res<DialogueState>,
-    mail_ui: Res<crate::mail::MailUi>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -552,16 +546,13 @@ fn tool_interact(
     if *state != HouseState::Town {
         return;
     }
-    if *tool == EquippedTool::None || dialogue.active {
+    if *tool == EquippedTool::None || !focus.is_world() {
         return;
     }
-    // The mail UI claims the E key while open.
-    // (The quest panel can only open with empty hands, so no quest check
-    // is needed here -- see tool_select.)
-    if mail_ui.open {
-        return;
-    }
-    if !keyboard.just_pressed(KeyCode::KeyE) {
+    // A held tool always answers E (cast, reel, swing, or a "nothing here"
+    // notice), so it takes the press outright. Doors and the mailbox need
+    // empty hands, so they never compete for it.
+    if !actions.consume(Action::Interact) {
         return;
     }
     let Ok((player_transform, facing)) = player_query.single() else {
@@ -752,9 +743,13 @@ impl Plugin for EcologyPlugin {
             )
             .add_systems(
                 Update,
+                (tool_select, tool_interact.in_set(InteractSet::Tools))
+                    .chain()
+                    .in_set(GameplaySet),
+            )
+            .add_systems(
+                Update,
                 (
-                    tool_select,
-                    tool_interact,
                     update_fish,
                     update_bugs,
                     update_bobber,
@@ -762,7 +757,9 @@ impl Plugin for EcologyPlugin {
                     update_tool_hud,
                     tick_catch_notify,
                 )
-                    .chain(),
+                    .chain()
+                    .after(tool_interact)
+                    .in_set(GameplaySet),
             );
     }
 }

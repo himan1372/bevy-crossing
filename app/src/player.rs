@@ -1,4 +1,6 @@
 use crate::house::HouseState;
+use crate::input::{Actions, InputFocus};
+use crate::states::GameplaySet;
 use crate::town::Town;
 use bevy::prelude::*;
 
@@ -36,12 +38,12 @@ pub fn spawn_player(
 
 /// Handle WASD movement with collision. Stands down inside the house
 /// or shop (see `house::interior_movement` / `shop::shop_interior_movement`),
-/// and while the shop menu is open.
+/// and whenever a UI has input focus.
 pub fn player_movement(
-    keyboard: Res<ButtonInput<KeyCode>>,
+    actions: Res<Actions>,
+    focus: Res<InputFocus>,
     state: Res<State<HouseState>>,
     shop_loc: Res<State<crate::shop::ShopLocation>>,
-    shop_ui: Res<crate::shop::ShopUi>,
     shop_building: Option<Res<crate::shop::ShopBuilding>>,
     mut player_query: Query<&mut Transform, With<Player>>,
     town: Res<Town>,
@@ -50,27 +52,14 @@ pub fn player_movement(
     if *state != HouseState::Town || *shop_loc != crate::shop::ShopLocation::Town {
         return;
     }
-    if shop_ui.open {
+    if !focus.is_world() {
         return;
     }
     let Ok(mut transform) = player_query.single_mut() else {
         return;
     };
 
-    let mut direction = Vec3::ZERO;
-
-    if keyboard.pressed(KeyCode::KeyW) || keyboard.pressed(KeyCode::ArrowUp) {
-        direction.z -= 1.0;
-    }
-    if keyboard.pressed(KeyCode::KeyS) || keyboard.pressed(KeyCode::ArrowDown) {
-        direction.z += 1.0;
-    }
-    if keyboard.pressed(KeyCode::KeyA) || keyboard.pressed(KeyCode::ArrowLeft) {
-        direction.x -= 1.0;
-    }
-    if keyboard.pressed(KeyCode::KeyD) || keyboard.pressed(KeyCode::ArrowRight) {
-        direction.x += 1.0;
-    }
+    let mut direction = actions.move_dir();
 
     if direction.length() > 0.0 {
         direction = direction.normalize();
@@ -120,6 +109,6 @@ pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, spawn_player)
-            .add_systems(Update, (player_movement, camera_follow));
+            .add_systems(Update, (player_movement, camera_follow).in_set(GameplaySet));
     }
 }

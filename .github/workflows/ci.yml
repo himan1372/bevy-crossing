@@ -1,0 +1,46 @@
+# Runs the rust-workflow gate on every push / PR to main:
+# fmt --check → check → clippy -D warnings (with and without `remote`) → test.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Bevy's Linux build needs ALSA (audio) and udev/Wayland/xkb (input, windowing).
+      - name: Install system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Check
+        run: cargo check --workspace --all-targets
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Clippy (remote feature)
+        run: cargo clippy --workspace --all-targets --features bevy-crossing/remote -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace

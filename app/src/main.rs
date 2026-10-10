@@ -3,9 +3,11 @@
 
 use bevy::prelude::*;
 
+mod assets;
 mod dialogue;
 mod ecology;
 mod house;
+mod input;
 mod interaction;
 mod mail;
 mod npc;
@@ -14,11 +16,14 @@ mod quest;
 mod remote;
 mod save;
 mod shop;
+mod states;
 mod town;
 
+use assets::GameAssetsPlugin;
 use dialogue::DialoguePlugin;
 use ecology::EcologyPlugin;
 use house::HousePlugin;
+use input::InputPlugin;
 use interaction::InteractionPlugin;
 use mail::MailPlugin;
 use npc::NpcPlugin;
@@ -27,12 +32,15 @@ use quest::QuestPlugin;
 use remote::RemotePluginGate;
 use save::SavePlugin;
 use shop::ShopPlugin;
+use states::GameStatePlugin;
 use town::TownPlugin;
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(RemotePluginGate)
+        // Foundations first: states, input, and the asset gate.
+        .add_plugins((GameStatePlugin, InputPlugin, GameAssetsPlugin))
         .add_plugins(SavePlugin)
         .add_plugins(TownPlugin)
         .add_plugins(PlayerPlugin)

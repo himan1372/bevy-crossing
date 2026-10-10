@@ -15,25 +15,21 @@ use bevy::text::FontSize;
 use rustimal_logic::furniture::FurnitureSize;
 use rustimal_logic::town_gen::{CellKind, Feature, ACRE_DEPTH, ACRE_WIDTH};
 
-use crate::dialogue::DialogueState;
 use crate::ecology::EquippedTool;
+use crate::input::{Action, Actions, InputFocus, InteractSet};
 use crate::interaction::Facing;
 use crate::player::Player;
+use crate::states::{AppState, GameplaySet};
 use crate::town::Town;
 
-/// Town map vs. house interior.
-#[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+/// Town map vs. house interior. Lives only while in game.
+#[derive(SubStates, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[source(AppState = AppState::InGame)]
 pub enum HouseState {
     #[default]
     Town,
     Inside,
 }
-
-/// System set for the house-door E handler. The town `interact` system runs
-/// after this set so that on a successful enter (which teleports the player
-/// far away) the talk/pickup query finds nothing that same frame.
-#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct HouseInputSet;
 
 /// World position of the player's house door (exterior), in town coordinates.
 #[derive(Resource)]
@@ -253,18 +249,14 @@ fn build_interior(
 
 /// E at the exterior house door: teleport into the interior.
 ///
-/// Runs in [`HouseInputSet`], before the town `interact` system, so a
-/// successful enter (which moves the player far away) means the talk/pickup
-/// query finds nothing that same frame.
+/// Runs in [`InteractSet::Doors`]: a successful enter consumes the press,
+/// so talk/pickup can't also fire on it.
 fn house_enter(
-    keyboard: Res<ButtonInput<KeyCode>>,
+    mut actions: ResMut<Actions>,
+    focus: Res<InputFocus>,
     state: Res<State<HouseState>>,
     shop_loc: Res<State<crate::shop::ShopLocation>>,
-    dialogue: Res<DialogueState>,
     tool: Res<EquippedTool>,
-    mail_ui: Res<crate::mail::MailUi>,
-    shop_ui: Res<crate::shop::ShopUi>,
-    quest_ui: Res<crate::quest::QuestUi>,
     house: Option<Res<PlayerHouse>>,
     mut next_state: ResMut<NextState<HouseState>>,
     mut commands: Commands,
@@ -273,11 +265,7 @@ fn house_enter(
     if *state != HouseState::Town || *shop_loc != crate::shop::ShopLocation::Town {
         return;
     }
-    if !keyboard.just_pressed(KeyCode::KeyE) || dialogue.active {
-        return;
-    }
-    // The mail, shop, or quest UI claims the E key while open.
-    if mail_ui.open || shop_ui.open || quest_ui.open {
+    if !actions.just_pressed(Action::Interact) || !focus.is_world() {
         return;
     }
     // A held tool claims E for the ecology plugin; the door needs empty hands.
@@ -293,7 +281,7 @@ fn house_enter(
     if dist > DOOR_RANGE_OUT || dist < 0.001 {
         return;
     }
-    if facing.dir.dot(to_door / dist) < DOOR_DOT {
+    if facing.dir.dot(to_door / dist) < DOOR_DOT || !actions.consume(Action::Interact) {
         return;
     }
     commands.insert_resource(ReturnPosition(transform.translation));
@@ -306,7 +294,8 @@ fn house_enter(
 
 /// E at the interior door: return to the town map.
 fn house_exit(
-    keyboard: Res<ButtonInput<KeyCode>>,
+    mut actions: ResMut<Actions>,
+    focus: Res<InputFocus>,
     state: Res<State<HouseState>>,
     mut next_state: ResMut<NextState<HouseState>>,
     return_pos: Option<Res<ReturnPosition>>,
@@ -315,7 +304,7 @@ fn house_exit(
     if *state != HouseState::Inside {
         return;
     }
-    if !keyboard.just_pressed(KeyCode::KeyE) {
+    if !actions.just_pressed(Action::Interact) || !focus.is_world() {
         return;
     }
     let Ok((mut transform, mut facing)) = player_query.single_mut() else {
@@ -327,7 +316,7 @@ fn house_exit(
     if dist > DOOR_RANGE_IN || dist < 0.001 {
         return;
     }
-    if facing.dir.dot(to_door / dist) < 0.5 {
+    if facing.dir.dot(to_door / dist) < 0.5 || !actions.consume(Action::Interact) {
         return;
     }
     transform.translation = return_pos.map(|r| r.0).unwrap_or(Vec3::new(0.0, 1.0, 5.0));
@@ -339,32 +328,21 @@ fn house_exit(
 
 /// WASD movement inside the room: room bounds plus furniture collision.
 fn interior_movement(
-    keyboard: Res<ButtonInput<KeyCode>>,
+    actions: Res<Actions>,
+    focus: Res<InputFocus>,
     state: Res<State<HouseState>>,
     mut player_query: Query<(&mut Transform, &mut Facing), With<Player>>,
     obstacles: Res<InteriorObstacles>,
     time: Res<Time>,
 ) {
-    if *state != HouseState::Inside {
+    if *state != HouseState::Inside || !focus.is_world() {
         return;
     }
     let Ok((mut transform, mut facing)) = player_query.single_mut() else {
         return;
     };
 
-    let mut direction = Vec3::ZERO;
-    if keyboard.pressed(KeyCode::KeyW) || keyboard.pressed(KeyCode::ArrowUp) {
-        direction.z -= 1.0;
-    }
-    if keyboard.pressed(KeyCode::KeyS) || keyboard.pressed(KeyCode::ArrowDown) {
-        direction.z += 1.0;
-    }
-    if keyboard.pressed(KeyCode::KeyA) || keyboard.pressed(KeyCode::ArrowLeft) {
-        direction.x -= 1.0;
-    }
-    if keyboard.pressed(KeyCode::KeyD) || keyboard.pressed(KeyCode::ArrowRight) {
-        direction.x += 1.0;
-    }
+    let mut direction = actions.move_dir();
 
     if direction.length() > 0.0 {
         direction = direction.normalize();
@@ -413,12 +391,18 @@ pub struct HousePlugin;
 
 impl Plugin for HousePlugin {
     fn build(&self, app: &mut App) {
-        app.init_state::<HouseState>()
+        app.add_sub_state::<HouseState>()
             .add_systems(Startup, find_player_house.after(crate::town::generate_town))
             .add_systems(Startup, build_interior)
-            .add_systems(Update, house_enter.in_set(HouseInputSet))
-            .add_systems(Update, house_exit)
-            .add_systems(Update, interior_movement)
-            .add_systems(Update, update_house_hud);
+            .add_systems(
+                Update,
+                (house_enter, house_exit)
+                    .in_set(InteractSet::Doors)
+                    .in_set(GameplaySet),
+            )
+            .add_systems(
+                Update,
+                (interior_movement, update_house_hud).in_set(GameplaySet),
+            );
     }
 }

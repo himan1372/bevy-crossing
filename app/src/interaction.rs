@@ -8,10 +8,11 @@
 use bevy::ecs::message::{Message, MessageWriter};
 use bevy::prelude::*;
 
-use crate::dialogue::DialogueState;
 use crate::house::HouseState;
+use crate::input::{Action, Actions, InputFocus, InteractSet};
 use crate::npc::Villager;
 use crate::player::Player;
+use crate::states::GameplaySet;
 use crate::town::Town;
 
 /// What a ground item is.
@@ -170,15 +171,14 @@ pub fn track_player_facing(
 ///
 /// When a fishing rod or bug net is equipped (see `ecology::EquippedTool`),
 /// this system stands down and lets the ecology plugin handle the E press.
+/// Last in the Interact order ([`InteractSet::Talk`]): doors, the mailbox and
+/// tools get the press first.
 pub fn interact(
-    keyboard: Res<ButtonInput<KeyCode>>,
+    mut actions: ResMut<Actions>,
+    focus: Res<InputFocus>,
     state: Res<State<HouseState>>,
     shop_loc: Res<State<crate::shop::ShopLocation>>,
-    dialogue: Res<DialogueState>,
     tool: Res<crate::ecology::EquippedTool>,
-    mail_ui: Res<crate::mail::MailUi>,
-    shop_ui: Res<crate::shop::ShopUi>,
-    quest_ui: Res<crate::quest::QuestUi>,
     mut talk_events: MessageWriter<TalkEvent>,
     mut commands: Commands,
     player_query: Query<(&Transform, &Facing), With<Player>>,
@@ -190,11 +190,7 @@ pub fn interact(
     if *state != HouseState::Town || *shop_loc != crate::shop::ShopLocation::Town {
         return;
     }
-    if !keyboard.just_pressed(KeyCode::KeyE) || dialogue.active {
-        return;
-    }
-    // The mail, shop, or quest UI claims the E key while open.
-    if mail_ui.open || shop_ui.open || quest_ui.open {
+    if !actions.just_pressed(Action::Interact) || !focus.is_world() {
         return;
     }
     // A held tool claims the E press — the ecology plugin handles it.
@@ -222,7 +218,9 @@ pub fn interact(
         }
     }
     if let Some((entity, _)) = best {
-        talk_events.write(TalkEvent { villager: entity });
+        if actions.consume(Action::Interact) {
+            talk_events.write(TalkEvent { villager: entity });
+        }
         return;
     }
 
@@ -238,6 +236,9 @@ pub fn interact(
         }
     }
     if let Some((entity, kind, _)) = best_item {
+        if !actions.consume(Action::Interact) {
+            return;
+        }
         match kind {
             ItemKind::Bells(amount) => {
                 inventory.bells += amount;
@@ -261,11 +262,13 @@ impl Plugin for InteractionPlugin {
             .add_systems(Startup, spawn_items.after(crate::town::generate_town))
             .add_systems(
                 Update,
-                (track_player_facing, interact)
-                    .chain()
-                    .after(crate::house::HouseInputSet)
-                    .after(crate::mail::MailInputSet)
-                    .after(crate::shop::ShopInputSet),
+                track_player_facing
+                    .before(InteractSet::Doors)
+                    .in_set(GameplaySet),
+            )
+            .add_systems(
+                Update,
+                interact.in_set(InteractSet::Talk).in_set(GameplaySet),
             );
     }
 }

@@ -20,9 +20,11 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::house::{HouseState, ReturnPosition};
+use crate::input::{Action, Actions, InputFocus};
 use crate::interaction::{spawn_ground_item, GroundItem, PlayerInventory, ITEM_SPOTS};
 use crate::mail::Mailbox;
 use crate::player::Player;
+use crate::states::GameplaySet;
 use crate::town::{Town, TownSeed};
 
 const SAVE_FILE_NAME: &str = "savegame.json";
@@ -285,7 +287,8 @@ fn tick_notification(
 
 /// F5: write the current state to disk.
 fn quick_save(
-    keyboard: Res<ButtonInput<KeyCode>>,
+    // One tuple param: these systems are at Bevy's 16-parameter limit.
+    (actions, focus): (Res<Actions>, Res<InputFocus>),
     player: Query<&Transform, With<Player>>,
     items: Query<&GroundItem>,
     inventory: Res<PlayerInventory>,
@@ -301,7 +304,8 @@ fn quick_save(
     mut timer: ResMut<NotifyTimer>,
     notify_query: Query<&mut Text, With<NotifyText>>,
 ) {
-    if !keyboard.just_pressed(KeyCode::F5) {
+    // World focus only: saving or loading mid-UI would leave that UI stale.
+    if !actions.just_pressed(Action::QuickSave) || !focus.is_world() {
         return;
     }
     let save = collect_save(
@@ -330,7 +334,8 @@ fn quick_save(
 /// F9: read the save and apply it — player position, inventory, playtime,
 /// and ground items (despawn all, respawn everything not marked picked).
 fn quick_load(
-    keyboard: Res<ButtonInput<KeyCode>>,
+    // One tuple param: these systems are at Bevy's 16-parameter limit.
+    (actions, focus): (Res<Actions>, Res<InputFocus>),
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -347,7 +352,7 @@ fn quick_load(
     mut timer: ResMut<NotifyTimer>,
     notify_query: Query<&mut Text, With<NotifyText>>,
 ) {
-    if !keyboard.just_pressed(KeyCode::F9) {
+    if !actions.just_pressed(Action::QuickLoad) || !focus.is_world() {
         return;
     }
     let Some(save) = read_save() else {
@@ -429,7 +434,7 @@ impl Plugin for SavePlugin {
             )
             .add_systems(
                 Update,
-                (tick_playtime, quick_save, quick_load, tick_notification),
+                (tick_playtime, quick_save, quick_load, tick_notification).in_set(GameplaySet),
             );
     }
 }
