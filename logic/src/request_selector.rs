@@ -218,6 +218,7 @@ pub fn build_trade_offer(
 /// `rng_value` must already be `RANDOM(eligible_count)` from C; this
 /// kernel never calls the RNG itself and never allocates.
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C ABI export: null-checked; pointer validity is the C caller's contract
 pub extern "C" fn pc_request_pick_carried(
     pockets: *const u16,
     eligible: *const u8,
@@ -239,6 +240,7 @@ pub extern "C" fn pc_request_pick_carried(
 /// passes e.g. `static u32 pc_rng(u32 n) { return (u32)RANDOM(n); }`);
 /// the kernel consumes exactly 61 `rng(100)` calls in retail order.
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C ABI export: null-checked; pointer validity is the C caller's contract
 pub extern "C" fn pc_request_dispatch(
     probs: *const u8,
     n: usize,

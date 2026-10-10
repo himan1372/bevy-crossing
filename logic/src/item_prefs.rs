@@ -146,6 +146,12 @@ pub struct IslandFtr {
     pub item_list: [u16; ISLAND_FTR_NUM],
 }
 
+impl Default for IslandFtr {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IslandFtr {
     pub fn new() -> Self {
         Self {
@@ -188,6 +194,7 @@ pub extern "C" fn pc_npc_house_goods(roll_0_9: u32) -> u8 {
 /// `flags[i]` packs: bit 0 = is furniture, bits 1..3 = excluded kind
 /// (7 = none). Matches `mNpc_DecideNpcFurniture`'s count pass.
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C ABI export: null-checked; pointer validity is the C caller's contract
 pub extern "C" fn pc_eligible_furniture_count(flags: *const u8) -> u32 {
     if flags.is_null() {
         return 0;

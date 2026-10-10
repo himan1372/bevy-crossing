@@ -308,6 +308,12 @@ pub struct TalkThrottle {
     pub reset_timer: u16,
 }
 
+impl Default for TalkThrottle {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TalkThrottle {
     pub fn new() -> Self {
         TalkThrottle {
@@ -360,6 +366,7 @@ pub const GREETING_RELATION_BUMP: i32 = 8;
 /// C ABI: `mNPS_schedule_manager_sub` for looks at `now_sec`.
 /// Packs (saved_type, current_type, forced_timer).
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C ABI export: null-checked; pointer validity is the C caller's contract
 pub extern "C" fn pc_schedule_step(
     looks: u8,
     now_sec: u32,
@@ -388,6 +395,7 @@ pub extern "C" fn pc_schedule_step(
 /// C ABI: global event override; returns 1 and writes FIELD when
 /// active, else 0.
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C ABI export: null-checked; pointer validity is the C caller's contract
 pub extern "C" fn pc_schedule_global_override(
     first_job: u8,
     halloween: u8,

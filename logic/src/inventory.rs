@@ -162,6 +162,7 @@ pub fn resolve_candidate(inv: &Inventory, candidate: u16) -> Option<usize> {
 /// Retail boundary: `mPr_GetPossessionItemIdx` (m_private.c); first match
 /// wins, slots scanned 0..15.
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C ABI export: null-checked; pointer validity is the C caller's contract
 pub extern "C" fn pc_inventory_find(pockets: *const u16, item: u16) -> i32 {
     if pockets.is_null() {
         return -1;
@@ -178,6 +179,7 @@ pub extern "C" fn pc_inventory_find(pockets: *const u16, item: u16) -> i32 {
 /// Retail boundary: `mPr_GetPossessionItemSum` (m_private.c), the 15-slot
 /// count used by shop/quest code.
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C ABI export: null-checked; pointer validity is the C caller's contract
 pub extern "C" fn pc_inventory_count(pockets: *const u16, item: u16) -> u32 {
     if pockets.is_null() {
         return 0;
