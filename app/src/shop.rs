@@ -14,6 +14,7 @@
 //! threshold is crossed instead of after the retail 2-day remodel.
 
 use bevy::prelude::*;
+use bevy::text::FontSize;
 use rustimal_logic::shop::{self, ShopTier};
 use serde::{Deserialize, Serialize};
 
@@ -52,7 +53,11 @@ pub struct ShopBuilding {
 
 /// True when (x, z) is inside the shop building's blocked footprint.
 pub fn point_blocked(building: &ShopBuilding, x: f32, z: f32) -> bool {
-    building.placed && x > building.min_x && x < building.max_x && z > building.min_z && z < building.max_z
+    building.placed
+        && x > building.min_x
+        && x < building.max_x
+        && z > building.min_z
+        && z < building.max_z
 }
 
 /// One item on the shelf. Serializable so the save file can persist stock.
@@ -82,12 +87,30 @@ impl Default for ShopData {
 /// decomp modules).
 fn default_stock() -> Vec<StockItem> {
     vec![
-        StockItem { name: "Wooden Chair".into(), price: 800 },
-        StockItem { name: "Potted Plant".into(), price: 900 },
-        StockItem { name: "Wall Clock".into(), price: 1100 },
-        StockItem { name: "Modern Lamp".into(), price: 1400 },
-        StockItem { name: "Bookshelf".into(), price: 1800 },
-        StockItem { name: "Cozy Bed".into(), price: 2000 },
+        StockItem {
+            name: "Wooden Chair".into(),
+            price: 800,
+        },
+        StockItem {
+            name: "Potted Plant".into(),
+            price: 900,
+        },
+        StockItem {
+            name: "Wall Clock".into(),
+            price: 1100,
+        },
+        StockItem {
+            name: "Modern Lamp".into(),
+            price: 1400,
+        },
+        StockItem {
+            name: "Bookshelf".into(),
+            price: 1800,
+        },
+        StockItem {
+            name: "Cozy Bed".into(),
+            price: 2000,
+        },
     ]
 }
 
@@ -255,33 +278,29 @@ fn spawn_shop_exterior(
     let cz = (building.min_z + building.max_z) / 2.0;
 
     // Main box.
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(Cuboid::new(SHOP_W, SHOP_H, SHOP_D)),
-        material: materials.add(Color::srgb(0.75, 0.6, 0.4)),
-        transform: Transform::from_xyz(cx, SHOP_H / 2.0, cz),
-        ..default()
-    });
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(SHOP_W, SHOP_H, SHOP_D))),
+        MeshMaterial3d(materials.add(Color::srgb(0.75, 0.6, 0.4))),
+        Transform::from_xyz(cx, SHOP_H / 2.0, cz),
+    ));
     // Roof slab.
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(Cuboid::new(SHOP_W + 0.6, 0.5, SHOP_D + 0.6)),
-        material: materials.add(Color::srgb(0.6, 0.25, 0.2)),
-        transform: Transform::from_xyz(cx, SHOP_H + 0.25, cz),
-        ..default()
-    });
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(SHOP_W + 0.6, 0.5, SHOP_D + 0.6))),
+        MeshMaterial3d(materials.add(Color::srgb(0.6, 0.25, 0.2))),
+        Transform::from_xyz(cx, SHOP_H + 0.25, cz),
+    ));
     // Door panel on the south face.
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(Cuboid::new(1.2, 2.2, 0.15)),
-        material: materials.add(Color::srgb(0.35, 0.22, 0.12)),
-        transform: Transform::from_xyz(cx, 1.1, building.max_z + 0.05),
-        ..default()
-    });
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(1.2, 2.2, 0.15))),
+        MeshMaterial3d(materials.add(Color::srgb(0.35, 0.22, 0.12))),
+        Transform::from_xyz(cx, 1.1, building.max_z + 0.05),
+    ));
     // Sign board above the door.
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(Cuboid::new(2.6, 0.8, 0.2)),
-        material: materials.add(Color::srgb(0.95, 0.9, 0.75)),
-        transform: Transform::from_xyz(cx, 2.7, building.max_z + 0.08),
-        ..default()
-    });
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(2.6, 0.8, 0.2))),
+        MeshMaterial3d(materials.add(Color::srgb(0.95, 0.9, 0.75))),
+        Transform::from_xyz(cx, 2.7, building.max_z + 0.08),
+    ));
     println!("Shop exterior spawned");
 }
 
@@ -301,12 +320,11 @@ fn build_shop_interior(
     let nook_mat = materials.add(Color::srgb(0.55, 0.38, 0.22));
 
     // Floor.
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(Plane3d::default().mesh().size(12.0, 10.0)),
-        material: floor_mat,
-        transform: Transform::from_xyz(ox, 0.02, oz),
-        ..default()
-    });
+    commands.spawn((
+        Mesh3d(meshes.add(Plane3d::default().mesh().size(12.0, 10.0))),
+        MeshMaterial3d(floor_mat),
+        Transform::from_xyz(ox, 0.02, oz),
+    ));
 
     // Four walls (no ceiling; camera looks in from above).
     let wall_h = 3.0;
@@ -318,21 +336,19 @@ fn build_shop_interior(
         (ox + 6.0, oz, wall_t, 10.0), // east
     ];
     for (wx, wz, sx, sz) in walls {
-        commands.spawn(PbrBundle {
-            mesh: meshes.add(Cuboid::new(sx, wall_h, sz)),
-            material: wall_mat.clone(),
-            transform: Transform::from_xyz(wx, wall_h / 2.0, wz),
-            ..default()
-        });
+        commands.spawn((
+            Mesh3d(meshes.add(Cuboid::new(sx, wall_h, sz))),
+            MeshMaterial3d(wall_mat.clone()),
+            Transform::from_xyz(wx, wall_h / 2.0, wz),
+        ));
     }
 
     // Door panel on the south wall (visual only; exit is via E).
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(Cuboid::new(1.4, 2.4, 0.15)),
-        material: door_mat,
-        transform: Transform::from_xyz(ox, 1.2, oz + 4.85),
-        ..default()
-    });
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(1.4, 2.4, 0.15))),
+        MeshMaterial3d(door_mat),
+        Transform::from_xyz(ox, 1.2, oz + 4.85),
+    ));
 
     // Counter at the back (north side).
     let counter = Obstacle {
@@ -341,20 +357,18 @@ fn build_shop_interior(
         min_z: oz - 3.5,
         max_z: oz - 2.5,
     };
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(Cuboid::new(4.5, 1.1, 1.0)),
-        material: counter_mat,
-        transform: Transform::from_xyz(ox, 0.55, oz - 3.0),
-        ..default()
-    });
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(4.5, 1.1, 1.0))),
+        MeshMaterial3d(counter_mat),
+        Transform::from_xyz(ox, 0.55, oz - 3.0),
+    ));
 
     // Tom Nook behind the counter.
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(Capsule3d::new(0.4, 1.0)),
-        material: nook_mat,
-        transform: Transform::from_xyz(ox, 1.0, oz - 4.1),
-        ..default()
-    });
+    commands.spawn((
+        Mesh3d(meshes.add(Capsule3d::new(0.4, 1.0))),
+        MeshMaterial3d(nook_mat),
+        Transform::from_xyz(ox, 1.0, oz - 4.1),
+    ));
 
     // Display pedestals with sample goods (colors only; names/prices live
     // in the shop menu).
@@ -368,18 +382,16 @@ fn build_shop_interior(
     for (i, (r, g, b)) in pedestal_cols.iter().enumerate() {
         let lx = -3.75 + i as f32 * 2.5;
         let lz = 0.8;
-        commands.spawn(PbrBundle {
-            mesh: meshes.add(Cuboid::new(0.9, 0.8, 0.9)),
-            material: materials.add(Color::srgb(0.5, 0.35, 0.2)),
-            transform: Transform::from_xyz(ox + lx, 0.4, oz + lz),
-            ..default()
-        });
-        commands.spawn(PbrBundle {
-            mesh: meshes.add(Cuboid::new(0.55, 0.55, 0.55)),
-            material: materials.add(Color::srgb(*r, *g, *b)),
-            transform: Transform::from_xyz(ox + lx, 1.1, oz + lz),
-            ..default()
-        });
+        commands.spawn((
+            Mesh3d(meshes.add(Cuboid::new(0.9, 0.8, 0.9))),
+            MeshMaterial3d(materials.add(Color::srgb(0.5, 0.35, 0.2))),
+            Transform::from_xyz(ox + lx, 0.4, oz + lz),
+        ));
+        commands.spawn((
+            Mesh3d(meshes.add(Cuboid::new(0.55, 0.55, 0.55))),
+            MeshMaterial3d(materials.add(Color::srgb(*r, *g, *b))),
+            Transform::from_xyz(ox + lx, 1.1, oz + lz),
+        ));
         obstacles.push(Obstacle {
             min_x: ox + lx - 0.45,
             max_x: ox + lx + 0.45,
@@ -392,24 +404,19 @@ fn build_shop_interior(
     // Persistent "inside shop" indicator (hidden until the player enters).
     commands.spawn((
         ShopHudText,
-        TextBundle {
-            text: Text::from_section(
-                "Nook's — E at Nook to shop, E at the door to exit",
-                TextStyle {
-                    font_size: 22.0,
-                    color: Color::WHITE,
-                    ..default()
-                },
-            ),
-            style: Style {
-                position_type: PositionType::Absolute,
-                top: Val::Px(10.0),
-                left: Val::Px(50.0),
-                ..default()
-            },
-            visibility: Visibility::Hidden,
+        Text::new("Nook's — E at Nook to shop, E at the door to exit"),
+        TextFont {
+            font_size: FontSize::Px(22.0),
             ..default()
         },
+        TextColor(Color::WHITE),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(10.0),
+            left: Val::Px(50.0),
+            ..default()
+        },
+        Visibility::Hidden,
     ));
 
     println!("Shop interior built at {:?}", SHOP_ORIGIN);
@@ -420,67 +427,56 @@ fn setup_shop_ui(mut commands: Commands) {
     commands
         .spawn((
             ShopPanel,
-            NodeBundle {
-                style: Style {
-                    position_type: PositionType::Absolute,
-                    left: Val::Percent(24.0),
-                    right: Val::Percent(24.0),
-                    top: Val::Percent(12.0),
-                    bottom: Val::Percent(12.0),
-                    flex_direction: FlexDirection::Column,
-                    padding: UiRect::all(Val::Px(20.0)),
-                    row_gap: Val::Px(10.0),
-                    ..default()
-                },
-                background_color: BackgroundColor(Color::srgba(0.10, 0.08, 0.05, 0.96)),
-                visibility: Visibility::Hidden,
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Percent(24.0),
+                right: Val::Percent(24.0),
+                top: Val::Percent(12.0),
+                bottom: Val::Percent(12.0),
+                flex_direction: FlexDirection::Column,
+                padding: UiRect::all(Val::Px(20.0)),
+                row_gap: Val::Px(10.0),
                 ..default()
             },
+            BackgroundColor(Color::srgba(0.10, 0.08, 0.05, 0.96)),
+            Visibility::Hidden,
         ))
         .with_children(|parent| {
             parent.spawn((
                 ShopTitleText,
-                TextBundle::from_section(
-                    "",
-                    TextStyle {
-                        font_size: 28.0,
-                        color: Color::srgb(1.0, 0.9, 0.5),
-                        ..default()
-                    },
-                ),
+                Text::new(""),
+                TextFont {
+                    font_size: FontSize::Px(28.0),
+                    ..default()
+                },
+                TextColor(Color::srgb(1.0, 0.9, 0.5)),
             ));
             parent.spawn((
                 ShopListText,
-                TextBundle::from_section(
-                    "",
-                    TextStyle {
-                        font_size: 20.0,
-                        color: Color::WHITE,
-                        ..default()
-                    },
-                ),
+                Text::new(""),
+                TextFont {
+                    font_size: FontSize::Px(20.0),
+                    ..default()
+                },
+                TextColor(Color::WHITE),
             ));
             parent.spawn((
                 ShopMsgText,
-                TextBundle::from_section(
-                    "",
-                    TextStyle {
-                        font_size: 20.0,
-                        color: Color::srgb(1.0, 0.85, 0.4),
-                        ..default()
-                    },
-                ),
+                Text::new(""),
+                TextFont {
+                    font_size: FontSize::Px(20.0),
+                    ..default()
+                },
+                TextColor(Color::srgb(1.0, 0.85, 0.4)),
             ));
             parent.spawn((
                 ShopHintText,
-                TextBundle::from_section(
-                    "1: Buy   2: Sell   Up/Down: select   Enter: confirm   Esc: close",
-                    TextStyle {
-                        font_size: 16.0,
-                        color: Color::srgb(0.7, 0.7, 0.75),
-                        ..default()
-                    },
-                ),
+                Text::new("1: Buy   2: Sell   Up/Down: select   Enter: confirm   Esc: close"),
+                TextFont {
+                    font_size: FontSize::Px(16.0),
+                    ..default()
+                },
+                TextColor(Color::srgb(0.7, 0.7, 0.75)),
             ));
         });
     println!("Shop UI ready");
@@ -499,8 +495,7 @@ fn apply_loaded_shop(
         shop.stock = save.shop_stock.clone();
     }
     shop.shop.sales_sum = save.shop_sales;
-    shop.shop.shop_level =
-        ShopTier::from_u8(save.shop_tier).unwrap_or(ShopTier::Zakka);
+    shop.shop.shop_level = ShopTier::from_u8(save.shop_tier).unwrap_or(ShopTier::Zakka);
     inventory.furniture = save.furniture.clone();
     println!(
         "Shop restored: {} items in stock, {} sales, tier {:?}, {} owned furniture",
@@ -546,7 +541,7 @@ fn shop_enter(
     if !building.placed {
         return;
     }
-    let Ok((mut transform, mut facing)) = player_query.get_single_mut() else {
+    let Ok((mut transform, mut facing)) = player_query.single_mut() else {
         return;
     };
     let to_door = building.door_pos - transform.translation;
@@ -581,7 +576,7 @@ fn shop_exit(
     if !keyboard.just_pressed(KeyCode::KeyE) {
         return;
     }
-    let Ok((mut transform, mut facing)) = player_query.get_single_mut() else {
+    let Ok((mut transform, mut facing)) = player_query.single_mut() else {
         return;
     };
     let door = SHOP_ORIGIN + Vec3::new(0.0, 0.0, 4.0);
@@ -615,7 +610,7 @@ fn nook_interact(
     if !keyboard.just_pressed(KeyCode::KeyE) {
         return;
     }
-    let Ok((transform, facing)) = player_query.get_single() else {
+    let Ok((transform, facing)) = player_query.single() else {
         return;
     };
     let nook = SHOP_ORIGIN + Vec3::new(0.0, 0.0, -4.1);
@@ -631,7 +626,7 @@ fn nook_interact(
     ui.mode = ShopMode::Buy;
     ui.selected = 0;
     ui.message.clear();
-    if let Ok(mut vis) = panel_query.get_single_mut() {
+    if let Ok(mut vis) = panel_query.single_mut() {
         *vis = Visibility::Visible;
     }
     println!("Shop menu opened");
@@ -642,13 +637,28 @@ fn nook_interact(
 fn sell_list(inventory: &PlayerInventory) -> Vec<(u8, String, u32, u32)> {
     let mut list = Vec::new();
     if inventory.fruit > 0 {
-        list.push((0, format!("Fruit x{}", inventory.fruit), inventory.fruit, FRUIT_SELL));
+        list.push((
+            0,
+            format!("Fruit x{}", inventory.fruit),
+            inventory.fruit,
+            FRUIT_SELL,
+        ));
     }
     if inventory.fish > 0 {
-        list.push((1, format!("Fish x{}", inventory.fish), inventory.fish, FISH_SELL));
+        list.push((
+            1,
+            format!("Fish x{}", inventory.fish),
+            inventory.fish,
+            FISH_SELL,
+        ));
     }
     if inventory.bugs > 0 {
-        list.push((2, format!("Bugs x{}", inventory.bugs), inventory.bugs, BUG_SELL));
+        list.push((
+            2,
+            format!("Bugs x{}", inventory.bugs),
+            inventory.bugs,
+            BUG_SELL,
+        ));
     }
     list
 }
@@ -677,7 +687,7 @@ fn shop_menu_input(
     }
     if keyboard.just_pressed(KeyCode::Escape) {
         ui.open = false;
-        if let Ok(mut vis) = panel_query.get_single_mut() {
+        if let Ok(mut vis) = panel_query.single_mut() {
             *vis = Visibility::Hidden;
         }
         println!("Shop menu closed");
@@ -781,19 +791,26 @@ fn refresh_shop_ui(
     inventory: Res<PlayerInventory>,
     mut title_q: Query<&mut Text, With<ShopTitleText>>,
     mut list_q: Query<&mut Text, (With<ShopListText>, Without<ShopTitleText>)>,
-    mut msg_q: Query<&mut Text, (With<ShopMsgText>, Without<ShopTitleText>, Without<ShopListText>)>,
+    mut msg_q: Query<
+        &mut Text,
+        (
+            With<ShopMsgText>,
+            Without<ShopTitleText>,
+            Without<ShopListText>,
+        ),
+    >,
 ) {
     if !ui.open {
         return;
     }
-    if let Ok(mut t) = title_q.get_single_mut() {
-        t.sections[0].value = format!(
+    if let Ok(mut t) = title_q.single_mut() {
+        t.0 = format!(
             "{}   |   Bells: {}",
             tier_name(shop.shop.shop_level),
             inventory.bells
         );
     }
-    if let Ok(mut t) = list_q.get_single_mut() {
+    if let Ok(mut t) = list_q.single_mut() {
         let mut s = String::new();
         match ui.mode {
             ShopMode::Buy => {
@@ -830,10 +847,10 @@ fn refresh_shop_ui(
         } else {
             s.push_str("\nNookington's — fully upgraded!");
         }
-        t.sections[0].value = s;
+        t.0 = s;
     }
-    if let Ok(mut t) = msg_q.get_single_mut() {
-        t.sections[0].value = ui.message.clone();
+    if let Ok(mut t) = msg_q.single_mut() {
+        t.0 = ui.message.clone();
     }
 }
 
@@ -849,7 +866,7 @@ fn shop_interior_movement(
     if *state != ShopLocation::Inside || ui.open {
         return;
     }
-    let Ok((mut transform, mut facing)) = player_query.get_single_mut() else {
+    let Ok((mut transform, mut facing)) = player_query.single_mut() else {
         return;
     };
 
@@ -869,7 +886,7 @@ fn shop_interior_movement(
 
     if direction.length() > 0.0 {
         direction = direction.normalize();
-        let movement = direction * PLAYER_SPEED * time.delta_seconds();
+        let movement = direction * PLAYER_SPEED * time.delta().as_secs_f32();
 
         let nx = transform.translation.x + movement.x;
         if (nx - SHOP_ORIGIN.x).abs() <= SHOP_WALK_X
@@ -929,6 +946,9 @@ impl Plugin for ShopPlugin {
             )
             .add_systems(Update, shop_enter.in_set(ShopInputSet))
             .add_systems(Update, (shop_exit, nook_interact, shop_menu_input))
-            .add_systems(Update, (refresh_shop_ui, shop_interior_movement, update_shop_hud));
+            .add_systems(
+                Update,
+                (refresh_shop_ui, shop_interior_movement, update_shop_hud),
+            );
     }
 }

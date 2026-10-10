@@ -53,10 +53,10 @@ impl WanderRng {
 
 /// (name, looks/personality index, capsule color).
 const VILLAGERS: [(&str, u8, (f32, f32, f32)); 4] = [
-    ("Maple", 0, (0.95, 0.55, 0.35)),  // normal — orange
-    ("Pippy", 1, (0.95, 0.35, 0.55)),  // peppy — pink
-    ("Bob", 2, (0.45, 0.75, 0.45)),    // lazy — green
-    ("Chief", 4, (0.55, 0.45, 0.75)),  // cranky — purple
+    ("Maple", 0, (0.95, 0.55, 0.35)), // normal — orange
+    ("Pippy", 1, (0.95, 0.35, 0.55)), // peppy — pink
+    ("Bob", 2, (0.45, 0.75, 0.45)),   // lazy — green
+    ("Chief", 4, (0.55, 0.45, 0.75)), // cranky — purple
 ];
 
 const SPAWN_POINTS: [Vec3; 4] = [
@@ -117,12 +117,9 @@ fn spawn_villagers(
                 retarget_timer: 0.0,
                 speed: 1.6,
             },
-            PbrBundle {
-                mesh,
-                material,
-                transform: Transform::from_translation(home),
-                ..default()
-            },
+            Mesh3d(mesh),
+            MeshMaterial3d(material),
+            Transform::from_translation(home),
         ));
 
         // Sanity-check the schedule logic from the logic crate at spawn:
@@ -148,12 +145,12 @@ fn villager_wander(
     mut villagers: Query<(&mut Villager, &mut Transform), Without<Player>>,
 ) {
     let player_pos = player_query
-        .get_single()
+        .single()
         .map(|t| t.translation)
         .unwrap_or(Vec3::ZERO);
 
     for (mut villager, mut transform) in villagers.iter_mut() {
-        villager.retarget_timer -= time.delta_seconds();
+        villager.retarget_timer -= time.delta().as_secs_f32();
         let to_target = villager.target - transform.translation;
         let dist = to_target.length();
 
@@ -161,15 +158,12 @@ fn villager_wander(
             // Pick a new target within ~7 units of home.
             let dx = rng.range_f32(-7.0, 7.0);
             let dz = rng.range_f32(-7.0, 7.0);
-            villager.target = Vec3::new(
-                villager.home.x + dx,
-                villager.home.y,
-                villager.home.z + dz,
-            );
+            villager.target =
+                Vec3::new(villager.home.x + dx, villager.home.y, villager.home.z + dz);
             villager.retarget_timer = rng.range_f32(2.0, 5.0);
         } else {
             let dir = to_target / dist;
-            let step = dir * villager.speed * time.delta_seconds();
+            let step = dir * villager.speed * time.delta().as_secs_f32();
             let candidate = transform.translation + step;
 
             // Don't walk into unwalkable cells, the shop building, or

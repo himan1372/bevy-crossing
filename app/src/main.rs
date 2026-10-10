@@ -1,32 +1,35 @@
 use bevy::prelude::*;
 
-mod mail;
-mod town;
-mod player;
-mod npc;
-mod interaction;
 mod dialogue;
-mod save;
 mod ecology;
 mod house;
-mod shop;
+mod interaction;
+mod mail;
+mod npc;
+mod player;
 mod quest;
+mod remote;
+mod save;
+mod shop;
+mod town;
 
-use town::TownPlugin;
-use player::PlayerPlugin;
-use npc::NpcPlugin;
-use interaction::InteractionPlugin;
 use dialogue::DialoguePlugin;
-use save::SavePlugin;
 use ecology::EcologyPlugin;
 use house::HousePlugin;
+use interaction::InteractionPlugin;
 use mail::MailPlugin;
-use shop::ShopPlugin;
+use npc::NpcPlugin;
+use player::PlayerPlugin;
 use quest::QuestPlugin;
+use remote::RemotePluginGate;
+use save::SavePlugin;
+use shop::ShopPlugin;
+use town::TownPlugin;
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
+        .add_plugins(RemotePluginGate)
         .add_plugins(SavePlugin)
         .add_plugins(TownPlugin)
         .add_plugins(PlayerPlugin)
@@ -43,8 +46,8 @@ fn main() {
 }
 
 fn setup_light(mut commands: Commands) {
-    commands.spawn(DirectionalLightBundle {
-        transform: Transform::from_xyz(4.0, 8.0, 4.0),
-        ..default()
-    });
+    commands.spawn((
+        DirectionalLight::default(),
+        Transform::from_xyz(4.0, 8.0, 4.0),
+    ));
 }

@@ -1,6 +1,6 @@
-use bevy::prelude::*;
 use crate::house::HouseState;
 use crate::town::Town;
+use bevy::prelude::*;
 
 /// Player marker component.
 #[derive(Component)]
@@ -20,20 +20,16 @@ pub fn spawn_player(
 
     commands.spawn((
         Player,
-        PbrBundle {
-            mesh: player_mesh,
-            material: player_mat,
-            transform: Transform::from_xyz(0.0, 1.0, 0.0),
-            ..default()
-        },
+        Mesh3d(player_mesh),
+        MeshMaterial3d(player_mat),
+        Transform::from_xyz(0.0, 1.0, 0.0),
     ));
 
     // Spawn camera
-    commands.spawn(Camera3dBundle {
-        transform: Transform::from_xyz(0.0, 12.0, 10.0)
-            .looking_at(Vec3::ZERO, Vec3::Y),
-        ..default()
-    });
+    commands.spawn((
+        Camera3d::default(),
+        Transform::from_xyz(0.0, 12.0, 10.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
 
     println!("Player and camera spawned");
 }
@@ -57,7 +53,7 @@ pub fn player_movement(
     if shop_ui.open {
         return;
     }
-    let Ok(mut transform) = player_query.get_single_mut() else {
+    let Ok(mut transform) = player_query.single_mut() else {
         return;
     };
 
@@ -78,12 +74,12 @@ pub fn player_movement(
 
     if direction.length() > 0.0 {
         direction = direction.normalize();
-        let movement = direction * PLAYER_SPEED * time.delta_seconds();
+        let movement = direction * PLAYER_SPEED * time.delta().as_secs_f32();
 
         let blocked = |x: f32, z: f32| {
-            shop_building.as_ref().map_or(false, |s| {
-                crate::shop::point_blocked(s, x, z)
-            })
+            shop_building
+                .as_ref()
+                .map_or(false, |s| crate::shop::point_blocked(s, x, z))
         };
 
         // Try X movement
@@ -107,10 +103,10 @@ pub fn camera_follow(
     player_query: Query<&Transform, With<Player>>,
     mut camera_query: Query<&mut Transform, (With<Camera>, Without<Player>)>,
 ) {
-    let Ok(player_transform) = player_query.get_single() else {
+    let Ok(player_transform) = player_query.single() else {
         return;
     };
-    let Ok(mut camera_transform) = camera_query.get_single_mut() else {
+    let Ok(mut camera_transform) = camera_query.single_mut() else {
         return;
     };
 
@@ -123,12 +119,7 @@ pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_player).add_systems(
-            Update,
-            (
-                player_movement,
-                camera_follow,
-            ),
-        );
+        app.add_systems(Startup, spawn_player)
+            .add_systems(Update, (player_movement, camera_follow));
     }
 }

@@ -11,6 +11,7 @@
 //! decomp data only carries numeric furniture IDs, no string table.
 
 use bevy::prelude::*;
+use bevy::text::FontSize;
 use rustimal_logic::furniture::FurnitureSize;
 use rustimal_logic::town_gen::{CellKind, Feature, ACRE_DEPTH, ACRE_WIDTH};
 
@@ -136,20 +137,18 @@ fn build_interior(
     let rug_mat = materials.add(Color::srgb(0.7, 0.25, 0.25));
 
     // Floor.
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(Plane3d::default().mesh().size(8.8, 8.8)),
-        material: floor_mat,
-        transform: Transform::from_xyz(ox, 0.02, oz),
-        ..default()
-    });
+    commands.spawn((
+        Mesh3d(meshes.add(Plane3d::default().mesh().size(8.8, 8.8))),
+        MeshMaterial3d(floor_mat),
+        Transform::from_xyz(ox, 0.02, oz),
+    ));
 
     // Rug.
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(Plane3d::default().mesh().size(2.6, 2.6)),
-        material: rug_mat,
-        transform: Transform::from_xyz(ox, 0.04, oz - 0.5),
-        ..default()
-    });
+    commands.spawn((
+        Mesh3d(meshes.add(Plane3d::default().mesh().size(2.6, 2.6))),
+        MeshMaterial3d(rug_mat),
+        Transform::from_xyz(ox, 0.04, oz - 0.5),
+    ));
 
     // Four walls (no ceiling; the camera looks in from above at an angle).
     let wall_h = 3.0;
@@ -162,40 +161,65 @@ fn build_interior(
         (ox + 4.0, oz, wall_t, 8.8), // east
     ];
     for (wx, wz, sx, sz) in walls {
-        commands.spawn(PbrBundle {
-            mesh: meshes.add(Cuboid::new(sx, wall_h, sz)),
-            material: wall_mat.clone(),
-            transform: Transform::from_xyz(wx, wall_h / 2.0, wz),
-            ..default()
-        });
+        commands.spawn((
+            Mesh3d(meshes.add(Cuboid::new(sx, wall_h, sz))),
+            MeshMaterial3d(wall_mat.clone()),
+            Transform::from_xyz(wx, wall_h / 2.0, wz),
+        ));
     }
 
     // Door panel on the south wall (visual only; exit is via E).
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(Cuboid::new(1.4, 2.4, 0.15)),
-        material: door_mat,
-        transform: Transform::from_xyz(ox, 1.2, oz + 3.85),
-        ..default()
-    });
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(1.4, 2.4, 0.15))),
+        MeshMaterial3d(door_mat),
+        Transform::from_xyz(ox, 1.2, oz + 3.85),
+    ));
 
     // Furniture: (placeholder name, size class, local x, local z, height, color).
     // Kept clear of the door path (x in [-1.2, 1.2], z > 1.0).
     let furniture: [(&str, FurnitureSize, f32, f32, f32, (f32, f32, f32)); 4] = [
-        ("Oak Table", FurnitureSize::Size2x2, -1.9, -1.4, 0.75, (0.5, 0.33, 0.18)),
-        ("Red Chair", FurnitureSize::Size1x1, -1.9, 0.3, 0.7, (0.75, 0.2, 0.2)),
-        ("Blue Bed", FurnitureSize::Size1x2, 2.3, -2.2, 0.5, (0.25, 0.4, 0.8)),
-        ("Floor Lamp", FurnitureSize::Size1x1, 2.6, 1.6, 1.5, (0.9, 0.8, 0.4)),
+        (
+            "Oak Table",
+            FurnitureSize::Size2x2,
+            -1.9,
+            -1.4,
+            0.75,
+            (0.5, 0.33, 0.18),
+        ),
+        (
+            "Red Chair",
+            FurnitureSize::Size1x1,
+            -1.9,
+            0.3,
+            0.7,
+            (0.75, 0.2, 0.2),
+        ),
+        (
+            "Blue Bed",
+            FurnitureSize::Size1x2,
+            2.3,
+            -2.2,
+            0.5,
+            (0.25, 0.4, 0.8),
+        ),
+        (
+            "Floor Lamp",
+            FurnitureSize::Size1x1,
+            2.6,
+            1.6,
+            1.5,
+            (0.9, 0.8, 0.4),
+        ),
     ];
     let mut obstacles = Vec::new();
     for (name, size, lx, lz, h, (r, g, b)) in furniture {
         let (fw, fd) = furniture_footprint(size);
         let mat = materials.add(Color::srgb(r, g, b));
-        commands.spawn(PbrBundle {
-            mesh: meshes.add(Cuboid::new(fw, h, fd)),
-            material: mat,
-            transform: Transform::from_xyz(ox + lx, h / 2.0, oz + lz),
-            ..default()
-        });
+        commands.spawn((
+            Mesh3d(meshes.add(Cuboid::new(fw, h, fd))),
+            MeshMaterial3d(mat),
+            Transform::from_xyz(ox + lx, h / 2.0, oz + lz),
+        ));
         obstacles.push(Obstacle {
             min_x: ox + lx - fw / 2.0,
             max_x: ox + lx + fw / 2.0,
@@ -209,24 +233,19 @@ fn build_interior(
     // Persistent "inside" indicator (hidden until the player enters).
     commands.spawn((
         HouseHudText,
-        TextBundle {
-            text: Text::from_section(
-                "House — press E at the door to exit",
-                TextStyle {
-                    font_size: 22.0,
-                    color: Color::WHITE,
-                    ..default()
-                },
-            ),
-            style: Style {
-                position_type: PositionType::Absolute,
-                top: Val::Px(10.0),
-                left: Val::Px(50.0),
-                ..default()
-            },
-            visibility: Visibility::Hidden,
+        Text::new("House — press E at the door to exit"),
+        TextFont {
+            font_size: FontSize::Px(22.0),
             ..default()
         },
+        TextColor(Color::WHITE),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(10.0),
+            left: Val::Px(50.0),
+            ..default()
+        },
+        Visibility::Hidden,
     ));
 
     println!("House interior built at {:?}", INTERIOR_ORIGIN);
@@ -266,7 +285,7 @@ fn house_enter(
         return;
     }
     let Some(house) = house else { return };
-    let Ok((mut transform, mut facing)) = player_query.get_single_mut() else {
+    let Ok((mut transform, mut facing)) = player_query.single_mut() else {
         return;
     };
     let to_door = house.door_pos - transform.translation;
@@ -299,7 +318,7 @@ fn house_exit(
     if !keyboard.just_pressed(KeyCode::KeyE) {
         return;
     }
-    let Ok((mut transform, mut facing)) = player_query.get_single_mut() else {
+    let Ok((mut transform, mut facing)) = player_query.single_mut() else {
         return;
     };
     let door = INTERIOR_ORIGIN + Vec3::new(0.0, 0.0, 3.0);
@@ -329,7 +348,7 @@ fn interior_movement(
     if *state != HouseState::Inside {
         return;
     }
-    let Ok((mut transform, mut facing)) = player_query.get_single_mut() else {
+    let Ok((mut transform, mut facing)) = player_query.single_mut() else {
         return;
     };
 
@@ -349,7 +368,7 @@ fn interior_movement(
 
     if direction.length() > 0.0 {
         direction = direction.normalize();
-        let movement = direction * PLAYER_SPEED * time.delta_seconds();
+        let movement = direction * PLAYER_SPEED * time.delta().as_secs_f32();
 
         let nx = transform.translation.x + movement.x;
         if (nx - INTERIOR_ORIGIN.x).abs() <= WALK_HALF

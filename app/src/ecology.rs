@@ -17,8 +17,9 @@
 //! bug in reach. Catches increment the HUD fish/bug counters.
 
 use bevy::prelude::*;
+use bevy::text::FontSize;
 use rustimal_logic::species::{self, FishArea, FishType, InsectArea, InsectType};
-use rustimal_logic::town_gen::{ACRE_WIDTH, CellKind};
+use rustimal_logic::town_gen::{CellKind, ACRE_WIDTH};
 
 use crate::dialogue::DialogueState;
 use crate::house::HouseState;
@@ -262,14 +263,11 @@ fn spawn_fish(
                 home: pos,
                 speed: rng.range_f32(0.3, 0.7),
             },
-            PbrBundle {
-                mesh: mesh.clone(),
-                material: mat.clone(),
-                transform: Transform {
-                    translation: Vec3::new(pos.x, 0.12, pos.z),
-                    scale: Vec3::new(1.2, 0.22, 0.7),
-                    ..default()
-                },
+            Mesh3d(mesh.clone()),
+            MeshMaterial3d(mat.clone()),
+            Transform {
+                translation: Vec3::new(pos.x, 0.12, pos.z),
+                scale: Vec3::new(1.2, 0.22, 0.7),
                 ..default()
             },
         ));
@@ -314,12 +312,9 @@ fn spawn_bugs(
                 speed: rng.range_f32(0.8, 1.6),
                 grounded,
             },
-            PbrBundle {
-                mesh: mesh.clone(),
-                material: mat,
-                transform: Transform::from_translation(pos),
-                ..default()
-            },
+            Mesh3d(mesh.clone()),
+            MeshMaterial3d(mat),
+            Transform::from_translation(pos),
         ));
     }
 }
@@ -329,11 +324,7 @@ fn find_walkable_near(town: &Town, rng: &mut EcoRng, center: Vec3, radius: f32) 
     for _ in 0..8 {
         let angle = rng.range_f32(0.0, std::f32::consts::TAU);
         let r = rng.range_f32(1.0, radius);
-        let p = Vec3::new(
-            center.x + angle.cos() * r,
-            0.0,
-            center.z + angle.sin() * r,
-        );
+        let p = Vec3::new(center.x + angle.cos() * r, 0.0, center.z + angle.sin() * r);
         if town.is_walkable(p) {
             return Some(p);
         }
@@ -349,8 +340,22 @@ fn spawn_initial_critters(
     town: Res<Town>,
 ) {
     let mut rng = EcoRng(0xC0FFEE1234567890);
-    spawn_fish(&mut commands, &mut meshes, &mut materials, &town, &mut rng, FISH_TARGET);
-    spawn_bugs(&mut commands, &mut meshes, &mut materials, &town, &mut rng, BUG_TARGET);
+    spawn_fish(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        &town,
+        &mut rng,
+        FISH_TARGET,
+    );
+    spawn_bugs(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        &town,
+        &mut rng,
+        BUG_TARGET,
+    );
     commands.insert_resource(rng);
     println!("Ecology spawned: {FISH_TARGET} fish, {BUG_TARGET} bugs");
 }
@@ -362,46 +367,35 @@ fn setup_ecology_ui(mut commands: Commands) {
     // Tool indicator — top-left, under the inventory HUD.
     commands.spawn((
         ToolText,
-        TextBundle {
-            text: Text::from_section(
-                "Tool: none (1=rod 2=net)",
-                TextStyle {
-                    font_size: 18.0,
-                    color: Color::srgba(1.0, 1.0, 1.0, 0.85),
-                    ..default()
-                },
-            ),
-            style: Style {
-                position_type: PositionType::Absolute,
-                top: Val::Px(40.0),
-                left: Val::Px(12.0),
-                ..default()
-            },
+        Text::new("Tool: none (1=rod 2=net)"),
+        TextFont {
+            font_size: FontSize::Px(18.0),
+            ..default()
+        },
+        TextColor(Color::srgba(1.0, 1.0, 1.0, 0.85)),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(40.0),
+            left: Val::Px(12.0),
             ..default()
         },
     ));
 
     // Catch notification — top-center, below the save notification.
-    let mut text = Text::from_section(
-        "",
-        TextStyle {
-            font_size: 26.0,
-            color: Color::WHITE,
-            ..default()
-        },
-    );
-    text.justify = bevy::text::JustifyText::Center;
     commands.spawn((
         CatchNotifyText,
-        TextBundle {
-            text,
-            style: Style {
-                position_type: PositionType::Absolute,
-                top: Val::Px(110.0),
-                left: Val::Px(0.0),
-                right: Val::Px(0.0),
-                ..default()
-            },
+        Text::new(""),
+        TextFont {
+            font_size: FontSize::Px(26.0),
+            ..default()
+        },
+        TextColor(Color::WHITE),
+        TextLayout::justify(Justify::Center),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(110.0),
+            left: Val::Px(0.0),
+            right: Val::Px(0.0),
             ..default()
         },
     ));
@@ -412,8 +406,8 @@ fn show_catch_notify(
     timer: &mut ResMut<CatchNotifyTimer>,
     query: &mut Query<&mut Text, With<CatchNotifyText>>,
 ) {
-    if let Ok(mut text) = query.get_single_mut() {
-        text.sections[0].value = msg.to_string();
+    if let Ok(mut text) = query.single_mut() {
+        text.0 = msg.to_string();
     }
     timer.0 = 2.5;
 }
@@ -424,10 +418,10 @@ fn tick_catch_notify(
     mut query: Query<&mut Text, With<CatchNotifyText>>,
 ) {
     if timer.0 > 0.0 {
-        timer.0 -= time.delta_seconds();
+        timer.0 -= time.delta().as_secs_f32();
         if timer.0 <= 0.0 {
-            if let Ok(mut text) = query.get_single_mut() {
-                text.sections[0].value.clear();
+            if let Ok(mut text) = query.single_mut() {
+                text.0.clear();
             }
         }
     }
@@ -442,8 +436,8 @@ fn update_tool_hud(tool: Res<EquippedTool>, mut query: Query<&mut Text, With<Too
         EquippedTool::Rod => "Tool: Fishing Rod (E to cast near water)",
         EquippedTool::Net => "Tool: Bug Net (E to swing at bugs)",
     };
-    if let Ok(mut text) = query.get_single_mut() {
-        text.sections[0].value = label.to_string();
+    if let Ok(mut text) = query.single_mut() {
+        text.0 = label.to_string();
     }
 }
 
@@ -457,7 +451,7 @@ fn update_fish(
     mut rng: ResMut<EcoRng>,
 ) {
     for (mut fish, mut transform) in query.iter_mut() {
-        let step = fish.dir * fish.speed * time.delta_seconds();
+        let step = fish.dir * fish.speed * time.delta().as_secs_f32();
         let next = transform.translation + step;
         let in_range = (next - fish.home).length() < 9.0;
         if town.is_river(next) && in_range {
@@ -478,7 +472,7 @@ fn update_bugs(
 ) {
     for (mut bug, mut transform) in query.iter_mut() {
         if bug.pause > 0.0 {
-            bug.pause -= time.delta_seconds();
+            bug.pause -= time.delta().as_secs_f32();
             continue;
         }
         let to_target = bug.target - transform.translation;
@@ -499,7 +493,7 @@ fn update_bugs(
             }
             continue;
         }
-        transform.translation += to_target.normalize() * bug.speed * time.delta_seconds();
+        transform.translation += to_target.normalize() * bug.speed * time.delta().as_secs_f32();
     }
 }
 
@@ -570,7 +564,7 @@ fn tool_interact(
     if !keyboard.just_pressed(KeyCode::KeyE) {
         return;
     }
-    let Ok((player_transform, facing)) = player_query.get_single() else {
+    let Ok((player_transform, facing)) = player_query.single() else {
         return;
     };
     let player_pos = player_transform.translation;
@@ -578,7 +572,7 @@ fn tool_interact(
     match *tool {
         EquippedTool::Rod => {
             // Reel in if a bobber is already out.
-            if let Ok(bobber) = bobber_query.get_single() {
+            if let Ok(bobber) = bobber_query.single() {
                 commands.entity(bobber).despawn();
                 show_catch_notify("Reeled in.", &mut notify_timer, &mut notify_query);
                 return;
@@ -593,18 +587,22 @@ fn tool_interact(
                 }
             }
             let Some(cp) = cast_point else {
-                show_catch_notify("No water in front of you.", &mut notify_timer, &mut notify_query);
+                show_catch_notify(
+                    "No water in front of you.",
+                    &mut notify_timer,
+                    &mut notify_query,
+                );
                 return;
             };
             let bite_at = rng.range_f32(1.5, 3.5);
             commands.spawn((
-                Bobber { timer: 0.0, bite_at },
-                PbrBundle {
-                    mesh: meshes.add(Sphere::new(0.18)),
-                    material: materials.add(Color::srgb(0.9, 0.15, 0.1)),
-                    transform: Transform::from_xyz(cp.x, 0.35, cp.z),
-                    ..default()
+                Bobber {
+                    timer: 0.0,
+                    bite_at,
                 },
+                Mesh3d(meshes.add(Sphere::new(0.18))),
+                MeshMaterial3d(materials.add(Color::srgb(0.9, 0.15, 0.1))),
+                Transform::from_xyz(cp.x, 0.35, cp.z),
             ));
             println!("Cast! (bite in {bite_at:.1}s)");
         }
@@ -659,7 +657,7 @@ fn update_bobber(
     mut notify_query: Query<&mut Text, With<CatchNotifyText>>,
 ) {
     for (entity, mut bobber, bobber_transform) in bobber_query.iter_mut() {
-        bobber.timer += time.delta_seconds();
+        bobber.timer += time.delta().as_secs_f32();
         if bobber.timer < bobber.bite_at {
             continue;
         }
@@ -672,10 +670,7 @@ fn update_bobber(
         }
         match best {
             Some((fish_entity, _)) => {
-                let species = fish_query
-                    .get(fish_entity)
-                    .map(|(_, f, _)| f.species)
-                    .ok();
+                let species = fish_query.get(fish_entity).map(|(_, f, _)| f.species).ok();
                 commands.entity(fish_entity).despawn();
                 inventory.fish += 1;
                 let name = species

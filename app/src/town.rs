@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use rustimal_logic::town_gen::{self, TownPlan, CellKind, ACRE_WIDTH, ACRE_DEPTH};
+use rustimal_logic::town_gen::{self, CellKind, TownPlan, ACRE_DEPTH, ACRE_WIDTH};
 use std::collections::HashSet;
 
 /// Size of one acre in world units.
@@ -19,7 +19,9 @@ const RIVER_HALF_WIDTH: usize = 2;
 /// Deterministic 0/1 shade jitter for an acre index, so the grass
 /// checkerboard has slight organic variation instead of a perfect pattern.
 fn acre_jitter(acre_idx: usize) -> usize {
-    let mut x = (acre_idx as u32).wrapping_mul(0x9E3779B9).wrapping_add(0x85EBCA6B);
+    let mut x = (acre_idx as u32)
+        .wrapping_mul(0x9E3779B9)
+        .wrapping_add(0x85EBCA6B);
     x ^= x >> 16;
     x = x.wrapping_mul(0x85EBCA6B);
     x ^= x >> 13;
@@ -253,8 +255,7 @@ fn river_water_tiles(plan: &TownPlan) -> HashSet<(usize, usize, usize, usize)> {
 pub fn generate_town(mut commands: Commands, seed: Option<Res<TownSeed>>) {
     let seed_val = seed.map(|s| s.0).unwrap_or(12345);
     let pool: Vec<u16> = (0..15).collect();
-    let plan = town_gen::generate(seed_val, &pool, 6)
-        .expect("Failed to generate town");
+    let plan = town_gen::generate(seed_val, &pool, 6).expect("Failed to generate town");
 
     let river_tiles = river_water_tiles(&plan);
     println!(
@@ -302,8 +303,10 @@ pub fn render_town(
             let acre_idx = az * ACRE_WIDTH + ax;
             let acre = &town.plan.acres[acre_idx];
 
-            let wx = (ax as f32 * ACRE_SIZE) + ACRE_SIZE / 2.0 - (ACRE_WIDTH as f32 * ACRE_SIZE) / 2.0;
-            let wz = (az as f32 * ACRE_SIZE) + ACRE_SIZE / 2.0 - (ACRE_DEPTH as f32 * ACRE_SIZE) / 2.0;
+            let wx =
+                (ax as f32 * ACRE_SIZE) + ACRE_SIZE / 2.0 - (ACRE_WIDTH as f32 * ACRE_SIZE) / 2.0;
+            let wz =
+                (az as f32 * ACRE_SIZE) + ACRE_SIZE / 2.0 - (ACRE_DEPTH as f32 * ACRE_SIZE) / 2.0;
 
             // Checkerboard grass: alternate light/dark acres, with a deterministic
             // per-acre shade jitter for a less artificial look.
@@ -311,12 +314,11 @@ pub fn render_town(
             let jitter = acre_jitter(acre_idx);
             let grass_mat = grass_mats[checker * 2 + jitter].clone();
 
-            commands.spawn(PbrBundle {
-                mesh: ground_mesh.clone(),
-                material: grass_mat,
-                transform: Transform::from_xyz(wx, 0.0, wz),
-                ..default()
-            });
+            commands.spawn((
+                Mesh3d(ground_mesh.clone()),
+                MeshMaterial3d(grass_mat),
+                Transform::from_xyz(wx, 0.0, wz),
+            ));
 
             for cz in 0..16 {
                 for cx in 0..16 {
@@ -325,12 +327,11 @@ pub fn render_town(
                     // River water: flat blue plane, no decorations on top.
                     if town.river_tiles.contains(&(ax, az, cx, cz)) {
                         water_count += 1;
-                        commands.spawn(PbrBundle {
-                            mesh: water_mesh.clone(),
-                            material: water_mat.clone(),
-                            transform: Transform::from_xyz(pos.x, 0.05, pos.z),
-                            ..default()
-                        });
+                        commands.spawn((
+                            Mesh3d(water_mesh.clone()),
+                            MeshMaterial3d(water_mat.clone()),
+                            Transform::from_xyz(pos.x, 0.05, pos.z),
+                        ));
                         continue;
                     }
 
@@ -339,33 +340,29 @@ pub fn render_town(
 
                     if cell == CellKind::Tree as u8 {
                         tree_count += 1;
-                        commands.spawn(PbrBundle {
-                            mesh: trunk_mesh.clone(),
-                            material: tree_trunk_mat.clone(),
-                            transform: Transform::from_xyz(pos.x, 0.75, pos.z),
-                            ..default()
-                        });
-                        commands.spawn(PbrBundle {
-                            mesh: leaf_mesh.clone(),
-                            material: tree_leaf_mat.clone(),
-                            transform: Transform::from_xyz(pos.x, 2.2, pos.z),
-                            ..default()
-                        });
+                        commands.spawn((
+                            Mesh3d(trunk_mesh.clone()),
+                            MeshMaterial3d(tree_trunk_mat.clone()),
+                            Transform::from_xyz(pos.x, 0.75, pos.z),
+                        ));
+                        commands.spawn((
+                            Mesh3d(leaf_mesh.clone()),
+                            MeshMaterial3d(tree_leaf_mat.clone()),
+                            Transform::from_xyz(pos.x, 2.2, pos.z),
+                        ));
                     } else if cell == CellKind::House as u8 {
                         house_count += 1;
-                        commands.spawn(PbrBundle {
-                            mesh: house_mesh.clone(),
-                            material: house_mat.clone(),
-                            transform: Transform::from_xyz(pos.x, 1.25, pos.z),
-                            ..default()
-                        });
+                        commands.spawn((
+                            Mesh3d(house_mesh.clone()),
+                            MeshMaterial3d(house_mat.clone()),
+                            Transform::from_xyz(pos.x, 1.25, pos.z),
+                        ));
                     } else if cell == CellKind::Rock as u8 {
-                        commands.spawn(PbrBundle {
-                            mesh: rock_mesh.clone(),
-                            material: rock_mat.clone(),
-                            transform: Transform::from_xyz(pos.x, 0.4, pos.z),
-                            ..default()
-                        });
+                        commands.spawn((
+                            Mesh3d(rock_mesh.clone()),
+                            MeshMaterial3d(rock_mat.clone()),
+                            Transform::from_xyz(pos.x, 0.4, pos.z),
+                        ));
                     }
                 }
             }

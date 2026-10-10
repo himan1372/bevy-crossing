@@ -5,6 +5,7 @@
 //! villager mood/patience ("feels"), not spatial queries, so it isn't
 //! called here; talk-throttle mechanics are a later-phase concern.
 
+use bevy::ecs::message::{Message, MessageWriter};
 use bevy::prelude::*;
 
 use crate::dialogue::DialogueState;
@@ -53,7 +54,7 @@ pub struct PlayerInventory {
 }
 
 /// Fired when the player talks to a villager.
-#[derive(Event)]
+#[derive(Message)]
 pub struct TalkEvent {
     pub villager: Entity,
 }
@@ -93,12 +94,9 @@ pub fn spawn_ground_item(
     };
     commands.spawn((
         GroundItem { kind, index },
-        PbrBundle {
-            mesh,
-            material: mat,
-            transform: Transform::from_translation(pos),
-            ..default()
-        },
+        Mesh3d(mesh),
+        MeshMaterial3d(mat),
+        Transform::from_translation(pos),
     ));
 }
 
@@ -125,7 +123,14 @@ fn spawn_items(
         if !town.is_walkable(Vec3::new(*x, 0.0, *z)) {
             continue;
         }
-        spawn_ground_item(&mut commands, &mut meshes, &mut materials, index, *kind, pos);
+        spawn_ground_item(
+            &mut commands,
+            &mut meshes,
+            &mut materials,
+            index,
+            *kind,
+            pos,
+        );
     }
     println!("Ground items spawned");
 }
@@ -136,12 +141,12 @@ pub fn track_player_facing(
     player_query: Query<(Entity, &Transform), With<Player>>,
     mut facing_query: Query<&mut Facing>,
 ) {
-    let Ok((entity, transform)) = player_query.get_single() else {
+    let Ok((entity, transform)) = player_query.single() else {
         return;
     };
     let pos = transform.translation;
 
-    if let Ok(mut facing) = facing_query.get_single_mut() {
+    if let Ok(mut facing) = facing_query.single_mut() {
         if !facing.initialized {
             facing.last_pos = pos;
             facing.initialized = true;
@@ -174,7 +179,7 @@ pub fn interact(
     mail_ui: Res<crate::mail::MailUi>,
     shop_ui: Res<crate::shop::ShopUi>,
     quest_ui: Res<crate::quest::QuestUi>,
-    mut talk_events: EventWriter<TalkEvent>,
+    mut talk_events: MessageWriter<TalkEvent>,
     mut commands: Commands,
     player_query: Query<(&Transform, &Facing), With<Player>>,
     villagers: Query<(Entity, &Villager, &Transform), Without<Player>>,
@@ -196,7 +201,7 @@ pub fn interact(
     if *tool != crate::ecology::EquippedTool::None {
         return;
     }
-    let Ok((player_transform, facing)) = player_query.get_single() else {
+    let Ok((player_transform, facing)) = player_query.single() else {
         return;
     };
     let player_pos = player_transform.translation;
@@ -217,7 +222,7 @@ pub fn interact(
         }
     }
     if let Some((entity, _)) = best {
-        talk_events.send(TalkEvent { villager: entity });
+        talk_events.write(TalkEvent { villager: entity });
         return;
     }
 
@@ -252,7 +257,7 @@ pub struct InteractionPlugin;
 impl Plugin for InteractionPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(PlayerInventory::default())
-            .add_event::<TalkEvent>()
+            .add_message::<TalkEvent>()
             .add_systems(Startup, spawn_items.after(crate::town::generate_town))
             .add_systems(
                 Update,

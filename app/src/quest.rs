@@ -10,7 +10,9 @@
 //! The offer/turn-in UI, `!` markers, HUD line, and Bevy-side generation
 //! (delivery recipient, fruit/furniture/catch variants) are new.
 
+use bevy::ecs::message::MessageReader;
 use bevy::prelude::*;
+use bevy::text::FontSize;
 use rustimal_logic::quest::{self, ckind, dkind, qtype};
 use rustimal_logic::quest_gen;
 use serde::{Deserialize, Serialize};
@@ -142,12 +144,7 @@ const DECLINE_COOLDOWN_SECS: f32 = 120.0;
 
 /// Build a quest from a type-table roll. `others` are villager names to pick
 /// a delivery recipient from; `stock` are Nook's shelf names.
-fn generate_quest(
-    roll: u32,
-    giver: &str,
-    others: &[String],
-    stock: &[String],
-) -> (QuestKind, u32) {
+fn generate_quest(roll: u32, giver: &str, others: &[String], stock: &[String]) -> (QuestKind, u32) {
     match quest_gen::select_quest_type(false, roll) {
         t if t == qtype::DELIVERY => {
             let candidates: Vec<&String> = others.iter().filter(|n| *n != giver).collect();
@@ -194,13 +191,21 @@ fn generate_quest(
         // rewards instead), so catch quests pay a flat 400 here.
         _ => {
             if roll % 2 == 0 {
-                let reward =
-                    quest::pc_quest_base_pay(qtype::CONTEST, ckind::FISH, 0).max(400);
-                (QuestKind::CatchFish { giver: giver.to_string() }, reward)
+                let reward = quest::pc_quest_base_pay(qtype::CONTEST, ckind::FISH, 0).max(400);
+                (
+                    QuestKind::CatchFish {
+                        giver: giver.to_string(),
+                    },
+                    reward,
+                )
             } else {
-                let reward =
-                    quest::pc_quest_base_pay(qtype::CONTEST, ckind::INSECT, 0).max(400);
-                (QuestKind::CatchBug { giver: giver.to_string() }, reward)
+                let reward = quest::pc_quest_base_pay(qtype::CONTEST, ckind::INSECT, 0).max(400);
+                (
+                    QuestKind::CatchBug {
+                        giver: giver.to_string(),
+                    },
+                    reward,
+                )
             }
         }
     }
@@ -238,7 +243,10 @@ fn turnin_text(active: &ActiveQuest) -> String {
         QuestKind::CatchBug { .. } => "Show off your catch?".to_string(),
         QuestKind::BuyFurniture { item, .. } => format!("Give the {item}?"),
     };
-    format!("{what}\nReward: {} bells\n\nY: Yes    N: Not yet", active.reward)
+    format!(
+        "{what}\nReward: {} bells\n\nY: Yes    N: Not yet",
+        active.reward
+    )
 }
 
 fn hud_text(active: &ActiveQuest) -> String {
@@ -276,92 +284,81 @@ fn setup_quest_ui(mut commands: Commands) {
     commands
         .spawn((
             QuestPanel,
-            NodeBundle {
-                style: Style {
-                    position_type: PositionType::Absolute,
-                    left: Val::Percent(25.0),
-                    right: Val::Percent(25.0),
-                    top: Val::Percent(30.0),
-                    padding: UiRect::all(Val::Px(20.0)),
-                    ..default()
-                },
-                background_color: BackgroundColor(Color::srgba(0.08, 0.07, 0.03, 0.94)),
-                visibility: Visibility::Hidden,
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Percent(25.0),
+                right: Val::Percent(25.0),
+                top: Val::Percent(30.0),
+                padding: UiRect::all(Val::Px(20.0)),
                 ..default()
             },
+            BackgroundColor(Color::srgba(0.08, 0.07, 0.03, 0.94)),
+            Visibility::Hidden,
         ))
         .with_children(|parent| {
             parent.spawn((
                 QuestPanelText,
-                TextBundle::from_section(
-                    "",
-                    TextStyle {
-                        font_size: 22.0,
-                        color: Color::srgb(1.0, 0.95, 0.75),
-                        ..default()
-                    },
-                ),
+                Text::new(""),
+                TextFont {
+                    font_size: FontSize::Px(22.0),
+                    ..default()
+                },
+                TextColor(Color::srgb(1.0, 0.95, 0.75)),
             ));
         });
 
     commands.spawn((
         QuestHudText,
-        TextBundle {
-            text: Text::from_section(
-                "",
-                TextStyle {
-                    font_size: 18.0,
-                    color: Color::srgb(1.0, 0.9, 0.4),
-                    ..default()
-                },
-            ),
-            style: Style {
-                position_type: PositionType::Absolute,
-                top: Val::Px(40.0),
-                left: Val::Px(12.0),
-                ..default()
-            },
-            visibility: Visibility::Hidden,
+        Text::new(""),
+        TextFont {
+            font_size: FontSize::Px(18.0),
             ..default()
         },
+        TextColor(Color::srgb(1.0, 0.9, 0.4)),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(40.0),
+            left: Val::Px(12.0),
+            ..default()
+        },
+        Visibility::Hidden,
     ));
 
     commands.spawn((
         QuestNotifyText,
-        TextBundle {
-            text: Text::from_section(
-                "",
-                TextStyle {
-                    font_size: 22.0,
-                    color: Color::WHITE,
-                    ..default()
-                },
-            ),
-            style: Style {
-                position_type: PositionType::Absolute,
-                top: Val::Px(70.0),
-                left: Val::Percent(30.0),
-                right: Val::Percent(30.0),
-                ..default()
-            },
-            visibility: Visibility::Hidden,
+        Text::new(""),
+        TextFont {
+            font_size: FontSize::Px(22.0),
             ..default()
         },
+        TextColor(Color::WHITE),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(70.0),
+            left: Val::Percent(30.0),
+            right: Val::Percent(30.0),
+            ..default()
+        },
+        Visibility::Hidden,
     ));
     println!("Quest UI ready");
 }
 
-fn show_panel(text: &str, panel: &mut Query<&mut Visibility, With<QuestPanel>>, body: &mut Query<&mut Text, With<QuestPanelText>>) {
-    if let Ok(mut vis) = panel.get_single_mut() {
+fn show_panel(
+    text: &str,
+    panel: &mut Query<&mut Visibility, (With<QuestPanel>, Without<QuestNotifyText>)>,
+    body: &mut Query<&mut Text, With<QuestPanelText>>,
+) {
+    if let Ok(mut vis) = panel.single_mut() {
         *vis = Visibility::Visible;
     }
-    if let Ok(mut t) = body.get_single_mut() {
-        t.sections[0].value = text.to_string();
+    if let Ok(mut t) = body.single_mut() {
+        t.0 = text.to_string();
     }
 }
 
-fn hide_panel(panel: &mut Query<&mut Visibility, With<QuestPanel>>) {
-    if let Ok(mut vis) = panel.get_single_mut() {
+fn hide_panel(panel: &mut Query<&mut Visibility, (With<QuestPanel>, Without<QuestNotifyText>)>) {
+    if let Ok(mut vis) = panel.single_mut() {
         *vis = Visibility::Hidden;
     }
 }
@@ -369,10 +366,13 @@ fn hide_panel(panel: &mut Query<&mut Visibility, With<QuestPanel>>) {
 fn notify(
     msg: &str,
     timer: &mut ResMut<QuestNotifyTimer>,
-    query: &mut Query<(&mut Visibility, &mut Text), With<QuestNotifyText>>,
+    query: &mut Query<
+        (&mut Visibility, &mut Text),
+        (With<QuestNotifyText>, Without<QuestPanel>),
+    >,
 ) {
-    if let Ok((mut vis, mut text)) = query.get_single_mut() {
-        text.sections[0].value = msg.to_string();
+    if let Ok((mut vis, mut text)) = query.single_mut() {
+        text.0 = msg.to_string();
         *vis = Visibility::Visible;
     }
     timer.0 = NOTIFY_DURATION;
@@ -386,9 +386,9 @@ fn tick_notify(
     if timer.0 <= 0.0 {
         return;
     }
-    timer.0 -= time.delta_seconds();
+    timer.0 -= time.delta().as_secs_f32();
     if timer.0 <= 0.0 {
-        if let Ok(mut vis) = query.get_single_mut() {
+        if let Ok(mut vis) = query.single_mut() {
             *vis = Visibility::Hidden;
         }
     }
@@ -411,7 +411,7 @@ fn quest_cooldown_tick(
     if *house_state != HouseState::Town || *shop_loc != crate::shop::ShopLocation::Town {
         return;
     }
-    quest.cooldown -= time.delta_seconds();
+    quest.cooldown -= time.delta().as_secs_f32();
     if quest.cooldown > 0.0 {
         return;
     }
@@ -443,18 +443,13 @@ fn quest_cooldown_tick(
     commands.entity(entity).with_children(|parent| {
         parent.spawn((
             QuestMarker,
-            Text2dBundle {
-                text: Text::from_section(
-                    "!",
-                    TextStyle {
-                        font_size: 64.0,
-                        color: Color::srgb(1.0, 0.85, 0.1),
-                        ..default()
-                    },
-                ),
-                transform: Transform::from_translation(Vec3::new(0.0, 1.7, 0.0)),
+            Text2d::new("!"),
+            TextFont {
+                font_size: FontSize::Px(64.0),
                 ..default()
             },
+            TextColor(Color::srgb(1.0, 0.85, 0.1)),
+            Transform::from_translation(Vec3::new(0.0, 1.7, 0.0)),
         ));
     });
     println!("{name} has a quest (marker placed)");
@@ -462,7 +457,7 @@ fn quest_cooldown_tick(
 
 /// Bob the `!` markers.
 fn marker_bob(time: Res<Time>, mut markers: Query<&mut Transform, With<QuestMarker>>) {
-    let bob = (time.elapsed_seconds() * 3.0).sin() * 0.15;
+    let bob = (time.elapsed().as_secs_f32() * 3.0).sin() * 0.15;
     for mut t in markers.iter_mut() {
         t.translation.y = 1.7 + bob;
     }
@@ -472,7 +467,7 @@ fn marker_bob(time: Res<Time>, mut markers: Query<&mut Transform, With<QuestMark
 /// normal dialogue box stays shut (see `QuestClaim`).
 #[allow(clippy::too_many_arguments)]
 fn quest_talk_intercept(
-    mut events: EventReader<TalkEvent>,
+    mut events: MessageReader<TalkEvent>,
     villagers: Query<&Villager>,
     quest: Res<QuestState>,
     giver: Res<QuestGiver>,
@@ -482,7 +477,7 @@ fn quest_talk_intercept(
     mut claim: ResMut<QuestClaim>,
     mut qui: ResMut<QuestUi>,
     inventory: Res<PlayerInventory>,
-    mut panel: Query<&mut Visibility, With<QuestPanel>>,
+    mut panel: Query<&mut Visibility, (With<QuestPanel>, Without<QuestNotifyText>)>,
     mut body: Query<&mut Text, With<QuestPanelText>>,
 ) {
     if *house_state != HouseState::Town || *shop_loc != crate::shop::ShopLocation::Town {
@@ -531,22 +526,21 @@ fn quest_ui_input(
     mut inventory: ResMut<PlayerInventory>,
     mut mailbox: ResMut<crate::mail::Mailbox>,
     markers: Query<Entity, With<QuestMarker>>,
-    mut panel: Query<&mut Visibility, With<QuestPanel>>,
+    mut panel: Query<&mut Visibility, (With<QuestPanel>, Without<QuestNotifyText>)>,
     mut timer: ResMut<QuestNotifyTimer>,
-    mut notify_query: Query<(&mut Visibility, &mut Text), With<QuestNotifyText>>,
+    mut notify_query: Query<(&mut Visibility, &mut Text), (With<QuestNotifyText>, Without<QuestPanel>)>,
 ) {
     if !ui.open {
         return;
     }
     let accepted = keyboard.just_pressed(KeyCode::KeyY);
-    let declined =
-        keyboard.just_pressed(KeyCode::KeyN) || keyboard.just_pressed(KeyCode::Escape);
+    let declined = keyboard.just_pressed(KeyCode::KeyN) || keyboard.just_pressed(KeyCode::Escape);
     if !accepted && !declined {
         return;
     }
     let close = |ui: &mut ResMut<QuestUi>,
                  claim: &mut ResMut<QuestClaim>,
-                 panel: &mut Query<&mut Visibility, With<QuestPanel>>| {
+                 panel: &mut Query<&mut Visibility, (With<QuestPanel>, Without<QuestNotifyText>)>| {
         ui.open = false;
         claim.0 = None;
         hide_panel(panel);
@@ -590,9 +584,7 @@ fn quest_ui_input(
                             inventory.fruit = inventory.fruit.saturating_sub(*amount);
                         }
                         QuestKind::BuyFurniture { item, .. } => {
-                            if let Some(pos) =
-                                inventory.furniture.iter().position(|f| f == item)
-                            {
+                            if let Some(pos) = inventory.furniture.iter().position(|f| f == item) {
                                 inventory.furniture.remove(pos);
                             }
                         }
@@ -638,10 +630,10 @@ fn update_quest_hud(
     if !quest.is_changed() {
         return;
     }
-    if let Ok((mut vis, mut text)) = text_query.get_single_mut() {
+    if let Ok((mut vis, mut text)) = text_query.single_mut() {
         match quest.active.as_ref() {
             Some(active) => {
-                text.sections[0].value = hud_text(active);
+                text.0 = hud_text(active);
                 *vis = Visibility::Visible;
             }
             None => {
