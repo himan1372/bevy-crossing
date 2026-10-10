@@ -4,3 +4,4 @@
 {"action":"claim","task":"fix-letter-notify","agent":"lapis","timestamp":"2026-10-10T18:15:44Z"}
 {"action":"claim","task":"fix-shop-entry","agent":"claude","timestamp":"2026-10-10T19:29:08Z"}
 {"action":"complete","task":"fix-shop-entry","agent":"claude","timestamp":"2026-10-10T20:16:57Z"}
+{"action":"claim","task":"fix-letter-notify","agent":"claude","timestamp":"2026-10-10T20:18:30Z","note":"handed over by lapis (Philip) in chat"}
