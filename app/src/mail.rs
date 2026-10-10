@@ -614,7 +614,7 @@ fn refresh_mail_ui(
 
     if let Some(idx) = ui.reading {
         *list_vis = Visibility::Hidden;
-        *body_vis = Visibility::Visible;
+        *body_vis = Visibility::Inherited;
         if let Some(letter) = mailbox.letters.get(idx) {
             body_text.0 = format!(
                 "From: {}\nSubject: {}\n\n{}",
@@ -624,7 +624,7 @@ fn refresh_mail_ui(
         hint_text.0 = "[Esc]/[Backspace] back to list".to_string();
     } else if ui.writing {
         *list_vis = Visibility::Hidden;
-        *body_vis = Visibility::Visible;
+        *body_vis = Visibility::Inherited;
         let names: Vec<String> = villagers.iter().map(|v| v.name.to_string()).collect();
         let name = names
             .get(ui.write_recipient)
@@ -633,7 +633,7 @@ fn refresh_mail_ui(
         body_text.0 = format!("To: {name}   (Up/Down to change)\n\n{}_", ui.write_text);
         hint_text.0 = "[Enter] send   [Esc] cancel".to_string();
     } else {
-        *list_vis = Visibility::Visible;
+        *list_vis = Visibility::Inherited;
         *body_vis = Visibility::Hidden;
         let mut s = String::new();
         for (i, letter) in mailbox.letters.iter().enumerate() {
