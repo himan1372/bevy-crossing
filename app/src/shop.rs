@@ -167,6 +167,10 @@ const SHOP_H: f32 = 3.0;
 const DOOR_RANGE_OUT: f32 = 3.4;
 const DOOR_RANGE_IN: f32 = 2.6;
 const DOOR_DOT: f32 = 0.6;
+/// Half the exterior door panel's width (panel is 1.2 wide).
+const DOOR_HALF_W: f32 = 0.6;
+/// Interior door z offset from the origin: inner face of the south wall.
+const INTERIOR_DOOR_Z: f32 = 4.8;
 const NOOK_RANGE: f32 = 3.5;
 const NOOK_DOT: f32 = 0.5;
 /// Interior walk bounds (half-extents from the origin).
@@ -506,6 +510,27 @@ fn apply_loaded_shop(
     );
 }
 
+/// True when a player at `pos` facing `facing_dir` is close to, and facing,
+/// the exterior door panel.
+///
+/// Measured on the ground (XZ) plane against the nearest point of the door
+/// panel on the south wall. `door_pos` itself sits 0.7 out from the wall at
+/// y = 0, so measuring to it rejected a player pressed against the door: the
+/// point was beside/behind them and the 1-unit height gap skewed the dot.
+fn can_enter_door(building: &ShopBuilding, pos: Vec3, facing_dir: Vec3) -> bool {
+    let door_x = pos.x.clamp(
+        building.door_pos.x - DOOR_HALF_W,
+        building.door_pos.x + DOOR_HALF_W,
+    );
+    let to_door = Vec3::new(door_x - pos.x, 0.0, building.max_z - pos.z);
+    let dist = to_door.length();
+    if dist > DOOR_RANGE_OUT || dist < 0.001 {
+        return false;
+    }
+    let facing = Vec3::new(facing_dir.x, 0.0, facing_dir.z).normalize_or_zero();
+    facing.dot(to_door / dist) >= DOOR_DOT
+}
+
 /// E at the exterior shop door: teleport into the interior.
 ///
 /// Runs in [`ShopInputSet`], before the town `interact` system, so a
@@ -544,12 +569,7 @@ fn shop_enter(
     let Ok((mut transform, mut facing)) = player_query.single_mut() else {
         return;
     };
-    let to_door = building.door_pos - transform.translation;
-    let dist = to_door.length();
-    if dist > DOOR_RANGE_OUT || dist < 0.001 {
-        return;
-    }
-    if facing.dir.dot(to_door / dist) < DOOR_DOT {
+    if !can_enter_door(&building, transform.translation, facing.dir) {
         return;
     }
     commands.insert_resource(ShopReturnPos(transform.translation));
@@ -579,7 +599,14 @@ fn shop_exit(
     let Ok((mut transform, mut facing)) = player_query.single_mut() else {
         return;
     };
-    let door = SHOP_ORIGIN + Vec3::new(0.0, 0.0, 4.0);
+    // Inner face of the south wall, at the player's height: the walk bound
+    // (SHOP_WALK_Z) lets the player step past a point any closer than this,
+    // which put the door behind them when pressed against it.
+    let door = Vec3::new(
+        SHOP_ORIGIN.x,
+        transform.translation.y,
+        SHOP_ORIGIN.z + INTERIOR_DOOR_Z,
+    );
     let to_door = door - transform.translation;
     let dist = to_door.length();
     if dist > DOOR_RANGE_IN || dist < 0.001 {
@@ -950,5 +977,73 @@ impl Plugin for ShopPlugin {
                 Update,
                 (refresh_shop_ui, shop_interior_movement, update_shop_hud),
             );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The live layout: footprint x -6..-1, z -2..2, door at (-3.5, 0, 2.7).
+    fn building() -> ShopBuilding {
+        ShopBuilding {
+            door_pos: Vec3::new(-3.5, 0.0, 2.7),
+            min_x: -6.0,
+            max_x: -1.0,
+            min_z: -2.0,
+            max_z: 2.0,
+            placed: true,
+        }
+    }
+
+    const NORTH: Vec3 = Vec3::new(0.0, 0.0, -1.0);
+
+    #[test]
+    fn enters_when_pressed_against_door_facing_it() {
+        // The reported bug: player walked into the door (y = 1) and faced it.
+        assert!(can_enter_door(
+            &building(),
+            Vec3::new(-3.5, 1.0, 2.04),
+            NORTH
+        ));
+    }
+
+    #[test]
+    fn enters_from_door_edge_and_from_a_few_steps_back() {
+        assert!(can_enter_door(
+            &building(),
+            Vec3::new(-3.0, 1.0, 2.04),
+            NORTH
+        ));
+        assert!(can_enter_door(
+            &building(),
+            Vec3::new(-3.5, 1.0, 4.6),
+            NORTH
+        ));
+    }
+
+    #[test]
+    fn rejects_facing_away_or_too_far() {
+        let south = Vec3::new(0.0, 0.0, 1.0);
+        assert!(!can_enter_door(
+            &building(),
+            Vec3::new(-3.5, 1.0, 2.5),
+            south
+        ));
+        assert!(!can_enter_door(
+            &building(),
+            Vec3::new(-3.5, 1.0, 6.0),
+            NORTH
+        ));
+    }
+
+    #[test]
+    fn rejects_beside_the_door_along_the_wall() {
+        // Against the wall 2 units east of the panel, facing the wall.
+        assert!(!can_enter_door(
+            &building(),
+            Vec3::new(-1.5, 1.0, 2.04),
+            NORTH
+        ));
     }
 }
