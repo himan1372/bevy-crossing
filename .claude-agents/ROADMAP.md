@@ -32,10 +32,10 @@ Each milestone ends with a Philip playtest.
 ### M0 — Decisions and foundations (do first)
 - [ ] **slice-scope** (P) — Philip confirms the "done when" list above, town size, and one art direction (e.g. low-poly, flat colours).
 - [ ] **ip-rename** (P) — the shop uses Nintendo names (Tom Nook, Nook's Cranny, Nook 'n Go, Nookway, Nookington's in `app/src/shop.rs`). The project rules say no Nintendo IP, so Philip should pick original names; then a quick find/replace. Check villager names too.
-- [ ] **app-states** — top-level `AppState` (Title / InGame / Paused). Gameplay plugins run only `InGame`; HouseState/ShopLocation become sub-states.
-- [ ] **input-actions** — one action map (Interact, Tool1-3, Menu, Save) instead of raw `KeyCode` checks, plus a single "who owns E right now" rule. That replaces the chain of "is mail/shop/quest UI open" checks that caused the door bugs, and makes a gamepad easy later.
-- [ ] **assets-scaffold** — create `assets/` (models, textures, audio, fonts), a loading step, and a placeholder fallback so missing art never crashes the game.
-- [ ] **ci-gate** — GitHub Action on `main` that runs check → clippy -D warnings → fmt --check → test, so a broken push is caught right away.
+- [x] **app-states** — done (claude): top-level `AppState` (Title / InGame / Paused). Gameplay plugins run only `InGame`; HouseState/ShopLocation become sub-states.
+- [x] **input-actions** — done (claude): one action map (Interact, Tool1-3, Menu, Save) instead of raw `KeyCode` checks, plus a single "who owns E right now" rule. That replaces the chain of "is mail/shop/quest UI open" checks that caused the door bugs, and makes a gamepad easy later.
+- [x] **assets-scaffold** — done (claude) — folder is `app/assets/`: create `assets/` (models, textures, audio, fonts), a loading step, and a placeholder fallback so missing art never crashes the game.
+- [x] **ci-gate** — done (claude) — `.github/workflows/ci.yml`: GitHub Action on `main` that runs check → clippy -D warnings → fmt --check → test, so a broken push is caught right away.
 
 ### M1 — Core loop complete (gameplay)
 - [ ] **game-clock** — in-game clock and calendar (use `logic::game_time`); ecology spawns follow it instead of the PC clock; clock on the HUD. [blocked: app-states]

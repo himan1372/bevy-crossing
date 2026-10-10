@@ -6,7 +6,7 @@ Philip asked that tests / game runs wait for his OK: code is compile-checked
 - [x] assets-scaffold — assets/ tree + licensing README, AssetsPlugin with a Loading state and placeholder fallback.
 - [x] app-states — AppState (Loading/Title/InGame) + PauseState sub-state; gameplay systems gated; HouseState/ShopLocation become InGame sub-states.
 - [x] input-actions — Actions resource (one key map) + InputFocus (who owns input) + ordered, consumable Interact press.
-- [ ] Philip OKs running tests → cargo test + live BRP check → push.
+- [x] Philip OKs running tests → cargo test + live BRP check → push.
 - [x] slice-scope / ip-rename: proposals given to Philip in chat (decisions are his).
 
-Status: code written + compile-gated on local branch `m0-foundations` (claude's PC). Not pushed until Philip OKs tests.
+Status: done — tested (475 tests + live BRP) and pushed to main.
