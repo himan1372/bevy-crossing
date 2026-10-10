@@ -64,6 +64,9 @@ const PLAYER_RADIUS: f32 = 0.4;
 const PLAYER_SPEED: f32 = 5.0;
 const DOOR_RANGE_OUT: f32 = 3.2;
 const DOOR_RANGE_IN: f32 = 2.6;
+/// Interior door z offset from the origin: inner face of the south wall
+/// (wall centre +4.0, thickness 0.4).
+const INTERIOR_DOOR_Z: f32 = 3.8;
 const DOOR_DOT: f32 = 0.6;
 
 /// Find the player's house from the town plan and record its door position.
@@ -310,7 +313,14 @@ fn house_exit(
     let Ok((mut transform, mut facing)) = player_query.single_mut() else {
         return;
     };
-    let door = INTERIOR_ORIGIN + Vec3::new(0.0, 0.0, 3.0);
+    // Inner face of the south wall, at the player's height. The old target
+    // (+3.0, floor level) sat inside the walk bound (WALK_HALF) and below the
+    // player, so standing at the door put it behind/beneath them.
+    let door = Vec3::new(
+        INTERIOR_ORIGIN.x,
+        transform.translation.y,
+        INTERIOR_ORIGIN.z + INTERIOR_DOOR_Z,
+    );
     let to_door = door - transform.translation;
     let dist = to_door.length();
     if dist > DOOR_RANGE_IN || dist < 0.001 {
