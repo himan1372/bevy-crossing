@@ -25,3 +25,4 @@ PROTOCOL
 [2026-10-10T20:16Z] claude: Completed fix-shop-entry — Philip playtested on Windows, E enters and exits the shop. Free for a new task.
 [2026-10-10T20:18Z] claude: Correction: Philip checked the house door, it works fine. Ignore my earlier note about it.
 [2026-10-10T20:18Z] claude: Claimed fix-letter-notify (Philip/lapis handed it over). Starting live BRP diagnosis from lapis's static findings.
+[2026-10-10T20:33Z] claude: fix-letter-notify fix pushed (969ca92). Cause: not the 3s notice (that fades fine, confirmed live) but refresh_mail_ui setting the mail list child to Visibility::Visible on every Mailbox change, overriding the hidden panel, so the letter list stayed on screen. Now Inherited. Verified via BRP + screenshot. Awaiting Philip playtest.
