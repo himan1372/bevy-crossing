@@ -10,6 +10,7 @@
 //! - `status`: the player-visible status the rod animation syncs to,
 //! - `gyo_command` / `gyo_status`: the fish-side handshake channel,
 //! - `child_actor`: the linked fish actor.
+//!
 //! The player only writes `command`; the fish only writes `gyo_command`
 //! (plus `gyo_type` / `child_actor`). Collapsing these into one
 //! `FishingState` enum loses retail behavior.
@@ -218,6 +219,7 @@ pub const BACK_SPEED: [f32; 8] = [-0.38, -0.40, -0.42, -0.42, -0.45, -0.50, -0.7
 pub const TRASH_BY_SIZE: [u8; 8] = [41, 41, 42, 42, 42, 43, 43, 43];
 
 /// BITE angular wobble (degrees) and drift speed by fish size.
+#[allow(clippy::excessive_precision)] // verbatim decomp values; each is exact in f32
 pub const BITE_ANGLE_DEG: [f32; 8] = [10.1513671875, 9.4647216796875, 8.778076171875, 8.778076171875,
     8.0914306640625, 7.40478515625, 7.03125, 7.03125];
 pub const BITE_SPEED: [f32; 8] = [0.1, 0.2, 0.3, 0.3, 0.4, 0.6, 0.8, 0.8];
@@ -743,11 +745,10 @@ impl UkiActor {
             proc::CARRY => {
                 self.pos = self.right_hand_pos;
                 self.uki_pos = self.right_hand_pos;
-                if self.command == command::READY {
-                    if timer_step(&mut self.frame_timer) == 0 {
+                if self.command == command::READY
+                    && timer_step(&mut self.frame_timer) == 0 {
                         self.set_proc(proc::READY, 0, events);
                     }
-                }
             }
             proc::READY => {
                 if timer_step(&mut self.frame_timer) == 0 {
@@ -1037,8 +1038,10 @@ mod tests {
         assert_eq!(u.frame_timer, ft);
         assert_eq!(u.proc, proc::CAST);
         // ...until water collision.
-        let mut wet = StepEnv::default();
-        wet.in_water = true;
+        let wet = StepEnv {
+            in_water: true,
+            ..StepEnv::default()
+        };
         u.step(&wet, &mut ev);
         assert_eq!(u.proc, proc::WAIT);
         assert_eq!(u.status, status::FLOAT);

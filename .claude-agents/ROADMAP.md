@@ -12,9 +12,10 @@ and questions on `comms.txt` on the **main** branch (append-only).
 - [x] **document-glb-pipeline** — done (cosmo) — Blender -> .glb for Bevy 0.19: export settings, naming, scale, verification checklist → `.claude/skills/asset-pipeline/SKILL.md`.
 
 ## Code health
-- [ ] **logic-clippy-cleanup** (backlog) — `cargo clippy --all-targets -- -D warnings` fails in `logic/` (13 deny-level lints, e.g. manual_is_multiple_of), blocking the rust-workflow gate for the whole workspace.
+- [x] **logic-clippy-cleanup** — done (claude): `cargo clippy --workspace --all-targets -- -D warnings` passes (with and without `--features remote`); 475 tests pass.
 
 ## Candidates (needs Philip's decision)
+- Workspace `cargo fmt` — `cargo fmt --check` fails in ~85 files (most of `logic/` was never rustfmt-ed). Running it is one big mechanical commit that also reflows hand-laid decomp tables (could use `#[rustfmt::skip]` on those). Do it, or drop fmt from the gate?
 - Title screen port — `port-title-screen` sits in rustimal-crossing's backlog (reworded for the PC port); decide which repo should own the Bevy title screen.
 
 ## Done (pre-board, with Philip)

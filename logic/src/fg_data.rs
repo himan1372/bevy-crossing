@@ -38,11 +38,11 @@ pub struct FgRecord {
 /// Parse big-endian `fgdata.bin` bytes into records.
 /// Returns an error string on truncated input.
 pub fn parse_fg_records(data: &[u8]) -> Result<Vec<FgRecord>, &'static str> {
-    if data.len() % FG_RECORD_SIZE != 0 {
+    if !data.len().is_multiple_of(FG_RECORD_SIZE) {
         return Err("fgdata.bin size is not a multiple of 518");
     }
     let mut out = Vec::with_capacity(data.len() / FG_RECORD_SIZE);
-    for chunk in data.chunks_exact(FG_RECORD_SIZE) {
+    for chunk in data.as_chunks::<FG_RECORD_SIZE>().0 {
         let fg_id = u16::from_be_bytes([chunk[0], chunk[1]]);
         let mut items = [0u16; FG_ITEMS];
         for (i, slot) in items.iter_mut().enumerate() {

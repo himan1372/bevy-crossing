@@ -278,7 +278,7 @@ pub mod friendship {
 
 /// Ordinary new-quest attempt roll: 75% attempt (mQst_GetRandom(4) != 0).
 pub fn quest_attempt_roll(roll: u8) -> bool {
-    roll % 4 != 0
+    !roll.is_multiple_of(4)
 }
 
 // ---- C ABI ----

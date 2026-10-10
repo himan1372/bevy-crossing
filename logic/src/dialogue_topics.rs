@@ -137,6 +137,12 @@ impl TalkInfo {
     }
 }
 
+impl Default for TalkInfo {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Conversation-frequency parameters (`mNpc_Temper_c`).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Temper {

@@ -139,7 +139,7 @@ pub static SCHEDULE_TABLES: [[(u8, u32); 9]; PERSONALITY_NUM] = [
     ],
     // sport_man (jock)
     [
-        (ScheduleState::InHouse as u8, 1 * 3600),
+        (ScheduleState::InHouse as u8, 3600),
         (ScheduleState::Sleep as u8, 5 * 3600 + 1800),
         (ScheduleState::InHouse as u8, 6 * 3600 + 1800),
         (ScheduleState::Field as u8, 12 * 3600),
@@ -163,7 +163,7 @@ pub static SCHEDULE_TABLES: [[(u8, u32); 9]; PERSONALITY_NUM] = [
     ],
     // naniwa_lady (snooty)
     [
-        (ScheduleState::Field as u8, 1 * 3600 + 1800),
+        (ScheduleState::Field as u8, 3600 + 1800),
         (ScheduleState::InHouse as u8, 2 * 3600 + 1800),
         (ScheduleState::Sleep as u8, 9 * 3600),
         (ScheduleState::InHouse as u8, 10 * 3600),
@@ -286,13 +286,13 @@ pub struct DialogueContext {
 /// Choose a dialogue category from context. Personality selects the pool;
 /// situation and random roll select within it. Rewrite-owned logic.
 pub fn select_category(ctx: &DialogueContext, roll: u32) -> MessageCategory {
-    if ctx.has_favor_available && roll % 3 == 0 {
+    if ctx.has_favor_available && roll.is_multiple_of(3) {
         return MessageCategory::Favor;
     }
-    if ctx.is_event_day && roll % 4 == 0 {
+    if ctx.is_event_day && roll.is_multiple_of(4) {
         return MessageCategory::Event;
     }
-    if ctx.is_raining && roll % 5 == 0 {
+    if ctx.is_raining && roll.is_multiple_of(5) {
         return MessageCategory::Weather;
     }
     match roll % 6 {

@@ -12,13 +12,13 @@
 //! * House sizes (`mHm_HOMESIZE_*`): SMALL/MEDIUM/LARGE/UPPER/STATUE.
 //!   Basement is a flag (`flags.has_basement`), not a size.
 //! * Three distinct phases (do NOT conflate):
-//!   Phase A (order): Nook accepts -> next_size += 1 (or
+//!   - Phase A (order): Nook accepts -> next_size += 1 (or
 //!     basement_ordered = TRUE), ordered palette, upgrade_order_date.
 //!     size and renew are UNTOUCHED.
-//!   Phase B (construction): mHm_CheckRehouseOrder on a later calendar
+//!   - Phase B (construction): mHm_CheckRehouseOrder on a later calendar
 //!     date -> size = next_size (or has_basement = TRUE, or
 //!     next_size = STATUE), renew = TRUE, physical room rebuilt.
-//!   Phase C (Nook renewal): aNSC_set_talk_info_start_wait sees renew ->
+//!   - Phase C (Nook renewal): aNSC_set_talk_info_start_wait sees renew ->
 //!     assigns next loan (basement: 49800 + pad_1 = 1; else
 //!     rehouse_loan[size-1]), clears renew.
 //! * Basement can be ordered from MEDIUM or LARGE (not just LARGE).

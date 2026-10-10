@@ -56,7 +56,6 @@
 //! faithful documentation.
 
 use crate::segment_map::point_info_front_line;
-use crate::wall_priority::check_dist_sp_suppress;
 
 /// Squared point-in-circle test (`mCoBG_JudgePointInCircle`).
 pub fn judge_point_in_circle(center: [f32; 2], p: [f32; 2], radius: f32) -> bool {
@@ -326,7 +325,9 @@ pub fn attribute_wall_special_collision(
 
 /// Re-export of the corner-suppression test for the endpoint path
 /// (`mCoBG_CheckDistSPCheck`; see `wall_priority.rs`).
+#[allow(unused_imports)] // decomp-named alias; used by tests, kept for future callers
 pub use crate::wall_priority::check_dist_sp_suppress as check_dist_sp_check;
+
 
 /// C ABI: attribute-wall special path; writes reverse[2]; returns 1 on hit.
 #[no_mangle]

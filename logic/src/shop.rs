@@ -105,7 +105,7 @@ impl ShopTier {
 fn days_in_month(y: u16, m: u8) -> u8 {
     match m {
         2 => {
-            if y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) {
+            if y.is_multiple_of(4) && (!y.is_multiple_of(100) || y.is_multiple_of(400)) {
                 29
             } else {
                 28
@@ -404,15 +404,19 @@ mod tests {
 
     #[test]
     fn nookingtons_needs_visitor_flag() {
-        let mut shop = ShopState::default();
-        shop.sales_sum = DSUPER_SUM;
+        let mut shop = ShopState {
+            sales_sum: DSUPER_SUM,
+            ..ShopState::default()
+        };
         assert_eq!(shop.real_level(), ShopTier::Super); // no visitor yet
         shop.set_new_visitor(true);
         assert_eq!(shop.real_level(), ShopTier::Dsuper);
         // PC toggle skips the requirement.
-        let mut shop2 = ShopState::default();
-        shop2.sales_sum = DSUPER_SUM;
-        shop2.disable_visitor_req = true;
+        let shop2 = ShopState {
+            sales_sum: DSUPER_SUM,
+            disable_visitor_req: true,
+            ..ShopState::default()
+        };
         assert_eq!(shop2.real_level(), ShopTier::Dsuper);
     }
 
@@ -491,9 +495,11 @@ mod tests {
     #[test]
     fn sales_wrap_not_saturate() {
         // Retail uses plain u32 += (wrapping); the clamp is what bounds it.
-        let mut shop = ShopState::default();
-        shop.shop_level = ShopTier::Dsuper; // no cap
-        shop.sales_sum = u32::MAX - 10;
+        let mut shop = ShopState {
+            shop_level: ShopTier::Dsuper, // no cap
+            sales_sum: u32::MAX - 10,
+            ..ShopState::default()
+        };
         shop.plus_sales(20);
         assert_eq!(shop.sales_sum, 9); // wrapped, not saturated
     }

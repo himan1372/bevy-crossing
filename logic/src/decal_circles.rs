@@ -54,6 +54,7 @@
 //!   `mCoBG_decal_circle`'s data — and doesn't stop after the
 //!   first free slot, so all free slots get used.
 //! * `mCoBG_InitDecalCircle` clears 3× too much memory.
+//!
 //! The Rust port implements the intended (fixed) behavior; the
 //! bugs are documented here, not reproduced.
 //! `mCoBG_CrossOffDecalCircle` is marked @unused/@fabricated in
@@ -82,7 +83,7 @@ pub struct DefenceWallInfo {
     pub wall_name1: WallName,
 }
 
-const R: f32 = 0.7071067811865476;
+const R: f32 = std::f32::consts::FRAC_1_SQRT_2;
 
 /// `defence_wall_info[8]` — verbatim.
 pub const DEFENCE_WALL_INFO: [DefenceWallInfo; 8] = [

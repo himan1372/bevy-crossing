@@ -62,7 +62,7 @@ unsafe fn open_file(path: &[u8]) -> *mut c_void {
         return ptr::null_mut();
     };
     // SAFETY: Both strings are NUL terminated and remain live through fopen.
-    unsafe { fopen(path.as_ptr(), b"rb\0".as_ptr().cast()) }
+    unsafe { fopen(path.as_ptr(), c"rb".as_ptr()) }
 }
 
 fn fallback_base_path() -> Vec<u8> {
@@ -107,8 +107,8 @@ fn fallback_file_path(base: &[u8], path: &[u8]) -> Vec<u8> {
 
 #[no_mangle]
 pub extern "C" fn DVDGetCurrentDiskID() -> *mut c_void {
-    // SAFETY: This pointer refers to the stable process-wide 0x20-byte disk ID.
-    unsafe { ptr::addr_of_mut!(DISK_ID).cast() }
+    // The stable process-wide 0x20-byte disk ID; taking its address is safe.
+    ptr::addr_of_mut!(DISK_ID).cast()
 }
 
 #[no_mangle]

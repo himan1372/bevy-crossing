@@ -617,7 +617,7 @@ fn tool_interact(
                 if facing.dir.dot(to_bug / dist) < FACING_DOT {
                     continue;
                 }
-                if best.map_or(true, |(_, d)| dist < d) {
+                if best.is_none_or(|(_, d)| dist < d) {
                     best = Some((entity, dist));
                 }
             }
@@ -664,7 +664,7 @@ fn update_bobber(
         let mut best: Option<(Entity, f32)> = None;
         for (fish_entity, _fish, fish_transform) in fish_query.iter() {
             let dist = (fish_transform.translation - bobber_transform.translation).length();
-            if dist < BITE_RADIUS && best.map_or(true, |(_, d)| dist < d) {
+            if dist < BITE_RADIUS && best.is_none_or(|(_, d)| dist < d) {
                 best = Some((fish_entity, dist));
             }
         }

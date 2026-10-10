@@ -491,12 +491,11 @@ impl BeeActor {
                             self.set_action(bee_action::DISAPPEAR);
                             return;
                         }
-                        bee_player_status::ATTACK => {
-                            if env.dist_xz < bee::ATTACK_DIST {
+                        bee_player_status::ATTACK
+                            if env.dist_xz < bee::ATTACK_DIST => {
                                 events.push(BeeEvent::RequestSting);
                                 self.set_action(bee_action::ATTACK);
                             }
-                        }
                         _ => {}
                     }
                     self.fly_move_common(env.player_angle_y_deg);
@@ -737,7 +736,6 @@ impl AntActor {
                 } else {
                     events.push(AntEvent::ChangeCatchLabel);
                     self.set_action(ant_action::DISAPPEAR);
-                    return;
                 }
             }
             ant_action::DISAPPEAR => {
@@ -867,7 +865,7 @@ mod tests {
         }
         assert_eq!(bee.catch_delay_frames, 0.0);
         // Net catch -> CAUGHT -> conversion -> DISAPPEAR.
-        let mut catch_env = BeeEnv { catch_label_is_me: true, leveled: true, ..BeeEnv::default() };
+        let catch_env = BeeEnv { catch_label_is_me: true, leveled: true, ..BeeEnv::default() };
         bee.step(&catch_env, &mut ev);
         assert_eq!(bee.action, bee_action::CAUGHT);
         // Conversion is requested on the next tick (aBEE_caught).

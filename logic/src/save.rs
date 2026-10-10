@@ -238,7 +238,7 @@ pub fn checksum_sum(data: &[u8]) -> u16 {
         return 0;
     }
     let mut sum: u16 = 0;
-    for chunk in data.chunks_exact(2) {
+    for chunk in data.as_chunks::<2>().0 {
         sum = sum.wrapping_add(u16::from_be_bytes([chunk[0], chunk[1]]));
     }
     sum

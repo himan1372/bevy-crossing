@@ -554,7 +554,7 @@ pub extern "C" fn pc_mother_mail_monthly_no(month: u8, event_no: u8) -> i32 {
     } else {
         3
     };
-    (MAIL_START_NO_TABLE[idx] as i32 + event_no as i32 + (month as i32 - 1 - idx as i32 * 3) * 2)
+    MAIL_START_NO_TABLE[idx] as i32 + event_no as i32 + (month as i32 - 1 - idx as i32 * 3) * 2
 }
 
 // ---------------------------------------------------------------------------

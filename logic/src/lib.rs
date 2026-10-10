@@ -5,6 +5,17 @@
 //! existing callers may continue to release them with `free`.
 
 #![allow(non_snake_case)]
+// Ported decomp modules are kept whole for fidelity; many items aren't wired
+// into the PC port (C exports or the Bevy app) yet.
+#![allow(dead_code)]
+// Keep ported code shaped like the decomp: C-style index loops, decomp
+// function signatures, and explicit `+ 0` / `* 1` offset arithmetic.
+#![allow(
+    clippy::needless_range_loop,
+    clippy::explicit_counter_loop,
+    clippy::too_many_arguments,
+    clippy::identity_op
+)]
 
 use std::ffi::{c_char, c_void, CStr};
 use std::fs::{self, File};
@@ -265,7 +276,7 @@ impl Disc {
         let Some(fst_size) = be32(&head[4..]) else {
             return Vec::new();
         };
-        if fst_size < 12 || fst_size > 128 * 1024 * 1024 {
+        if !(12..=128 * 1024 * 1024).contains(&fst_size) {
             return Vec::new();
         }
         let Some(mut fst) = zeroed_bytes(fst_size as usize) else {
@@ -279,7 +290,7 @@ impl Disc {
             return Vec::new();
         };
         let entry_count = entry_count as usize;
-        if entry_count < 1 || entry_count > MAX_FST_ENTRIES {
+        if !(1..=MAX_FST_ENTRIES).contains(&entry_count) {
             return Vec::new();
         }
         let Some(entries_size) = entry_count.checked_mul(12) else {
@@ -388,18 +399,14 @@ fn decode_yaz0(src: &[u8]) -> Option<Vec<u8>> {
             if dp >= out_len {
                 break;
             }
-            let Some(&first) = src.get(sp) else {
-                return None;
-            };
+            let &first = src.get(sp)?;
             sp += 1;
             if flags & (1 << bit) != 0 {
                 dst[dp] = first;
                 dp += 1;
                 continue;
             }
-            let Some(&second) = src.get(sp) else {
-                return None;
-            };
+            let &second = src.get(sp)?;
             sp += 1;
             let distance = (((first as usize) & 0x0F) << 8) | second as usize;
             let mut length = (first >> 4) as usize;
@@ -473,6 +480,10 @@ pub extern "C" fn pc_disc_is_open() -> i32 {
     DISC.lock().unwrap_or_else(|e| e.into_inner()).is_some() as i32
 }
 
+/// # Safety
+///
+/// `path` must be null or a valid NUL-terminated C string; `disc_offset`
+/// and `file_size` must be null or valid for writing one `u32` each.
 #[no_mangle]
 pub unsafe extern "C" fn pc_disc_find_file(
     path: *const c_char,
@@ -500,6 +511,9 @@ pub unsafe extern "C" fn pc_disc_find_file(
     1
 }
 
+/// # Safety
+///
+/// When `size != 0`, `dest` must be valid for writing `size` bytes.
 #[no_mangle]
 pub unsafe extern "C" fn pc_disc_read(offset: u32, dest: *mut c_void, size: u32) -> i32 {
     if (dest.is_null() && size != 0) || size as usize > isize::MAX as usize {

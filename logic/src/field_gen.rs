@@ -286,9 +286,9 @@ pub fn acre_height_table(blocks: &[u8; BLOCK_TOTAL_NUM]) -> [u8; BLOCK_TOTAL_NUM
     base
 }
 
-/// Slope conversion, verbatim: a chosen cliff block `CLIFF_HORIZONTAL
-/// + idx` becomes `SLOPE_HORIZONTAL + idx`. Valid for the seven plain
-/// cliff types 15-21.
+/// Slope conversion, verbatim: a chosen cliff block
+/// `CLIFF_HORIZONTAL + idx` becomes `SLOPE_HORIZONTAL + idx`. Valid for the
+/// seven plain cliff types 15-21.
 pub fn slope_for_cliff(cliff_type: u8) -> Option<u8> {
     if (block::CLIFF_HORIZONTAL..=block::CLIFF_BOTTOM_LEFT_CORNER).contains(&cliff_type) {
         Some(block::SLOPE_HORIZONTAL + (cliff_type - block::CLIFF_HORIZONTAL))
@@ -407,6 +407,7 @@ pub extern "C" fn pc_bridge_for_river(river_type: u8) -> u8 {
 }
 
 #[cfg(test)]
+#[allow(clippy::erasing_op, clippy::identity_op)] // `row * 7 + col` grid indices kept readable
 mod tests {
     use super::*;
 

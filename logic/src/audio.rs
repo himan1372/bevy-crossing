@@ -177,7 +177,7 @@ pub fn voice_seq_for_spec(spec: i32) -> u8 {
 /// Per-spec voice volume/pitch (`Na_VoiceSe`): (volume, freq_scale).
 pub fn voice_spec_params(spec: i32) -> (f32, f32) {
     match spec {
-        2 | 3 | 4 => (0.65, 1.0),
+        2..=4 => (0.65, 1.0),
         5 | 6 => (0.9, 1.0),
         7 => (0.9, 1.3),
         8 => (0.9, 0.75),
@@ -294,7 +294,7 @@ impl SeId {
 /// mode 1 = unchanged, mode 2 = x0.75. Pan is 0..127, center 0x40.
 pub fn pan_kochou(a: u8, b: f32, out_mode: u8) -> u8 {
     match out_mode {
-        1 => return a,
+        1 => a,
         0 => {
             let b = b * 1.6;
             let v = ((a as i16 - 0x40) as f32 * b) as i16;
@@ -344,6 +344,7 @@ pub fn distance2vol(distance: f32) -> f32 {
 /// including the retail bug: the `if (distance < 0.0) v2 = 0.0` branch is
 /// dead because the linear formula unconditionally overwrites `v2` right
 /// after, so volume can go negative past the intended range.
+#[allow(unused_assignments)] // the dead stores are the preserved retail bug
 pub fn distance2vol_kiteki(distance: f32) -> f32 {
     let mut v2 = 0.0f32;
     if distance > 320.0 {
@@ -361,18 +362,12 @@ pub fn distance2vol_kiteki(distance: f32) -> f32 {
 /// Minidisc/music-player curve (`distance2vol4MD`): quadratic over
 /// `SOU_ONGEN_AREA2`, clamped to [0.2, 0.8].
 pub fn distance2vol_md(distance: f32, area2: f32) -> f32 {
-    let mut v2 = if distance > area2 {
+    let v2 = if distance > area2 {
         0.0
     } else {
         1.15 - (1.15 / (area2 * area2)) * distance * distance
     };
-    if v2 > 0.8 {
-        v2 = 0.8;
-    }
-    if v2 < 0.2 {
-        v2 = 0.2;
-    }
-    v2
+    v2.clamp(0.2, 0.8)
 }
 
 /// `Na_RoomType`, verbatim: case 0 (other) sets AREA1 = 540 and does NOT
@@ -869,7 +864,7 @@ impl VoiceManager {
 
     /// `Na_SpecChange`: stop the voice group and pick the voice sequence
     /// for the new spec (243/244/245).
-    pub fn spec_change(&mut self, ring: &mut CommandRing, spec: i32) -> u8 {
+    pub fn spec_change(&mut self, _ring: &mut CommandRing, spec: i32) -> u8 {
         for s in self.slots.iter_mut() {
             *s = VoiceSe::default();
         }

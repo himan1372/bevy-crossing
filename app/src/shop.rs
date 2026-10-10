@@ -243,7 +243,7 @@ fn find_shop_spot(town: Res<Town>, mut commands: Commands) {
                 continue;
             }
             let d2 = (gx + RW / 2 - cx).pow(2) + (gz + RD / 2 - cz).pow(2);
-            if best.map_or(true, |(_, _, b)| d2 < b) {
+            if best.is_none_or(|(_, _, b)| d2 < b) {
                 best = Some((gx, gz, d2));
             }
         }

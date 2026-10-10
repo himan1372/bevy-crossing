@@ -1,3 +1,6 @@
+// Bevy systems take many params and nested Query filters by design.
+#![allow(clippy::too_many_arguments, clippy::type_complexity)]
+
 use bevy::prelude::*;
 
 mod dialogue;

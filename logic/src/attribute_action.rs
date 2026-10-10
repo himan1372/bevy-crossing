@@ -125,10 +125,7 @@ pub extern "C" fn pc_check_npc_attr(attr: u32) -> u8 {
 /// C ABI: plant policy; returns 0/2/4, or 0xFF for "cannot plant" (-1).
 #[no_mangle]
 pub extern "C" fn pc_check_plant_attr(attr: u32) -> u8 {
-    match attribute2check_plant(attr) {
-        Ok(stage) => stage,
-        Err(()) => 0xFF,
-    }
+    attribute2check_plant(attr).unwrap_or(0xFF)
 }
 
 #[cfg(test)]

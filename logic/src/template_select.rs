@@ -31,7 +31,7 @@ pub fn use_data_reset() -> [i16; USE_DATA_LEN] {
 
 /// Duplicate test (mRF_SearchAlreadyUse): exact index equality over all slots.
 pub fn search_already_use(use_data: &[i16; USE_DATA_LEN], value: i16) -> bool {
-    use_data.iter().any(|&v| v == value)
+    use_data.contains(&value)
 }
 
 /// Candidate count (mRF_TypeCombCount). `types[i]` = semantic type of

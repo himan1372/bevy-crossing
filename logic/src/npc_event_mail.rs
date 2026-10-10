@@ -23,7 +23,6 @@
 //! This module ports the selection formulas, message-number math,
 //! scheduling quirks, and RNG structure.
 
-use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
 // RNG
@@ -202,6 +201,7 @@ pub const EVENT_MAIL_FRIEND_NUM: u8 = 3;
 
 /// Relationship classes (`mNpc_EVENT_MAIL_*`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(clippy::enum_variant_names)] // mirrors mNpc_EVENT_MAIL_*_FRIEND
 pub enum EventMailType {
     BestFriend = 0,
     OkFriend = 1,
@@ -286,7 +286,7 @@ pub fn make_event_mail(
 /// `classify` maps villager idx -> Option<(player_no, type)>.
 /// `try_send` attempts delivery and returns whether it succeeded.
 pub fn send_valentine_mails(
-    classify: &[(Option<(u8, EventMailType)>); ANIMAL_NUM_MAX],
+    classify: &[Option<(u8, EventMailType)>; ANIMAL_NUM_MAX],
     try_send: &mut dyn FnMut(u8, EventMailType) -> bool,
 ) -> u32 {
     let mut player_bitfield: u8 = 0b1111;
@@ -499,12 +499,11 @@ pub fn send_goodbye_mails(
 ) -> u32 {
     let mut sent = 0u32;
     for player_no in 0..4u8 {
-        if (pending.deliver_to_bitfield >> player_no) & 1 == 1 {
-            if try_send(player_no) {
+        if (pending.deliver_to_bitfield >> player_no) & 1 == 1
+            && try_send(player_no) {
                 pending.deliver_to_bitfield &= !(1 << player_no);
                 sent += 1;
             }
-        }
     }
     sent
 }
@@ -910,8 +909,8 @@ mod tests {
         // Two villagers: one BEST (player 0), one NOT (player 1).
         // Delivery fails for player 0 -> bitfield excludes them; the
         // NOT_FRIEND mail for player 1 still goes out.
-        let classify: [(Option<(u8, EventMailType)>); ANIMAL_NUM_MAX] = {
-            let mut c: [(Option<(u8, EventMailType)>); ANIMAL_NUM_MAX] = [None; ANIMAL_NUM_MAX];
+        let classify: [Option<(u8, EventMailType)>; ANIMAL_NUM_MAX] = {
+            let mut c: [Option<(u8, EventMailType)>; ANIMAL_NUM_MAX] = [None; ANIMAL_NUM_MAX];
             c[0] = Some((0, EventMailType::BestFriend));
             c[1] = Some((1, EventMailType::NotFriend));
             c
@@ -1061,8 +1060,10 @@ mod tests {
 
     #[test]
     fn birthday_year_reset() {
-        let mut st = BirthdayYearState::default();
-        st.birthday_present_npc = 42;
+        let mut st = BirthdayYearState {
+            birthday_present_npc: 42,
+            ..BirthdayYearState::default()
+        };
         st.mark_celebrated(2026);
         assert_eq!(st.birthday_present_npc, BirthdayYearState::EMPTY_NO);
         assert_eq!(st.celebrated_birthday_year, 2026);

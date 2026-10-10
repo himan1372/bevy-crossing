@@ -246,7 +246,7 @@ pub unsafe extern "C" fn pc_bg_neighborhood_coords(
         return 0;
     }
     let all = neighborhood_coords(center_x, center_z, size);
-    let count = ((size * size).min(49).max(0)) as usize;
+    let count = (size * size).clamp(0, 49) as usize;
     let dst = unsafe { core::slice::from_raw_parts_mut(coords, count) };
     dst.copy_from_slice(&all[..count]);
     count as u8

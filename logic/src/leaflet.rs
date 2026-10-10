@@ -463,7 +463,7 @@ mod tests {
     fn unclaimed_house_marked_without_mail() {
         let mut s = LeafletState::init();
         s.receive(&sample_mail(mtype::MAIL), send_type::LEAFLET);
-        let mut houses = vec![HouseInfo { land_id: UNCLAIMED_LAND_ID, ..Default::default() }];
+        let houses = vec![HouseInfo { land_id: UNCLAIMED_LAND_ID, ..Default::default() }];
         let mut mailboxes = vec![LeafletMailbox::default()];
         deliver_leaflets(&mut s, &houses, &mut mailboxes, -1);
         assert_eq!(s.leaflet_flags, 0x1); // single house

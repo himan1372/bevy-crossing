@@ -142,7 +142,7 @@ pub mod index {
     pub const NUM: i32 = 121;
 
     pub fn valid(idx: i32) -> bool {
-        idx >= 0 && idx < NUM
+        (0..NUM).contains(&idx)
     }
 }
 

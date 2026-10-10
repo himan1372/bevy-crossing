@@ -261,8 +261,8 @@ impl Emu64 {
                 *pc += 1;
             }
             op::G_GEOMETRYMODE => {
-                let clear = ((gfx.w0 >> 0) & 0x00FF_FFFF) as u32;
-                let set = (gfx.w1 & 0x00FF_FFFF) as u32;
+                let clear = gfx.w0 & 0x00FF_FFFF;
+                let set = gfx.w1 & 0x00FF_FFFF;
                 // Retail: G_GEOMETRYMODE packs clear/set; the actual
                 // handler distinguishes via the param field.
                 let _ = clear;
@@ -325,7 +325,7 @@ impl Emu64 {
             op::G_LOADTLUT => {
                 let tile = ((gfx.w0 >> 16) & 0x7) as usize % 8;
                 self.state.tluts[tile % super::state::NUM_TLUTS].addr = gfx.addr();
-                self.state.tluts[tile % super::state::NUM_TLUTS].count = (gfx.len() >> 6) as u16;
+                self.state.tluts[tile % super::state::NUM_TLUTS].count = gfx.len() >> 6;
                 self.state.dirty.mark(Dirty::Texture);
                 *pc += 1;
             }
@@ -363,9 +363,9 @@ impl Emu64 {
             op::G_SETSCISSOR => {
                 let (x0, y0, x1, y1) = (
                     ((gfx.w0 >> 12) & 0xFFF) as u16,
-                    ((gfx.w0 >> 0) & 0xFFF) as u16,
+                    (gfx.w0 & 0xFFF) as u16,
                     ((gfx.w1 >> 12) & 0xFFF) as u16,
-                    ((gfx.w1 >> 0) & 0xFFF) as u16,
+                    (gfx.w1 & 0xFFF) as u16,
                 );
                 self.state.scissor = (x0, y0, x1, y1);
                 *pc += 1;
@@ -514,7 +514,7 @@ impl Emu64 {
             };
             // Retail tests the 5b/7b bit per word, not once for the run.
             let word_7bit = (g.w1 & 1) == 1;
-            let faces_this_word = if word_7bit { 3 } else if first_pass { 3 } else { 4 };
+            let faces_this_word = if word_7bit || first_pass { 3 } else { 4 };
             for f in 0..faces_this_word {
                 if n_faces == 0 {
                     break;
@@ -582,7 +582,7 @@ impl Emu64 {
             // _SHIFTL(fmt, 21, 3) | _SHIFTL(siz, 19, 2) | _SHIFTL(1, 18, 1)
             let fmt = ((w0 >> 21) & 0x7) as u8;
             let siz = ((w0 >> 19) & 0x3) as u8;
-            let wd = ((w0 >> 0) & 0x3FF) as u16;
+            let wd = (w0 & 0x3FF) as u16;
             let ht = ((w0 >> 10) & 0xFF) as u16;
             (fmt, siz, wd + 1, (ht + 1) * 4)
         } else {
@@ -697,9 +697,9 @@ fn rgba(w1: u32) -> super::state::Rgba {
 fn texrect_coords(gfx: Gfx) -> (u16, u16, u16, u16) {
     (
         ((gfx.w0 >> 12) & 0xFFF) as u16,
-        ((gfx.w0 >> 0) & 0xFFF) as u16,
+        (gfx.w0 & 0xFFF) as u16,
         ((gfx.w1 >> 12) & 0xFFF) as u16,
-        ((gfx.w1 >> 0) & 0xFFF) as u16,
+        (gfx.w1 & 0xFFF) as u16,
     )
 }
 

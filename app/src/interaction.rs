@@ -217,7 +217,7 @@ pub fn interact(
         if facing.dir.dot(to_v / dist) < FACING_DOT {
             continue;
         }
-        if best.map_or(true, |(_, d)| dist < d) {
+        if best.is_none_or(|(_, d)| dist < d) {
             best = Some((entity, dist));
         }
     }
@@ -233,7 +233,7 @@ pub fn interact(
         if dist > INTERACT_RANGE_ITEM {
             continue;
         }
-        if best_item.map_or(true, |(_, _, d)| dist < d) {
+        if best_item.is_none_or(|(_, _, d)| dist < d) {
             best_item = Some((entity, item.kind, dist));
         }
     }

@@ -1012,7 +1012,7 @@ pub mod letter_present {
 /// 10 -> rare furniture; 11 -> rare carpet or wallpaper (50/50).
 pub fn letter_reply_present(rank: u8) -> u8 {
     match rank {
-        0 | 1 | 2 => letter_present::NONE,
+        0..=2 => letter_present::NONE,
         3 | 7 => letter_present::NORMAL_CLOTHING,
         4 => letter_present::NORMAL_FURNITURE,
         5 => letter_present::CARPET_OR_WALLPAPER,

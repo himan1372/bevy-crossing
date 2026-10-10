@@ -106,7 +106,7 @@ pub fn ftr_no_rot_2_idx(no: u16, rot: u8) -> u16 {
 }
 /// `mRmTp_FtrIdx2FtrItemNo(idx, direct)`: index + cardinal direction -> saved item.
 pub fn ftr_idx_2_item_no(idx: u16, dir: Direction) -> u16 {
-    ((idx << 2) | (dir as u16)) & 0xFFFF
+    (idx << 2) | (dir as u16)
 }
 /// Inverse: saved item -> (furniture index, direction).
 pub fn ftr_item_no_2_idx_dir(item: u16) -> (u16, Direction) {
@@ -845,8 +845,8 @@ pub fn judge_place_furniture(
         let (tx, tz) = look_at_unit(px, pz, base_dir, i);
 
         // ON_SURFACE 1x1 items go to layer 1 above SURFACE furniture.
-        if set_type == SetType::OnSurface && shape == ShapeType::TypeA {
-            if fg_layer1.get(tx, tz) == Some(EMPTY_NO)
+        if set_type == SetType::OnSurface && shape == ShapeType::TypeA
+            && fg_layer1.get(tx, tz) == Some(EMPTY_NO)
                 && fg_layer0.get(tx, tz) != Some(EMPTY_NO)
                 && surface_below(tx, tz)
             {
@@ -858,7 +858,6 @@ pub fn judge_place_furniture(
                     layer: layer::SECONDARY,
                 };
             }
-        }
 
         if shape != ShapeType::TypeC {
             if check_place_situation(shape, tx, tz, fg_layer0, occupied) {

@@ -82,7 +82,7 @@ fn check_alpha(c: u8, upper: bool) -> bool {
 pub fn cmp_key(s: &[u8]) -> bool {
     let (c0, c1, c2) = (s[0], s[1], s[2]);
     let lower = c0.to_ascii_lowercase();
-    if !(b'a'..=b'z').contains(&lower) {
+    if !lower.is_ascii_lowercase() {
         return false;
     }
     let t = (lower - b'a') as usize;
@@ -191,11 +191,10 @@ fn key_type_d(body: &[u8], len: usize) -> i32 {
     let mut i = 0;
     let mut left = len;
     while left > 2 {
-        if check_alpha(body[i], false) || check_alpha(body[i], true) {
-            if body[i] == body[i + 1] && body[i] == body[i + 2] {
+        if (check_alpha(body[i], false) || check_alpha(body[i], true))
+            && body[i] == body[i + 1] && body[i] == body[i + 2] {
                 return -50;
             }
-        }
         left -= 1;
         i += 1;
     }
@@ -719,7 +718,7 @@ impl HandbillzComposer {
     /// small_to_capital for the ASCII range (the retail 56-pair table also
     /// covers accented characters; ASCII is what the reply path needs).
     fn small_to_capital(c: u8) -> u8 {
-        if (b'a'..=b'z').contains(&c) {
+        if c.is_ascii_lowercase() {
             c - 32
         } else {
             c
@@ -727,6 +726,7 @@ impl HandbillzComposer {
     }
 
     /// One FREE-code substitution at `start` (code is 2 bytes: 0x7F, type).
+    #[allow(clippy::self_assignment)] // reproduces a retail bug (see capital_flag below)
     fn put_string_free(
         &mut self,
         res: &mut dyn HandbillzResources,
@@ -1035,7 +1035,7 @@ mod tests {
     fn runon_penalty() {
         // Separator first, then 80 non-separator chars -> -150.
         let mut raw = vec![b'.'];
-        raw.extend(std::iter::repeat(b'a').take(80));
+        raw.extend(std::iter::repeat_n(b'a', 80));
         let b = body_of(&raw);
         assert_eq!(key_type_f(&b, strlen_new(&b, MAIL_BODY_LEN)), -150);
         // Retail quirk: the outer `while (len > 76)` bound means a separator

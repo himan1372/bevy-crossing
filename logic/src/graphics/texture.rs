@@ -77,7 +77,7 @@ pub fn rgba5551_to_rgb5a3(rgba5551: u16) -> u16 {
     if rgba5551 & 1 != 0 {
         0x8000 | (rgba5551 >> 1)
     } else {
-        (((rgba5551 >> 4) & !0xFF) | ((rgba5551 >> 3) & 0xF0) | ((rgba5551 >> 2) & 0x0F)) as u16
+        ((rgba5551 >> 4) & !0xFF) | ((rgba5551 >> 3) & 0xF0) | ((rgba5551 >> 2) & 0x0F)
     }
 }
 
@@ -103,7 +103,7 @@ pub fn tmem_swizzle(ofs: u32, blk_siz: u32) -> u32 {
 pub fn ia8_rearrange(src: &[u8], dst: &mut [u8]) {
     for (d, &s) in dst.iter_mut().zip(src.iter()) {
         // N64 IA8 is (I:4, A:4) nibbles; GX IA8 wants (A:4, I:4).
-        *d = (s << 4) | (s >> 4);
+        *d = s.rotate_right(4);
     }
 }
 
@@ -148,7 +148,7 @@ pub fn texconv_tile(src: &[u8], dst: &mut [u8], width: u32, height: u32, fmt: u8
                             dst[out..out + 2].copy_from_slice(&c.to_be_bytes());
                         }
                         (img_fmt::G_IM_FMT_IA, img_siz::G_IM_SIZ_8B) => {
-                            dst[out] = (src[src_ofs] << 4) | (src[src_ofs] >> 4);
+                            dst[out] = src[src_ofs].rotate_right(4);
                         }
                         _ => {
                             dst[out..out + texel_bytes].copy_from_slice(&src[src_ofs..src_ofs + texel_bytes]);
@@ -310,7 +310,7 @@ impl DesignTexture {
         }
         let i = (y * DESIGN_TEX_W + x) as usize;
         let b = self.data[i / 2];
-        if i % 2 == 0 {
+        if i.is_multiple_of(2) {
             (b >> 4) & 0xF
         } else {
             b & 0xF
@@ -324,7 +324,7 @@ impl DesignTexture {
         }
         let i = (y * DESIGN_TEX_W + x) as usize;
         let b = &mut self.data[i / 2];
-        if i % 2 == 0 {
+        if i.is_multiple_of(2) {
             *b = (*b & 0x0F) | ((v & 0xF) << 4);
         } else {
             *b = (*b & 0xF0) | (v & 0xF);

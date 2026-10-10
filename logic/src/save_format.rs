@@ -537,7 +537,7 @@ mod tests {
     }
 
     fn live_save_t() -> [u8; SAVE_T_SIZE] {
-        let mut live = [0xABu8; SAVE_T_SIZE];
+        let live = [0xABu8; SAVE_T_SIZE];
         // land_info.id lives deep in Save_t; the candidate check reads the
         // header's land_id against the caller-supplied id, so the live
         // image content here is arbitrary.

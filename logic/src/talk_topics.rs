@@ -210,7 +210,7 @@ pub fn normal3_weather_msg_no(
 /// Normal-3 season leaf: `base + add_table[month - 1]` (month clamped).
 pub fn normal3_season_msg_no(base: i32, month_1_12: i32) -> i32 {
     let m = month_1_12 - 1;
-    let m = if m < 0 || m >= 12 { 0 } else { m };
+    let m = if !(0..12).contains(&m) { 0 } else { m };
     base + SEASON_ADD_TABLE[m as usize]
 }
 

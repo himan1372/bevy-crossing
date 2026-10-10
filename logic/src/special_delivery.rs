@@ -163,7 +163,7 @@ impl TicketOverflow {
             tickets = 0;
             self.expiry_month = current_month;
         }
-        tickets = tickets.saturating_add(1).min(MAX_TICKETS);
+        tickets = tickets.saturating_add(1);
         self.mail_storage = tickets;
     }
 }
@@ -267,17 +267,11 @@ pub struct SpecialMail {
 
 /// Minimal mailbox model: `mPO_copy_contents` needs one free slot.
 #[derive(Clone, Debug)]
+#[derive(Default)]
 pub struct Mailbox {
     pub slots: [Option<SpecialMail>; MAILBOX_SIZE],
 }
 
-impl Default for Mailbox {
-    fn default() -> Self {
-        Mailbox {
-            slots: [None, None, None, None, None, None, None, None, None, None],
-        }
-    }
-}
 
 impl Mailbox {
     pub fn free_slot(&self) -> Option<usize> {

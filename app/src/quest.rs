@@ -7,6 +7,7 @@
 //! - `quest::pc_quest_base_pay` gives the retail bell pay per type/kind
 //!   (delivery 200, errand tier-2 500; contest kinds pay 0 in bells in
 //!   retail — item rewards — so catch quests use a flat 400 here)
+//!
 //! The offer/turn-in UI, `!` markers, HUD line, and Bevy-side generation
 //! (delivery recipient, fruit/furniture/catch variants) are new.
 
@@ -162,7 +163,7 @@ fn generate_quest(roll: u32, giver: &str, others: &[String], stock: &[String]) -
             )
         }
         t if t == qtype::ERRAND => {
-            if roll % 2 == 0 {
+            if roll.is_multiple_of(2) {
                 // used_num=2 -> ERRAND_PAY tier 2 = 500 bells.
                 let reward = quest::pc_quest_base_pay(qtype::ERRAND, 0, 2).max(300);
                 (
@@ -190,7 +191,7 @@ fn generate_quest(roll: u32, giver: &str, others: &[String], stock: &[String]) -
         // CONTEST -> catch quests. Retail contest bell pay is 0 (item
         // rewards instead), so catch quests pay a flat 400 here.
         _ => {
-            if roll % 2 == 0 {
+            if roll.is_multiple_of(2) {
                 let reward = quest::pc_quest_base_pay(qtype::CONTEST, ckind::FISH, 0).max(400);
                 (
                     QuestKind::CatchFish {

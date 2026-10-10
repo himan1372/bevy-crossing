@@ -28,6 +28,7 @@ impl Gfx {
         ((self.w0 >> 16) & 0xFF) as u8
     }
     /// Length field: low 16 bits of word 0.
+    #[allow(clippy::len_without_is_empty)] // a command field, not a container length
     pub fn len(self) -> u16 {
         (self.w0 & 0xFFFF) as u16
     }

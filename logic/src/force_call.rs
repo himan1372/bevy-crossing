@@ -34,6 +34,7 @@
 //! SEARCHing the player → automatic greeting.
 
 /// `aNPC_FORCE_CALL_*` (ac_npc.h).
+#[allow(clippy::module_inception)] // `force_call::force_call::*` mirrors the C prefix
 pub mod force_call {
     pub const NONE: u8 = 0;
     pub const REQUEST: u8 = 1;

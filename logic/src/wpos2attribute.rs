@@ -264,7 +264,7 @@ pub fn wpos2attribute_step(inp: &Wpos2AttributeInputs) -> Wpos2AttributeOut {
         if (39..=42).contains(&raw) {
             let idx = (raw - 39) as usize;
             let mapped = GRASS3_WATER_INFO[idx][(inp.area & 3) as usize];
-            let a = if (mapped <= attr::GRASS3 && !inp.is_fg_field) == false {
+            let a = if !(mapped <= attr::GRASS3 && !inp.is_fg_field) {
                 mapped
             } else {
                 attr::FLOOR
@@ -274,7 +274,7 @@ pub fn wpos2attribute_step(inp: &Wpos2AttributeInputs) -> Wpos2AttributeOut {
     }
 
     // Default: (attr <= GRASS3 && non-FG) ? FLOOR : attr.
-    let a = if (raw <= attr::GRASS3 && !inp.is_fg_field) == false {
+    let a = if !(raw <= attr::GRASS3 && !inp.is_fg_field) {
         raw
     } else {
         attr::FLOOR
@@ -453,8 +453,6 @@ pub extern "C" fn pc_slate_ground_height(
 ) -> f32 {
     slate_ground_height(top_left, bot_left, bot_right, top_right, area, base_height)
 }
-
-/// C ABI: one Wpos2Attribute step.
 
 /// C ABI: one Wpos2Attribute step.
 /// Returns the effective attribute in the low byte and cant_dig in bit 8;

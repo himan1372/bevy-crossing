@@ -64,7 +64,7 @@ pub struct ForbidVecData {
     pub wall_name: u8,
 }
 
-const SQRT2_2: f32 = 0.7071067811865476;
+const SQRT2_2: f32 = std::f32::consts::FRAC_1_SQRT_2;
 
 /// `mCoBG_make_vector_table[8]` — verbatim.
 pub const MAKE_VECTOR_TABLE: [ForbidVecData; 8] = [
@@ -107,7 +107,7 @@ pub const ATTRIBUTE_LAST: u8 = 62;
 /// Attribute-wall attribute range check
 /// (`mCoBG_MakeForbidAttrVector`).
 pub fn is_forbid_attribute(attr: u8) -> bool {
-    attr >= ATTRIBUTE_FIRST && attr <= ATTRIBUTE_LAST
+    (ATTRIBUTE_FIRST..=ATTRIBUTE_LAST).contains(&attr)
 }
 
 /// The vector IDs an attribute expands to (`mCoBG_MakeForbidVectorData`).
@@ -219,7 +219,7 @@ pub fn forbid_wall_segments(
 #[no_mangle]
 pub extern "C" fn pc_forbid_vectors(attr: u8, out: *mut u8) -> u8 {
     let v = forbid_vectors(attr);
-    if !out.is_null() && v.len() > 0 {
+    if !out.is_null() && !v.is_empty() {
         let dst = unsafe { core::slice::from_raw_parts_mut(out, v.len()) };
         for (i, id) in v.iter().enumerate() {
             dst[i] = *id as u8;

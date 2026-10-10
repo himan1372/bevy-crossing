@@ -280,8 +280,8 @@ pub fn interval_days(t0: &RtcTime, t1: &RtcTime) -> i32 {
     ];
     let year_leap_period = (t1.year as i32 - t0.year as i32) / 4;
     let extra_years = (t1.year as i32 - t0.year as i32) % 4;
-    let less_leap = if t0.year % 4 == 0 { 1 } else { 0 };
-    let over_leap = if t1.year % 4 == 0 { 1 } else { 0 };
+    let less_leap = if t0.year.is_multiple_of(4) { 1 } else { 0 };
+    let over_leap = if t1.year.is_multiple_of(4) { 1 } else { 0 };
     let leap_add = if (((4 - (t0.year % 4)) % 4) as i32) < extra_years {
         1
     } else {

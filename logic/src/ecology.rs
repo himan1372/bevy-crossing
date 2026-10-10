@@ -98,7 +98,7 @@ pub fn fish_select(weights: &[(f32, bool)], env_rate: f32, roll: f32) -> Option<
         return None;
     }
     let mut tried = vec![false; weights.len()];
-    let mut selected = total * roll;
+    let selected = total * roll;
     loop {
         let mut now = total;
         let mut pick = None;
@@ -112,16 +112,14 @@ pub fn fish_select(weights: &[(f32, bool)], env_rate: f32, roll: f32) -> Option<
                 break;
             }
         }
-        match pick {
-            None => return None,
-            Some(i) => {
-                if weights[i].1 {
-                    return Some(i);
-                }
-                tried[i] = true; // habitat incompatible: retry without it
-                if tried.iter().all(|&t| t) {
-                    return None;
-                }
+        {
+            let i = pick?;
+            if weights[i].1 {
+                return Some(i);
+            }
+            tried[i] = true; // habitat incompatible: retry without it
+            if tried.iter().all(|&t| t) {
+                return None;
             }
         }
     }
@@ -129,7 +127,7 @@ pub fn fish_select(weights: &[(f32, bool)], env_rate: f32, roll: f32) -> Option<
 
 /// Interior spawn region: x,z in 2..13 (12x12) of the 16x16 acre.
 pub fn interior_unit_ok(x: u8, z: u8) -> bool {
-    x >= 2 && x <= 13 && z >= 2 && z <= 13
+    (2..=13).contains(&x) && (2..=13).contains(&z)
 }
 
 /// Ocean fish need water_height - ground_height >= 20.0.
@@ -258,7 +256,7 @@ pub fn net_capture_test(
     // extended by the envelope along the axis is approximated by the
     // radial test; the source clamps via the projection).
     let _ = net_sweep_len(golden);
-    t >= 0.0 && t <= 1.0 && dist_sq <= len * len
+    (0.0..=1.0).contains(&t) && dist_sq <= len * len
 }
 
 /// Default insect catch radius; butterflies get 24.

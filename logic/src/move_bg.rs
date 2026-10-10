@@ -128,6 +128,9 @@ fn tab_t(check_type: u8) -> (f32, f32) {
     }
 }
 
+/// (start, end, normal, base_angle_short, wall_name)
+type WallDef = ([f32; 2], [f32; 2], [f32; 2], i16, u8);
+
 /// Generate the four moving-background wall segments
 /// (`mCoBG_SizeData2CollisionData` core, verbatim).
 ///
@@ -143,7 +146,7 @@ pub fn make_move_bg_walls(size: &MoveBgSize, t: &MoveBgTransform, check_type: u8
     let rotate = rad.to_degrees().abs() >= 0.05;
 
     // (start, end, normal, base_angle_short, wall_name)
-    let defs: [([f32; 2], [f32; 2], [f32; 2], i16, u8); 4] = [
+    let defs: [WallDef; 4] = [
         (
             [-size.left * rate - t0, -size.up * rate],
             [size.right * rate + t0, -size.up * rate],

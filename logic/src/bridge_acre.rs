@@ -43,12 +43,12 @@ pub mod block_type {
 
 /// Is this a plain river block type (40-46)?
 pub fn is_river_block(t: u8) -> bool {
-    t >= block_type::RIVER_FIRST && t <= block_type::RIVER_LAST
+    (block_type::RIVER_FIRST..=block_type::RIVER_LAST).contains(&t)
 }
 
 /// Is this a bridge-variant block type (47-53)?
 pub fn is_bridge_block(t: u8) -> bool {
-    t >= block_type::RIVER_BRIDGE_FIRST && t <= block_type::RIVER_BRIDGE_LAST
+    (block_type::RIVER_BRIDGE_FIRST..=block_type::RIVER_BRIDGE_LAST).contains(&t)
 }
 
 /// Convert a river block type to its bridge counterpart via the

@@ -242,7 +242,7 @@ pub fn search_wall_flag(wall_name: u8, h0: [f32; 2], h1: [f32; 2]) -> Option<([f
 
 /// Is this a bridge attribute (27–35)?
 pub fn is_bridge_attribute(attr: u8) -> bool {
-    attr >= attribute::BRIDGE_FIRST && attr <= attribute::BRIDGE_LAST
+    (attribute::BRIDGE_FIRST..=attribute::BRIDGE_LAST).contains(&attr)
 }
 
 /// Bridge/water policy for one boundary between two terrain units —
@@ -465,7 +465,7 @@ pub enum BridgeAttribute {
 
 /// Water/river classification range used by the bridge water search.
 pub fn is_water_attribute(attr: u8) -> bool {
-    attr >= attribute::WATER && attr <= attribute::RIVER_NE
+    (attribute::WATER..=attribute::RIVER_NE).contains(&attr)
 }
 
 /// `mCoBG_unit_attribute_water_info` verbatim (64 entries): water/river
@@ -1251,7 +1251,7 @@ mod tests {
         assert_eq!(slate_detail_for_ground(4, 1), wall_name::SLATE_UP);
         assert_eq!(slate_detail_for_ground(1, 1), wall_name::SLATE_DOWN);
         // C ABI.
-        assert_eq!(unsafe { pc_slate_ground_y(4, 0, 1, 0, wall_name::SLATE_UP, 2) }, 10.0);
+        assert_eq!(pc_slate_ground_y(4, 0, 1, 0, wall_name::SLATE_UP, 2), 10.0);
     }
 
     #[test]

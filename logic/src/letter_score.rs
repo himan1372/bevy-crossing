@@ -191,12 +191,12 @@ fn trigram_hit(body: &[u8; MAIL_BODY_LEN], pos: usize, mode: TrigramMode) -> boo
     };
     // pos + 2 <= 191: callers only pass word starts within the trimmed body.
     let want = [body[pos + 1], body[pos + 2]];
-    if tables::TRIGRAM_PAIRS[lo..hi].iter().any(|&p| p == want) {
+    if tables::TRIGRAM_PAIRS[lo..hi].contains(&want) {
         return true;
     }
     // NTSC-U only: after the Z table, the scan continues through the RAM tail.
     if mode == TrigramMode::NtscU {
-        return tables::TRIGRAM_RAM_EXTRA.iter().any(|&p| p == want);
+        return tables::TRIGRAM_RAM_EXTRA.contains(&want);
     }
     false
 }
@@ -480,9 +480,7 @@ pub fn quest_trigram_component(
     *nonspace_len = count as u32;
     let mut rank = NUM;
     if words < 3 {
-        if count < 5 {
-            rank = BAD;
-        } else if run_on != 0 {
+        if count < 5 || run_on != 0 {
             rank = BAD;
         }
     } else if rate >= 30 {

@@ -11,11 +11,11 @@
 pub const GX_DL_ALIGN: usize = 32;
 
 pub fn gx_dl_addr_valid(addr: usize) -> bool {
-    addr % GX_DL_ALIGN == 0
+    addr.is_multiple_of(GX_DL_ALIGN)
 }
 
 pub fn gx_dl_size_valid(size: usize) -> bool {
-    size % GX_DL_ALIGN == 0 && size > 0
+    size.is_multiple_of(GX_DL_ALIGN) && size > 0
 }
 
 /// A recorded GX display-list call (`GXCallDisplayList` emits hardware
@@ -57,7 +57,7 @@ pub struct GxTexObj {
 
 /// `GXInitTexObj` validation: width/height <= 1024, image 32-byte aligned.
 pub fn gx_tex_obj_valid(width: u32, height: u32, image_addr: usize) -> bool {
-    width <= 1024 && height <= 1024 && image_addr % 32 == 0
+    width <= 1024 && height <= 1024 && image_addr.is_multiple_of(32)
 }
 
 /// GX tiled-storage tile sizes per format (`GXGetTexBufferSize`):

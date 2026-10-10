@@ -79,7 +79,7 @@ pub fn player_movement(
         let blocked = |x: f32, z: f32| {
             shop_building
                 .as_ref()
-                .map_or(false, |s| crate::shop::point_blocked(s, x, z))
+                .is_some_and(|s| crate::shop::point_blocked(s, x, z))
         };
 
         // Try X movement

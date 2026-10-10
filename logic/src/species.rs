@@ -361,6 +361,7 @@ pub extern "C" fn pc_fish_seasonal_count(month: u8, day: u8, hour: u8, env: u8) 
 }
 
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C ABI export: null-checked; pointer validity is the C caller's contract
 pub extern "C" fn pc_fish_table_entry(
     month: u8,
     day: u8,
@@ -399,6 +400,7 @@ pub extern "C" fn pc_insect_seasonal_count(month: u8, hour: u8, island: u8) -> i
 }
 
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C ABI export: null-checked; pointer validity is the C caller's contract
 pub extern "C" fn pc_insect_table_entry(
     month: u8,
     hour: u8,

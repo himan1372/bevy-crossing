@@ -80,6 +80,7 @@ pub type ColUnit = (u8, u8, u8, u8, u8, u8, u8);
 
 /// 17 assets x 256 units, in ALBUMIN_ASSETS order
 /// (south row 7, east row 5, west row 5).
+#[allow(clippy::large_const_arrays)] // public `const` API; indexed in place, never copied whole
 pub const ALBUMIN_COLLISION: [[ColUnit; 256]; 17] = [
     // [0] GRD_S_C1_R1_1
     [

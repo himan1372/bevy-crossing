@@ -1287,6 +1287,11 @@ pub fn assess(plan: &TownPlan, trash_outside_dump: &[u16; ACRE_COUNT]) -> TownAs
 /// generator with the Rust town model — a Wave 2/3 architectural
 /// migration, not a function-level shim. Do not wire until the
 /// `mFM_*` structures are translated or a C adapter reconstructs them.
+///
+/// # Safety
+///
+/// When `candidate_count != 0`, `candidate_ids` must be valid for reading
+/// `candidate_count` `u16`s; `out_plan` must be null or valid for writing.
 #[no_mangle]
 pub unsafe extern "C" fn pc_town_generate(
     seed: u32,
@@ -1324,6 +1329,11 @@ pub unsafe extern "C" fn pc_town_generate(
 /// RNG source, draw count, duplicate rejection, personality
 /// restrictions, six-villager ordering) must be pinned down first or
 /// the RNG stream will diverge from retail.
+///
+/// # Safety
+///
+/// `candidates` must be null or valid for reading `candidate_count`
+/// entries; `out_ids` must be null or valid for writing six `u16`s.
 #[no_mangle]
 pub unsafe extern "C" fn pc_town_select_initial_villagers(
     seed: u32,
@@ -1350,6 +1360,12 @@ pub unsafe extern "C" fn pc_town_select_initial_villagers(
 
 /// Assess generated vegetation using caller-provided per-acre trash counts
 /// outside the dump. Returns 1 on success and 0 for any null pointer.
+///
+/// # Safety
+///
+/// Each pointer must be null or valid: `plan` for reading a `TownPlan`,
+/// `trash_by_acre` for reading one `u16` per acre, `out_assessment` for
+/// writing a `TownAssessment`.
 #[no_mangle]
 pub unsafe extern "C" fn pc_town_assess(
     plan: *const TownPlan,

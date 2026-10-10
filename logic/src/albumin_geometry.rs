@@ -126,7 +126,7 @@ pub fn unpack_col_unit(raw: u32) -> (u8, u8, u8, u8, u8, u8, u8) {
 /// B. Unit collision height: data_bgd collision[16][16] center/corners,
 ///    the physical surface inside the acre.
 /// world_y = unit_height * 10.0 + acre_base_height.
-
+///
 /// Center height of one unit of an albumin asset.
 pub fn albumin_center_height(asset_idx: usize, x: usize, z: usize) -> Option<u8> {
     albumin_unit(asset_idx, x, z).map(|u| u.1)
