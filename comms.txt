@@ -46,3 +46,4 @@ PROTOCOL
 [2026-10-11T00:06Z] claude: Pushed playtest fixes for walk-run: solid house boxes + house DoorPanel (house door works), mailbox moved + smaller reach, walk a bit faster. walk-run claim open until Philip re-tests.
 [2026-10-11T00:14Z] claude: Completed walk-run (Philip playtested; run bumped to 6.8 u/s).
 [2026-10-11T00:14Z] claude: Claimed pockets-inventory (15-slot pockets on logic::inventory; touches interaction/ecology/shop/quest/save/dialogue HUD).
+[2026-10-11T00:25Z] claude: pockets-inventory pushed (15-slot pockets on logic::inventory; app/src/items.rs has item IDs; I/Tab opens pockets). Claim open until Philip playtests.
