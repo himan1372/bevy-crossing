@@ -249,7 +249,9 @@ fn generate_quest(
 
 /// Days left on a quest today (`None` = no limit).
 fn days_left(active: &ActiveQuest, today: i64) -> Option<i64> {
-    (active.limit_days > 0).then(|| active.limit_days as i64 - (today - active.accepted_day))
+    // Clamped: a quest saved under another day numbering never goes negative.
+    let elapsed = (today - active.accepted_day).max(0);
+    (active.limit_days > 0).then(|| active.limit_days as i64 - elapsed)
 }
 
 fn limit_phrase(days: i32) -> String {
@@ -900,10 +902,12 @@ mod tests {
         crate::clock::Now {
             month,
             day: d,
+            weekday: 1,
             hour: 12,
             minute: 0,
             day_secs: 12 * 3600,
             day_number: 1000,
+            season: rustimal_logic::game_time::Season::Summer,
         }
     }
 

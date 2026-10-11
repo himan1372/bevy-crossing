@@ -53,14 +53,14 @@ Each milestone ends with a Philip playtest.
 - [x] **ci-gate** — done (claude): `.github/workflows/ci.yml` runs the full gate on every push to `main`.
 - [ ] **art-direction** (P) — Philip chose: look similar to Animal Crossing GameCube (soft pastel palette, chunky rounded low-poly, big-headed characters, painterly ground) built from scratch: no game textures or traced assets as reference. Next: one reference render for Philip to approve. [blocks all of M2]
 
-### M1 — Main loop on the translated code (placeholder art is fine)
+### M1 — Main loop on the translated code (placeholder art is fine) — code complete 2026-10-10; Philip playtest pending
 - [x] **logic-expose** — done (claude): make the slice modules `pub` in `logic/src/lib.rs`: `player_move`, `inventory`, `item_prefs`, `talk_request`, `talk_topics`, `request_selector`, `npc_ai`, `behavior`, `collision`, `game_time`. Add a small test per module proving the app-facing call works.
 - [x] **walk-run** — done (claude, playtested; walk ~3.9 u/s, run 6.8 u/s): player locomotion through `logic::player_move` (walk/run/dash speeds and acceleration from the translated controller), with a Run action (hold Shift / gamepad B). Replaces the fixed speed in `player.rs`, `house.rs` and `shop.rs`. [blocked: logic-expose]
 - [x] **pockets-inventory** — done (claude, playtested): 15-slot pockets backed by `logic::inventory` (+ `item_prefs` for item types); pockets UI; catches, fruit, furniture and quest items go into pockets; selling takes from pockets. Replaces the HUD counters. [blocked: logic-expose]
 - [x] **talk-system** — done (claude, playtested): conversations driven by `logic::talk_request` / `talk_topics` / `dialogue_topics` (topic choice per personality and situation) instead of the placeholder lines in `dialogue.rs`. Dialogue text stays original (no game script). [blocked: logic-expose]
 - [x] **quests-full** — done (claude; Philip playtest batched at end of M1): quest flow through `logic::quest` / `quest_gen` / `request_selector`: villager requests, delivery items carried in pockets, turn-in, rewards. Builds on today's `quest.rs`. [blocked: pockets-inventory, talk-system]
 - [x] **villager-routines** — done (claude, playtested): villager schedules and wandering from `logic::npc_ai` / `behavior` / `movement` (field / in-house / sleep, greeting reactions) instead of the random walk in `npc.rs`. [blocked: logic-expose]
-- [ ] **game-clock** — partly done (claude): `app/src/clock.rs` gives local time (chrono) + F6 debug hour; still to do: the `logic::game_time` calendar engine. — in-game clock and calendar from `logic::game_time`; villager schedules and ecology follow it; clock on the HUD. [blocked: logic-expose]
+- [x] **game-clock** — done (claude): `app/src/clock.rs` runs on `logic::game_time` (hardware ticks + `GameClock::time_delta`, OS tick calendar, 6 am game day, 18-term seasons), local time via chrono, F6 debug hour, weekday/date/time HUD.
 
 ### M2 — Graphics: assets, rendering pipeline, animation
 - [ ] **render-pipeline** — the Bevy look: camera angle and follow, sun + ambient light with shadows, a flat/toon material for our models, the curved-horizon ("rolling world") effect as our own shader, colour grading, MSAA. Tuned on placeholder geometry first. [blocked: art-direction]

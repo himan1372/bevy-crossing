@@ -65,6 +65,8 @@ pub struct TalkContext {
     pub carried_furniture: Option<ItemId>,
     /// 1-12.
     pub month: u8,
+    /// From the game calendar's terms (`clock::Now::season`).
+    pub season: rustimal_logic::game_time::Season,
     pub hour: u8,
 }
 
@@ -544,15 +546,6 @@ const MILDLY_ANNOYED: [&str; 6] = [
     "Do try not to monopolize my time.",
 ];
 
-fn season_name(month: u8) -> &'static str {
-    match month {
-        3..=5 => "spring",
-        6..=8 => "summer",
-        9..=11 => "fall",
-        _ => "winter",
-    }
-}
-
 fn time_name(hour: u8) -> &'static str {
     ["morning", "afternoon", "evening", "night"][time_kind(hour)]
 }
@@ -587,7 +580,7 @@ pub fn lines(topic: Topic, ctx: &TalkContext, item: Option<&str>, variant: usize
     let line = pool[looks][variant % 2]
         .replace("{item}", item.unwrap_or("thing"))
         .replace("{time}", time_name(ctx.hour))
-        .replace("{season}", season_name(ctx.month));
+        .replace("{season}", crate::clock::season_name(ctx.season));
     capitalize(&line)
 }
 
@@ -620,6 +613,7 @@ mod tests {
             carried_catch: None,
             carried_furniture: None,
             month: 4,
+            season: rustimal_logic::game_time::Season::Spring,
             hour: 9,
         }
     }

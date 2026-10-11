@@ -188,7 +188,7 @@ fn on_talk(
             lines.push(say(talk::annoyed(looks)));
             println!("{} is too annoyed to talk", villager.name);
         } else {
-            let (month, _, hour) = crate::ecology::today_mdh();
+            let now = crate::clock::now();
             let ctx = TalkContext {
                 looks,
                 happy: chat.happy,
@@ -207,8 +207,9 @@ fn on_talk(
                     .iter()
                     .copied()
                     .find(|&it| items::is_furniture(it)),
-                month,
-                hour,
+                month: now.month,
+                season: now.season,
+                hour: now.hour,
             };
             let (topic, msg_no) = talk::choose(&ctx, &mut |n| rng.below(n));
             // The topic's subject: the gift handed over, or the item admired.
