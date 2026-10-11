@@ -24,10 +24,11 @@ use rustimal_logic::player_move::{self, LocomotionState, PlayerMovement};
 use crate::input::{Action, Actions};
 use crate::interaction::Facing;
 
-/// World units per second at full tilt (running).
-pub const FULL_TILT_SPEED: f32 = 6.0;
+/// World units per second at full tilt (running). Tuned in Philip's playtest.
+pub const FULL_TILT_SPEED: f32 = 6.8;
 /// Stick magnitude a keyboard walk stands in for (Run held = full tilt).
-pub const WALK_TILT: f32 = 0.65;
+/// 0.575 x 6.8 = ~3.9 u/s, the walk speed Philip approved.
+pub const WALK_TILT: f32 = 0.575;
 /// The GameCube game's logic rate.
 const RETAIL_FPS: f32 = 30.0;
 
