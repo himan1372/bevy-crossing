@@ -18,7 +18,9 @@
 //! the town's non-player houses in order).
 
 use bevy::prelude::*;
-use rustimal_logic::movement::{AVOID_PROBE_ANGLES, AVOID_PROBE_DISTANCE_UNITS};
+use rustimal_logic::movement::{
+    AVOID_PROBE_ANGLES, AVOID_PROBE_DISTANCE_UNITS, TURN_BACKWARD_ANGLES,
+};
 use rustimal_logic::npc::Personality;
 use rustimal_logic::npc_ai::{self, sched, WanderAct};
 use rustimal_logic::town_gen::{CellKind, ACRE_DEPTH, ACRE_WIDTH};
@@ -28,13 +30,26 @@ use crate::player::Player;
 use crate::town::{Town, HOUSE_SIZE};
 
 /// Wander targets lie within this distance of home.
-const WANDER_RADIUS: f32 = 6.0;
+/// Philip's playtest: ~19 units.
+const WANDER_RADIUS: f32 = 19.0;
 const WALK_SPEED: f32 = 1.6;
 const RUN_SPEED: f32 = 3.4;
-/// Seconds a "wait" lasts (min, max).
-const WAIT_SECS: (f32, f32) = (1.5, 4.0);
+/// Seconds a "wait" lasts (min, max). Short, because waits chain: a peppy
+/// villager waits on 70% of decisions (decomp odds).
+const WAIT_SECS: (f32, f32) = (1.0, 2.5);
 /// Give up on a walk/run after this long.
-const MOVE_TIMEOUT_SECS: f32 = 8.0;
+const MOVE_TIMEOUT_SECS: f32 = 15.0;
+/// Give up walking home (and just go in) after this long.
+const GO_HOME_TIMEOUT_SECS: f32 = 20.0;
+/// How long a steer-around direction replaces the goal (decomp: the
+/// probe result temporarily becomes `avoid_pos`).
+const AVOID_COMMIT_SECS: f32 = 0.7;
+/// Progress check: moving less than `STUCK_DIST` in `STUCK_CHECK_SECS`
+/// counts as stuck.
+const STUCK_CHECK_SECS: f32 = 1.5;
+const STUCK_DIST: f32 = 0.3;
+/// Tries at finding an open wander spot before just waiting.
+const SPOT_TRIES: u32 = 8;
 /// Villagers closer than this greet each other.
 const GREET_DIST: f32 = 1.6;
 /// Seconds before the same villager greets again.
@@ -59,6 +74,12 @@ pub struct Villager {
     /// Seconds left in the current act.
     timer: f32,
     greet_cooldown: f32,
+    /// Steer-around direction and seconds left on it.
+    avoid: Option<(Vec3, f32)>,
+    /// Progress watchdog.
+    watch_pos: Vec3,
+    watch_timer: f32,
+    stuck_count: u8,
 }
 
 /// What a villager is doing right now.
@@ -183,6 +204,10 @@ fn spawn_villagers(
                 act: Act::Wait,
                 timer: 0.0,
                 greet_cooldown: 0.0,
+                avoid: None,
+                watch_pos: home,
+                watch_timer: STUCK_CHECK_SECS,
+                stuck_count: 0,
             },
             Mesh3d(meshes.add(Capsule3d::new(0.35, 0.9))),
             MeshMaterial3d(materials.add(Color::srgb(*r, *g, *b))),
@@ -241,7 +266,7 @@ fn villager_schedule(
             println!("{} stepped outside", v.name);
         } else if !out && !indoors && v.act != Act::GoHome {
             v.act = Act::GoHome;
-            v.timer = 60.0;
+            v.timer = GO_HOME_TIMEOUT_SECS;
             println!("{} is heading home", v.name);
         }
     }
@@ -315,6 +340,12 @@ fn villager_move(
         println!("{} greeted each other", names.join(" and "));
     }
 
+    let open = |p: Vec3| {
+        town.can_stand(Vec3::new(p.x, 0.0, p.z))
+            && !shop_building
+                .as_ref()
+                .is_some_and(|s| crate::shop::point_blocked(s, p.x, p.z))
+    };
     let blocked = |p: Vec3, from: Vec3| {
         !town.can_step(from, Vec3::new(p.x, 0.0, p.z))
             || shop_building
@@ -357,14 +388,32 @@ fn villager_move(
                 schedule,
                 schedule,
             );
-            let angle = rng.range_f32(0.0, std::f32::consts::TAU);
-            let radius = rng.range_f32(1.0, WANDER_RADIUS);
-            let spot = v.home + Vec3::new(angle.sin(), 0.0, angle.cos()) * radius;
-            (v.act, v.timer) = match act {
-                WanderAct::Wait => (Act::Wait, rng.range_f32(WAIT_SECS.0, WAIT_SECS.1)),
-                WanderAct::Walk => (Act::Walk(spot), MOVE_TIMEOUT_SECS),
-                WanderAct::Run => (Act::Run(spot), MOVE_TIMEOUT_SECS),
+            // A random point in the circle around home (decomp), but only on
+            // open ground: no spots inside trees, houses or the shop.
+            let mut spot = None;
+            for _ in 0..SPOT_TRIES {
+                let angle = rng.range_f32(0.0, std::f32::consts::TAU);
+                let radius = rng.range_f32(1.0, WANDER_RADIUS);
+                let p = v.home + Vec3::new(angle.sin(), 0.0, angle.cos()) * radius;
+                if open(p) {
+                    spot = Some(p);
+                    break;
+                }
+            }
+            (v.act, v.timer) = match (act, spot) {
+                (WanderAct::Walk, Some(s)) => (Act::Walk(s), MOVE_TIMEOUT_SECS),
+                (WanderAct::Run, Some(s)) => (Act::Run(s), MOVE_TIMEOUT_SECS),
+                _ => (Act::Wait, rng.range_f32(WAIT_SECS.0, WAIT_SECS.1)),
             };
+            if v.act == Act::Wait {
+                // Glance around while standing.
+                let yaw = rng.range_f32(0.0, std::f32::consts::TAU);
+                transform.rotation = Quat::from_rotation_y(yaw);
+            }
+            v.avoid = None;
+            v.stuck_count = 0;
+            v.watch_pos = transform.translation;
+            v.watch_timer = STUCK_CHECK_SECS;
             continue;
         }
 
@@ -382,35 +431,71 @@ fn villager_move(
         }
         let dir = to / dist;
         let from = transform.translation;
-        let step = dir * speed * dt;
+        let step_len = speed * dt;
 
-        // Steer straight at the goal; when blocked, try the decomp's probe
-        // angles two units ahead, then give up and re-think.
+        // 1. Keep following a committed steer-around direction.
         let mut chosen = None;
-        if !blocked(from + step, from) {
+        if let Some((d, secs)) = v.avoid {
+            if secs > 0.0 && !blocked(from + d * step_len, from) {
+                chosen = Some(d);
+                v.avoid = Some((d, secs - dt));
+            } else {
+                v.avoid = None;
+            }
+        }
+        // 2. Straight at the goal.
+        if chosen.is_none() && !blocked(from + dir * step_len, from) {
             chosen = Some(dir);
-        } else {
+        }
+        // 3. The decomp's probes: ±22.5°, ±45°, ±90°, two units ahead.
+        if chosen.is_none() {
             'probe: for a in AVOID_PROBE_ANGLES {
                 for sign in [1.0, -1.0] {
-                    let rot = Quat::from_rotation_y((a * sign).to_radians());
-                    let d = rot * dir;
-                    let ahead = from + d * AVOID_PROBE_DISTANCE_UNITS;
-                    if !blocked(from + d * speed * dt, from) && !blocked(ahead, from) {
+                    let d = Quat::from_rotation_y((a * sign).to_radians()) * dir;
+                    if !blocked(from + d * step_len, from)
+                        && !blocked(from + d * AVOID_PROBE_DISTANCE_UNITS, from)
+                    {
                         chosen = Some(d);
+                        v.avoid = Some((d, AVOID_COMMIT_SECS));
                         break 'probe;
                     }
                 }
             }
         }
-        match chosen {
-            Some(d) => {
-                transform.translation += d * speed * dt;
-                transform.rotation = Quat::from_rotation_y(d.x.atan2(d.z));
+        // 4. All probes failed: turn back (180°, or ±112.5° when badly stuck).
+        if chosen.is_none() {
+            v.stuck_count = v.stuck_count.saturating_add(1);
+            let angle = if v.stuck_count >= 2 {
+                TURN_BACKWARD_ANGLES[rng.below(2) as usize]
+            } else {
+                180.0
+            };
+            let d = Quat::from_rotation_y(angle.to_radians()) * dir;
+            if !blocked(from + d * step_len, from) {
+                chosen = Some(d);
+                v.avoid = Some((d, AVOID_COMMIT_SECS));
             }
-            None if v.act == Act::GoHome => {
-                // Can't reach the door this way; the timer will put them inside.
+        }
+        if let Some(d) = chosen {
+            transform.translation += d * step_len;
+            transform.rotation = Quat::from_rotation_y(d.x.atan2(d.z));
+        }
+
+        // Progress watchdog: not getting anywhere means stuck. Wanderers
+        // pick something new; walking home gives up after a few tries (the
+        // go-home timer then puts them inside).
+        v.watch_timer -= dt;
+        if v.watch_timer <= 0.0 {
+            if transform.translation.distance(v.watch_pos) < STUCK_DIST {
+                v.stuck_count = v.stuck_count.saturating_add(1);
+                if v.act != Act::GoHome || v.stuck_count >= 4 {
+                    v.timer = 0.0;
+                }
+            } else {
+                v.stuck_count = 0;
             }
-            None => v.timer = 0.0, // stuck: decide again next frame
+            v.watch_pos = transform.translation;
+            v.watch_timer = STUCK_CHECK_SECS;
         }
     }
 }
