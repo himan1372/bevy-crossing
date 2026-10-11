@@ -358,17 +358,23 @@ def head(loc, scale, mat, cheeks=0.12):
 
 def body(x, y, shirt, skin, legs, shoes, arms=0.95):
     def pear(px, py, pz):
-        k = 1 - 0.28 * max(0.0, pz)
+        # Pear profile: narrow shoulders, wide hips, flat-ish bottom.
+        r_now = max(1e-4, math.sqrt(max(0.0, 1 - pz * pz)))
+        if pz >= 0:
+            r_t = r_now * (1 - 0.62 * pz) * (1 - 0.15 * pz)
+        else:
+            r_t = (1 - abs(pz) ** 3.5) ** 0.3 * 1.08
+        k = r_t / r_now
         return (px * k, py * k, pz)
-    sphere((x, y, 0.6), (0.33, 0.29, 0.36), shirt, seg=32, ring=16, shape=pear)
+    sphere((x, y, 0.58), (0.36, 0.3, 0.38), shirt, seg=40, ring=24, shape=pear)
     sk = flat(skin)
     lg = flat(legs)
     sh = flat(shoes)
     for s in (-1, 1):
         sphere((x + s * 0.13, y, 0.22), (0.1, 0.1, 0.16), lg, seg=16, ring=8)
         sphere((x + s * 0.13, y - 0.04, 0.06), (0.115, 0.15, 0.075), sh, seg=16, ring=8)
-        sphere((x + s * 0.36, y, 0.76), (0.08, 0.08, 0.2), shirt, seg=16, ring=8, rot=(0, s * arms, 0))
-        sphere((x + s * 0.5, y - 0.01, 0.62), 0.095, sk, seg=16, ring=8)
+        sphere((x + s * 0.3, y, 0.8), (0.075, 0.075, 0.2), shirt, seg=16, ring=8, rot=(0, s * arms, 0))
+        sphere((x + s * 0.45, y - 0.01, 0.66), 0.09, sk, seg=16, ring=8)
 
 
 def kid(x, y, shirt, hat="#e86a6a", hair="#6b4630", skin="#f7d3b2"):
