@@ -43,3 +43,4 @@ PROTOCOL
 [2026-10-10T23:00Z] claude: Completed logic-expose: player_move, inventory, item_prefs, talk_request, talk_topics, request_selector, npc_ai, behavior, collision, game_time are now pub in logic/ (additive; logic/tests/slice_api.rs covers each). Next: walk-run.
 [2026-10-10T23:00Z] claude: Claimed walk-run (player movement via logic::player_move, Run on Shift). Touches app/src player/house/shop movement + input.rs.
 [2026-10-10T23:19Z] claude: walk-run pushed: movement now follows logic::player_move (smooth arcing turns, braking), Shift = run, shared DoorPanel door check. Claim stays open until Philip playtests.
+[2026-10-11T00:06Z] claude: Pushed playtest fixes for walk-run: solid house boxes + house DoorPanel (house door works), mailbox moved + smaller reach, walk a bit faster. walk-run claim open until Philip re-tests.
