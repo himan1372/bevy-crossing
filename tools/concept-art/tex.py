@@ -77,7 +77,7 @@ def grass(size=512, dark="#2f7d32", mids=("#3f9a3a", "#4caf3f", "#5cbf48"), coun
     return arr
 
 
-def dirt_patch(size=256):
+def dirt_patch(size=256, base="#d9b45a", light="#e9cc78", dark="#c49a43"):
     """Tan oval with concentric swirl rings, alpha outside the oval."""
     x, y = _grid(size, size)
     u = (x - size / 2) / (size / 2)
@@ -85,14 +85,14 @@ def dirt_patch(size=256):
     d = np.sqrt(u * u + v * v)
     ang = np.arctan2(v, u)
     rings = np.sin((d * 7.0 + 0.18 * np.sin(ang * 3.0)) * math.pi)
-    arr = blank(size, size, "#d9b45a")
-    arr[rings > 0.25] = hexrgb("#e9cc78")
-    arr[rings < -0.55] = hexrgb("#c49a43")
+    arr = blank(size, size, base)
+    arr[rings > 0.25] = hexrgb(light)
+    arr[rings < -0.55] = hexrgb(dark)
     arr[..., 3] = (d < 1.0).astype(np.float32)
     return arr
 
 
-def cobbles(size=512, cells=5):
+def cobbles(size=512, cells=5, shades=("#9fb3cf", "#a9bcd6", "#94a9c6", "#b2c3da"), mid="#7d93b3", line="#4a5f80"):
     """Chunky blue-grey cobbles with dark outlines (tileable)."""
     x, y = _grid(size, size)
     s = size / cells
@@ -112,33 +112,33 @@ def cobbles(size=512, cells=5):
         second = np.where(closer, best, np.minimum(second, d))
         best = np.where(closer, d, best)
         idx = np.where(closer, k, idx)
-    shades = [hexrgb(c) for c in ("#9fb3cf", "#a9bcd6", "#94a9c6", "#b2c3da")]
-    arr = blank(size, size, "#9fb3cf")
+    shades = [hexrgb(c) for c in shades]
+    arr = blank(size, size, shades[0])
     for i in range(len(shades)):
         arr[idx % len(shades) == i] = shades[i]
     gap = second - best
-    arr[gap < s * 0.16] = hexrgb("#7d93b3")
-    arr[gap < s * 0.07] = hexrgb("#4a5f80")
+    arr[gap < s * 0.16] = hexrgb(mid)
+    arr[gap < s * 0.07] = hexrgb(line)
     return arr
 
 
-def cliff(w=256, h=256):
+def cliff(w=256, h=256, palette=("#e8d3a4", "#c9a26b", "#a77b4c", "#d9bb84"), seam="#7a5532", ledge="#8a6440"):
     """Vertical bands of tan, cream and brown with darker seams."""
-    arr = blank(w, h, "#c9a26b")
+    palette = [hexrgb(c) for c in palette]
+    arr = blank(w, h, palette[1])
     x = 0
-    palette = [hexrgb(c) for c in ("#e8d3a4", "#c9a26b", "#a77b4c", "#d9bb84")]
     while x < w:
         bw = int(RNG.integers(10, 30))
         arr[:, x:x + bw] = palette[RNG.integers(len(palette))]
-        arr[:, x:x + 2] = hexrgb("#7a5532")
+        arr[:, x:x + 2] = hexrgb(seam)
         x += bw
     # A few horizontal ledges.
     for yy in RNG.integers(20, h - 20, 3):
-        arr[yy:yy + 2, :] = hexrgb("#8a6440")
+        arr[yy:yy + 2, :] = hexrgb(ledge)
     return arr
 
 
-def water(size=512, cells=12, deep="#1c45b0"):
+def water(size=512, cells=12, deep="#1c45b0", mid="#2d5fd0", line="#b8d4ff", mid_w=6, line_w=2.0):
     """Deep blue with a white web of ripples (Voronoi edges)."""
     x, y = _grid(size, size)
     pts = RNG.uniform(0, size, (cells * cells // 3, 2))
@@ -153,15 +153,15 @@ def water(size=512, cells=12, deep="#1c45b0"):
         d1 = nd1
     edge = d2 - d1
     arr = blank(size, size, deep)
-    arr[edge < 6] = hexrgb("#2d5fd0")
-    arr[edge < 2.0] = hexrgb("#b8d4ff")
+    arr[edge < mid_w] = hexrgb(mid)
+    arr[edge < line_w] = hexrgb(line)
     return arr
 
 
-def waterfall(w=128, h=256):
-    arr = blank(w, h, "#5c8fe8")
+def waterfall(w=128, h=256, base="#5c8fe8", light="#d6e8ff", mid="#8db4f2"):
+    arr = blank(w, h, base)
     for xx in range(0, w, 6):
-        shade = "#d6e8ff" if RNG.random() < 0.4 else "#8db4f2"
+        shade = light if RNG.random() < 0.4 else mid
         arr[:, xx:xx + int(RNG.integers(2, 5))] = hexrgb(shade)
     return arr
 

@@ -59,3 +59,4 @@ PROTOCOL
 [2026-10-11T02:45Z] claude: Claimed game-clock (last M1 item: calendar via logic::game_time).
 [2026-10-11T02:48Z] claude: Completed game-clock. M1 (main loop on the translated code) is code-complete; handing Philip one batched playtest list. Next up is M2 (graphics) once he signs off.
 [2026-10-11T03:26Z] claude: M1 done — Philip playtested everything; only issue (U-turns drifting south) fixed in 6bb80f7. Next: M2 graphics, starting with an art-direction reference render for Philip.
+[2026-10-11T04:55Z] claude: art-direction: Philip said v1 concept art (blocky) was way off; anchor is now the CC BY 'Pots the Raccoon' style (smooth, rounded, pastel, painted faces). v2 renders made (tools/concept-art/build2.py), docs/art-direction.md updated. Waiting on Philip's sign-off before M2 models.

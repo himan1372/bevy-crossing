@@ -7,6 +7,15 @@ the reference pictures Philip collected (kept outside the repo in
 colour, shape, lighting, proportions. Do not copy specific characters,
 buildings, logos or textures.
 
+## Style anchor (Philip, 2026-10-11)
+The first blocky, faceted concept pass felt "way off". Philip's anchor is
+the CC BY model "Pots the Raccoon" by Lemon Leon (and the same author's
+"Macchiato"): **smooth, rounded, soft shapes; a gentle pastel palette;
+flat hand-painted colour with a faint brush grain; soft, almost self-lit
+shading; expressive painted faces** (eye highlights, eyelids, blush, small
+mouth). Where anything below conflicts with this, this wins. Concept
+renders: `tools/concept-art/build2.py`.
+
 ## Camera
 - High, close, slightly tilted-down view (about 45–55° down), following the
   player. Light perspective, not orthographic.
@@ -38,14 +47,16 @@ buildings, logos or textures.
 ## Characters
 - **Big heads:** roughly two heads tall in total; the head is about as big as
   the body.
-- Low-poly and faceted on purpose; faces are painted textures (big eyes,
-  simple nose), not modelled.
+- Smooth and rounded (no visible facets); the head is wider at the cheeks.
+  Faces are painted textures (big eyes with highlights, optional eyelids,
+  blush, small nose and mouth), not modelled.
 - Short, simple limbs; small hands and feet.
 - A soft dark round blob shadow under every character and object.
 
 ## Light and colour
-- Bright and highly saturated by day; texture colour does most of the work,
-  with soft directional shading on top.
+- Bright but soft and pastel by day, not loud; texture colour does most of
+  the work, with gentle directional shading and a little self-light so
+  shadows stay light.
 - Night: deep blue-purple sky, warm yellow light from windows and lamps.
 
 ## UI
