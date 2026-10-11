@@ -50,6 +50,8 @@ renders: `tools/concept-art/build2.py`.
 - Smooth and rounded (no visible facets); the head is wider at the cheeks.
   Faces are painted textures (big eyes with highlights, optional eyelids,
   blush, small nose and mouth), not modelled.
+- Strongly pear-shaped torso: narrow shoulders, wide round hips, flat
+  bottom (Philip: "even more pear shaped").
 - Short, simple limbs; small hands and feet.
 - A soft dark round blob shadow under every character and object.
 
