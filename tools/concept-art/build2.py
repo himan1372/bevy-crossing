@@ -363,7 +363,7 @@ def body(x, y, shirt, skin, legs, shoes, arms=0.95):
         if pz >= 0:
             r_t = r_now * (1 - 0.62 * pz) * (1 - 0.15 * pz)
         else:
-            r_t = (1 - abs(pz) ** 3.5) ** 0.3 * 1.08
+            r_t = (1 - abs(pz) ** 3.5) ** 0.3 * 0.9
         k = r_t / r_now
         return (px * k, py * k, pz)
     sphere((x, y, 0.58), (0.36, 0.3, 0.38), shirt, seg=40, ring=24, shape=pear)
