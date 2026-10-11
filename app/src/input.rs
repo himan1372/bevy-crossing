@@ -112,6 +112,15 @@ pub struct Actions {
 }
 
 impl Actions {
+    /// Test helper: these actions held down (not just pressed).
+    #[cfg(test)]
+    pub fn holding(held: &[Action]) -> Self {
+        Self {
+            pressed: held.iter().copied().collect(),
+            ..Self::default()
+        }
+    }
+
     pub fn pressed(&self, action: Action) -> bool {
         self.pressed.contains(&action)
     }
