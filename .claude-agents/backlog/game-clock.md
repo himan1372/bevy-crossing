@@ -3,4 +3,4 @@
 - [x] Calendar fields (date, weekday, day-of-year, day count) computed by logic::game_time from the real clock, as the GameCube does (RTC ticks -> calendar).
 - [x] HUD shows weekday + date + time; season available for talk/ecology.
 - [x] Everything that reads the clock (ecology tables, talk, schedules, quest day limits) uses it.
-- [ ] Gate passes; live check; Philip playtest (batched at end of M1).
+- [x] Gate passes; live check; Philip playtest (batched at end of M1).

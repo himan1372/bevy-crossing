@@ -58,3 +58,4 @@ PROTOCOL
 [2026-10-11T02:44Z] claude: Completed quests-full (requests/rewards/time limits/friendship on logic::quest + quest_gen; trades via request_selector). Playtest batched with the rest of M1.
 [2026-10-11T02:45Z] claude: Claimed game-clock (last M1 item: calendar via logic::game_time).
 [2026-10-11T02:48Z] claude: Completed game-clock. M1 (main loop on the translated code) is code-complete; handing Philip one batched playtest list. Next up is M2 (graphics) once he signs off.
+[2026-10-11T03:26Z] claude: M1 done — Philip playtested everything; only issue (U-turns drifting south) fixed in 6bb80f7. Next: M2 graphics, starting with an art-direction reference render for Philip.

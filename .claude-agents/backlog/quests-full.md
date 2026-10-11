@@ -3,4 +3,4 @@
 - [x] Delivery items carried in pockets; recipients chosen per quest_gen rules.
 - [x] Villager requests for items you carry via request_selector.
 - [x] Turn-in, rewards (bells and/or items into pockets), quest state saved.
-- [ ] Gate passes; live BRP check; Philip playtest (batched at end of M1).
+- [x] Gate passes; live BRP check; Philip playtest (batched at end of M1).

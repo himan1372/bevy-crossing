@@ -53,7 +53,7 @@ Each milestone ends with a Philip playtest.
 - [x] **ci-gate** — done (claude): `.github/workflows/ci.yml` runs the full gate on every push to `main`.
 - [ ] **art-direction** (P) — Philip chose: look similar to Animal Crossing GameCube (soft pastel palette, chunky rounded low-poly, big-headed characters, painterly ground) built from scratch: no game textures or traced assets as reference. Next: one reference render for Philip to approve. [blocks all of M2]
 
-### M1 — Main loop on the translated code (placeholder art is fine) — code complete 2026-10-10; Philip playtest pending
+### M1 — Main loop on the translated code (placeholder art is fine) — DONE 2026-10-10 (Philip playtested; U-turn drift fixed in 6bb80f7)
 - [x] **logic-expose** — done (claude): make the slice modules `pub` in `logic/src/lib.rs`: `player_move`, `inventory`, `item_prefs`, `talk_request`, `talk_topics`, `request_selector`, `npc_ai`, `behavior`, `collision`, `game_time`. Add a small test per module proving the app-facing call works.
 - [x] **walk-run** — done (claude, playtested; walk ~3.9 u/s, run 6.8 u/s): player locomotion through `logic::player_move` (walk/run/dash speeds and acceleration from the translated controller), with a Run action (hold Shift / gamepad B). Replaces the fixed speed in `player.rs`, `house.rs` and `shop.rs`. [blocked: logic-expose]
 - [x] **pockets-inventory** — done (claude, playtested): 15-slot pockets backed by `logic::inventory` (+ `item_prefs` for item types); pockets UI; catches, fruit, furniture and quest items go into pockets; selling takes from pockets. Replaces the HUD counters. [blocked: logic-expose]
