@@ -58,6 +58,8 @@ pub enum Action {
     Pause,
     /// Open / close the pockets screen.
     Pockets,
+    /// Debug: move the game clock forward one hour.
+    DebugHour,
 }
 
 /// Keys for each action. Several actions may share a key: they are read in
@@ -95,6 +97,7 @@ impl Default for KeyBindings {
             (QuickLoad, vec![K::F9]),
             (Pause, vec![K::KeyP]),
             (Pockets, vec![K::KeyI, K::Tab]),
+            (DebugHour, vec![K::F6]),
         ];
         Self(map.into_iter().collect())
     }

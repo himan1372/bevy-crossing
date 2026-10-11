@@ -60,7 +60,7 @@ Each milestone ends with a Philip playtest.
 - [x] **talk-system** — done (claude, playtested): conversations driven by `logic::talk_request` / `talk_topics` / `dialogue_topics` (topic choice per personality and situation) instead of the placeholder lines in `dialogue.rs`. Dialogue text stays original (no game script). [blocked: logic-expose]
 - [ ] **quests-full** — quest flow through `logic::quest` / `quest_gen` / `request_selector`: villager requests, delivery items carried in pockets, turn-in, rewards. Builds on today's `quest.rs`. [blocked: pockets-inventory, talk-system]
 - [ ] **villager-routines** — villager schedules and wandering from `logic::npc_ai` / `behavior` / `movement` (field / in-house / sleep, greeting reactions) instead of the random walk in `npc.rs`. [blocked: logic-expose]
-- [ ] **game-clock** — NOTE (claude): ecology spawns and talk time-of-day currently use the PC clock in UTC, not local time; fix here. — in-game clock and calendar from `logic::game_time`; villager schedules and ecology follow it; clock on the HUD. [blocked: logic-expose]
+- [ ] **game-clock** — partly done (claude): `app/src/clock.rs` gives local time (chrono) + F6 debug hour; still to do: the `logic::game_time` calendar engine. — in-game clock and calendar from `logic::game_time`; villager schedules and ecology follow it; clock on the HUD. [blocked: logic-expose]
 
 ### M2 — Graphics: assets, rendering pipeline, animation
 - [ ] **render-pipeline** — the Bevy look: camera angle and follow, sun + ambient light with shadows, a flat/toon material for our models, the curved-horizon ("rolling world") effect as our own shader, colour grading, MSAA. Tuned on placeholder geometry first. [blocked: art-direction]

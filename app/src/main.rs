@@ -4,6 +4,7 @@
 use bevy::prelude::*;
 
 mod assets;
+mod clock;
 mod dialogue;
 mod ecology;
 mod house;
@@ -24,6 +25,7 @@ mod talk;
 mod town;
 
 use assets::GameAssetsPlugin;
+use clock::ClockPlugin;
 use dialogue::DialoguePlugin;
 use ecology::EcologyPlugin;
 use house::HousePlugin;
@@ -58,6 +60,7 @@ fn main() {
         .add_plugins(ShopPlugin)
         .add_plugins(QuestPlugin)
         .add_plugins(PocketsPlugin)
+        .add_plugins(ClockPlugin)
         .add_systems(Startup, setup_light)
         .run();
 }

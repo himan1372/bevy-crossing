@@ -404,7 +404,8 @@ fn quest_cooldown_tick(
     house_state: Res<State<HouseState>>,
     shop_loc: Res<State<crate::shop::ShopLocation>>,
     shop_data: Res<crate::shop::ShopData>,
-    villagers: Query<(Entity, &Villager)>,
+    // Only villagers out in town can offer a quest.
+    villagers: Query<(Entity, &Villager), Without<crate::npc::Indoors>>,
 ) {
     if quest.active.is_some() || giver.0.is_some() {
         return;

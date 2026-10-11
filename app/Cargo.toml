@@ -6,6 +6,8 @@ edition = "2021"
 [dependencies]
 bevy = "0.19"
 bevy_brp_extras = { version = "0.22.1", optional = true }
+# Local time zone for the game clock (std can't read it on Windows).
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 rustimal-logic = { path = "../logic" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

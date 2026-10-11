@@ -238,7 +238,11 @@ pub fn interact(
     mut talk_events: MessageWriter<TalkEvent>,
     mut commands: Commands,
     player_query: Query<(&Transform, &Facing), With<Player>>,
-    villagers: Query<(Entity, &Villager, &Transform), Without<Player>>,
+    // Villagers at home can't be talked to.
+    villagers: Query<
+        (Entity, &Villager, &Transform),
+        (Without<Player>, Without<crate::npc::Indoors>),
+    >,
     items: Query<(Entity, &GroundItem, &Transform), Without<Player>>,
     mut inventory: ResMut<PlayerInventory>,
 ) {

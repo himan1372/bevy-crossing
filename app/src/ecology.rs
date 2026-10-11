@@ -124,26 +124,11 @@ struct CatchNotifyText;
 
 // ---- date/time ----
 
-/// Current (month, day, hour) from the system clock, via Howard Hinnant's
-/// civil-from-days algorithm. Feeds the seasonal spawn tables.
+/// Current (month, day, hour) on the game clock (local time). Feeds the
+/// seasonal spawn tables.
 pub(crate) fn today_mdh() -> (u8, u8, u8) {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let days = (secs / 86_400) as i64;
-    let hour = ((secs % 86_400) / 3600) as u8;
-
-    let z = days + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = (z - era * 146_097) as u64; // [0, 146096]
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365; // [0, 399]
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
-    let mp = (5 * doy + 2) / 153; // [0, 11]
-    let d = (doy - (153 * mp + 2) / 5 + 1) as u8; // [1, 31]
-    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u8; // [1, 12]
-    (m, d, hour)
+    let n = crate::clock::now();
+    (n.month, n.day, n.hour)
 }
 
 /// Weighted pick from (value, weight) pairs. Returns None on empty/zero total.
