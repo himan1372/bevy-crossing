@@ -215,7 +215,7 @@ fn find_shop_spot(town: Res<Town>, mut commands: Commands) {
             for dz in 0..RD {
                 for dx in 0..RW {
                     let p = cell_center(gx + dx, gz + dz);
-                    if !town.is_walkable(p) {
+                    if !town.is_clear_ground(p) {
                         ok = false;
                         break;
                     }
@@ -233,7 +233,7 @@ fn find_shop_spot(town: Res<Town>, mut commands: Commands) {
             }
             // The door approach (one cell south of the rect) must be walkable.
             let door_cell = cell_center(gx + RW / 2, gz + RD);
-            if gz + RD >= GD || !town.is_walkable(door_cell) {
+            if gz + RD >= GD || !town.is_clear_ground(door_cell) {
                 continue;
             }
             let d2 = (gx + RW / 2 - cx).pow(2) + (gz + RD / 2 - cz).pow(2);

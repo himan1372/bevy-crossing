@@ -137,6 +137,12 @@ impl Town {
         false
     }
 
+    /// Clear, uncluttered ground: walkable and not litter. Used to place
+    /// buildings, so making litter walkable didn't move the shop.
+    pub fn is_clear_ground(&self, world_pos: Vec3) -> bool {
+        self.is_walkable(world_pos) && self.cell_at(world_pos) != Some(CellKind::Litter as u8)
+    }
+
     pub fn is_walkable(&self, world_pos: Vec3) -> bool {
         let (ax, az, cx, cz) = match self.cell_indices(world_pos) {
             Some(i) => i,
@@ -148,9 +154,12 @@ impl Town {
         }
         match self.cell_at(world_pos) {
             Some(c) => {
+                // Litter is ground clutter you walk over (it used to block
+                // movement while drawn as nothing: an invisible wall).
                 c == CellKind::Grass as u8
                     || c == CellKind::Flower as u8
                     || c == CellKind::Weed as u8
+                    || c == CellKind::Litter as u8
             }
             None => false,
         }
@@ -328,6 +337,7 @@ pub fn render_town(
     let tree_leaf_mat = materials.add(Color::srgb(0.2, 0.6, 0.25));
     let house_mat = materials.add(Color::srgb(0.8, 0.6, 0.4));
     let rock_mat = materials.add(Color::srgb(0.5, 0.5, 0.5));
+    let litter_mat = materials.add(Color::srgb(0.45, 0.47, 0.5));
 
     let ground_mesh = meshes.add(Plane3d::default().mesh().size(ACRE_SIZE, ACRE_SIZE));
     let water_mesh = meshes.add(Plane3d::default().mesh().size(CELL_SIZE, CELL_SIZE));
@@ -335,6 +345,8 @@ pub fn render_town(
     let leaf_mesh = meshes.add(Sphere::new(1.2).mesh());
     let house_mesh = meshes.add(Cuboid::new(HOUSE_SIZE, 2.5, HOUSE_SIZE));
     let rock_mesh = meshes.add(Sphere::new(0.8).mesh());
+    // A small tin can lying on its side.
+    let litter_mesh = meshes.add(Cylinder::new(0.12, 0.3));
 
     let mut tree_count = 0;
     let mut house_count = 0;
@@ -404,6 +416,13 @@ pub fn render_town(
                             Mesh3d(rock_mesh.clone()),
                             MeshMaterial3d(rock_mat.clone()),
                             Transform::from_xyz(pos.x, 0.4, pos.z),
+                        ));
+                    } else if cell == CellKind::Litter as u8 {
+                        commands.spawn((
+                            Mesh3d(litter_mesh.clone()),
+                            MeshMaterial3d(litter_mat.clone()),
+                            Transform::from_xyz(pos.x + 0.15, 0.12, pos.z - 0.1)
+                                .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
                         ));
                     }
                 }

@@ -23,6 +23,7 @@ use rustimal_logic::movement::{
 };
 use rustimal_logic::npc::Personality;
 use rustimal_logic::npc_ai::{self, sched, WanderAct};
+use rustimal_logic::player_move;
 use rustimal_logic::town_gen::{CellKind, ACRE_DEPTH, ACRE_WIDTH};
 
 use crate::dialogue::{DialogueState, VillagerTalk};
@@ -57,6 +58,32 @@ const GREET_COOLDOWN_SECS: f32 = 45.0;
 /// How long a greeting pause lasts.
 const GREET_SECS: f32 = 2.0;
 
+/// Turn rates (stick tilt fed to the decomp's turn coefficient).
+const WALK_TILT: f32 = 0.6;
+const RUN_TILT: f32 = 1.0;
+/// Glancing around / turning to greet is a slow, light turn.
+const LOOK_TILT: f32 = 0.3;
+/// The GameCube logic rate; the decomp's turn fraction is per tick.
+const RETAIL_FPS: f32 = 30.0;
+
+/// Ease `current` toward `target` (degrees) with the decomp's per-tick turn
+/// fraction `calc_ease(turn_mod(tilt))`, compounded over this frame's ticks
+/// — the same turning the player uses (see `locomotion`).
+fn turn_toward(current: f32, target: f32, tilt: f32, dt: f32) -> f32 {
+    let per_tick = player_move::calc_ease(player_move::turn_mod(tilt));
+    let frac = 1.0 - (1.0 - per_tick).powf(dt * RETAIL_FPS);
+    player_move::wrap_deg(current + player_move::wrap_deg(target - current) * frac)
+}
+
+fn deg_of(d: Vec3) -> f32 {
+    d.x.atan2(d.z).to_degrees()
+}
+
+fn dir_of(deg: f32) -> Vec3 {
+    let r = deg.to_radians();
+    Vec3::new(r.sin(), 0.0, r.cos())
+}
+
 /// Marker + data for a villager.
 #[derive(Component)]
 pub struct Villager {
@@ -80,6 +107,10 @@ pub struct Villager {
     watch_pos: Vec3,
     watch_timer: f32,
     stuck_count: u8,
+    /// Facing in degrees (0 = +z), turned smoothly like the player's.
+    facing_deg: f32,
+    /// While standing: the direction to turn toward (glance / greeting).
+    look_deg: Option<f32>,
 }
 
 /// What a villager is doing right now.
@@ -208,6 +239,8 @@ fn spawn_villagers(
                 watch_pos: home,
                 watch_timer: STUCK_CHECK_SECS,
                 stuck_count: 0,
+                facing_deg: 0.0,
+                look_deg: None,
             },
             Mesh3d(meshes.add(Capsule3d::new(0.35, 0.9))),
             MeshMaterial3d(materials.add(Color::srgb(*r, *g, *b))),
@@ -321,14 +354,14 @@ fn villager_move(
         }
     }
     for (entity, other_pos) in &greeters {
-        if let Ok((_, mut v, mut t, _, mut talk)) = villagers.get_mut(*entity) {
+        if let Ok((_, mut v, t, _, mut talk)) = villagers.get_mut(*entity) {
             v.act = Act::Greet;
             v.timer = GREET_SECS;
             v.greet_cooldown = GREET_COOLDOWN_SECS;
             talk.happy = true; // ac_npc_act_greeting: both feel happy
             let d = *other_pos - t.translation;
             if d.length_squared() > 1e-4 {
-                t.rotation = Quat::from_rotation_y(d.x.atan2(d.z));
+                v.look_deg = Some(deg_of(d));
             }
         }
     }
@@ -405,11 +438,8 @@ fn villager_move(
                 (WanderAct::Run, Some(s)) => (Act::Run(s), MOVE_TIMEOUT_SECS),
                 _ => (Act::Wait, rng.range_f32(WAIT_SECS.0, WAIT_SECS.1)),
             };
-            if v.act == Act::Wait {
-                // Glance around while standing.
-                let yaw = rng.range_f32(0.0, std::f32::consts::TAU);
-                transform.rotation = Quat::from_rotation_y(yaw);
-            }
+            // Glance around while standing (turned toward smoothly below).
+            v.look_deg = (v.act == Act::Wait).then(|| rng.range_f32(-180.0, 180.0));
             v.avoid = None;
             v.stuck_count = 0;
             v.watch_pos = transform.translation;
@@ -418,6 +448,10 @@ fn villager_move(
         }
 
         let Some(target) = target else {
+            if let Some(look) = v.look_deg {
+                v.facing_deg = turn_toward(v.facing_deg, look, LOOK_TILT, dt);
+                transform.rotation = Quat::from_rotation_y(v.facing_deg.to_radians());
+            }
             continue;
         };
         let to = Vec3::new(
@@ -477,8 +511,20 @@ fn villager_move(
             }
         }
         if let Some(d) = chosen {
-            transform.translation += d * step_len;
-            transform.rotation = Quat::from_rotation_y(d.x.atan2(d.z));
+            // Turn toward the chosen direction, then move along the facing,
+            // slowing while still swinging round so they never skate sideways.
+            let tilt = if speed >= RUN_SPEED {
+                RUN_TILT
+            } else {
+                WALK_TILT
+            };
+            v.facing_deg = turn_toward(v.facing_deg, deg_of(d), tilt, dt);
+            let facing = dir_of(v.facing_deg);
+            let step = facing * step_len * facing.dot(d).max(0.0);
+            if !blocked(from + step, from) {
+                transform.translation += step;
+            }
+            transform.rotation = Quat::from_rotation_y(v.facing_deg.to_radians());
         }
 
         // Progress watchdog: not getting anywhere means stuck. Wanderers
@@ -516,5 +562,37 @@ impl Plugin for NpcPlugin {
                 .chain()
                 .in_set(crate::states::GameplaySet),
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn turning_is_gradual_not_a_snap() {
+        // One 60 fps frame toward a target 90° away moves only part way.
+        let one = turn_toward(0.0, 90.0, WALK_TILT, 1.0 / 60.0);
+        assert!(one > 0.0 && one < 30.0, "turned {one}°");
+        // ...and eases in: most of the way in half a second, all of it in one.
+        let mut f = 0.0;
+        for i in 1..=60 {
+            f = turn_toward(f, 90.0, WALK_TILT, 1.0 / 60.0);
+            if i == 30 {
+                assert!(f > 75.0 && f < 90.0, "half a second: {f}°");
+            }
+        }
+        assert!(f > 88.0 && f <= 90.0, "one second: {f}°");
+        // Running turns faster than glancing around.
+        assert!(
+            turn_toward(0.0, 90.0, RUN_TILT, 1.0 / 60.0)
+                > turn_toward(0.0, 90.0, LOOK_TILT, 1.0 / 60.0)
+        );
+    }
+
+    #[test]
+    fn turns_take_the_short_way_round() {
+        let f = turn_toward(170.0, -170.0, WALK_TILT, 1.0 / 30.0);
+        assert!(f > 170.0 || f < -170.0, "went the long way: {f}°");
     }
 }
