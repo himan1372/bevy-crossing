@@ -32,10 +32,11 @@ use crate::states::GameplaySet;
 
 /// Max letters the mailbox holds (decomp `cap::MAILBOX`).
 pub const MAILBOX_CAP: usize = 10;
-/// E-key range for the mailbox.
-const MAILBOX_RANGE: f32 = 3.5;
-/// Facing-cone cosine threshold (same as interaction).
-const MAILBOX_DOT: f32 = 0.2;
+/// E-key range for the mailbox (ground plane). Short, so standing at the
+/// house door doesn't reach it.
+const MAILBOX_RANGE: f32 = 2.2;
+/// Facing-cone cosine threshold (~60° either side).
+const MAILBOX_DOT: f32 = 0.5;
 /// Chance a talked-to villager sends a letter afterwards.
 const VILLAGER_LETTER_CHANCE: f32 = 0.15;
 /// Max characters in a player-written letter.
@@ -287,7 +288,8 @@ fn spawn_mailbox(
     mut mailbox: ResMut<Mailbox>,
 ) {
     let Some(house) = house else { return };
-    let pos = house.door_pos + Vec3::new(2.4, 0.0, 0.8);
+    // Beside the house (right of the door), clear of the doorway.
+    let pos = house.door_pos + Vec3::new(3.0, 0.0, 0.8);
     commands.insert_resource(MailboxPos(pos));
 
     // Post.
@@ -352,7 +354,12 @@ fn mailbox_interact(
     let Ok((transform, facing)) = player_query.single() else {
         return;
     };
-    let to_box = pos.0 - transform.translation;
+    // Ground plane only: the box is at y = 0, the player at y = 1.
+    let to_box = Vec3::new(
+        pos.0.x - transform.translation.x,
+        0.0,
+        pos.0.z - transform.translation.z,
+    );
     let dist = to_box.length();
     if dist > MAILBOX_RANGE || dist < 0.001 {
         return;

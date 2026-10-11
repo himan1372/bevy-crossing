@@ -71,14 +71,18 @@ pub fn player_movement(
         // Try X movement
         let new_x = transform.translation.x + movement.x;
         let test_pos_x = Vec3::new(new_x, 0.0, transform.translation.z);
-        if town.is_walkable(test_pos_x) && !blocked(new_x, transform.translation.z) {
+        if town.can_step(transform.translation, test_pos_x)
+            && !blocked(new_x, transform.translation.z)
+        {
             transform.translation.x = new_x;
         }
 
         // Try Z movement
         let new_z = transform.translation.z + movement.z;
         let test_pos_z = Vec3::new(transform.translation.x, 0.0, new_z);
-        if town.is_walkable(test_pos_z) && !blocked(transform.translation.x, new_z) {
+        if town.can_step(transform.translation, test_pos_z)
+            && !blocked(transform.translation.x, new_z)
+        {
             transform.translation.z = new_z;
         }
     }

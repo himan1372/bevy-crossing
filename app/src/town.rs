@@ -6,6 +6,8 @@ use std::collections::HashSet;
 pub const ACRE_SIZE: f32 = 16.0;
 /// Size of one cell in world units.
 pub const CELL_SIZE: f32 = 1.0;
+/// Width/depth of a house box, centred on its House cell.
+pub const HOUSE_SIZE: f32 = 3.0;
 
 /// River edge bits, mirroring town_gen's private NORTH/EAST/SOUTH/WEST.
 const EDGE_N: u8 = 1;
@@ -95,6 +97,46 @@ impl Town {
     }
 
     /// Check if a world position is walkable.
+    /// True when something may stand here: walkable ground and outside every
+    /// house box. Only the House cell itself is unwalkable in the plan, but
+    /// the drawn box is 3x3 — without this you could walk into the front of
+    /// a house and end up past its door.
+    pub fn can_stand(&self, world_pos: Vec3) -> bool {
+        self.is_walkable(world_pos) && !self.in_house_box(world_pos)
+    }
+
+    /// Whether a mover at `from` may step to `to`. Anything already inside a
+    /// house box (spawned or loaded there) may move on walkable ground, so it
+    /// can never get stuck.
+    pub fn can_step(&self, from: Vec3, to: Vec3) -> bool {
+        if self.in_house_box(from) {
+            self.is_walkable(to)
+        } else {
+            self.can_stand(to)
+        }
+    }
+
+    fn in_house_box(&self, world_pos: Vec3) -> bool {
+        let half = HOUSE_SIZE / 2.0;
+        let reach = half.ceil() as i32;
+        for dz in -reach..=reach {
+            for dx in -reach..=reach {
+                let q = world_pos + Vec3::new(dx as f32 * CELL_SIZE, 0.0, dz as f32 * CELL_SIZE);
+                if self.cell_at(q) != Some(CellKind::House as u8) {
+                    continue;
+                }
+                let Some((ax, az, cx, cz)) = self.cell_indices(q) else {
+                    continue;
+                };
+                let c = Self::cell_to_world(ax, az, cx, cz);
+                if (world_pos.x - c.x).abs() < half && (world_pos.z - c.z).abs() < half {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     pub fn is_walkable(&self, world_pos: Vec3) -> bool {
         let (ax, az, cx, cz) = match self.cell_indices(world_pos) {
             Some(i) => i,
@@ -291,7 +333,7 @@ pub fn render_town(
     let water_mesh = meshes.add(Plane3d::default().mesh().size(CELL_SIZE, CELL_SIZE));
     let trunk_mesh = meshes.add(Cylinder::new(0.3, 1.5));
     let leaf_mesh = meshes.add(Sphere::new(1.2).mesh());
-    let house_mesh = meshes.add(Cuboid::new(3.0, 2.5, 3.0));
+    let house_mesh = meshes.add(Cuboid::new(HOUSE_SIZE, 2.5, HOUSE_SIZE));
     let rock_mesh = meshes.add(Sphere::new(0.8).mesh());
 
     let mut tree_count = 0;

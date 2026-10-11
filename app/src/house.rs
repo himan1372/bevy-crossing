@@ -21,7 +21,7 @@ use crate::interaction::{DoorPanel, Facing};
 use crate::locomotion::{self, Locomotion};
 use crate::player::Player;
 use crate::states::{AppState, GameplaySet};
-use crate::town::Town;
+use crate::town::{Town, HOUSE_SIZE};
 
 /// Town map vs. house interior. Lives only while in game.
 #[derive(SubStates, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -70,6 +70,10 @@ const INTERIOR_DOOR_Z: f32 = 3.8;
 /// Half the interior door panel's width (panel is 1.4 wide).
 const INTERIOR_DOOR_HALF_W: f32 = 0.7;
 const DOOR_DOT: f32 = 0.6;
+/// `PlayerHouse::door_pos` sits this far in front of the house's front wall.
+const DOOR_OUT: f32 = 0.8;
+/// Half the exterior door's width.
+const DOOR_HALF_W: f32 = 0.6;
 
 /// Find the player's house from the town plan and record its door position.
 pub(crate) fn find_player_house(town: Res<Town>, mut commands: Commands) {
@@ -84,8 +88,8 @@ pub(crate) fn find_player_house(town: Res<Town>, mut commands: Commands) {
                 for cx in 0..16 {
                     if acre.cells[cz * 16 + cx] == CellKind::House as u8 {
                         let p = Town::cell_to_world(ax, az, cx, cz);
-                        // Door on the south face of the 3-wide house box.
-                        door = Some(p + Vec3::new(0.0, 0.0, 2.3));
+                        // Door on the south face of the house box.
+                        door = Some(p + Vec3::new(0.0, 0.0, HOUSE_SIZE / 2.0 + DOOR_OUT));
                         break 'acres;
                     }
                 }
@@ -101,7 +105,7 @@ pub(crate) fn find_player_house(town: Res<Town>, mut commands: Commands) {
                     for cx in 0..16 {
                         if acre.cells[cz * 16 + cx] == CellKind::House as u8 {
                             let p = Town::cell_to_world(ax, az, cx, cz);
-                            door = Some(p + Vec3::new(0.0, 0.0, 2.3));
+                            door = Some(p + Vec3::new(0.0, 0.0, HOUSE_SIZE / 2.0 + DOOR_OUT));
                             break 'acres;
                         }
                     }
@@ -281,12 +285,16 @@ fn house_enter(
     let Ok((mut transform, mut facing)) = player_query.single_mut() else {
         return;
     };
-    let to_door = house.door_pos - transform.translation;
-    let dist = to_door.length();
-    if dist > DOOR_RANGE_OUT || dist < 0.001 {
-        return;
-    }
-    if facing.dir.dot(to_door / dist) < DOOR_DOT || !actions.consume(Action::Interact) {
+    // The door panel on the house's front (south) wall.
+    let door = DoorPanel {
+        center_x: house.door_pos.x,
+        half_w: DOOR_HALF_W,
+        face_z: house.door_pos.z - DOOR_OUT,
+        into_z: -1.0,
+    };
+    if !door.faced_by(transform.translation, facing.dir, DOOR_RANGE_OUT, DOOR_DOT)
+        || !actions.consume(Action::Interact)
+    {
         return;
     }
     commands.insert_resource(ReturnPosition(transform.translation));

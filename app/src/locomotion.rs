@@ -27,7 +27,7 @@ use crate::interaction::Facing;
 /// World units per second at full tilt (running).
 pub const FULL_TILT_SPEED: f32 = 6.0;
 /// Stick magnitude a keyboard walk stands in for (Run held = full tilt).
-pub const WALK_TILT: f32 = 0.55;
+pub const WALK_TILT: f32 = 0.65;
 /// The GameCube game's logic rate.
 const RETAIL_FPS: f32 = 30.0;
 
