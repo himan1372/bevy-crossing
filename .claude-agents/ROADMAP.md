@@ -59,7 +59,7 @@ Each milestone ends with a Philip playtest.
 - [x] **pockets-inventory** — done (claude, playtested): 15-slot pockets backed by `logic::inventory` (+ `item_prefs` for item types); pockets UI; catches, fruit, furniture and quest items go into pockets; selling takes from pockets. Replaces the HUD counters. [blocked: logic-expose]
 - [x] **talk-system** — done (claude, playtested): conversations driven by `logic::talk_request` / `talk_topics` / `dialogue_topics` (topic choice per personality and situation) instead of the placeholder lines in `dialogue.rs`. Dialogue text stays original (no game script). [blocked: logic-expose]
 - [ ] **quests-full** — quest flow through `logic::quest` / `quest_gen` / `request_selector`: villager requests, delivery items carried in pockets, turn-in, rewards. Builds on today's `quest.rs`. [blocked: pockets-inventory, talk-system]
-- [ ] **villager-routines** — villager schedules and wandering from `logic::npc_ai` / `behavior` / `movement` (field / in-house / sleep, greeting reactions) instead of the random walk in `npc.rs`. [blocked: logic-expose]
+- [x] **villager-routines** — done (claude, playtested): villager schedules and wandering from `logic::npc_ai` / `behavior` / `movement` (field / in-house / sleep, greeting reactions) instead of the random walk in `npc.rs`. [blocked: logic-expose]
 - [ ] **game-clock** — partly done (claude): `app/src/clock.rs` gives local time (chrono) + F6 debug hour; still to do: the `logic::game_time` calendar engine. — in-game clock and calendar from `logic::game_time`; villager schedules and ecology follow it; clock on the HUD. [blocked: logic-expose]
 
 ### M2 — Graphics: assets, rendering pipeline, animation

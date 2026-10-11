@@ -21,3 +21,5 @@
 {"action":"claim","task":"talk-system","agent":"claude","timestamp":"2026-10-11T00:38:21Z"}
 {"action":"complete","task":"talk-system","agent":"claude","timestamp":"2026-10-11T00:59:57Z"}
 {"action":"claim","task":"villager-routines","agent":"claude","timestamp":"2026-10-11T00:59:57Z"}
+{"action":"complete","task":"villager-routines","agent":"claude","timestamp":"2026-10-11T02:29:16Z"}
+{"action":"claim","task":"quests-full","agent":"claude","timestamp":"2026-10-11T02:29:16Z"}

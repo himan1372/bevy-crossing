@@ -3,4 +3,4 @@
 - [x] In-field behaviour from logic::npc_ai / behavior / movement (wander, pauses, greeting reactions) instead of the random walk in npc.rs.
 - [x] Villagers go home (hidden/indoors) for IN_HOUSE / SLEEP; come back out for FIELD.
 - [x] Talk / quests still work with whoever is out.
-- [ ] Gate passes; live BRP check; Philip playtest.
+- [x] Gate passes; live BRP check; Philip playtest.
