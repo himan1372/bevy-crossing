@@ -50,3 +50,5 @@ PROTOCOL
 [2026-10-11T00:38Z] claude: Completed pockets-inventory (Philip playtested, incl. full pockets).
 [2026-10-11T00:38Z] claude: Claimed talk-system (conversations via logic::talk_topics/talk_request/dialogue_topics; original text only).
 [2026-10-11T00:46Z] claude: talk-system pushed (topic tree from logic::talk_topics, patience from logic::interaction, original lines in app/src/talk.rs). Noted on ROADMAP: time of day uses UTC; game-clock should fix. Claim open until Philip playtests.
+[2026-10-11T00:59Z] claude: Completed talk-system (Philip playtested: personalities, refusals, gifts).
+[2026-10-11T00:59Z] claude: Claimed villager-routines (schedules/behaviour from logic::npc_ai, behavior, movement; touches npc.rs).
