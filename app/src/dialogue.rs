@@ -1,21 +1,26 @@
-//! Phase 2: dialogue UI — bottom text box, speaker name, advance/dismiss.
+//! Dialogue: villager conversations and the bottom text box.
 //!
-//! Message selection uses `rustimal_logic::dialogue_topics::talk_check_msg`
-//! (the decomp-verified `aNPC_set_talk_info_talk_request_check` pool:
-//! `base + looks*3 + RANDOM(3)`). The message ID is real; the displayed
-//! text is a placeholder — retail dialogue lives in ARAM message scripts
-//! indexed by that ID, which the Bevy port doesn't ship. The original
-//! lines below stand in until real text content exists.
+//! What a villager says is chosen by the translated GameCube topic tree
+//! (see [`crate::talk`]); how long they'll keep chatting follows the
+//! translated talk-patience rules in `rustimal_logic::interaction`
+//! (`mNpc_CountTalkNum` / `mNpc_GetOverImpatient`, temper table indexed by
+//! personality — a retail quirk the port keeps). All text is original.
+//!
+//! Ours (not traced in the decomp): how moods change. A villager is Happy
+//! about a quarter of the time (re-rolled when their patience resets) and
+//! always after you finish their quest.
 
 use bevy::ecs::message::MessageReader;
 use bevy::prelude::*;
 use bevy::text::FontSize;
-use rustimal_logic::dialogue_topics::talk_check_msg;
+use rustimal_logic::interaction::{Patience, TalkInfo, TEMPER_TABLE};
 
 use crate::input::{Action, Actions, InteractSet};
 use crate::interaction::{PlayerInventory, TalkEvent};
+use crate::items;
 use crate::npc::Villager;
 use crate::states::GameplaySet;
+use crate::talk::{self, TalkContext, Topic, TradeKind};
 
 /// Dialogue box state.
 #[derive(Resource, Default)]
@@ -38,40 +43,48 @@ struct DialogueText;
 #[derive(Component)]
 struct HudText;
 
-/// Counter feeding the RANDOM(3) slot of `talk_check_msg`.
-#[derive(Resource, Default)]
-struct TalkCounter(u32);
+/// The GameCube logic rate; talk timers count retail frames.
+const RETAIL_FPS: f32 = 30.0;
+/// `mNpc_TalkEndMove` sets the talk timer to this many frames.
+const TALK_END_TIMER: u16 = 1000;
+/// Chance a villager is in a Happy mood (re-rolled when patience resets).
+const HAPPY_CHANCE: u32 = 25;
 
-/// Original placeholder lines per personality (see module docs).
-fn placeholder_lines(personality: &str) -> Vec<String> {
-    let (a, b) = match personality {
-        "normal" => (
-            "What a lovely day for a stroll, don't you think?",
-            "I was just thinking about planting some flowers.",
-        ),
-        "peppy" => (
-            "OMG! Hi hi! Have you seen my new shoes?!",
-            "We should totally have a dance party later!",
-        ),
-        "lazy" => (
-            "I was just thinking about snacks... wanna hear about snacks?",
-            "Naps are great. Talking is okay too, I guess.",
-        ),
-        "jock" => (
-            "Gotta stay hydrated! Want to do some laps with me?",
-            "I did fifty push-ups this morning. FIFTY.",
-        ),
-        "cranky" => (
-            "Hmph. What do you want? Make it quick.",
-            "Back in my day, we didn't just walk up to people.",
-        ),
-        "snooty" => (
-            "That outfit... interesting choice. Anyway.",
-            "I only drink juice from very specific oranges.",
-        ),
-        _ => ("...", "..."),
-    };
-    vec![a.to_string(), b.to_string()]
+/// A villager's conversation state.
+#[derive(Component)]
+pub struct VillagerTalk {
+    info: TalkInfo,
+    pub happy: bool,
+    rolled: bool,
+    /// Fractional retail frames carried between updates.
+    frame_acc: f32,
+}
+
+impl Default for VillagerTalk {
+    fn default() -> Self {
+        Self {
+            info: TalkInfo::new(),
+            happy: false,
+            rolled: false,
+            frame_acc: 0.0,
+        }
+    }
+}
+
+/// xorshift for topic rolls (same pattern as the other plugins).
+#[derive(Resource)]
+struct TalkRng(u64);
+
+impl TalkRng {
+    /// 0..n
+    fn below(&mut self, n: u32) -> u32 {
+        let mut x = self.0;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.0 = x;
+        ((x >> 32) as u32) % n.max(1)
+    }
 }
 
 /// Build the UI: hidden dialogue box + inventory HUD.
@@ -122,15 +135,18 @@ fn setup_ui(mut commands: Commands) {
     println!("Dialogue UI ready");
 }
 
-/// Start dialogue when a TalkEvent arrives.
+/// Start a conversation when a TalkEvent arrives.
 ///
 /// Talks the quest system claimed (offers / turn-ins) are skipped here —
 /// the quest plugin shows its own panel for those.
+#[allow(clippy::too_many_arguments)]
 fn on_talk(
     mut events: MessageReader<TalkEvent>,
-    villagers: Query<&Villager>,
+    mut villagers: Query<(&Villager, &mut VillagerTalk)>,
     mut dialogue: ResMut<DialogueState>,
-    mut counter: ResMut<TalkCounter>,
+    mut rng: ResMut<TalkRng>,
+    mut inventory: ResMut<PlayerInventory>,
+    mailbox: Res<crate::mail::Mailbox>,
     quest_claim: Res<crate::quest::QuestClaim>,
     mut box_query: Query<&mut Visibility, With<DialogueBox>>,
     mut text_query: Query<&mut Text, With<DialogueText>>,
@@ -139,28 +155,131 @@ fn on_talk(
         if quest_claim.0 == Some(event.villager) {
             continue;
         }
-        let Ok(villager) = villagers.get(event.villager) else {
+        let Ok((villager, mut chat)) = villagers.get_mut(event.villager) else {
             continue;
         };
-        counter.0 = counter.0.wrapping_add(1);
-        let msg_id = talk_check_msg(villager.looks, counter.0, false);
+        let looks = villager.looks as usize;
+        if !chat.rolled {
+            chat.happy = rng.below(100) < HAPPY_CHANCE;
+            chat.rolled = true;
+        }
+        let say = |line: &str| format!("{}: {line}", villager.name);
+
+        let patience = chat.info.patience(looks);
+        let mut lines = Vec::new();
+        if patience == Patience::Annoyed {
+            lines.push(say(talk::annoyed(looks)));
+            println!("{} is too annoyed to talk", villager.name);
+        } else {
+            let (month, _, hour) = crate::ecology::today_mdh();
+            let ctx = TalkContext {
+                looks,
+                happy: chat.happy,
+                free_pocket: inventory.pockets.find_free_slot().is_some(),
+                bells: inventory.bells,
+                has_letter_from_them: mailbox.letters.iter().any(|l| l.sender == villager.name),
+                carried_catch: inventory
+                    .pockets
+                    .pockets
+                    .iter()
+                    .copied()
+                    .find(|&it| items::is_fish(it) || items::is_bug(it)),
+                carried_furniture: inventory
+                    .pockets
+                    .pockets
+                    .iter()
+                    .copied()
+                    .find(|&it| items::is_furniture(it)),
+                month,
+                hour,
+            };
+            let (topic, msg_no) = talk::choose(&ctx, &mut |n| rng.below(n));
+            // The topic's subject: the gift handed over, or the item admired.
+            let item = match topic {
+                Topic::Gift => {
+                    let gift = if rng.below(2) == 0 {
+                        items::FRUIT
+                    } else {
+                        let n = items::FURNITURE_CATALOG.len() as u32;
+                        items::furniture(items::FURNITURE_CATALOG[rng.below(n) as usize])
+                            .unwrap_or(items::FRUIT)
+                    };
+                    // The topic is only chosen with a free pocket.
+                    inventory.add(gift);
+                    Some(items::name(gift))
+                }
+                Topic::Trade(TradeKind::Catch(it) | TradeKind::Furniture(it)) => {
+                    Some(items::name(it))
+                }
+                _ => None,
+            };
+            lines.push(say(talk::greeting(looks, rng.below(2) as usize)));
+            lines.push(say(&talk::lines(
+                topic,
+                &ctx,
+                item.as_deref(),
+                rng.below(2) as usize,
+            )));
+            if topic == Topic::Gift {
+                lines.push(format!(
+                    "(You got the {}!)",
+                    item.as_deref().unwrap_or("item")
+                ));
+            }
+            if patience == Patience::MildlyAnnoyed {
+                lines.push(say(talk::mildly_annoyed(looks)));
+            }
+            println!(
+                "Talking to {} ({}, {}): {topic:?}, msg #{msg_no:#06x}, patience {patience:?}",
+                villager.name,
+                villager.personality.english_name(),
+                if chat.happy { "happy" } else { "normal mood" },
+            );
+        }
+
+        // mNpc_CountTalkNum (counts only while the timer from the last talk
+        // runs), then mNpc_TalkEndMove: restart the talk timer, and the
+        // unlock timer that eventually forgives a pestered villager.
+        chat.info.count_talk(looks);
+        chat.info.timer = TALK_END_TIMER;
+        chat.info.unlock_timer = TEMPER_TABLE[looks.min(TEMPER_TABLE.len() - 1)].0;
 
         dialogue.active = true;
         dialogue.index = 0;
-        dialogue.lines = placeholder_lines(villager.personality.english_name())
-            .into_iter()
-            .map(|l| format!("{}: {}", villager.name, l))
-            .collect();
-        // Show which decomp message ID this talk resolved to.
-        dialogue.lines.push(format!("(msg #{})", msg_id));
-
+        dialogue.lines = lines;
         if let Ok(mut vis) = box_query.single_mut() {
             *vis = Visibility::Visible;
         }
         if let Ok(mut text) = text_query.single_mut() {
             text.0 = dialogue.lines[0].clone();
         }
-        println!("Talking to {} (msg #{})", villager.name, msg_id);
+    }
+}
+
+/// Run the talk timers in retail frames. When the unlock timer runs out the
+/// villager forgets being pestered (talk count reset) and rolls a new mood.
+fn tick_talk_timers(
+    time: Res<Time>,
+    mut rng: ResMut<TalkRng>,
+    mut villagers: Query<&mut VillagerTalk>,
+) {
+    let frames = time.delta().as_secs_f32() * RETAIL_FPS;
+    for mut chat in villagers.iter_mut() {
+        chat.frame_acc += frames;
+        let whole = chat.frame_acc.floor();
+        if whole < 1.0 {
+            continue;
+        }
+        chat.frame_acc -= whole;
+        let step = whole as u16;
+        chat.info.timer = chat.info.timer.saturating_sub(step);
+        if chat.info.unlock_timer > 0 {
+            chat.info.unlock_timer = chat.info.unlock_timer.saturating_sub(step);
+            if chat.info.unlock_timer == 0 {
+                chat.info.talk_num = 0;
+                chat.happy = rng.below(100) < HAPPY_CHANCE;
+            }
+        }
     }
 }
 
@@ -214,7 +333,7 @@ pub struct DialoguePlugin;
 impl Plugin for DialoguePlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(DialogueState::default())
-            .insert_resource(TalkCounter::default())
+            .insert_resource(TalkRng(0x7A1C_5EED))
             .add_systems(Startup, setup_ui)
             .add_systems(
                 Update,
@@ -226,6 +345,6 @@ impl Plugin for DialoguePlugin {
                 Update,
                 dialogue_input.in_set(InteractSet::Ui).in_set(GameplaySet),
             )
-            .add_systems(Update, update_hud.in_set(GameplaySet));
+            .add_systems(Update, (update_hud, tick_talk_timers).in_set(GameplaySet));
     }
 }

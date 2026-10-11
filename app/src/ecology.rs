@@ -126,7 +126,7 @@ struct CatchNotifyText;
 
 /// Current (month, day, hour) from the system clock, via Howard Hinnant's
 /// civil-from-days algorithm. Feeds the seasonal spawn tables.
-fn today_mdh() -> (u8, u8, u8) {
+pub(crate) fn today_mdh() -> (u8, u8, u8) {
     use std::time::{SystemTime, UNIX_EPOCH};
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)

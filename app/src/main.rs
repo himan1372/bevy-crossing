@@ -20,6 +20,7 @@ mod remote;
 mod save;
 mod shop;
 mod states;
+mod talk;
 mod town;
 
 use assets::GameAssetsPlugin;

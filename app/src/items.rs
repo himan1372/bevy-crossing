@@ -82,6 +82,10 @@ pub fn is_bug(id: ItemId) -> bool {
     bug_species(id).is_some()
 }
 
+pub fn is_furniture(id: ItemId) -> bool {
+    furniture_name(id).is_some()
+}
+
 /// "SeaBass" -> "Sea Bass".
 pub fn pretty_name(debug: &str) -> String {
     let mut out = String::new();

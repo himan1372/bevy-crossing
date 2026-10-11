@@ -108,6 +108,7 @@ fn spawn_villagers(
         let material = materials.add(Color::srgb(*r, *g, *b));
 
         commands.spawn((
+            crate::dialogue::VillagerTalk::default(),
             Villager {
                 name,
                 personality,
