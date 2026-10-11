@@ -1,1 +1,4 @@
 /target/
+# Never commit game-derived assets (e.g. the GameCube texture pack, folder "GAF").
+app/assets/textures/GAF/
+**/GAF/
