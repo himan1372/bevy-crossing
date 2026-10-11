@@ -24,6 +24,7 @@ use rustimal_logic::town_gen::{CellKind, ACRE_WIDTH};
 use crate::house::HouseState;
 use crate::input::{Action, Actions, InputFocus, InteractSet};
 use crate::interaction::{Facing, PlayerInventory};
+use crate::items;
 use crate::player::Player;
 use crate::states::GameplaySet;
 use crate::town::Town;
@@ -143,18 +144,6 @@ fn today_mdh() -> (u8, u8, u8) {
     let d = (doy - (153 * mp + 2) / 5 + 1) as u8; // [1, 31]
     let m = if mp < 10 { mp + 3 } else { mp - 9 } as u8; // [1, 12]
     (m, d, hour)
-}
-
-/// Turn a `Debug`-formatted enum name ("CrucianCarp") into "Crucian Carp".
-fn pretty_name(debug: &str) -> String {
-    let mut out = String::new();
-    for (i, c) in debug.chars().enumerate() {
-        if i > 0 && c.is_uppercase() {
-            out.push(' ');
-        }
-        out.push(c);
-    }
-    out
 }
 
 /// Weighted pick from (value, weight) pairs. Returns None on empty/zero total.
@@ -614,18 +603,27 @@ fn tool_interact(
             }
             match best {
                 Some((entity, _)) => {
-                    let insect = bug_query.get(entity).map(|(_, b, _)| b.insect).ok();
+                    let Ok((_, bug, _)) = bug_query.get(entity) else {
+                        return;
+                    };
+                    let item = items::bug(bug.insect);
+                    let name = items::name(item);
+                    if !inventory.add(item) {
+                        // Retail: a full pocket means you can't keep the catch.
+                        show_catch_notify(
+                            "Your pockets are full!",
+                            &mut notify_timer,
+                            &mut notify_query,
+                        );
+                        return;
+                    }
                     commands.entity(entity).despawn();
-                    inventory.bugs += 1;
-                    let name = insect
-                        .map(|i| pretty_name(&format!("{i:?}")))
-                        .unwrap_or_else(|| "Bug".to_string());
                     show_catch_notify(
                         &format!("Caught a {name}!"),
                         &mut notify_timer,
                         &mut notify_query,
                     );
-                    println!("Caught a {name} (total bugs: {})", inventory.bugs);
+                    println!("Caught a {name} ({}/15 pockets)", inventory.used());
                 }
                 None => {
                     show_catch_notify("No bugs in reach.", &mut notify_timer, &mut notify_query);
@@ -661,18 +659,26 @@ fn update_bobber(
         }
         match best {
             Some((fish_entity, _)) => {
-                let species = fish_query.get(fish_entity).map(|(_, f, _)| f.species).ok();
-                commands.entity(fish_entity).despawn();
-                inventory.fish += 1;
-                let name = species
-                    .map(|s| pretty_name(&format!("{s:?}")))
-                    .unwrap_or_else(|| "Fish".to_string());
-                show_catch_notify(
-                    &format!("Caught a {name}!"),
-                    &mut notify_timer,
-                    &mut notify_query,
-                );
-                println!("Caught a {name} (total fish: {})", inventory.fish);
+                if let Ok((_, fish, _)) = fish_query.get(fish_entity) {
+                    let item = items::fish(fish.species);
+                    let name = items::name(item);
+                    if inventory.add(item) {
+                        commands.entity(fish_entity).despawn();
+                        show_catch_notify(
+                            &format!("Caught a {name}!"),
+                            &mut notify_timer,
+                            &mut notify_query,
+                        );
+                        println!("Caught a {name} ({}/15 pockets)", inventory.used());
+                    } else {
+                        // The fish swims off.
+                        show_catch_notify(
+                            "Your pockets are full!",
+                            &mut notify_timer,
+                            &mut notify_query,
+                        );
+                    }
+                }
             }
             None => {
                 show_catch_notify("Nothing bit...", &mut notify_timer, &mut notify_query);

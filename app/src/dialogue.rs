@@ -201,8 +201,10 @@ fn update_hud(inventory: Res<PlayerInventory>, mut text_query: Query<&mut Text, 
     }
     if let Ok(mut text) = text_query.single_mut() {
         text.0 = format!(
-            "Bells: {}   Fruit: {}   Fish: {}   Bugs: {}",
-            inventory.bells, inventory.fruit, inventory.fish, inventory.bugs
+            "Bells: {}   Pockets: {}/{}   (I: open pockets)",
+            inventory.bells,
+            inventory.used(),
+            rustimal_logic::inventory::POCKETS_SLOT_COUNT
         );
     }
 }

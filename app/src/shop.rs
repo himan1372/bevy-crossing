@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use crate::ecology::EquippedTool;
 use crate::input::{Action, Actions, InputFocus, InteractSet};
 use crate::interaction::{DoorPanel, Facing, PlayerInventory};
+use crate::items::{self, ItemId};
 use crate::locomotion::{self, Locomotion};
 use crate::player::Player;
 use crate::states::{AppState, GameplaySet};
@@ -175,10 +176,6 @@ const NOOK_DOT: f32 = 0.5;
 const SHOP_WALK_X: f32 = 5.2;
 const SHOP_WALK_Z: f32 = 4.2;
 const PLAYER_RADIUS: f32 = 0.4;
-/// What Nook pays per unit.
-const FRUIT_SELL: u32 = 100;
-const FISH_SELL: u32 = 250;
-const BUG_SELL: u32 = 150;
 
 /// Interior obstacles (counter + display pedestals), in world coordinates.
 #[derive(Resource, Default)]
@@ -484,11 +481,7 @@ fn setup_shop_ui(mut commands: Commands) {
 }
 
 /// Restore shop stock/sales/tier and owned furniture from the loaded save.
-fn apply_loaded_shop(
-    loaded: Option<Res<crate::save::LoadedSave>>,
-    mut shop: ResMut<ShopData>,
-    mut inventory: ResMut<PlayerInventory>,
-) {
+fn apply_loaded_shop(loaded: Option<Res<crate::save::LoadedSave>>, mut shop: ResMut<ShopData>) {
     let Some(save) = loaded.as_ref().and_then(|l| l.0.as_ref()) else {
         return;
     };
@@ -497,13 +490,11 @@ fn apply_loaded_shop(
     }
     shop.shop.sales_sum = save.shop_sales;
     shop.shop.shop_level = ShopTier::from_u8(save.shop_tier).unwrap_or(ShopTier::Zakka);
-    inventory.furniture = save.furniture.clone();
     println!(
-        "Shop restored: {} items in stock, {} sales, tier {:?}, {} owned furniture",
+        "Shop restored: {} items in stock, {} sales, tier {:?}",
         shop.stock.len(),
         shop.shop.sales_sum,
-        shop.shop.shop_level,
-        inventory.furniture.len()
+        shop.shop.shop_level
     );
 }
 
@@ -641,32 +632,23 @@ fn nook_interact(
     println!("Shop menu opened");
 }
 
-/// Sellable player goods: (good id, label, count, unit price).
-/// Good ids: 0 = fruit, 1 = fish, 2 = bugs.
-fn sell_list(inventory: &PlayerInventory) -> Vec<(u8, String, u32, u32)> {
-    let mut list = Vec::new();
-    if inventory.fruit > 0 {
+/// Sellable goods in the pockets, grouped by item in pocket order:
+/// (item, label, count, unit price).
+fn sell_list(inventory: &PlayerInventory) -> Vec<(ItemId, String, u32, u32)> {
+    let mut list: Vec<(ItemId, String, u32, u32)> = Vec::new();
+    for &item in inventory.pockets.pockets.iter() {
+        let Some(price) = items::sell_price(item) else {
+            continue;
+        };
+        if list.iter().any(|(it, ..)| *it == item) {
+            continue;
+        }
+        let count = inventory.count(item);
         list.push((
-            0,
-            format!("Fruit x{}", inventory.fruit),
-            inventory.fruit,
-            FRUIT_SELL,
-        ));
-    }
-    if inventory.fish > 0 {
-        list.push((
-            1,
-            format!("Fish x{}", inventory.fish),
-            inventory.fish,
-            FISH_SELL,
-        ));
-    }
-    if inventory.bugs > 0 {
-        list.push((
-            2,
-            format!("Bugs x{}", inventory.bugs),
-            inventory.bugs,
-            BUG_SELL,
+            item,
+            format!("{} x{count}", items::name(item)),
+            count,
+            price,
         ));
     }
     list
@@ -743,8 +725,15 @@ fn shop_menu_input(
                 ui.message = "Not enough bells!".to_string();
                 return;
             }
+            let Some(id) = items::furniture(&item.name) else {
+                ui.message = format!("{} isn't for sale.", item.name);
+                return;
+            };
+            if !inventory.add(id) {
+                ui.message = "Your pockets are full!".to_string();
+                return;
+            }
             inventory.bells -= item.price;
-            inventory.furniture.push(item.name.clone());
             // Full price counts toward the shop upgrade (mSP_PlusSales).
             shop.shop.record_purchase(item.price);
             let mut msg = format!("Bought {}!", item.name);
@@ -759,21 +748,11 @@ fn shop_menu_input(
             let Some((good, _, _, unit)) = list.get(ui.selected).cloned() else {
                 return;
             };
-            // Sell one unit of the selected good.
-            let name = match good {
-                0 => {
-                    inventory.fruit -= 1;
-                    "Fruit"
-                }
-                1 => {
-                    inventory.fish -= 1;
-                    "Fish"
-                }
-                _ => {
-                    inventory.bugs -= 1;
-                    "Bug"
-                }
-            };
+            // Sell one of the selected item.
+            if !inventory.remove(good) {
+                return;
+            }
+            let name = items::name(good);
             inventory.bells += unit;
             // Half of Nook's payout counts toward the upgrade (mSP_PlusSales).
             shop.shop.record_sale(unit);

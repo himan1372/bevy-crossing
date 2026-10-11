@@ -15,6 +15,8 @@
 
 use bevy::prelude::*;
 use bevy::text::FontSize;
+use rustimal_logic::inventory::{Inventory, POCKETS_SLOT_COUNT};
+use rustimal_logic::species::{FishType, InsectType};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -22,6 +24,7 @@ use std::path::PathBuf;
 use crate::house::{HouseState, ReturnPosition};
 use crate::input::{Action, Actions, InputFocus};
 use crate::interaction::{spawn_ground_item, GroundItem, PlayerInventory, ITEM_SPOTS};
+use crate::items;
 use crate::mail::Mailbox;
 use crate::player::Player;
 use crate::states::GameplaySet;
@@ -38,8 +41,16 @@ pub struct SaveData {
     pub town_seed: u32,
     pub player_pos: [f32; 3],
     pub bells: u32,
+    /// Pocket item IDs (`crate::items`), 15 slots. `None` in saves made
+    /// before pockets existed; those are converted from the legacy counts.
+    #[serde(default)]
+    pub pockets: Option<Vec<u16>>,
+    /// Packed 2-bit pocket conditions (`rustimal_logic::inventory`).
+    #[serde(default)]
+    pub pocket_conds: u32,
+    /// Legacy (pre-pockets) fruit count; read for conversion, written as 0.
     pub fruit: u32,
-    /// Fish caught (added after v1; defaults to 0 for old saves).
+    /// Legacy fish count (added after v1; defaults to 0 for old saves).
     #[serde(default)]
     pub fish: u32,
     /// Bugs caught (added after v1; defaults to 0 for old saves).
@@ -63,7 +74,7 @@ pub struct SaveData {
     /// Displayed shop tier as u8 (added later).
     #[serde(default)]
     pub shop_tier: u8,
-    /// Furniture bought at Nook's (added later).
+    /// Legacy furniture names (pre-pockets); read for conversion only.
     #[serde(default)]
     pub furniture: Vec<String>,
     /// Active quest (added later; defaults to none for old saves).
@@ -153,16 +164,59 @@ fn apply_loaded_player(loaded: Res<LoadedSave>, mut player: Query<&mut Transform
     }
 }
 
-/// Startup: restore inventory counts from the loaded save.
+/// Pockets from a save. Saves made before pockets existed carry counts
+/// instead: fruit and furniture convert directly; fish and bugs become one
+/// stand-in species each (the counts never recorded which species). An
+/// active delivery gets its parcel, so it can still be handed over.
+fn pockets_from_save(save: &SaveData) -> Inventory {
+    let mut inv = Inventory::default();
+    if let Some(saved) = save.pockets.as_ref() {
+        for (slot, &item) in saved.iter().take(POCKETS_SLOT_COUNT).enumerate() {
+            inv.pockets[slot] = item;
+        }
+        inv.item_conditions = save.pocket_conds;
+        return inv;
+    }
+    let legacy = std::iter::repeat_n(items::FRUIT, save.fruit as usize)
+        .chain(std::iter::repeat_n(
+            items::fish(FishType::CrucianCarp),
+            save.fish as usize,
+        ))
+        .chain(std::iter::repeat_n(
+            items::bug(InsectType::CommonButterfly),
+            save.bugs as usize,
+        ))
+        .chain(save.furniture.iter().filter_map(|n| items::furniture(n)));
+    let mut dropped = 0;
+    for item in legacy {
+        if inv.put(item, 0).is_none() {
+            dropped += 1;
+        }
+    }
+    let delivery = matches!(
+        save.quest.as_ref().map(|q| &q.kind),
+        Some(crate::quest::QuestKind::Delivery { .. })
+    );
+    if delivery && inv.find_item(items::PARCEL).is_none() && inv.put(items::PARCEL, 0).is_none() {
+        dropped += 1;
+    }
+    if dropped > 0 {
+        warn!("old save: {dropped} item(s) didn't fit in 15 pockets and were dropped");
+    }
+    println!("Converted an old save's item counts into pockets");
+    inv
+}
+
+/// Startup: restore the wallet and pockets from the loaded save.
 fn apply_loaded_inventory(loaded: Res<LoadedSave>, mut inventory: ResMut<PlayerInventory>) {
     if let Some(save) = loaded.0.as_ref() {
         inventory.bells = save.bells;
-        inventory.fruit = save.fruit;
-        inventory.fish = save.fish;
-        inventory.bugs = save.bugs;
+        inventory.pockets = pockets_from_save(save);
         println!(
-            "Inventory restored: {} bells, {} fruit, {} fish, {} bugs",
-            save.bells, save.fruit, save.fish, save.bugs
+            "Inventory restored: {} bells, {}/{} pockets",
+            save.bells,
+            inventory.used(),
+            POCKETS_SLOT_COUNT
         );
     }
 }
@@ -218,9 +272,11 @@ fn collect_save(
         town_seed: seed.0,
         player_pos,
         bells: inventory.bells,
-        fruit: inventory.fruit,
-        fish: inventory.fish,
-        bugs: inventory.bugs,
+        pockets: Some(inventory.pockets.pockets.to_vec()),
+        pocket_conds: inventory.pockets.item_conditions,
+        fruit: 0,
+        fish: 0,
+        bugs: 0,
         playtime_secs: playtime.secs,
         picked_items,
         letters: mailbox.letters.clone(),
@@ -228,7 +284,7 @@ fn collect_save(
         shop_stock: shop.stock.clone(),
         shop_sales: shop.shop.sales_sum,
         shop_tier: shop.shop.shop_level as u8,
-        furniture: inventory.furniture.clone(),
+        furniture: Vec::new(),
         quest: quest.active.clone(),
     }
 }
@@ -367,10 +423,7 @@ fn quick_load(
     next_house.set(HouseState::Town);
     next_shop.set(crate::shop::ShopLocation::Town);
     inventory.bells = save.bells;
-    inventory.fruit = save.fruit;
-    inventory.fish = save.fish;
-    inventory.bugs = save.bugs;
-    inventory.furniture = save.furniture.clone();
+    inventory.pockets = pockets_from_save(&save);
     playtime.secs = save.playtime_secs;
     mailbox.letters = save.letters.clone();
     mailbox.sent = save.sent_letters.clone();
@@ -436,5 +489,50 @@ impl Plugin for SavePlugin {
                 Update,
                 (tick_playtime, quick_save, quick_load, tick_notification).in_set(GameplaySet),
             );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn old_save(extra: &str) -> SaveData {
+        let json = format!(
+            r#"{{"version":1,"town_seed":7,"player_pos":[0.0,1.0,0.0],"bells":200,
+                "fruit":2,"fish":1,"bugs":3,"playtime_secs":0.0,"picked_items":[]{extra}}}"#
+        );
+        serde_json::from_str(&json).unwrap()
+    }
+
+    #[test]
+    fn old_save_counts_become_pocket_items() {
+        let save = old_save(r#","furniture":["Bookshelf"]"#);
+        let inv = pockets_from_save(&save);
+        assert_eq!(inv.count_item(items::FRUIT), 2);
+        assert_eq!(inv.count_item(items::fish(FishType::CrucianCarp)), 1);
+        assert_eq!(inv.count_item(items::bug(InsectType::CommonButterfly)), 3);
+        assert_eq!(inv.count_item(items::furniture("Bookshelf").unwrap()), 1);
+        assert_eq!(inv.pockets.iter().filter(|&&i| i != 0).count(), 7);
+    }
+
+    #[test]
+    fn old_save_with_delivery_gets_its_parcel() {
+        let save = old_save(
+            r#","quest":{"kind":{"Delivery":{"giver":"A","recipient":"B"}},"reward":200,"fish_baseline":0,"bugs_baseline":0}"#,
+        );
+        assert_eq!(pockets_from_save(&save).count_item(items::PARCEL), 1);
+    }
+
+    #[test]
+    fn new_save_pockets_round_trip() {
+        let mut save = old_save("");
+        let mut slots = vec![0u16; POCKETS_SLOT_COUNT];
+        slots[4] = items::FRUIT;
+        save.pockets = Some(slots);
+        save.pocket_conds = 0b11 << 8;
+        let inv = pockets_from_save(&save);
+        assert_eq!(inv.pockets[4], items::FRUIT);
+        assert_eq!(inv.item_cond(4), 3);
+        assert_eq!(inv.count_item(items::FRUIT), 1); // legacy counts ignored
     }
 }

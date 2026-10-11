@@ -56,6 +56,8 @@ pub enum Action {
     QuickSave,
     QuickLoad,
     Pause,
+    /// Open / close the pockets screen.
+    Pockets,
 }
 
 /// Keys for each action. Several actions may share a key: they are read in
@@ -92,6 +94,7 @@ impl Default for KeyBindings {
             (QuickSave, vec![K::F5]),
             (QuickLoad, vec![K::F9]),
             (Pause, vec![K::KeyP]),
+            (Pockets, vec![K::KeyI, K::Tab]),
         ];
         Self(map.into_iter().collect())
     }
@@ -150,6 +153,7 @@ pub enum InputFocus {
     Mail,
     Shop,
     Quest,
+    Pockets,
     Paused,
 }
 
@@ -196,6 +200,7 @@ fn update_focus(
     mail: Res<crate::mail::MailUi>,
     shop: Res<crate::shop::ShopUi>,
     quest: Res<crate::quest::QuestUi>,
+    pockets: Res<crate::pockets::PocketsUi>,
     mut focus: ResMut<InputFocus>,
 ) {
     let next = if pause.is_some_and(|p| *p.get() == PauseState::Paused) {
@@ -208,6 +213,8 @@ fn update_focus(
         InputFocus::Mail
     } else if shop.open {
         InputFocus::Shop
+    } else if pockets.open {
+        InputFocus::Pockets
     } else {
         InputFocus::World
     };

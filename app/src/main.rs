@@ -9,10 +9,12 @@ mod ecology;
 mod house;
 mod input;
 mod interaction;
+mod items;
 mod locomotion;
 mod mail;
 mod npc;
 mod player;
+mod pockets;
 mod quest;
 mod remote;
 mod save;
@@ -29,6 +31,7 @@ use interaction::InteractionPlugin;
 use mail::MailPlugin;
 use npc::NpcPlugin;
 use player::PlayerPlugin;
+use pockets::PocketsPlugin;
 use quest::QuestPlugin;
 use remote::RemotePluginGate;
 use save::SavePlugin;
@@ -53,6 +56,7 @@ fn main() {
         .add_plugins(MailPlugin)
         .add_plugins(ShopPlugin)
         .add_plugins(QuestPlugin)
+        .add_plugins(PocketsPlugin)
         .add_systems(Startup, setup_light)
         .run();
 }

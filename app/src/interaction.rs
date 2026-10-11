@@ -10,10 +10,12 @@ use bevy::prelude::*;
 
 use crate::house::HouseState;
 use crate::input::{Action, Actions, InputFocus, InteractSet};
+use crate::items::{self, ItemId};
 use crate::npc::Villager;
 use crate::player::Player;
 use crate::states::GameplaySet;
 use crate::town::Town;
+use rustimal_logic::inventory::{Inventory, EMPTY_NO};
 
 /// What a ground item is.
 #[derive(Clone, Copy, Debug)]
@@ -41,17 +43,61 @@ pub const ITEM_SPOTS: [(ItemKind, f32, f32); 6] = [
     (ItemKind::Fruit, -5.0, -4.0),
 ];
 
-/// Player's collected items (placeholder inventory for Phase 2).
+/// The player's wallet and pockets. Pockets are the decomp-verified
+/// 15-slot model from `rustimal_logic::inventory` (item IDs in
+/// [`crate::items`]); bells are kept separately, like the retail wallet.
 #[derive(Resource, Default)]
 pub struct PlayerInventory {
     pub bells: u32,
-    pub fruit: u32,
-    /// Fish caught with the rod (Phase 3 ecology).
-    pub fish: u32,
-    /// Bugs caught with the net (Phase 3 ecology).
-    pub bugs: u32,
-    /// Furniture bought at Nook's (Phase 3 shop).
-    pub furniture: Vec<String>,
+    pub pockets: Inventory,
+}
+
+impl PlayerInventory {
+    /// Put an item in the first free pocket. False when pockets are full.
+    pub fn add(&mut self, item: ItemId) -> bool {
+        self.pockets.put(item, 0).is_some()
+    }
+
+    /// How many pockets hold `item`.
+    pub fn count(&self, item: ItemId) -> u32 {
+        self.pockets.count_item(item)
+    }
+
+    /// How many pockets hold an item matching `pred`.
+    pub fn count_where(&self, pred: impl Fn(ItemId) -> bool) -> u32 {
+        self.pockets
+            .pockets
+            .iter()
+            .filter(|&&it| it != EMPTY_NO && pred(it))
+            .count() as u32
+    }
+
+    /// Remove one `item`. False if none is carried.
+    pub fn remove(&mut self, item: ItemId) -> bool {
+        self.remove_first_where(|it| it == item).is_some()
+    }
+
+    /// Remove the first item matching `pred`, returning it.
+    pub fn remove_first_where(&mut self, pred: impl Fn(ItemId) -> bool) -> Option<ItemId> {
+        let slot = self
+            .pockets
+            .pockets
+            .iter()
+            .position(|&it| it != EMPTY_NO && pred(it))?;
+        let item = self.pockets.pockets[slot];
+        self.pockets.pockets[slot] = EMPTY_NO;
+        self.pockets.set_item_cond(slot, 0);
+        Some(item)
+    }
+
+    /// Filled pockets.
+    pub fn used(&self) -> usize {
+        self.pockets
+            .pockets
+            .iter()
+            .filter(|&&it| it != EMPTY_NO)
+            .count()
+    }
 }
 
 /// Fired when the player talks to a villager.
@@ -255,8 +301,12 @@ pub fn interact(
                 println!("Picked up {amount} bells (total: {})", inventory.bells);
             }
             ItemKind::Fruit => {
-                inventory.fruit += 1;
-                println!("Picked up a fruit (total: {})", inventory.fruit);
+                if !inventory.add(items::FRUIT) {
+                    // Leave it on the ground; the HUD shows the pockets are full.
+                    println!("Pockets full; left the fruit");
+                    return;
+                }
+                println!("Picked up a fruit ({}/15 pockets)", inventory.used());
             }
         }
         commands.entity(entity).despawn();

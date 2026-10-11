@@ -22,6 +22,7 @@ use crate::dialogue::DialogueState;
 use crate::house::HouseState;
 use crate::input::{Action, Actions, InteractSet};
 use crate::interaction::{PlayerInventory, TalkEvent};
+use crate::items;
 use crate::npc::Villager;
 use crate::states::GameplaySet;
 
@@ -45,9 +46,6 @@ pub enum QuestKind {
 pub struct ActiveQuest {
     pub kind: QuestKind,
     pub reward: u32,
-    /// Fish/bug counts when accepted — turn-in needs a *new* catch.
-    pub fish_baseline: u32,
-    pub bugs_baseline: u32,
 }
 
 /// A villager with a `!` marker, holding a generated offer.
@@ -242,8 +240,8 @@ fn turnin_text(active: &ActiveQuest) -> String {
     let what = match &active.kind {
         QuestKind::Delivery { recipient, .. } => format!("Deliver the parcel to {recipient}?"),
         QuestKind::ErrandFruit { amount, .. } => format!("Hand over {amount} fruit?"),
-        QuestKind::CatchFish { .. } => "Show off your catch?".to_string(),
-        QuestKind::CatchBug { .. } => "Show off your catch?".to_string(),
+        QuestKind::CatchFish { .. } => "Hand over a fish from your pockets?".to_string(),
+        QuestKind::CatchBug { .. } => "Hand over a bug from your pockets?".to_string(),
         QuestKind::BuyFurniture { item, .. } => format!("Give the {item}?"),
     };
     format!(
@@ -266,18 +264,21 @@ fn hud_text(active: &ActiveQuest) -> String {
 /// Is this talk a valid turn-in for the active quest?
 fn turn_in_ready(active: &ActiveQuest, villager_name: &str, inventory: &PlayerInventory) -> bool {
     match &active.kind {
-        QuestKind::Delivery { recipient, .. } => villager_name == recipient,
+        QuestKind::Delivery { recipient, .. } => {
+            villager_name == recipient && inventory.count(items::PARCEL) > 0
+        }
         QuestKind::ErrandFruit { giver, amount } => {
-            villager_name == giver && inventory.fruit >= *amount
+            villager_name == giver && inventory.count(items::FRUIT) >= *amount
         }
         QuestKind::CatchFish { giver } => {
-            villager_name == giver && inventory.fish > active.fish_baseline
+            villager_name == giver && inventory.count_where(items::is_fish) > 0
         }
         QuestKind::CatchBug { giver } => {
-            villager_name == giver && inventory.bugs > active.bugs_baseline
+            villager_name == giver && inventory.count_where(items::is_bug) > 0
         }
         QuestKind::BuyFurniture { giver, item } => {
-            villager_name == giver && inventory.furniture.iter().any(|f| f == item)
+            villager_name == giver
+                && items::furniture(item).is_some_and(|id| inventory.count(id) > 0)
         }
     }
 }
@@ -552,12 +553,24 @@ fn quest_ui_input(
     match ui.mode {
         QuestUiMode::Offer => {
             if accepted {
+                let is_delivery = giver
+                    .0
+                    .as_ref()
+                    .is_some_and(|o| matches!(o.kind, QuestKind::Delivery { .. }));
+                // A delivery hands you the parcel, which needs a free pocket.
+                if is_delivery && !inventory.add(items::PARCEL) {
+                    notify(
+                        "Your pockets are full! Make room for the parcel first.",
+                        &mut timer,
+                        &mut notify_query,
+                    );
+                    close(&mut ui, &mut claim, &mut panel);
+                    return;
+                }
                 if let Some(offer) = giver.0.take() {
                     quest.active = Some(ActiveQuest {
                         kind: offer.kind,
                         reward: offer.reward,
-                        fish_baseline: inventory.fish,
-                        bugs_baseline: inventory.bugs,
                     });
                     for e in markers.iter() {
                         commands.entity(e).despawn();
@@ -584,15 +597,25 @@ fn quest_ui_input(
                 if let Some(active) = quest.active.take() {
                     // Apply per-kind handovers.
                     match &active.kind {
-                        QuestKind::ErrandFruit { amount, .. } => {
-                            inventory.fruit = inventory.fruit.saturating_sub(*amount);
+                        QuestKind::Delivery { .. } => {
+                            inventory.remove(items::PARCEL);
                         }
-                        QuestKind::BuyFurniture { item, .. } => {
-                            if let Some(pos) = inventory.furniture.iter().position(|f| f == item) {
-                                inventory.furniture.remove(pos);
+                        QuestKind::ErrandFruit { amount, .. } => {
+                            for _ in 0..*amount {
+                                inventory.remove(items::FRUIT);
                             }
                         }
-                        _ => {}
+                        QuestKind::CatchFish { .. } => {
+                            inventory.remove_first_where(items::is_fish);
+                        }
+                        QuestKind::CatchBug { .. } => {
+                            inventory.remove_first_where(items::is_bug);
+                        }
+                        QuestKind::BuyFurniture { item, .. } => {
+                            if let Some(id) = items::furniture(item) {
+                                inventory.remove(id);
+                            }
+                        }
                     }
                     inventory.bells += active.reward;
                     quest.completed += 1;
