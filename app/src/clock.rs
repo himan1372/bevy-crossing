@@ -30,6 +30,8 @@ pub struct Now {
     pub minute: u8,
     /// Seconds since midnight.
     pub day_secs: u32,
+    /// Days since 0001-01-01 (for counting days between dates).
+    pub day_number: i64,
 }
 
 /// The current game time: local time plus the debug offset.
@@ -42,6 +44,7 @@ pub fn now() -> Now {
         hour: t.hour() as u8,
         minute: t.minute() as u8,
         day_secs: t.num_seconds_from_midnight(),
+        day_number: t.num_days_from_ce() as i64,
     }
 }
 

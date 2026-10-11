@@ -14,6 +14,8 @@ use bevy::ecs::message::MessageReader;
 use bevy::prelude::*;
 use bevy::text::FontSize;
 use rustimal_logic::interaction::{Patience, TalkInfo, TEMPER_TABLE};
+use rustimal_logic::quest::reward;
+use rustimal_logic::request_selector;
 
 use crate::input::{Action, Actions, InteractSet};
 use crate::interaction::{PlayerInventory, TalkEvent};
@@ -29,6 +31,17 @@ pub struct DialogueState {
     pub active: bool,
     lines: Vec<String>,
     index: usize,
+    /// A trade offer waiting on Y/N at the last line.
+    trade: Option<TradeDeal>,
+}
+
+/// A villager offering to swap one of their goods for something you carry
+/// (`request_selector`: the wanted item is picked uniformly among eligible
+/// carried items, the offer comes from `build_trade_offer`).
+struct TradeDeal {
+    villager: &'static str,
+    wanted: items::ItemId,
+    offered: items::ItemId,
 }
 
 /// Marker for the dialogue box node.
@@ -55,6 +68,8 @@ const HAPPY_CHANCE: u32 = 25;
 pub struct VillagerTalk {
     info: TalkInfo,
     pub happy: bool,
+    /// Friendship with the player (quest::friendship deltas).
+    pub friendship: i32,
     rolled: bool,
     /// Fractional retail frames carried between updates.
     frame_acc: f32,
@@ -65,6 +80,7 @@ impl Default for VillagerTalk {
         Self {
             info: TalkInfo::new(),
             happy: false,
+            friendship: 0,
             rolled: false,
             frame_acc: 0.0,
         }
@@ -167,6 +183,7 @@ fn on_talk(
 
         let patience = chat.info.patience(looks);
         let mut lines = Vec::new();
+        dialogue.trade = None;
         if patience == Patience::Annoyed {
             lines.push(say(talk::annoyed(looks)));
             println!("{} is too annoyed to talk", villager.name);
@@ -208,8 +225,17 @@ fn on_talk(
                     inventory.add(gift);
                     Some(items::name(gift))
                 }
-                Topic::Trade(TradeKind::Catch(it) | TradeKind::Furniture(it)) => {
-                    Some(items::name(it))
+                Topic::Trade(kind) => {
+                    let deal = trade_offer(kind, &inventory, &mut |n| rng.below(n));
+                    let name = deal.as_ref().map(|d| items::name(d.wanted));
+                    if let Some((wanted, offered)) = deal.map(|d| (d.wanted, d.offered)) {
+                        dialogue.trade = Some(TradeDeal {
+                            villager: villager.name,
+                            wanted,
+                            offered,
+                        });
+                    }
+                    name
                 }
                 _ => None,
             };
@@ -226,7 +252,12 @@ fn on_talk(
                     item.as_deref().unwrap_or("item")
                 ));
             }
-            if patience == Patience::MildlyAnnoyed {
+            if let Some(deal) = dialogue.trade.as_ref() {
+                lines.push(say(&format!(
+                    "Would you trade it for my {}?\n(Y: Trade    N: No thanks)",
+                    items::name(deal.offered)
+                )));
+            } else if patience == Patience::MildlyAnnoyed {
                 lines.push(say(talk::mildly_annoyed(looks)));
             }
             println!(
@@ -254,6 +285,63 @@ fn on_talk(
             text.0 = dialogue.lines[0].clone();
         }
     }
+}
+
+/// Build a trade offer for a trade topic: the item they want is picked
+/// uniformly among your eligible carried items
+/// (`request_selector::pick_random_eligible`), and what they offer comes
+/// from three candidate goods (`build_trade_offer`).
+fn trade_offer(
+    kind: TradeKind,
+    inventory: &PlayerInventory,
+    rng: &mut dyn FnMut(u32) -> u32,
+) -> Option<TradeDeal> {
+    let pockets = &inventory.pockets.pockets;
+    let eligible: Vec<u8> = pockets
+        .iter()
+        .map(|&it| match kind {
+            TradeKind::Catch(_) => items::is_fish(it) || items::is_bug(it),
+            TradeKind::Furniture(_) => items::is_furniture(it),
+        } as u8)
+        .collect();
+    let count = eligible.iter().filter(|&&e| e != 0).count() as u32;
+    if count == 0 {
+        return None;
+    }
+    let wanted = request_selector::pick_random_eligible(pockets, &eligible, rng(count))?;
+    // Candidate goods: reward goods and catalog furniture, never the wanted item.
+    let pool: Vec<items::ItemId> = items::FURNITURE_CATALOG
+        .iter()
+        .filter_map(|n| items::furniture(n))
+        .chain(
+            [
+                reward::STATIONERY,
+                reward::CLOTH,
+                reward::CARPET,
+                reward::WALLPAPER,
+            ]
+            .into_iter()
+            .filter_map(items::reward_good),
+        )
+        .filter(|&it| it != wanted.item)
+        .collect();
+    let pick = |rng: &mut dyn FnMut(u32) -> u32| pool[rng(pool.len() as u32) as usize];
+    let goods = [
+        (pick(rng), rng(10)),
+        (pick(rng), rng(10)),
+        (pick(rng), rng(10)),
+    ];
+    let offer = request_selector::build_trade_offer(
+        Some(wanted),
+        goods,
+        request_selector::TradeItemMode::Random,
+        rng(3),
+    );
+    Some(TradeDeal {
+        villager: "",
+        wanted: wanted.item,
+        offered: offer.offered,
+    })
 }
 
 /// Run the talk timers in retail frames. When the unlock timer runs out the
@@ -290,10 +378,43 @@ fn tick_talk_timers(
 fn dialogue_input(
     mut actions: ResMut<Actions>,
     mut dialogue: ResMut<DialogueState>,
+    mut inventory: ResMut<PlayerInventory>,
     mut box_query: Query<&mut Visibility, With<DialogueBox>>,
     mut text_query: Query<&mut Text, With<DialogueText>>,
 ) {
     if !dialogue.active {
+        return;
+    }
+    // A trade offer on the last line waits for Y / N.
+    if dialogue.index + 1 >= dialogue.lines.len() && dialogue.trade.is_some() {
+        let yes = actions.just_pressed(Action::Yes);
+        let no = actions.just_pressed(Action::No) || actions.just_pressed(Action::Cancel);
+        if !yes && !no {
+            return;
+        }
+        if let Some(deal) = dialogue.trade.take() {
+            let line = if yes && inventory.remove(deal.wanted) {
+                // Removing the wanted item freed a pocket for the offered one.
+                inventory.add(deal.offered);
+                println!(
+                    "Traded {} for {}",
+                    items::name(deal.wanted),
+                    items::name(deal.offered)
+                );
+                format!(
+                    "(You traded your {} for the {}!)",
+                    items::name(deal.wanted),
+                    items::name(deal.offered)
+                )
+            } else {
+                format!("{}: Oh well, maybe next time!", deal.villager)
+            };
+            dialogue.lines.push(line);
+            dialogue.index += 1;
+            if let Ok(mut text) = text_query.single_mut() {
+                text.0 = dialogue.lines[dialogue.index].clone();
+            }
+        }
         return;
     }
     if !(actions.just_pressed(Action::Advance) || actions.consume(Action::Interact)) {
@@ -346,5 +467,37 @@ impl Plugin for DialoguePlugin {
                 dialogue_input.in_set(InteractSet::Ui).in_set(GameplaySet),
             )
             .add_systems(Update, (update_hud, tick_talk_timers).in_set(GameplaySet));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rustimal_logic::species::{FishType, InsectType};
+
+    #[test]
+    fn trade_offer_wants_an_eligible_carried_item() {
+        let mut inv = PlayerInventory::default();
+        let mut s = 7u32;
+        let mut rng = |n: u32| {
+            s = s.wrapping_mul(1103515245).wrapping_add(12345);
+            (s >> 16) % n
+        };
+        // Nothing eligible: no deal.
+        inv.add(items::FRUIT);
+        assert!(trade_offer(TradeKind::Catch(0), &inv, &mut rng).is_none());
+        // With a fish and a bug, the wanted item is one of them.
+        let fish = items::fish(FishType::Carp);
+        let bug = items::bug(InsectType::CommonButterfly);
+        inv.add(fish);
+        inv.add(bug);
+        let mut wanted = std::collections::HashSet::new();
+        for _ in 0..50 {
+            let deal = trade_offer(TradeKind::Catch(0), &inv, &mut rng).unwrap();
+            assert!(deal.wanted == fish || deal.wanted == bug);
+            assert_ne!(deal.offered, deal.wanted);
+            wanted.insert(deal.wanted);
+        }
+        assert_eq!(wanted.len(), 2, "uniform pick reaches every eligible item");
     }
 }

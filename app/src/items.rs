@@ -12,6 +12,7 @@
 //! | `0x2400 + n` | bugs, `n` = `InsectType as u8` |
 //! | `0x2800` | fruit |
 //! | `0x2900` | quest parcel |
+//! | `0x2A00 + c` | quest reward goods, `c` = `quest::reward` category |
 
 use rustimal_logic::inventory::EMPTY_NO;
 use rustimal_logic::species::{FishType, InsectType};
@@ -23,6 +24,34 @@ const FISH_BASE: ItemId = 0x2300;
 const BUG_BASE: ItemId = 0x2400;
 pub const FRUIT: ItemId = 0x2800;
 pub const PARCEL: ItemId = 0x2900;
+const REWARD_BASE: ItemId = 0x2A00;
+
+/// Reward goods for the non-furniture `rustimal_logic::quest::reward`
+/// categories (placeholder originals; the slice has no clothing/carpet
+/// systems yet, so these are pocket items).
+pub fn reward_good(category: u8) -> Option<ItemId> {
+    use rustimal_logic::quest::reward;
+    match category {
+        reward::STATIONERY
+        | reward::CLOTH
+        | reward::CARPET
+        | reward::WALLPAPER
+        | reward::WORN_CLOTH => Some(REWARD_BASE + category as ItemId),
+        _ => None,
+    }
+}
+
+fn reward_good_name(id: ItemId) -> Option<&'static str> {
+    use rustimal_logic::quest::reward;
+    match id.checked_sub(REWARD_BASE)? as u8 {
+        reward::STATIONERY => Some("Letter Paper"),
+        reward::CLOTH => Some("Striped Shirt"),
+        reward::CARPET => Some("Plaid Rug"),
+        reward::WALLPAPER => Some("Floral Wallpaper"),
+        reward::WORN_CLOTH => Some("Worn Shirt"),
+        _ => None,
+    }
+}
 
 /// Sell prices (bells per item) — sensible originals; the ported modules
 /// carry no price table.
@@ -118,6 +147,9 @@ pub fn name(id: ItemId) -> String {
     if let Some(n) = furniture_name(id) {
         return n.to_string();
     }
+    if let Some(n) = reward_good_name(id) {
+        return n.to_string();
+    }
     format!("Item {id:#06x}")
 }
 
@@ -145,6 +177,9 @@ mod tests {
         assert_eq!(name(furniture("Bookshelf").unwrap()), "Bookshelf");
         assert_eq!(name(FRUIT), "Fruit");
         assert_eq!(name(EMPTY_NO), "");
+        let rug = reward_good(rustimal_logic::quest::reward::CARPET).unwrap();
+        assert_eq!(name(rug), "Plaid Rug");
+        assert_eq!(reward_good(rustimal_logic::quest::reward::MONEY), None);
     }
 
     #[test]

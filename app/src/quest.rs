@@ -1,24 +1,36 @@
-//! Phase 3: quest/errand system.
+//! Quests (villager requests), on the translated quest code.
 //!
-//! Quest plumbing comes from the decomp-verified logic crate:
-//! - `quest_gen::select_quest_type` picks DELIVERY / ERRAND / CONTEST from
-//!   the retail type tables (`QUEST_TYPE_TABLE_QST`)
-//! - `quest::quest_attempt_roll` (75% pass) gates whether a villager gets a `!`
-//! - `quest::pc_quest_base_pay` gives the retail bell pay per type/kind
-//!   (delivery 200, errand tier-2 500; contest kinds pay 0 in bells in
-//!   retail — item rewards — so catch quests use a flat 400 here)
+//! From the decomp (`rustimal_logic::quest`, `quest_gen`):
+//! - type and kind: `select_quest_type` / `select_quest_kind`, gated by
+//!   `occur_ok` (season rules, e.g. bug contests only Mar-Nov) and the
+//!   75% `quest_attempt_roll`;
+//! - completion: deliveries need the parcel at the recipient; contests use
+//!   `contest_complete` (fruit: the item is in your pockets; fish/bug: you
+//!   carry one of that category);
+//! - time limits: `limit_days` (deliveries 2 days, contests 1-3);
+//! - rewards: the category is rolled from `DELIVERY_REWARDS` /
+//!   `ERRAND_REWARDS` / `CONTEST_REWARDS` with `prob_table_select`; money
+//!   uses the max pay tables and `scaled_pay` (+/-10%); a reward that
+//!   doesn't fit in your pockets is owed and handed over next time you talk
+//!   (`give_reward`);
+//! - friendship: declining -3, completing +3 (`quest::friendship`).
 //!
-//! The offer/turn-in UI, `!` markers, HUD line, and Bevy-side generation
-//! (delivery recipient, fruit/furniture/catch variants) are new.
+//! The slice supports normal deliveries, furniture errands and fruit /
+//! fish / bug contests. Other original kinds (lost items, foreign or
+//! removed-villager deliveries, soccer, snowman, flower and letter
+//! contests) need systems the slice doesn't have, so rolling one fails the
+//! attempt like a failed occur check. Ours: the dialogue text, the errand
+//! chain counter (`used_num` = requests completed + 1), and the expiry
+//! friendship penalty.
 
 use bevy::ecs::message::MessageReader;
 use bevy::prelude::*;
 use bevy::text::FontSize;
-use rustimal_logic::quest::{self, ckind, dkind, qtype};
+use rustimal_logic::quest::{self, ckind, dkind, ekind, qtype, reward};
 use rustimal_logic::quest_gen;
 use serde::{Deserialize, Serialize};
 
-use crate::dialogue::DialogueState;
+use crate::dialogue::{DialogueState, VillagerTalk};
 use crate::house::HouseState;
 use crate::input::{Action, Actions, InteractSet};
 use crate::interaction::{PlayerInventory, TalkEvent};
@@ -45,7 +57,22 @@ pub enum QuestKind {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ActiveQuest {
     pub kind: QuestKind,
-    pub reward: u32,
+    /// Game-clock day it was accepted (`clock::Now::day_number`).
+    #[serde(default)]
+    pub accepted_day: i64,
+    /// Days allowed (`quest::limit_days`); 0 = no limit.
+    #[serde(default)]
+    pub limit_days: i32,
+    /// Errand chain counter for the reward tier.
+    #[serde(default)]
+    pub used_num: u8,
+}
+
+/// What a finished quest pays.
+#[derive(Clone, Copy, Debug)]
+enum Reward {
+    Bells(u32),
+    Item(items::ItemId),
 }
 
 /// A villager with a `!` marker, holding a generated offer.
@@ -53,7 +80,7 @@ pub struct ActiveQuest {
 pub struct PendingOffer {
     pub giver: String,
     pub kind: QuestKind,
-    pub reward: u32,
+    pub limit_days: i32,
 }
 
 /// Quest runtime state.
@@ -63,6 +90,9 @@ pub struct QuestState {
     cooldown: f32,
     pub completed: u32,
     rng: u64,
+    /// A reward that didn't fit in the pockets: (giver, reward), handed over
+    /// next time you talk to them (retail `give_reward`).
+    owed: Option<(String, Reward)>,
 }
 
 impl Default for QuestState {
@@ -73,6 +103,7 @@ impl Default for QuestState {
             cooldown: 20.0,
             completed: 0,
             rng: 0x51ED_752B_9C3A_11A7,
+            owed: None,
         }
     }
 }
@@ -142,73 +173,90 @@ struct QuestNotifyTimer(f32);
 const NOTIFY_DURATION: f32 = 3.0;
 const QUEST_COOLDOWN_SECS: f32 = 300.0;
 const DECLINE_COOLDOWN_SECS: f32 = 120.0;
+/// After a failed attempt (roll, occur check, kind not in the slice).
+const RETRY_COOLDOWN_SECS: f32 = 30.0;
 
-/// Build a quest from a type-table roll. `others` are villager names to pick
-/// a delivery recipient from; `stock` are Nook's shelf names.
-fn generate_quest(roll: u32, giver: &str, others: &[String], stock: &[String]) -> (QuestKind, u32) {
-    match quest_gen::select_quest_type(false, roll) {
-        t if t == qtype::DELIVERY => {
+/// Decomp (type, kind) for a quest.
+fn type_kind(kind: &QuestKind) -> (u8, u8) {
+    match kind {
+        QuestKind::Delivery { .. } => (qtype::DELIVERY, dkind::NORMAL),
+        QuestKind::BuyFurniture { .. } => (qtype::ERRAND, ekind::REQUEST),
+        QuestKind::ErrandFruit { .. } => (qtype::CONTEST, ckind::FRUIT),
+        QuestKind::CatchFish { .. } => (qtype::CONTEST, ckind::FISH),
+        QuestKind::CatchBug { .. } => (qtype::CONTEST, ckind::INSECT),
+    }
+}
+
+fn giver_of(kind: &QuestKind) -> &str {
+    match kind {
+        QuestKind::Delivery { giver, .. }
+        | QuestKind::ErrandFruit { giver, .. }
+        | QuestKind::CatchFish { giver }
+        | QuestKind::CatchBug { giver }
+        | QuestKind::BuyFurniture { giver, .. } => giver,
+    }
+}
+
+/// Roll a quest for `giver` (`select_quest_type` -> `select_quest_kind` ->
+/// `occur_ok`). `None` means this attempt fails (as retail does on a failed
+/// occur check) — including kinds the slice can't run yet.
+fn generate_quest(
+    rolls: [u32; 3],
+    giver: &str,
+    others: &[String],
+    stock: &[String],
+    now: &crate::clock::Now,
+) -> Option<(QuestKind, i32)> {
+    let qt = quest_gen::select_quest_type(false, rolls[0]);
+    let qk = quest_gen::select_quest_kind(qt, false, rolls[1])?;
+    let ctx = quest_gen::OccurCtx {
+        month: now.month,
+        day: now.day,
+        hour: now.hour,
+        local_player: true,
+        ..Default::default()
+    };
+    if !quest_gen::occur_ok(qt, qk, &ctx) {
+        return None;
+    }
+    let giver_s = giver.to_string();
+    let kind = match (qt, qk) {
+        (qtype::DELIVERY, dkind::NORMAL) => {
             let candidates: Vec<&String> = others.iter().filter(|n| *n != giver).collect();
-            let recipient = candidates
-                .get((roll as usize) % candidates.len().max(1))
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| "Bob".to_string());
-            let reward = quest::pc_quest_base_pay(qtype::DELIVERY, dkind::NORMAL, 1).max(200);
-            (
-                QuestKind::Delivery {
-                    giver: giver.to_string(),
-                    recipient,
-                },
-                reward,
-            )
-        }
-        t if t == qtype::ERRAND => {
-            if roll.is_multiple_of(2) {
-                // used_num=2 -> ERRAND_PAY tier 2 = 500 bells.
-                let reward = quest::pc_quest_base_pay(qtype::ERRAND, 0, 2).max(300);
-                (
-                    QuestKind::ErrandFruit {
-                        giver: giver.to_string(),
-                        amount: 3,
-                    },
-                    reward,
-                )
-            } else {
-                let item = stock
-                    .get((roll as usize) % stock.len().max(1))
-                    .cloned()
-                    .unwrap_or_else(|| "Wooden Chair".to_string());
-                let reward = quest::pc_quest_base_pay(qtype::ERRAND, 0, 3).max(300);
-                (
-                    QuestKind::BuyFurniture {
-                        giver: giver.to_string(),
-                        item,
-                    },
-                    reward,
-                )
+            let recipient = candidates.get(rolls[2] as usize % candidates.len().max(1))?;
+            QuestKind::Delivery {
+                giver: giver_s,
+                recipient: recipient.to_string(),
             }
         }
-        // CONTEST -> catch quests. Retail contest bell pay is 0 (item
-        // rewards instead), so catch quests pay a flat 400 here.
-        _ => {
-            if roll.is_multiple_of(2) {
-                let reward = quest::pc_quest_base_pay(qtype::CONTEST, ckind::FISH, 0).max(400);
-                (
-                    QuestKind::CatchFish {
-                        giver: giver.to_string(),
-                    },
-                    reward,
-                )
-            } else {
-                let reward = quest::pc_quest_base_pay(qtype::CONTEST, ckind::INSECT, 0).max(400);
-                (
-                    QuestKind::CatchBug {
-                        giver: giver.to_string(),
-                    },
-                    reward,
-                )
-            }
-        }
+        (qtype::ERRAND, ekind::REQUEST) => QuestKind::BuyFurniture {
+            giver: giver_s,
+            item: stock.get(rolls[2] as usize % stock.len().max(1))?.clone(),
+        },
+        (qtype::CONTEST, ckind::FRUIT) => QuestKind::ErrandFruit {
+            giver: giver_s,
+            amount: 1,
+        },
+        (qtype::CONTEST, ckind::FISH) => QuestKind::CatchFish { giver: giver_s },
+        (qtype::CONTEST, ckind::INSECT) => QuestKind::CatchBug { giver: giver_s },
+        _ => return None, // not in the slice yet
+    };
+    // Contests are "in progress" (progress 1) while you work on them.
+    let progress = if qt == qtype::CONTEST { 1 } else { 0 };
+    let limit = quest::limit_days(qt, qk, progress).unwrap_or(0);
+    Some((kind, limit))
+}
+
+/// Days left on a quest today (`None` = no limit).
+fn days_left(active: &ActiveQuest, today: i64) -> Option<i64> {
+    (active.limit_days > 0).then(|| active.limit_days as i64 - (today - active.accepted_day))
+}
+
+fn limit_phrase(days: i32) -> String {
+    match days {
+        0 => String::new(),
+        1 => "\n(Please do it by tomorrow.)".to_string(),
+        n => format!("\n(You have {n} days.)"),
     }
 }
 
@@ -217,9 +265,7 @@ fn offer_text(offer: &PendingOffer) -> String {
         QuestKind::Delivery { recipient, .. } => {
             format!("Could you take this parcel to {recipient} for me?")
         }
-        QuestKind::ErrandFruit { amount, .. } => {
-            format!("Could you bring me {amount} fruit? I need them for a recipe!")
-        }
+        QuestKind::ErrandFruit { .. } => "I'm craving fruit! Could you bring me one?".to_string(),
         QuestKind::CatchFish { .. } => {
             "I'd love a fresh fish! Could you catch one for me?".to_string()
         }
@@ -227,58 +273,129 @@ fn offer_text(offer: &PendingOffer) -> String {
             "Have you seen the bugs around here? Catch one for me!".to_string()
         }
         QuestKind::BuyFurniture { item, .. } => {
-            format!("I have my eye on a {item} at Nook's. Could you buy one for me?")
+            format!("I have my eye on a {item} at the shop. Could you get one for me?")
         }
     };
     format!(
-        "{}: {}\nReward: {} bells\n\nY: Accept    N: Decline",
-        offer.giver, ask, offer.reward
+        "{}: {}\nI'll make it worth your while!{}\n\nY: Accept    N: Decline",
+        offer.giver,
+        ask,
+        limit_phrase(offer.limit_days)
     )
 }
 
 fn turnin_text(active: &ActiveQuest) -> String {
     let what = match &active.kind {
         QuestKind::Delivery { recipient, .. } => format!("Deliver the parcel to {recipient}?"),
-        QuestKind::ErrandFruit { amount, .. } => format!("Hand over {amount} fruit?"),
+        QuestKind::ErrandFruit { .. } => "Hand over a fruit?".to_string(),
         QuestKind::CatchFish { .. } => "Hand over a fish from your pockets?".to_string(),
         QuestKind::CatchBug { .. } => "Hand over a bug from your pockets?".to_string(),
         QuestKind::BuyFurniture { item, .. } => format!("Give the {item}?"),
     };
-    format!(
-        "{what}\nReward: {} bells\n\nY: Yes    N: Not yet",
-        active.reward
-    )
+    format!("{what}\n\nY: Yes    N: Not yet")
 }
 
-fn hud_text(active: &ActiveQuest) -> String {
+fn hud_text(active: &ActiveQuest, today: i64) -> String {
     let task = match &active.kind {
         QuestKind::Delivery { recipient, .. } => format!("Bring parcel to {recipient}"),
-        QuestKind::ErrandFruit { giver, amount } => format!("Bring {amount} fruit to {giver}"),
-        QuestKind::CatchFish { giver } => format!("Catch a fish for {giver}"),
-        QuestKind::CatchBug { giver } => format!("Catch a bug for {giver}"),
-        QuestKind::BuyFurniture { giver, item } => format!("Buy {item} for {giver}"),
+        QuestKind::ErrandFruit { giver, .. } => format!("Bring a fruit to {giver}"),
+        QuestKind::CatchFish { giver } => format!("Bring a fish to {giver}"),
+        QuestKind::CatchBug { giver } => format!("Bring a bug to {giver}"),
+        QuestKind::BuyFurniture { giver, item } => format!("Get a {item} for {giver}"),
     };
-    format!("Quest: {task}")
+    match days_left(active, today) {
+        Some(0) => format!("Quest: {task} (due today)"),
+        Some(1) => format!("Quest: {task} (1 day left)"),
+        Some(n) => format!("Quest: {task} ({n} days left)"),
+        None => format!("Quest: {task}"),
+    }
 }
 
 /// Is this talk a valid turn-in for the active quest?
 fn turn_in_ready(active: &ActiveQuest, villager_name: &str, inventory: &PlayerInventory) -> bool {
+    let (_, qk) = type_kind(&active.kind);
     match &active.kind {
         QuestKind::Delivery { recipient, .. } => {
             villager_name == recipient && inventory.count(items::PARCEL) > 0
         }
-        QuestKind::ErrandFruit { giver, amount } => {
-            villager_name == giver && inventory.count(items::FRUIT) >= *amount
-        }
-        QuestKind::CatchFish { giver } => {
-            villager_name == giver && inventory.count_where(items::is_fish) > 0
-        }
-        QuestKind::CatchBug { giver } => {
-            villager_name == giver && inventory.count_where(items::is_bug) > 0
-        }
         QuestKind::BuyFurniture { giver, item } => {
             villager_name == giver
                 && items::furniture(item).is_some_and(|id| inventory.count(id) > 0)
+        }
+        _ => {
+            // Contests: the decomp completion rule.
+            let qual = quest::ContestQual {
+                item_possessed: inventory.count(items::FRUIT) > 0,
+                player_id_absent: true,
+                owns_category_item: match qk {
+                    ckind::FISH => inventory.count_where(items::is_fish) > 0,
+                    ckind::INSECT => inventory.count_where(items::is_bug) > 0,
+                    _ => false,
+                },
+                ..quest::ContestQual::none()
+            };
+            villager_name == giver_of(&active.kind) && quest::contest_complete(qk, 1, &qual)
+        }
+    }
+}
+
+/// Roll the reward from the decomp tables (`prob_table_select`).
+fn roll_reward(active: &ActiveQuest, rng: &mut dyn FnMut() -> u64) -> Reward {
+    let (qt, qk) = type_kind(&active.kind);
+    let (table, pay) = match qt {
+        qtype::DELIVERY => (
+            &quest::DELIVERY_REWARDS[qk as usize],
+            quest::DELIVERY_MAX_PAY[qk as usize],
+        ),
+        qtype::ERRAND => {
+            let tier = quest::errand_tier(active.used_num);
+            (&quest::ERRAND_REWARDS[tier], quest::ERRAND_PAY[tier])
+        }
+        _ => (
+            &quest::CONTEST_REWARDS[qk as usize],
+            quest::CONTEST_MAX_PAY[qk as usize],
+        ),
+    };
+    let category = quest::prob_table_select(table, (rng() % 100) as u8);
+    match category {
+        reward::MONEY => {
+            let dir = (rng() % 2) as u8;
+            let frac = (rng() % 1000) as f32 / 1000.0;
+            Reward::Bells(quest::scaled_pay(pay, dir, frac, 0))
+        }
+        reward::FTR => {
+            let n = items::FURNITURE_CATALOG.len() as u64;
+            let name = items::FURNITURE_CATALOG[(rng() % n) as usize];
+            Reward::Item(items::furniture(name).unwrap_or(items::FRUIT))
+        }
+        c => Reward::Item(items::reward_good(c).unwrap_or(items::FRUIT)),
+    }
+}
+
+/// Hand a reward over; `false` if it doesn't fit (it's then owed).
+fn give_reward(reward: Reward, inventory: &mut PlayerInventory) -> bool {
+    match reward {
+        Reward::Bells(n) => {
+            inventory.bells += n;
+            true
+        }
+        Reward::Item(id) => inventory.add(id),
+    }
+}
+
+fn reward_name(reward: Reward) -> String {
+    match reward {
+        Reward::Bells(n) => format!("{n} bells"),
+        Reward::Item(id) => format!("a {}", items::name(id)),
+    }
+}
+
+/// Change a villager's friendship by name.
+fn adjust_friendship(talks: &mut Query<(&Villager, &mut VillagerTalk)>, name: &str, delta: i32) {
+    for (v, mut t) in talks.iter_mut() {
+        if v.name == name {
+            t.friendship += delta;
+            println!("{name}: friendship {delta:+} -> {}", t.friendship);
         }
     }
 }
@@ -351,7 +468,7 @@ fn setup_quest_ui(mut commands: Commands) {
 fn show_panel(
     text: &str,
     panel: &mut Query<&mut Visibility, (With<QuestPanel>, Without<QuestNotifyText>)>,
-    body: &mut Query<&mut Text, With<QuestPanelText>>,
+    body: &mut Query<&mut Text, (With<QuestPanelText>, Without<QuestNotifyText>)>,
 ) {
     if let Ok(mut vis) = panel.single_mut() {
         *vis = Visibility::Visible;
@@ -395,18 +512,45 @@ fn tick_notify(
     }
 }
 
-/// Cooldown ticking + picking a new quest giver with a `!` marker.
+/// Quest timeouts, then cooldown ticking + picking a new quest giver.
+#[allow(clippy::too_many_arguments)]
 fn quest_cooldown_tick(
     time: Res<Time>,
     mut commands: Commands,
     mut quest: ResMut<QuestState>,
     mut giver: ResMut<QuestGiver>,
+    mut inventory: ResMut<PlayerInventory>,
     house_state: Res<State<HouseState>>,
     shop_loc: Res<State<crate::shop::ShopLocation>>,
     shop_data: Res<crate::shop::ShopData>,
     // Only villagers out in town can offer a quest.
     villagers: Query<(Entity, &Villager), Without<crate::npc::Indoors>>,
+    mut talks: Query<(&Villager, &mut VillagerTalk)>,
+    mut timer: ResMut<QuestNotifyTimer>,
+    mut notify_query: Query<
+        (&mut Visibility, &mut Text),
+        (With<QuestNotifyText>, Without<QuestPanel>),
+    >,
 ) {
+    let now = crate::clock::now();
+    // Time limit (`quest::limit_days`): past it, the request lapses.
+    if let Some(active) = quest.active.as_ref() {
+        if days_left(active, now.day_number).is_some_and(|d| d < 0) {
+            let who = giver_of(&active.kind).to_string();
+            if matches!(active.kind, QuestKind::Delivery { .. }) {
+                inventory.remove(items::PARCEL);
+            }
+            quest.active = None;
+            quest.cooldown = DECLINE_COOLDOWN_SECS;
+            adjust_friendship(&mut talks, &who, quest::friendship::FAIL_MSG_0X2B8);
+            notify(
+                &format!("You ran out of time for {who}'s request."),
+                &mut timer,
+                &mut notify_query,
+            );
+            println!("Quest for {who} expired");
+        }
+    }
     if quest.active.is_some() || giver.0.is_some() {
         return;
     }
@@ -420,7 +564,7 @@ fn quest_cooldown_tick(
     // Retail gates quest attempts on a roll; 3-in-4 passes.
     let attempt = (quest.rng_next() % 256) as u8;
     if !quest::quest_attempt_roll(attempt) {
-        quest.cooldown = 60.0;
+        quest.cooldown = RETRY_COOLDOWN_SECS;
         return;
     }
     let list: Vec<(Entity, String)> = villagers
@@ -428,18 +572,27 @@ fn quest_cooldown_tick(
         .map(|(e, v)| (e, v.name.to_string()))
         .collect();
     if list.is_empty() {
-        quest.cooldown = 60.0;
+        quest.cooldown = RETRY_COOLDOWN_SECS;
         return;
     }
     let (entity, name) = list[(quest.rng_next() as usize) % list.len()].clone();
-    let all_names: Vec<String> = list.iter().map(|(_, n)| n.clone()).collect();
+    let all_names: Vec<String> = talks.iter().map(|(v, _)| v.name.to_string()).collect();
     let stock_names: Vec<String> = shop_data.stock.iter().map(|s| s.name.clone()).collect();
-    let roll = (quest.rng_next() % u32::MAX as u64) as u32;
-    let (kind, reward) = generate_quest(roll, &name, &all_names, &stock_names);
+    let rolls = [
+        quest.rng_next() as u32,
+        quest.rng_next() as u32,
+        quest.rng_next() as u32,
+    ];
+    let Some((kind, limit_days)) = generate_quest(rolls, &name, &all_names, &stock_names, &now)
+    else {
+        // Failed occur check / kind not in the slice: try again later.
+        quest.cooldown = RETRY_COOLDOWN_SECS;
+        return;
+    };
     giver.0 = Some(PendingOffer {
         giver: name.clone(),
         kind,
-        reward,
+        limit_days,
     });
     // Floating "!" above the giver's head.
     commands.entity(entity).with_children(|parent| {
@@ -471,16 +624,21 @@ fn marker_bob(time: Res<Time>, mut markers: Query<&mut Transform, With<QuestMark
 fn quest_talk_intercept(
     mut events: MessageReader<TalkEvent>,
     villagers: Query<&Villager>,
-    quest: Res<QuestState>,
+    mut quest: ResMut<QuestState>,
     giver: Res<QuestGiver>,
     house_state: Res<State<HouseState>>,
     shop_loc: Res<State<crate::shop::ShopLocation>>,
     dialogue: Res<DialogueState>,
     mut claim: ResMut<QuestClaim>,
     mut qui: ResMut<QuestUi>,
-    inventory: Res<PlayerInventory>,
+    mut inventory: ResMut<PlayerInventory>,
     mut panel: Query<&mut Visibility, (With<QuestPanel>, Without<QuestNotifyText>)>,
-    mut body: Query<&mut Text, With<QuestPanelText>>,
+    mut body: Query<&mut Text, (With<QuestPanelText>, Without<QuestNotifyText>)>,
+    mut timer: ResMut<QuestNotifyTimer>,
+    mut notify_query: Query<
+        (&mut Visibility, &mut Text),
+        (With<QuestNotifyText>, Without<QuestPanel>),
+    >,
 ) {
     if *house_state != HouseState::Town || *shop_loc != crate::shop::ShopLocation::Town {
         return;
@@ -492,6 +650,29 @@ fn quest_talk_intercept(
         let Ok(villager) = villagers.get(event.villager) else {
             continue;
         };
+        // A reward they still owe you (it didn't fit last time)?
+        let owed = quest
+            .owed
+            .as_ref()
+            .filter(|(who, _)| who == villager.name)
+            .map(|(_, r)| *r);
+        if let Some(owed) = owed {
+            {
+                if give_reward(owed, &mut inventory) {
+                    quest.owed = None;
+                    notify(
+                        &format!(
+                            "{} gave you the reward they owed: {}!",
+                            villager.name,
+                            reward_name(owed)
+                        ),
+                        &mut timer,
+                        &mut notify_query,
+                    );
+                    println!("{} handed over an owed reward", villager.name);
+                }
+            }
+        }
         // Quest offer?
         if let Some(offer) = giver.0.as_ref() {
             if offer.giver == villager.name {
@@ -527,6 +708,7 @@ fn quest_ui_input(
     mut claim: ResMut<QuestClaim>,
     mut inventory: ResMut<PlayerInventory>,
     mut mailbox: ResMut<crate::mail::Mailbox>,
+    mut talks: Query<(&Villager, &mut VillagerTalk)>,
     markers: Query<Entity, With<QuestMarker>>,
     mut panel: Query<&mut Visibility, (With<QuestPanel>, Without<QuestNotifyText>)>,
     mut timer: ResMut<QuestNotifyTimer>,
@@ -571,7 +753,9 @@ fn quest_ui_input(
                 if let Some(offer) = giver.0.take() {
                     quest.active = Some(ActiveQuest {
                         kind: offer.kind,
-                        reward: offer.reward,
+                        accepted_day: crate::clock::now().day_number,
+                        limit_days: offer.limit_days,
+                        used_num: (quest.completed + 1).min(u8::MAX as u32) as u8,
                     });
                     for e in markers.iter() {
                         commands.entity(e).despawn();
@@ -584,7 +768,9 @@ fn quest_ui_input(
                     println!("Quest accepted");
                 }
             } else {
-                giver.0 = None;
+                if let Some(offer) = giver.0.take() {
+                    adjust_friendship(&mut talks, &offer.giver, quest::friendship::REJECT_QUEST);
+                }
                 for e in markers.iter() {
                     commands.entity(e).despawn();
                 }
@@ -596,13 +782,13 @@ fn quest_ui_input(
         QuestUiMode::TurnIn => {
             if accepted {
                 if let Some(active) = quest.active.take() {
-                    // Apply per-kind handovers.
+                    // Hand over what was asked for.
                     match &active.kind {
                         QuestKind::Delivery { .. } => {
                             inventory.remove(items::PARCEL);
                         }
                         QuestKind::ErrandFruit { amount, .. } => {
-                            for _ in 0..*amount {
+                            for _ in 0..(*amount).max(1) {
                                 inventory.remove(items::FRUIT);
                             }
                         }
@@ -618,21 +804,22 @@ fn quest_ui_input(
                             }
                         }
                     }
-                    inventory.bells += active.reward;
+                    let giver_name = giver_of(&active.kind).to_string();
+                    let reward = roll_reward(&active, &mut || quest.rng_next());
+                    let msg = if give_reward(reward, &mut inventory) {
+                        format!("Quest complete! You got {}.", reward_name(reward))
+                    } else {
+                        // Retail give_reward: keep it for next time.
+                        quest.owed = Some((giver_name.clone(), reward));
+                        format!(
+                            "Quest complete! Your pockets are full, so {giver_name} will give you {} later.",
+                            reward_name(reward)
+                        )
+                    };
+                    adjust_friendship(&mut talks, &giver_name, quest::friendship::NORMAL_REWARD);
                     quest.completed += 1;
                     quest.cooldown = QUEST_COOLDOWN_SECS;
-                    let giver_name = match &active.kind {
-                        QuestKind::Delivery { giver, .. } => giver.clone(),
-                        QuestKind::ErrandFruit { giver, .. } => giver.clone(),
-                        QuestKind::CatchFish { giver } => giver.clone(),
-                        QuestKind::CatchBug { giver } => giver.clone(),
-                        QuestKind::BuyFurniture { giver, .. } => giver.clone(),
-                    };
-                    notify(
-                        &format!("Quest complete! +{} bells", active.reward),
-                        &mut timer,
-                        &mut notify_query,
-                    );
+                    notify(&msg, &mut timer, &mut notify_query);
                     // Thank-you letter in the mailbox.
                     mailbox.letters.push(crate::mail::Letter {
                         sender: giver_name.clone(),
@@ -642,7 +829,7 @@ fn quest_ui_input(
                         ),
                         read: false,
                     });
-                    println!("Quest complete (+{} bells)", active.reward);
+                    println!("Quest complete: reward {reward:?}");
                 }
             }
             close(&mut ui, &mut claim, &mut panel);
@@ -655,13 +842,13 @@ fn update_quest_hud(
     quest: Res<QuestState>,
     mut text_query: Query<(&mut Visibility, &mut Text), With<QuestHudText>>,
 ) {
-    if !quest.is_changed() {
-        return;
-    }
     if let Ok((mut vis, mut text)) = text_query.single_mut() {
         match quest.active.as_ref() {
             Some(active) => {
-                text.0 = hud_text(active);
+                let label = hud_text(active, crate::clock::now().day_number);
+                if text.0 != label {
+                    text.0 = label;
+                }
                 *vis = Visibility::Visible;
             }
             None => {
@@ -702,5 +889,140 @@ impl Plugin for QuestPlugin {
                 )
                     .in_set(GameplaySet),
             );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn day(month: u8, d: u8) -> crate::clock::Now {
+        crate::clock::Now {
+            month,
+            day: d,
+            hour: 12,
+            minute: 0,
+            day_secs: 12 * 3600,
+            day_number: 1000,
+        }
+    }
+
+    fn names() -> Vec<String> {
+        vec!["Maple".into(), "Pippy".into(), "Bob".into()]
+    }
+
+    #[test]
+    fn generation_only_yields_slice_kinds_and_respects_seasons() {
+        let stock = vec!["Bookshelf".to_string()];
+        let mut seen = std::collections::HashSet::new();
+        let mut december_bug = false;
+        for t in 0..3 {
+            for k in 0..7 {
+                let rolls = [t, k, 1];
+                if let Some((kind, limit)) =
+                    generate_quest(rolls, "Maple", &names(), &stock, &day(6, 1))
+                {
+                    let (qt, qk) = type_kind(&kind);
+                    assert_eq!(
+                        quest::limit_days(qt, qk, if qt == qtype::CONTEST { 1 } else { 0 })
+                            .unwrap(),
+                        limit
+                    );
+                    seen.insert((qt, qk));
+                }
+                if let Some((QuestKind::CatchBug { .. }, _)) =
+                    generate_quest(rolls, "Maple", &names(), &stock, &day(12, 15))
+                {
+                    december_bug = true;
+                }
+            }
+        }
+        for (qt, qk) in &seen {
+            assert!(matches!(
+                (*qt, *qk),
+                (qtype::DELIVERY, dkind::NORMAL)
+                    | (qtype::ERRAND, ekind::REQUEST)
+                    | (qtype::CONTEST, ckind::FRUIT | ckind::FISH | ckind::INSECT)
+            ));
+        }
+        assert!(
+            seen.contains(&(qtype::CONTEST, ckind::INSECT)),
+            "June bug contests occur"
+        );
+        assert!(!december_bug, "occur_ok blocks bug contests in December");
+    }
+
+    #[test]
+    fn delivery_rewards_follow_the_decomp_table() {
+        let active = ActiveQuest {
+            kind: QuestKind::Delivery {
+                giver: "Maple".into(),
+                recipient: "Bob".into(),
+            },
+            accepted_day: 0,
+            limit_days: 2,
+            used_num: 1,
+        };
+        let mut s = 0x1234_5678_9abc_def0u64;
+        let mut rng = || {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            s
+        };
+        let (mut ftr, mut money, mut worn) = (0, 0, 0);
+        for _ in 0..3000 {
+            match roll_reward(&active, &mut rng) {
+                Reward::Bells(n) => {
+                    money += 1;
+                    assert!((180..=220).contains(&n), "scaled_pay of 200 +/-10%: {n}");
+                }
+                Reward::Item(id) if items::is_furniture(id) => ftr += 1,
+                Reward::Item(id) => {
+                    assert_eq!(Some(id), items::reward_good(reward::WORN_CLOTH));
+                    worn += 1;
+                }
+            }
+        }
+        let pct = |n: i32| n as f64 / 30.0;
+        assert!((pct(ftr) - 40.0).abs() < 4.0, "ftr {}", pct(ftr));
+        assert!((pct(money) - 30.0).abs() < 4.0, "money {}", pct(money));
+        assert!((pct(worn) - 30.0).abs() < 4.0, "worn {}", pct(worn));
+    }
+
+    #[test]
+    fn contest_turn_in_uses_contest_complete() {
+        let active = ActiveQuest {
+            kind: QuestKind::CatchFish {
+                giver: "Bob".into(),
+            },
+            accepted_day: 0,
+            limit_days: 3,
+            used_num: 1,
+        };
+        let mut inv = PlayerInventory::default();
+        assert!(!turn_in_ready(&active, "Bob", &inv));
+        inv.add(items::bug(
+            rustimal_logic::species::InsectType::CommonButterfly,
+        ));
+        assert!(!turn_in_ready(&active, "Bob", &inv), "a bug isn't a fish");
+        inv.add(items::fish(rustimal_logic::species::FishType::Carp));
+        assert!(turn_in_ready(&active, "Bob", &inv));
+        assert!(!turn_in_ready(&active, "Maple", &inv), "only the giver");
+    }
+
+    #[test]
+    fn days_left_counts_down() {
+        let active = ActiveQuest {
+            kind: QuestKind::CatchBug {
+                giver: "Bob".into(),
+            },
+            accepted_day: 100,
+            limit_days: 2,
+            used_num: 1,
+        };
+        assert_eq!(days_left(&active, 100), Some(2));
+        assert_eq!(days_left(&active, 102), Some(0));
+        assert_eq!(days_left(&active, 103), Some(-1));
     }
 }
