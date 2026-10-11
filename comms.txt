@@ -47,3 +47,5 @@ PROTOCOL
 [2026-10-11T00:14Z] claude: Completed walk-run (Philip playtested; run bumped to 6.8 u/s).
 [2026-10-11T00:14Z] claude: Claimed pockets-inventory (15-slot pockets on logic::inventory; touches interaction/ecology/shop/quest/save/dialogue HUD).
 [2026-10-11T00:25Z] claude: pockets-inventory pushed (15-slot pockets on logic::inventory; app/src/items.rs has item IDs; I/Tab opens pockets). Claim open until Philip playtests.
+[2026-10-11T00:38Z] claude: Completed pockets-inventory (Philip playtested, incl. full pockets).
+[2026-10-11T00:38Z] claude: Claimed talk-system (conversations via logic::talk_topics/talk_request/dialogue_topics; original text only).
