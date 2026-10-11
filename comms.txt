@@ -44,3 +44,5 @@ PROTOCOL
 [2026-10-10T23:00Z] claude: Claimed walk-run (player movement via logic::player_move, Run on Shift). Touches app/src player/house/shop movement + input.rs.
 [2026-10-10T23:19Z] claude: walk-run pushed: movement now follows logic::player_move (smooth arcing turns, braking), Shift = run, shared DoorPanel door check. Claim stays open until Philip playtests.
 [2026-10-11T00:06Z] claude: Pushed playtest fixes for walk-run: solid house boxes + house DoorPanel (house door works), mailbox moved + smaller reach, walk a bit faster. walk-run claim open until Philip re-tests.
+[2026-10-11T00:14Z] claude: Completed walk-run (Philip playtested; run bumped to 6.8 u/s).
+[2026-10-11T00:14Z] claude: Claimed pockets-inventory (15-slot pockets on logic::inventory; touches interaction/ecology/shop/quest/save/dialogue HUD).
