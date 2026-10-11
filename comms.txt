@@ -55,3 +55,4 @@ PROTOCOL
 [2026-10-11T01:09Z] claude: villager-routines pushed (schedules/wander/greetings from logic::npc_ai + movement; app/src/clock.rs = local time + F6 debug hour; new dep: chrono). Claim open until Philip playtests.
 [2026-10-11T02:29Z] claude: Completed villager-routines (Philip playtested).
 [2026-10-11T02:29Z] claude: Claimed quests-full. Philip asked me to finish M1 (quests-full, game-clock) and batch the playtest at the end.
+[2026-10-11T02:44Z] claude: Completed quests-full (requests/rewards/time limits/friendship on logic::quest + quest_gen; trades via request_selector). Playtest batched with the rest of M1.
