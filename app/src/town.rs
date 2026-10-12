@@ -42,6 +42,15 @@ pub struct PlaceholderTree {
     pub trunk: bool,
 }
 
+/// A house or rock stand-in, replaced by its disc model when the player's
+/// disc is available. `cell` is (ax, az, cx, cz) in the town plan.
+#[derive(Component)]
+pub struct PlaceholderObject {
+    pub kind: CellKind,
+    pub cell: (usize, usize, usize, usize),
+    pub ground_y: f32,
+}
+
 /// Height of a placeholder trunk's centre above the ground.
 pub const PLACEHOLDER_TRUNK_Y: f32 = 0.75;
 
@@ -468,12 +477,22 @@ pub fn render_town(
                     } else if cell == CellKind::House as u8 {
                         house_count += 1;
                         commands.spawn((
+                            PlaceholderObject {
+                                kind: CellKind::House,
+                                cell: (ax, az, cx, cz),
+                                ground_y: gy,
+                            },
                             Mesh3d(house_mesh.clone()),
                             MeshMaterial3d(house_mat.clone()),
                             Transform::from_xyz(pos.x, gy + 1.25, pos.z),
                         ));
                     } else if cell == CellKind::Rock as u8 {
                         commands.spawn((
+                            PlaceholderObject {
+                                kind: CellKind::Rock,
+                                cell: (ax, az, cx, cz),
+                                ground_y: gy,
+                            },
                             Mesh3d(rock_mesh.clone()),
                             MeshMaterial3d(rock_mat.clone()),
                             Transform::from_xyz(pos.x, gy + 0.4, pos.z),

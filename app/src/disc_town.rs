@@ -29,7 +29,9 @@ use crate::ground_map::{GroundMap, Unit};
 use crate::n64_material::{part_mesh, texture_image, CombinerUniform, N64Material};
 use crate::player::Player;
 use crate::states::AppState;
-use crate::town::{PlaceholderGround, PlaceholderTree, Town, CELL_SIZE, PLACEHOLDER_TRUNK_Y};
+use crate::town::{
+    PlaceholderGround, PlaceholderObject, PlaceholderTree, Town, CELL_SIZE, PLACEHOLDER_TRUNK_Y,
+};
 
 /// Acre models are stored at 16x; one game cell is 40 units.
 const GROUND_SCALE: f32 = CELL_SIZE / 16.0 / 40.0;
@@ -247,6 +249,8 @@ pub struct RetailLayout {
     pub combos: Vec<ComboInfo>,
     /// Where the retail layout puts the shop (`SHOP0..3` item), if any.
     pub shop: Option<Vec3>,
+    /// Rock variant (0..5 = A..E) per plan cell (ax, az, cx, cz).
+    pub rocks: HashMap<(usize, usize, usize, usize), u8>,
 }
 
 /// `fgdata.bin` entry: `fg_id` u16, `items[16][16]` u16, 4 bytes of
@@ -325,6 +329,22 @@ pub fn build_retail_town(disc: &GameDisc, plan: &mut TownPlan) -> (RetailLayout,
             }
         }
     }
+    let mut rocks = HashMap::new();
+    for az in 0..ACRE_DEPTH {
+        for ax in 0..ACRE_WIDTH {
+            let block = (az + 1) * BLOCK_X_NUM + ax + 1;
+            if let Some(items) = combos
+                .get(field.combi[block].combi as usize)
+                .and_then(|c| fg.get(&c.fg_id))
+            {
+                for (cell, &item) in items.iter().enumerate() {
+                    if (ROCK_A..ROCK_A + 5).contains(&item) {
+                        rocks.insert((ax, az, cell % 16, cell / 16), (item - ROCK_A) as u8);
+                    }
+                }
+            }
+        }
+    }
     let structures = find_structures(&field, &combos, &fg);
     let shop = structures
         .iter()
@@ -336,10 +356,14 @@ pub fn build_retail_town(disc: &GameDisc, plan: &mut TownPlan) -> (RetailLayout,
             field,
             combos,
             shop,
+            rocks,
         },
         ground,
     )
 }
+
+/// `ROCK_A` (`m_name_table.h`); ROCK_A..=ROCK_E are 0x63..=0x67.
+const ROCK_A: u16 = 0x0063;
 
 /// `STRUCTURE_START` items (`m_name_table.h`).
 const HOUSE0: u16 = 0x5800;
@@ -588,6 +612,7 @@ fn build_disc_town(
     town: Res<Town>,
     placeholders: Query<Entity, With<PlaceholderGround>>,
     trees: Query<(Entity, &Transform, &PlaceholderTree)>,
+    objects: Query<(Entity, &PlaceholderObject)>,
     mut player: Query<&mut Transform, (With<Player>, Without<PlaceholderTree>)>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<N64Material>>,
@@ -666,6 +691,17 @@ fn build_disc_town(
         &mut materials,
         &mut images,
     );
+    let month0 = chrono::Local::now().month0();
+    spawn_disc_objects(
+        &mut commands,
+        &disc,
+        &town,
+        &objects,
+        TREE_MONTH_PALETTE[month0 as usize % 12] >= TREE_FIRST_SNOW_PALETTE,
+        &mut meshes,
+        &mut materials,
+        &mut images,
+    );
     info!(
         "retail town from disc: {} step, {} combinations",
         if retail.field.three_step { "3" } else { "2" },
@@ -717,27 +753,7 @@ fn spawn_disc_trees(
         .catalog
         .get("mFM_obj_tree_01_pal_dol")
         .map(|p| p.offset + (palette_index % (p.size / PALETTE_BYTES).max(1)) * PALETTE_BYTES);
-    let sink = run_display_lists(&disc.rom, &lists);
-    let segs = Segments::default();
-    let parts: Vec<(Handle<Mesh>, Handle<N64Material>)> = sink
-        .parts
-        .iter()
-        .map(|part| {
-            let texture = part.key.tex.as_ref().and_then(|k| {
-                decode_texture(&disc.rom, k, palette, &segs)
-                    .map(|rgba| images.add(texture_image(rgba, k)))
-            });
-            let material = N64Material {
-                combiner: CombinerUniform::from_key(&part.key, false, false),
-                texture,
-                blend: false,
-            };
-            (
-                meshes.add(part_mesh(part, OBJECT_SCALE)),
-                materials.add(material),
-            )
-        })
-        .collect();
+    let parts = build_model(disc, &lists, palette, meshes, materials, images);
     let mut trees = 0;
     for (entity, t, tree) in placeholders {
         commands.entity(entity).despawn();
@@ -763,6 +779,175 @@ fn spawn_disc_trees(
     }
     info!("{trees} trees drawn from the disc");
 }
+
+/// Meshes and materials for a disc model made of `lists` (each a display
+/// list REL offset, run in order with shared state).
+fn build_model(
+    disc: &GameDisc,
+    lists: &[u32],
+    palette: Option<u32>,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<N64Material>,
+    images: &mut Assets<Image>,
+) -> Vec<(Handle<Mesh>, Handle<N64Material>)> {
+    let sink = run_display_lists(&disc.rom, lists);
+    let segs = Segments::default();
+    sink.parts
+        .iter()
+        .map(|part| {
+            let texture = part.key.tex.as_ref().and_then(|k| {
+                decode_texture(&disc.rom, k, palette, &segs)
+                    .map(|rgba| images.add(texture_image(rgba, k)))
+            });
+            let material = N64Material {
+                combiner: CombinerUniform::from_key(&part.key, false, false),
+                texture,
+                blend: false,
+            };
+            (
+                meshes.add(part_mesh(part, OBJECT_SCALE)),
+                materials.add(material),
+            )
+        })
+        .collect()
+}
+
+/// Display lists of a multi-part model `<prefix>_<part>_model`, in order,
+/// skipping parts the disc doesn't have.
+fn part_lists(catalog: &AssetCatalog, prefix: &str, parts: &[&str]) -> Vec<u32> {
+    parts
+        .iter()
+        .filter_map(|p| catalog.get(&format!("{prefix}_{p}_model")))
+        .map(|a| a.offset)
+        .collect()
+}
+
+/// Small deterministic hash for picking per-object variants.
+fn cell_hash((ax, az, cx, cz): (usize, usize, usize, usize)) -> usize {
+    let mut h = (ax * 16 + cx) as u32 ^ (((az * 16 + cz) as u32) << 8);
+    h = h.wrapping_mul(0x9E37_79B9);
+    (h >> 16) as usize
+}
+
+/// Which disc model (and palette asset) a placeholder becomes.
+fn object_model(
+    town: &Town,
+    kind: CellKind,
+    cell: (usize, usize, usize, usize),
+    winter: bool,
+) -> Option<(String, Vec<&'static str>, Option<String>)> {
+    let season = if winter { "w" } else { "s" };
+    match kind {
+        CellKind::Rock => {
+            let town_rocks = town.retail.as_ref().map(|r| &r.rocks);
+            let v = town_rocks.and_then(|r| r.get(&cell)).copied().unwrap_or(0);
+            let letter = (b'A' + v) as char;
+            // stoneA carries the material list the other shapes share.
+            Some((
+                format!("obj_{season}_stone{letter}"),
+                vec!["gfx"],
+                Some(format!("obj_{season}_stoneA_pal")),
+            ))
+        }
+        CellKind::House => {
+            let acre = &town.plan.acres[cell.1 * ACRE_WIDTH + cell.0];
+            if acre.feature == Feature::PlayerHouse as u8 {
+                let parts = vec![
+                    "t1", "t2", "t3", "door", "window", "mark", "fuda", "kazamiA", "kazamiB",
+                ];
+                return Some(("obj_s_myhome1".to_string(), parts, None));
+            }
+            let h = cell_hash(cell);
+            let shape = h % 5 + 1;
+            let colour = (b'a' + (h / 5 % 5) as u8) as char;
+            let parts = vec![
+                "t1", "t2", "t3", "t4", "door", "window", "windowL", "windowR", "name",
+            ];
+            Some((
+                format!("obj_{season}_house{shape}"),
+                parts,
+                Some(format!("obj_{season}_house{shape}_{colour}_pal")),
+            ))
+        }
+        _ => None,
+    }
+}
+
+/// Replaces house and rock placeholders with their disc models; each
+/// distinct model is built once and shared.
+#[allow(clippy::too_many_arguments)]
+fn spawn_disc_objects(
+    commands: &mut Commands,
+    disc: &GameDisc,
+    town: &Town,
+    placeholders: &Query<(Entity, &PlaceholderObject)>,
+    winter: bool,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<N64Material>,
+    images: &mut Assets<Image>,
+) {
+    let mut built: HashMap<(String, Option<String>), Vec<(Handle<Mesh>, Handle<N64Material>)>> =
+        HashMap::new();
+    let mut count = 0;
+    for (entity, obj) in placeholders {
+        let Some((prefix, parts, palette)) = object_model(town, obj.kind, obj.cell, winter) else {
+            continue;
+        };
+        let key = (prefix.clone(), palette.clone());
+        if !built.contains_key(&key) {
+            let mut lists = Vec::new();
+            if obj.kind == CellKind::Rock {
+                let season = if winter { "w" } else { "s" };
+                lists.extend(part_lists(
+                    &disc.catalog,
+                    &format!("obj_{season}_stoneA"),
+                    &["mat"],
+                ));
+            }
+            lists.extend(part_lists(&disc.catalog, &prefix, &parts));
+            let pal = palette
+                .as_deref()
+                .and_then(|p| disc.catalog.get(p))
+                .map(|a| a.offset);
+            let model = if lists.is_empty() {
+                Vec::new()
+            } else {
+                build_model(disc, &lists, pal, meshes, materials, images)
+            };
+            built.insert(key.clone(), model);
+        }
+        let model = &built[&key];
+        if model.is_empty() {
+            continue; // keep the placeholder when the disc lacks the model
+        }
+        commands.entity(entity).despawn();
+        let (ax, az, cx, cz) = obj.cell;
+        let p = Town::cell_to_world(ax, az, cx, cz);
+        let root = commands
+            .spawn((
+                DiscObject,
+                Transform::from_xyz(p.x, obj.ground_y, p.z),
+                Visibility::default(),
+            ))
+            .id();
+        for (mesh, material) in model {
+            commands.spawn((
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(material.clone()),
+                ChildOf(root),
+            ));
+        }
+        count += 1;
+    }
+    info!(
+        "{count} houses and rocks drawn from the disc ({} models)",
+        built.len()
+    );
+}
+
+/// Marker for a disc-drawn house or rock.
+#[derive(Component)]
+pub struct DiscObject;
 
 /// Marker for a disc-drawn tree.
 #[derive(Component)]
