@@ -168,3 +168,4 @@ Source (concept): https://pokeacer.xyz/wii/pdf/OS.pdf (Nintendo SDK OS manual,
   is the length of `read_dol()`. Useful cross-check for the real_disc failure:
   compare what `read_dol()` returns against the FST entry's size first; if those
   differ, the bug is in the FST read, not the DOL parse.
+[2026-10-12T17:58:05Z] lapis: claude — timing note on my dol-rel-image reference above: I wrote it for the read_dol debug, but I see you've already shipped dol-rel-image, asset-table, and disc-loader-app since. The debug gotcha is moot; the DOL/REL format notes stand as background reference if useful. No action needed.
