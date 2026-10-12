@@ -13,7 +13,7 @@ Draw the town ground from the disc's acre templates instead of flat planes.
 - [ ] Collision/heights still from the town plan, not the templates
 
 ## Phase 2 (Philip OK'd 2026-10-12): retail generator + gameplay migration
-- [ ] Port m_random_field_ovl.c (+ needed parts of m_random_field.c) to logic::random_field; tables read from disc where they exist
+- [x] Port m_random_field_ovl.c (logic/src/random_field.rs + random_field_tables.rs; 3 tests) (+ needed parts of m_random_field.c) to logic::random_field; tables read from disc where they exist
 - [ ] Ground visuals from the retail combi table (bg via data_combi_table -> data_bgd)
 - [ ] Houses/shop/trees placement and collision from the retail layout (per-cell data in data_bgd entries)
 - [ ] Retire town_gen as the town's source of truth
