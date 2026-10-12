@@ -67,7 +67,7 @@ pub struct FstFile {
 /// An open disc image. Generic over the reader so tests can use memory.
 pub struct Disc<R> {
     reader: R,
-    /// CISO block size and logical → physical block map; `None` for raw images.
+    /// CISO block size and logical â†’ physical block map; `None` for raw images.
     ciso: Option<CisoMap>,
     game_id: [u8; 6],
     dol_offset: u32,
@@ -407,7 +407,8 @@ mod tests {
         ));
     }
 
-    /// Needs the player's own disc: `BEVY_CROSSING_ISO=path cargo test -p disc -- --ignored`.
+    /// Needs the player's own disc; set BEVY_CROSSING_ISO to an absolute path, then
+    /// `cargo test -p disc -- --ignored`.
     #[test]
     #[ignore]
     fn real_disc() {
@@ -416,6 +417,14 @@ mod tests {
         let rel = disc.read_file("foresta.rel.szs").unwrap();
         let rel = crate::decode_yaz0(&rel).expect("foresta.rel.szs should be Yaz0");
         assert!(rel.len() > 1024 * 1024);
-        assert!(disc.read_dol().unwrap().len() > 1024 * 1024);
+        let dol = disc.read_dol().unwrap();
+        eprintln!(
+            "files={} rel={} dol={}",
+            disc.files().len(),
+            rel.len(),
+            dol.len()
+        );
+        // AC keeps most code in foresta.rel; main.dol is small but non-trivial.
+        assert!(dol.len() > 64 * 1024);
     }
 }

@@ -86,7 +86,7 @@ Each milestone ends with a Philip playtest.
 - [x] **game-clock** — done (claude): `app/src/clock.rs` on `logic::game_time`.
 
 ### M2 — Reading the disc (pure Rust, no Bevy; testable without a disc)
-- [x] **disc-reader** — done (claude, crate `disc/`; real-disc test pending Philip): — open ISO/GCM/CISO, check the GameCube magic number and game ID, parse the FST, and find and read files by path. Port of rustimal-crossing's `Disc`/`FstFile`. Tests build a tiny made-up GCM in memory. [blocked: disc-setup]
+- [x] **disc-reader** — done (claude, crate `disc/`; passes on Philip's disc): — open ISO/GCM/CISO, check the GameCube magic number and game ID, parse the FST, and find and read files by path. Port of rustimal-crossing's `Disc`/`FstFile`. Tests build a tiny made-up GCM in memory. [blocked: disc-setup]
 - [x] **yaz0** — done (claude, `disc/src/yaz0.rs`): — Yaz0 (`.szs`) decoder, port of `decode_yaz0`. Tests round-trip through a small encoder written for the test.
 - [ ] **dol-rel-image** — extract `main.dol` and decompress `foresta.rel.szs`; map the DOL and REL sections so an asset's ROM offset resolves to bytes. [blocked: disc-reader, yaz0]
 - [ ] **asset-table** — port the asset table from rustimal-crossing (`pc_assets.c` / `gen_runtime_assets.py`) into Rust: name → ROM offset, size, source (DOL/REL), swap type. It holds metadata only, no disc bytes. Plus byte-swap helpers (u16 / u32 / `Vtx`). [blocked: dol-rel-image]
