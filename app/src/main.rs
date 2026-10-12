@@ -6,6 +6,7 @@ use bevy::prelude::*;
 mod assets;
 mod clock;
 mod dialogue;
+mod disc_gfx;
 mod ecology;
 mod game_disc;
 mod house;
@@ -14,6 +15,7 @@ mod interaction;
 mod items;
 mod locomotion;
 mod mail;
+mod model_view;
 mod npc;
 mod player;
 mod pockets;
@@ -34,6 +36,7 @@ use house::HousePlugin;
 use input::InputPlugin;
 use interaction::InteractionPlugin;
 use mail::MailPlugin;
+use model_view::ModelViewPlugin;
 use npc::NpcPlugin;
 use player::PlayerPlugin;
 use pockets::PocketsPlugin;
@@ -54,6 +57,7 @@ fn main() {
             InputPlugin,
             GameAssetsPlugin,
             GameDiscPlugin,
+            ModelViewPlugin,
         ))
         .add_plugins(SavePlugin)
         .add_plugins(TownPlugin)

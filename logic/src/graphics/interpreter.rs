@@ -34,6 +34,10 @@ pub trait GxBackend {
     fn emit_texrect(&mut self, ulx: u16, uly: u16, lrx: u16, lry: u16);
     fn gx_call_display_list(&mut self, bytes: &[u8]);
     fn cull_display_list(&mut self, v0: u8, vn: u8) -> bool;
+    /// Called with the current render state right before geometry is
+    /// emitted, so a backend can pick textures/materials. (Bevy port
+    /// addition; retail reprograms GX through dirty flags instead.)
+    fn set_state(&mut self, _state: &GbiState) {}
 }
 
 /// One traced command: what ran and what state it left behind.
@@ -487,6 +491,7 @@ impl Emu64 {
                 self.vtx_cache.get(b),
                 self.vtx_cache.get(c),
             ) {
+                backend.set_state(&self.state);
                 backend.emit_triangle(EmittedTri { v: [va, vb, vc] });
             }
         }
@@ -506,6 +511,7 @@ impl Emu64 {
                 None => return,
             }
         }
+        backend.set_state(&self.state);
         backend.emit_quad(v);
     }
 
@@ -553,6 +559,7 @@ impl Emu64 {
                     self.vtx_cache.get_raw(b),
                     self.vtx_cache.get_raw(c),
                 ) {
+                    backend.set_state(&self.state);
                     backend.emit_triangle(EmittedTri { v: [va, vb, vc] });
                 }
                 n_faces -= 1;

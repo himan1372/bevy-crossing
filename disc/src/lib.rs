@@ -8,6 +8,7 @@
 //! from `BEVY_CROSSING_ISO`.
 
 mod assets;
+pub mod gx_texture;
 mod image;
 mod rom;
 mod yaz0;
