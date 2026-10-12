@@ -2,3 +2,9 @@
 # Never commit game-derived assets (e.g. the GameCube texture pack, folder "GAF").
 app/assets/textures/GAF/
 **/GAF/
+
+# Player-supplied disc images: never commit
+rom/
+*.iso
+*.gcm
+*.ciso
