@@ -251,6 +251,31 @@ pub struct RetailLayout {
     pub shop: Option<Vec3>,
     /// Rock variant (0..5 = A..E) per plan cell (ax, az, cx, cz).
     pub rocks: HashMap<(usize, usize, usize, usize), u8>,
+    /// The four player houses (`HOUSE0..3` items) by house number.
+    pub player_homes: [Option<(usize, usize, usize, usize)>; 4],
+}
+
+/// Half-width of a player house, in cells: its front wall (and door) sits
+/// 2000 model units = 20 game units from the centre at 1/100 scale.
+pub const PLAYER_HOUSE_HALF: f32 = 0.5;
+
+/// Where and how a player house stands (`aMHS_actor_ct`): from the item's
+/// cell centre it moves half a cell toward the acre path (+20 game units
+/// in x for even houses, -20 for odd) and half a cell south (+20 in z);
+/// even houses are turned 90 deg, odd ones 0. With the model's bind pose
+/// (door at +X turned to face south) that puts even houses' doors east,
+/// toward the path, and odd houses' doors south.
+/// Returns (centre, model yaw, door yaw from south).
+pub fn player_home_placement(
+    house: usize,
+    (ax, az, cx, cz): (usize, usize, usize, usize),
+) -> (Vec3, f32, f32) {
+    let even = house.is_multiple_of(2);
+    let shift_x = if even { 0.5 } else { -0.5 };
+    let centre = Town::cell_to_world(ax, az, cx, cz) + Vec3::new(shift_x, 0.0, 0.5) * CELL_SIZE;
+    let half = std::f32::consts::FRAC_PI_2;
+    let (model_yaw, door_yaw) = if even { (0.0, half) } else { (-half, 0.0) };
+    (centre, model_yaw, door_yaw)
 }
 
 /// `fgdata.bin` entry: `fg_id` u16, `items[16][16]` u16, 4 bytes of
@@ -346,17 +371,24 @@ pub fn build_retail_town(disc: &GameDisc, plan: &mut TownPlan) -> (RetailLayout,
         }
     }
     let structures = find_structures(&field, &combos, &fg);
+    let mut player_homes = [None; 4];
+    for &(item, ax, az, cx, cz) in &structures {
+        if (HOUSE0..HOUSE0 + 4).contains(&item) {
+            player_homes[(item - HOUSE0) as usize] = Some((ax, az, cx, cz));
+        }
+    }
     let shop = structures
         .iter()
         .find(|s| (SHOP0..=SHOP0 + 3).contains(&s.0))
         .map(|&(_, ax, az, cx, cz)| Town::cell_to_world(ax, az, cx, cz));
-    resite_homes(plan, &structures, &ground);
+    resite_homes(plan, &player_homes, &ground);
     (
         RetailLayout {
             field,
             combos,
             shop,
             rocks,
+            player_homes,
         },
         ground,
     )
@@ -526,7 +558,7 @@ fn reachable_cells(
 /// where it fits on the terrain.
 fn resite_homes(
     plan: &mut TownPlan,
-    structures: &[(u16, usize, usize, usize, usize)],
+    player_homes: &[Option<(usize, usize, usize, usize)>; 4],
     ground: &GroundMap,
 ) {
     // Lift every existing footprint off the map first.
@@ -542,38 +574,34 @@ fn resite_homes(
         clear_home(&mut plan.acres[i], cx, cz);
     }
 
-    // Player house on the retail spot.
-    if let Some(&(_, ax, az, cx, cz)) = structures
-        .iter()
-        .find(|s| (HOUSE0..HOUSE0 + 4).contains(&s.0))
-    {
+    // Player houses are drawn from the layout (see `spawn_player_homes`),
+    // not stamped into the plan; only the acre is flagged.
+    if let Some((ax, az, ..)) = player_homes[0] {
         for acre in plan.acres.iter_mut() {
             if acre.feature == Feature::PlayerHouse as u8 {
                 acre.feature = Feature::None as u8;
             }
         }
-        let acre = &mut plan.acres[az * ACRE_WIDTH + ax];
-        acre.feature = Feature::PlayerHouse as u8;
-        stamp_home(acre, cx.clamp(1, 14), cz.clamp(1, 14));
+        plan.acres[az * ACRE_WIDTH + ax].feature = Feature::PlayerHouse as u8;
     }
 
     // Resident homes: same acre, nearest spot that fits and whose
     // doorstep connects to the player house (no homes walled in by
     // trees or cliffs).
-    let door = plan.acres.iter().enumerate().find_map(|(i, acre)| {
-        (acre.feature == Feature::PlayerHouse as u8)
-            .then(|| {
-                acre.cells
-                    .iter()
-                    .position(|&c| c == CellKind::House as u8)
-                    .map(|c| (i, c))
-            })
-            .flatten()
-    });
-    let reach = match door {
-        Some((i, c)) => {
-            let (ax, az, cx, cz) = (i % ACRE_WIDTH, i / ACRE_WIDTH, c % 16, c / 16);
-            reachable_cells(plan, ground, (ax * 16 + cx, az * 16 + cz + 2))
+    // Flood fill from the cell in front of the player's door.
+    let reach = match player_homes[0] {
+        Some(cell) => {
+            let (centre, _, door_yaw) = player_home_placement(0, cell);
+            let step =
+                Quat::from_rotation_y(door_yaw) * Vec3::Z * (PLAYER_HOUSE_HALF + 0.75) * CELL_SIZE;
+            let front = centre + step;
+            let w = Town::cell_indices_of(front);
+            match w {
+                Some((ax, az, cx, cz)) => {
+                    reachable_cells(plan, ground, (ax * 16 + cx, az * 16 + cz))
+                }
+                None => HashSet::new(),
+            }
         }
         None => HashSet::new(),
     };
@@ -692,6 +720,16 @@ fn build_disc_town(
         &mut images,
     );
     let month0 = chrono::Local::now().month0();
+    let winter = TREE_MONTH_PALETTE[month0 as usize % 12] >= TREE_FIRST_SNOW_PALETTE;
+    spawn_player_homes(
+        &mut commands,
+        &disc,
+        &town,
+        winter,
+        &mut meshes,
+        &mut materials,
+        &mut images,
+    );
     spawn_disc_objects(
         &mut commands,
         &disc,
@@ -882,18 +920,6 @@ fn object_model(
             ))
         }
         CellKind::House => {
-            let acre = &town.plan.acres[cell.1 * ACRE_WIDTH + cell.0];
-            if acre.feature == Feature::PlayerHouse as u8 {
-                let parts = vec![
-                    "t1", "t2", "t3", "door", "window", "mark", "fuda", "kazamiA", "kazamiB",
-                ];
-                // Roof colour is the player's choice in the game; `a` for now.
-                return Some((
-                    "obj_s_myhome1".to_string(),
-                    parts,
-                    Some("obj_s_myhome_a_pal".to_string()),
-                ));
-            }
             let h = cell_hash(cell);
             let shape = h % 5 + 1;
             let colour = (b'a' + (h / 5 % 5) as u8) as char;
@@ -957,17 +983,7 @@ fn spawn_disc_objects(
                 build_model(disc, &lists, pal, meshes, materials, images)
             };
             let yaw = if obj.kind == CellKind::House {
-                // Player houses face the acre path like retail; the model's
-                // door natively faces east (+X), a yaw of 90 deg from south.
-                let extra = if prefix.contains("myhome") {
-                    let (_, _, cx, _) = obj.cell;
-                    crate::house::player_house_door_yaw(true, cx)
-                        - std::f32::consts::FRAC_PI_2
-                        - door_facing_yaw(disc, &prefix)
-                } else {
-                    0.0
-                };
-                door_facing_yaw(disc, &prefix) + extra
+                door_facing_yaw(disc, &prefix)
             } else {
                 0.0
             };
@@ -1007,6 +1023,58 @@ fn spawn_disc_objects(
         "{count} houses and rocks drawn from the disc ({} models)",
         built.len()
     );
+}
+
+/// Draws the four player houses from the layout (`aMHS_actor_ct`
+/// placement), sharing one model per house size.
+fn spawn_player_homes(
+    commands: &mut Commands,
+    disc: &GameDisc,
+    town: &Town,
+    winter: bool,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<N64Material>,
+    images: &mut Assets<Image>,
+) {
+    let Some(retail) = &town.retail else { return };
+    let season = if winter { "w" } else { "s" };
+    // House size comes from the save (upgrades); everyone starts at size 1.
+    let prefix = format!("obj_{season}_myhome1");
+    let parts = [
+        "t1", "t2", "t3", "door", "window", "mark", "fuda", "kazamiA", "kazamiB",
+    ];
+    let lists = part_lists(&disc.catalog, &prefix, &parts);
+    if lists.is_empty() {
+        warn!("player house model not found on the disc");
+        return;
+    }
+    // Roof colour: the house's saved paint (`outlook_pal`); `a` for now.
+    let palette = disc
+        .catalog
+        .get(&format!("obj_{season}_myhome_a_pal"))
+        .map(|a| a.offset);
+    let model = build_model(disc, &lists, palette, meshes, materials, images);
+    for (house, cell) in retail.player_homes.iter().enumerate() {
+        let Some(cell) = *cell else { continue };
+        let (centre, yaw, _) = player_home_placement(house, cell);
+        let ground_y = town.ground_y(centre);
+        let root = commands
+            .spawn((
+                DiscObject,
+                Name::new(format!("player house {house}")),
+                Transform::from_xyz(centre.x, ground_y, centre.z)
+                    .with_rotation(Quat::from_rotation_y(yaw)),
+                Visibility::default(),
+            ))
+            .id();
+        for (mesh, material) in &model {
+            commands.spawn((
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(material.clone()),
+                ChildOf(root),
+            ));
+        }
+    }
 }
 
 /// Marker for a disc-drawn house or rock.
@@ -1153,6 +1221,26 @@ mod tests {
                 .collect();
             eprintln!("treepal {i:2}: {}", cols.join(" "));
         }
+    }
+
+    #[test]
+    fn player_homes_placed_like_amhs_actor_ct() {
+        let cell = (1, 1, 3, 3);
+        let base = Town::cell_to_world(1, 1, 3, 3);
+        let (c0, m0, d0) = player_home_placement(0, cell);
+        assert!((c0 - base - Vec3::new(0.5, 0.0, 0.5) * CELL_SIZE).length() < 1e-5);
+        assert_eq!(
+            (m0, d0),
+            (0.0, std::f32::consts::FRAC_PI_2),
+            "even: door east"
+        );
+        let (c1, m1, d1) = player_home_placement(1, cell);
+        assert!((c1 - base - Vec3::new(-0.5, 0.0, 0.5) * CELL_SIZE).length() < 1e-5);
+        assert_eq!(
+            (m1, d1),
+            (-std::f32::consts::FRAC_PI_2, 0.0),
+            "odd: door south"
+        );
     }
 
     #[test]

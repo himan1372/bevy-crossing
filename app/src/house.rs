@@ -92,7 +92,17 @@ const DOOR_HALF_W: f32 = 0.6;
 /// Find the player's house from the town plan and record its door position.
 pub(crate) fn find_player_house(town: Res<Town>, mut commands: Commands) {
     let mut door = None;
+    // Retail town: the player's house is HOUSE0, placed as the game does.
+    if let Some(cell) = town.retail.as_ref().and_then(|r| r.player_homes[0]) {
+        let (centre, _, yaw) = crate::disc_town::player_home_placement(0, cell);
+        let out = Quat::from_rotation_y(yaw)
+            * Vec3::new(0.0, 0.0, crate::disc_town::PLAYER_HOUSE_HALF + DOOR_OUT);
+        door = Some((centre + out, yaw));
+    }
     'acres: for az in 0..ACRE_DEPTH {
+        if door.is_some() {
+            break;
+        }
         for ax in 0..ACRE_WIDTH {
             let acre = &town.plan.acres[az * ACRE_WIDTH + ax];
             if acre.feature != Feature::PlayerHouse as u8 {

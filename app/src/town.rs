@@ -153,11 +153,46 @@ impl Town {
                 return false;
             }
         }
+        if self.in_player_home(to) && !self.in_player_home(from) {
+            return false;
+        }
         if self.in_house_box(from) {
             self.is_walkable(to)
         } else {
             self.can_stand(to)
         }
+    }
+
+    /// Inside one of the retail player houses' bodies (they block like the
+    /// game's structure actors; the reserved cells around them don't).
+    fn in_player_home(&self, p: Vec3) -> bool {
+        let Some(retail) = &self.retail else {
+            return false;
+        };
+        retail.player_homes.iter().enumerate().any(|(house, cell)| {
+            cell.is_some_and(|cell| {
+                let (c, ..) = crate::disc_town::player_home_placement(house, cell);
+                let half = crate::disc_town::PLAYER_HOUSE_HALF * CELL_SIZE;
+                (p.x - c.x).abs() < half && (p.z - c.z).abs() < half
+            })
+        })
+    }
+
+    /// (ax, az, cx, cz) of the plan cell under a world position.
+    pub fn cell_indices_of(world_pos: Vec3) -> Option<(usize, usize, usize, usize)> {
+        let ox = (ACRE_WIDTH as f32 * ACRE_SIZE) / 2.0;
+        let oz = (ACRE_DEPTH as f32 * ACRE_SIZE) / 2.0;
+        let (lx, lz) = (world_pos.x + ox, world_pos.z + oz);
+        if lx < 0.0 || lz < 0.0 {
+            return None;
+        }
+        let (ax, az) = ((lx / ACRE_SIZE) as usize, (lz / ACRE_SIZE) as usize);
+        if ax >= ACRE_WIDTH || az >= ACRE_DEPTH {
+            return None;
+        }
+        let cx = ((lx % ACRE_SIZE) / CELL_SIZE) as usize;
+        let cz = ((lz % ACRE_SIZE) / CELL_SIZE) as usize;
+        Some((ax, az, cx.min(15), cz.min(15)))
     }
 
     fn in_house_box(&self, world_pos: Vec3) -> bool {
