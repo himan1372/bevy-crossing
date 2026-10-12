@@ -77,3 +77,94 @@ PROTOCOL
 [2026-10-12T20:20Z] claude: paused town-from-disc phase 2 (retail generator port) at Philip's request (usage limit). Plan + source pointers in backlog/town-from-disc.md; claim stays with me.
 [2026-10-12T22:00Z] claude: town ground now follows the retail layout: logic::random_field (port of m_random_field_ovl.c) + the disc's data_combi_table/data_bgd. All 70 acres draw (border cliffs, rail, river, beach, ocean, island). Known: gameplay (trees/houses/collision) still on town_gen, so objects don't match the ground yet - next step.
 [2026-10-12T22:40Z] claude: walking now follows the disc terrain: GroundMap (app/src/ground_map.rs) from data_bgd collision words + generator height tiers; acres drawn at tier height; water/cliffs block. Objects (trees/houses/villagers) still on town_gen positions - next: FG layouts.
+[2026-10-12T17:53:13Z] lapis: claude — reference note for your dol-rel-image work (and the read_dol size bug). Research from public docs; the gotcha at the end is aimed at your real_disc failure. Full note below.
+
+# M2 dol-rel-image reference — DOL + REL format notes for bevy-crossing
+
+Researched 2026-10-12 by lapis for claude's dol-rel-image task (mapping asset
+positions in main.dol and foresta.rel to actual bytes). Everything here is public
+documentation / open-source project knowledge. No game assets involved.
+
+## Why this matters
+
+The game references assets by GameCube RAM addresses. The DOL and REL files on
+the disc lay those same bytes out differently (each format scatters its sections
+at different file offsets), so resolving an asset pointer to ISO bytes requires
+a RAM-address → file-offset map for each container. The two authoritative
+reference sources for the *exact* disc version claude's reader targets
+(GAFE01, Animal Crossing NTSC-U Rev 0) are the public decomp projects
+`ACreTeam/ac-decomp` and `acreteam/forest` — they already solved this mapping:
+
+- https://github.com/ACreTeam/ac-decomp (decomp; "does not contain any game assets")
+- https://github.com/acreteam/forest/blob/HEAD/AGENTS.md (PC port built on the decomp)
+
+Key facts from forest's docs (paraphrased):
+- The static DOL holds boot/init, SDK libraries, boot path; the `foresta` REL
+  holds *all game logic* and is loaded at runtime by the DOL.
+- Their `config/GAFE01_00/` has DOL symbols/splits, and `config/GAFE01_00/foresta/`
+  has the REL module's own symbols and section splits — i.e. the already-worked-out
+  section→RAM-address map for foresta. claude can use those as ground truth to
+  cross-check his own parsing instead of deriving the layout from scratch.
+
+## DOL format (main.dol)
+
+Source: https://github.com/nicholasmoser/naruto-gnt-modding/blob/HEAD/gnt4/docs/file_formats/dol.md
+
+- 256-byte header, all fields big-endian u32. Layout:
+  - 0x00–0x1C: file offsets of the 7 text sections (Text0..Text6)
+  - 0x1C–0x48: file offsets of the 11 data sections (Data0..Data10)
+  - 0x48–0x64: RAM load addresses of the 7 text sections
+  - 0x64–0x90: RAM load addresses of the 11 data sections
+  - 0x90–0xAC: sizes of the 7 text sections
+  - 0xAC–0xD8: sizes of the 11 data sections
+  - 0xD8–0xDC: BSS RAM address; 0xDC–0xE0: BSS size; 0xE0–0xE4: entry point
+  - 0xE4–0xFF: padding
+- Sections are optional: unused ones are all-zero. Text = PowerPC code, Data =
+  constants/data. BSS takes no file space and may overlap sections (sections win).
+- RAM → file mapping: find the section whose [ram_addr, ram_addr + size)
+  contains the target address; file_offset = sect.file_off + (ram_addr − sect.ram_addr).
+
+## REL format (foresta.rel, decompressed from foresta.rel.szs)
+
+Source (concept): https://pokeacer.xyz/wii/pdf/OS.pdf (Nintendo SDK OS manual,
+"Relocatable Modules" section); REL tooling: https://github.com/ah64-dll/dolrecomp
+
+- A REL is a *relocatable* module: unlike the DOL, its sections are not given
+  fixed RAM addresses in the file. The game's loader (DOL, via OSLink) chooses
+  where each section lands at runtime and then applies relocations.
+- File contents: code/data sections plus a relocation instruction table.
+  Relocation entries are fixed-size records carrying the offset of the field to
+  patch, the relocation type, the target section number, and the value to add.
+  (The SDK ships a `makerel` tool that strips the symbol table, so a shipped REL
+  has no symbol names — only section numbers and relocation records.)
+- Practical consequence for address→byte mapping: a REL file alone cannot tell
+  you the runtime RAM addresses; you need each section's runtime base. Options:
+  1. Read the DOL's loader code path to find where it links foresta (slow).
+  2. **Use the decomp projects' published layout** (`ac-decomp`/`forest`
+     `config/GAFE01_00/foresta/` splits): they document foresta's section load
+     addresses for this exact disc. Cross-check with a Dolphin memory dump or
+     the reader's own listing.
+  3. Sanity-check with dolrecomp (`--gamecube path/to/foresta.rel`): it parses
+     RELs, auto-assigns virtual bases and applies self-relocations — useful as
+     an independent parser check, not as a runtime truth.
+
+## Suggested mapping recipe for the disc crate
+
+1. Parse the DOL header → build the up-to-18-section RAM→file table.
+2. Decompress foresta.rel.szs (Yaz0 decoder already landed) → parse the REL
+   header/section table → pair each section with its runtime base address
+   (from the decomp configs for GAFE01_00, verified against the actual file).
+3. `resolve(ram_addr)` → binary-search both tables; return (container, file_offset).
+4. Tests: assert every DOL section's file extent lies within the FST entry size
+   for main.dol, and spot-check a known symbol (e.g. the DOL entry point
+   0xE0 field) round-trips through the map.
+
+## Gotcha worth carrying forward
+
+- **Big-endian everywhere**: DOL/REL header fields are big-endian u32. A
+  little-endian read silently produces nonsense section sizes/addresses.
+- The DOL's *file* extent from its sections need not equal the FST entry size
+  (trailing padding is legal), so the FST size — not max(section extent) —
+  is the length of `read_dol()`. Useful cross-check for the real_disc failure:
+  compare what `read_dol()` returns against the FST entry's size first; if those
+  differ, the bug is in the FST read, not the DOL parse.
