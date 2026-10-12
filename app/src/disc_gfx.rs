@@ -297,6 +297,19 @@ impl GxBackend for TriangleSink {
     }
 }
 
+/// Geometry mode of the game's model setup list:
+/// G_ZBUFFER | G_SHADE | G_CULL_BACK | G_FOG | G_LIGHTING | G_SHADING_SMOOTH.
+const SETUP_GEOMETRY_MODE: u32 = geo::G_ZBUFFER
+    | geo::G_SHADE
+    | geo::G_CULL_BACK
+    | geo::G_FOG
+    | geo::G_LIGHTING
+    | geo::G_SHADING_SMOOTH;
+
+/// G_SETCOMBINE words (low 24 bits of w0, w1) for TEXEL0 * SHADE (alpha
+/// TEXEL0), then COMBINED * PRIMITIVE (alpha too).
+const SETUP_COMBINE: (u32, u32) = (0x12_7E03, 0xFF0F_F3FF);
+
 /// Interprets display lists at REL offsets `entries`, in order, sharing
 /// render state (e.g. a model's `_mat_model` list, then its `_gfx_model`).
 pub fn run_display_lists(rom: &RomImage, entries: &[u32]) -> TriangleSink {
@@ -326,6 +339,13 @@ pub fn run_display_lists_with_prim(
         a: prim[3],
     };
     emu.state.prim_lod = prim_lod;
+    // The render setup the game draws models after (`m_rcp.c`
+    // `_texture_z_light_fog_prim` = `z_gsCPModeSet_Data[2]`): lighting on,
+    // combiner G_CC_MODULATEIDECALA then G_CC_MODULATEIA_PRIM2. Lists that
+    // don't set their own mode (e.g. trees) inherit it.
+    emu.state.geometry_mode = SETUP_GEOMETRY_MODE;
+    emu.state.combine_l = SETUP_COMBINE.0;
+    emu.state.combine_h = SETUP_COMBINE.1;
     let mut sink = TriangleSink::default();
     for &entry in entries {
         let lists = mem.lists(entry);

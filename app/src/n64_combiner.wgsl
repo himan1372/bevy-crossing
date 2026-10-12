@@ -2,6 +2,7 @@
 // Mux numbering follows the RDP (see n64_material.rs).
 
 #import bevy_pbr::forward_io::VertexOutput
+#import bevy_pbr::mesh_view_bindings::view
 
 struct Combiner {
     color0: vec4<u32>,
@@ -24,6 +25,35 @@ const FLAG_BLEND: u32 = 32u;
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> cc: Combiner;
 @group(#{MATERIAL_BIND_GROUP}) @binding(1) var tex: texture_2d<f32>;
 @group(#{MATERIAL_BIND_GROUP}) @binding(2) var tex_sampler: sampler;
+
+struct Env {
+    ambient: vec4<f32>,
+    sun_dir: vec4<f32>,
+    sun_color: vec4<f32>,
+    moon_dir: vec4<f32>,
+    moon_color: vec4<f32>,
+    fog_color: vec4<f32>,
+    // near, far (N64 depth range 0..1000), enabled, unused
+    fog: vec4<f32>,
+};
+
+@group(#{MATERIAL_BIND_GROUP}) @binding(3) var<uniform> env: Env;
+
+// World units are cells; the game measures 40 units per cell.
+const GAME_UNITS: f32 = 40.0;
+// The game camera's near/far planes, which the fog range is relative to.
+const CAM_NEAR: f32 = 200.0;
+const CAM_FAR: f32 = 1600.0;
+
+// gSPFogPosition: fog = ((ndc_z + 1) * 500 - near) / (far - near).
+fn fog_amount(world_pos: vec3<f32>) -> f32 {
+    let forward = -normalize(view.world_from_view[2].xyz);
+    let depth = max(dot(world_pos - view.world_position, forward) * GAME_UNITS, 1.0);
+    let ndc = (CAM_FAR + CAM_NEAR) / (CAM_FAR - CAM_NEAR)
+        - 2.0 * CAM_FAR * CAM_NEAR / ((CAM_FAR - CAM_NEAR) * depth);
+    let range = max(env.fog.y - env.fog.x, 1.0);
+    return clamp(((ndc + 1.0) * 500.0 - env.fog.x) / range, 0.0, 1.0);
+}
 
 struct Inputs {
     combined: vec4<f32>,
@@ -108,15 +138,17 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         i.texel = textureSample(tex, tex_sampler, in.uv);
     }
 
-    // Shade: vertex colour, or simple directional + ambient lighting.
+    // Shade: vertex colour, or the scene's ambient + sun + moon lights.
     i.shade = vec4(1.0);
 #ifdef VERTEX_COLORS
     i.shade = in.color;
 #endif
     if (cc.flags & FLAG_LIT) != 0u {
-        let l = normalize(vec3(-0.3, 0.8, 0.5));
-        let d = max(dot(normalize(in.world_normal), l), 0.0);
-        i.shade = vec4(vec3(clamp(0.55 + 0.6 * d, 0.0, 1.0)), 1.0);
+        let n = normalize(in.world_normal);
+        let lit = env.ambient.rgb
+            + env.sun_color.rgb * max(dot(n, env.sun_dir.xyz), 0.0)
+            + env.moon_color.rgb * max(dot(n, env.moon_dir.xyz), 0.0);
+        i.shade = vec4(clamp(lit, vec3(0.0), vec3(1.0)), 1.0);
     }
     if (cc.flags & FLAG_NO_SHADE) != 0u {
         i.shade = vec4(1.0);
@@ -130,6 +162,9 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         if (cc.flags & FLAG_TWO_CYCLE) != 0u {
             out = cycle(cc.color1, cc.alpha1, i);
         }
+    }
+    if env.fog.z > 0.0 {
+        out = vec4(mix(out.rgb, env.fog_color.rgb, fog_amount(in.world_position.xyz)), out.a);
     }
     if (cc.flags & FLAG_BLEND) != 0u {
         if out.a < 0.01 {

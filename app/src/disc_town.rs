@@ -24,6 +24,7 @@ use rustimal_logic::random_field::{
 use rustimal_logic::town_gen::{CellKind, Feature, TownAcre, TownPlan, ACRE_DEPTH, ACRE_WIDTH};
 
 use crate::disc_gfx::{decode_texture, run_display_lists, run_display_lists_with_prim, Segments};
+use crate::environment::BuildingLights;
 use crate::game_disc::GameDisc;
 use crate::ground_map::{GroundMap, Unit};
 use crate::n64_material::{part_mesh, texture_image, CombinerUniform, N64Material};
@@ -227,6 +228,7 @@ fn spawn_acre(
             let material = materials.add(N64Material {
                 combiner: CombinerUniform::from_key(&part.key, false, blend),
                 texture,
+                env: default(),
                 blend,
             });
             commands.spawn((
@@ -407,6 +409,7 @@ fn spawn_buildings(
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<N64Material>,
     images: &mut Assets<Image>,
+    lights: &mut BuildingLights,
 ) {
     let Some(retail) = &town.retail else { return };
     let season = if winter { "w" } else { "s" };
@@ -416,16 +419,8 @@ fn spawn_buildings(
         let palette = structure_palette(disc, spec.palette, winter);
         let lists = part_lists(&disc.catalog, &prefix, spec.parts);
         let mut model = build_model(disc, &lists, palette, meshes, materials, images);
-        let light = part_lists(&disc.catalog, &prefix, &[spec.light]);
-        model.extend(build_model_with_prim(
-            disc,
-            &light,
-            palette,
-            HOUSE_LIGHT_PRIM_DAY,
-            0,
-            meshes,
-            materials,
-            images,
+        model.extend(build_windows(
+            disc, &prefix, spec.light, palette, meshes, materials, images, lights,
         ));
         let ground_y = town.ground_y(b.origin);
         let origin = b.origin;
@@ -911,6 +906,7 @@ fn build_disc_town(
     );
     let month0 = chrono::Local::now().month0();
     let winter = TREE_MONTH_PALETTE[month0 as usize % 12] >= TREE_FIRST_SNOW_PALETTE;
+    let mut lights = BuildingLights::default();
     spawn_buildings(
         &mut commands,
         &disc,
@@ -919,6 +915,7 @@ fn build_disc_town(
         &mut meshes,
         &mut materials,
         &mut images,
+        &mut lights,
     );
     spawn_player_homes(
         &mut commands,
@@ -928,6 +925,7 @@ fn build_disc_town(
         &mut meshes,
         &mut materials,
         &mut images,
+        &mut lights,
     );
     spawn_disc_objects(
         &mut commands,
@@ -938,7 +936,9 @@ fn build_disc_town(
         &mut meshes,
         &mut materials,
         &mut images,
+        &mut lights,
     );
+    commands.insert_resource(lights);
     info!(
         "retail town from disc: {} step, {} combinations",
         if retail.field.three_step { "3" } else { "2" },
@@ -1028,7 +1028,7 @@ fn build_model(
     images: &mut Assets<Image>,
 ) -> Vec<(Handle<Mesh>, Handle<N64Material>)> {
     build_model_with_prim(
-        disc, lists, palette, [255; 4], 255, meshes, materials, images,
+        disc, lists, palette, [255; 4], 255, false, meshes, materials, images,
     )
 }
 
@@ -1040,6 +1040,7 @@ fn build_model_with_prim(
     palette: Option<u32>,
     prim: [u8; 4],
     prim_lod: u8,
+    blend: bool,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<N64Material>,
     images: &mut Assets<Image>,
@@ -1054,9 +1055,10 @@ fn build_model_with_prim(
                     .map(|rgba| images.add(texture_image(rgba, k)))
             });
             let material = N64Material {
-                combiner: CombinerUniform::from_key(&part.key, false, false),
+                combiner: CombinerUniform::from_key(&part.key, false, blend),
                 texture,
-                blend: false,
+                env: default(),
+                blend,
             };
             (
                 meshes.add(part_mesh(part, OBJECT_SCALE)),
@@ -1108,12 +1110,62 @@ fn door_facing_yaw(disc: &GameDisc, prefix: &str) -> f32 {
 /// time.
 const HOUSE_SCALE: f32 = 1.0;
 
+/// A structure's window parts: the `light` glass (tinted by the primitive
+/// colour) and the `window*` glow overlay (alpha = texel x LOD fraction),
+/// registered so `environment` switches them with the clock.
+#[allow(clippy::too_many_arguments)]
+fn build_windows(
+    disc: &GameDisc,
+    prefix: &str,
+    glass_part: &str,
+    palette: Option<u32>,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<N64Material>,
+    images: &mut Assets<Image>,
+    lights: &mut BuildingLights,
+) -> Vec<(Handle<Mesh>, Handle<N64Material>)> {
+    let glass = part_lists(&disc.catalog, prefix, &[glass_part]);
+    let mut model = build_model_with_prim(
+        disc,
+        &glass,
+        palette,
+        HOUSE_LIGHT_PRIM_DAY,
+        0,
+        false,
+        meshes,
+        materials,
+        images,
+    );
+    lights.glass.extend(model.iter().map(|(_, m)| m.clone()));
+    let glow = part_lists(
+        &disc.catalog,
+        prefix,
+        &["window", "windowL", "windowR", "windowT"],
+    );
+    let glow = build_model_with_prim(
+        disc,
+        &glow,
+        palette,
+        WINDOW_GLOW_PRIM,
+        0,
+        true,
+        meshes,
+        materials,
+        images,
+    );
+    lights.glow.extend(glow.iter().map(|(_, m)| m.clone()));
+    model.extend(glow);
+    model
+}
+
+/// Colour of the window glow overlay (`aHUS` / `aMHS` draw): its strength
+/// is the LOD fraction.
+const WINDOW_GLOW_PRIM: [u8; 4] = [255, 255, 150, 255];
+
 /// A house's `light` part: the window glass, tinted by the primitive colour
 /// the house actor sets (`aHUS_actor_draw_before` / `aMHS_actor_draw_*`):
-/// (0, 0, 0) by day rising to (255, 255, 150) at night. Night lighting
-/// (clock, light switch) isn't wired yet, so this is the daytime colour.
-/// The `window*` lists are a separate glow overlay whose alpha is the LOD
-/// fraction, 0 by day, so they aren't drawn yet.
+/// (0, 0, 0) with the lights off rising to (255, 255, 150) on; this is the
+/// starting (off) colour, `environment` changes it with the clock.
 const HOUSE_LIGHT_PRIM_DAY: [u8; 4] = [0, 0, 0, 255];
 
 /// Small deterministic hash for picking per-object variants.
@@ -1170,6 +1222,7 @@ fn spawn_disc_objects(
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<N64Material>,
     images: &mut Assets<Image>,
+    lights: &mut BuildingLights,
 ) {
     /// Shared meshes/materials and the yaw that faces the door south.
     type Model = (Vec<(Handle<Mesh>, Handle<N64Material>)>, f32);
@@ -1205,16 +1258,8 @@ fn spawn_disc_objects(
                 build_model(disc, &lists, pal, meshes, materials, images)
             };
             if obj.kind == CellKind::House && !model.is_empty() {
-                let light = part_lists(&disc.catalog, &prefix, &["light"]);
-                model.extend(build_model_with_prim(
-                    disc,
-                    &light,
-                    pal,
-                    HOUSE_LIGHT_PRIM_DAY,
-                    0,
-                    meshes,
-                    materials,
-                    images,
+                model.extend(build_windows(
+                    disc, &prefix, "light", pal, meshes, materials, images, lights,
                 ));
             }
             let yaw = if obj.kind == CellKind::House {
@@ -1270,6 +1315,7 @@ fn spawn_player_homes(
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<N64Material>,
     images: &mut Assets<Image>,
+    lights: &mut BuildingLights,
 ) {
     let Some(retail) = &town.retail else { return };
     let season = if winter { "w" } else { "s" };
@@ -1289,16 +1335,8 @@ fn spawn_player_homes(
         .get(&format!("obj_{season}_myhome_a_pal"))
         .map(|a| a.offset);
     let mut model = build_model(disc, &lists, palette, meshes, materials, images);
-    let light = part_lists(&disc.catalog, &prefix, &["light"]);
-    model.extend(build_model_with_prim(
-        disc,
-        &light,
-        palette,
-        HOUSE_LIGHT_PRIM_DAY,
-        0,
-        meshes,
-        materials,
-        images,
+    model.extend(build_windows(
+        disc, &prefix, "light", palette, meshes, materials, images, lights,
     ));
     for (house, cell) in retail.player_homes.iter().enumerate() {
         let Some(cell) = *cell else { continue };

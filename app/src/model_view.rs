@@ -232,6 +232,7 @@ fn rebuild_model(
         let material = materials.add(N64Material {
             combiner: CombinerUniform::from_key(&part.key, !viewer.vertex_colors, false),
             texture,
+            env: default(),
             blend: false,
         });
         commands.spawn((

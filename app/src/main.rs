@@ -9,6 +9,7 @@ mod dialogue;
 mod disc_gfx;
 mod disc_town;
 mod ecology;
+mod environment;
 mod game_disc;
 mod ground_map;
 mod house;
@@ -79,6 +80,7 @@ fn main() {
         .add_plugins(QuestPlugin)
         .add_plugins(PocketsPlugin)
         .add_plugins(ClockPlugin)
+        .add_plugins(environment::EnvironmentPlugin)
         .add_systems(Startup, setup_light)
         .run();
 }

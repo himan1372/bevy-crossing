@@ -117,10 +117,41 @@ impl CombinerUniform {
     }
 }
 
+/// Scene lighting and fog (`m_kankyo.c`), shared by every material and
+/// updated by `environment`. Colours 0..1; directions point at the light;
+/// `fog` = (near, far) in the N64 depth range 0..1000, enabled, unused.
+#[derive(Clone, Copy, Debug, ShaderType)]
+pub struct EnvUniform {
+    pub ambient: Vec4,
+    pub sun_dir: Vec4,
+    pub sun_color: Vec4,
+    pub moon_dir: Vec4,
+    pub moon_color: Vec4,
+    pub fog_color: Vec4,
+    pub fog: Vec4,
+}
+
+impl Default for EnvUniform {
+    /// Plain daylight, no fog (model viewer, or before the disc's table loads).
+    fn default() -> Self {
+        Self {
+            ambient: Vec4::splat(0.55),
+            sun_dir: Vec3::new(-0.3, 0.8, 0.5).normalize().extend(0.0),
+            sun_color: Vec4::splat(0.6),
+            moon_dir: Vec4::Y,
+            moon_color: Vec4::ZERO,
+            fog_color: Vec4::ZERO,
+            fog: Vec4::new(1000.0, 1000.0, 0.0, 0.0),
+        }
+    }
+}
+
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 pub struct N64Material {
     #[uniform(0)]
     pub combiner: CombinerUniform,
+    #[uniform(3)]
+    pub env: EnvUniform,
     #[texture(1)]
     #[sampler(2)]
     pub texture: Option<Handle<Image>>,
@@ -240,6 +271,16 @@ mod tests {
         assert_eq!(c1.color, [3, 15, 0, 7]);
         assert_eq!(c1.alpha, [7, 7, 7, 0]);
         assert!(reads_combined(&c1));
+    }
+
+    #[test]
+    fn decodes_model_setup_combiner() {
+        // m_rcp.c setup: G_CC_MODULATEIDECALA, G_CC_MODULATEIA_PRIM2.
+        let [c0, c1] = decode_combiner(0x12_7E03, 0xFF0F_F3FF);
+        assert_eq!(c0.color, [1, 15, 4, 7]);
+        assert_eq!(c0.alpha, [7, 7, 7, 1]);
+        assert_eq!(c1.color, [0, 15, 3, 7]);
+        assert_eq!(c1.alpha, [0, 7, 3, 7]);
     }
 
     #[test]
