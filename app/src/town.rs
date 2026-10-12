@@ -115,9 +115,6 @@ impl Town {
         self.is_walkable(world_pos) && !self.in_house_box(world_pos)
     }
 
-    /// Whether a mover at `from` may step to `to`. Anything already inside a
-    /// house box (spawned or loaded there) may move on walkable ground, so it
-    /// can never get stuck.
     /// Ground height at a world position: the disc terrain when loaded,
     /// otherwise the flat plane at 0.
     pub fn ground_y(&self, pos: Vec3) -> f32 {
@@ -127,9 +124,15 @@ impl Town {
             .unwrap_or(0.0)
     }
 
+    /// Whether a mover at `from` may step to `to`. Anything already inside a
+    /// house box (spawned or loaded there) may move on walkable ground, so it
+    /// can never get stuck. With the disc terrain, cliffs and water come
+    /// from the terrain and trees, rocks and houses still block.
     pub fn can_step(&self, from: Vec3, to: Vec3) -> bool {
         if let Some(ground) = &self.ground {
-            return ground.can_step(from, to);
+            if !ground.can_step(from, to) {
+                return false;
+            }
         }
         if self.in_house_box(from) {
             self.is_walkable(to)
