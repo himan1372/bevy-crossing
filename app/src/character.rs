@@ -139,6 +139,8 @@ enum Motion {
     Wait = 0,
     Walk = 1,
     Run = 2,
+    /// Played once, then held (`aNPC_ANIM_AISATU1`).
+    Greet = 3,
 }
 
 impl Motion {
@@ -151,18 +153,21 @@ impl Motion {
     }
 }
 
-/// Player animations, indexed by [`Motion`].
-const PLAYER_ANIMATIONS: [&str; 3] = [
+/// Player animations, indexed by [`Motion`] (no greeting).
+const PLAYER_ANIMATIONS: [&str; 4] = [
     "cKF_ba_r_ply_1_wait1",
     "cKF_ba_r_ply_1_walk1",
     "cKF_ba_r_ply_1_run1",
+    "",
 ];
 
 /// Villager animations (shared by every species' 26-joint skeleton).
-const NPC_ANIMATIONS: [&str; 3] = [
+/// Talking (`aNPC_ANIM_TALK1`) uses `wait1` too, with the mouth moving.
+const NPC_ANIMATIONS: [&str; 4] = [
     "cKF_ba_r_npc_1_wait1",
     "cKF_ba_r_npc_1_walk1",
     "cKF_ba_r_npc_1_run1",
+    "cKF_ba_r_npc_1_aisatu1",
 ];
 
 /// A drawn skeleton: its joints' entities and animations.
@@ -170,7 +175,7 @@ const NPC_ANIMATIONS: [&str; 3] = [
 pub struct CharacterRig {
     skeleton: Arc<Skeleton>,
     joints: Vec<Entity>,
-    animations: [Option<Arc<Animation>>; 3],
+    animations: [Option<Arc<Animation>>; 4],
     playing: Motion,
     frame: f32,
     /// Owner's last world position (villagers: motion from movement).
@@ -232,7 +237,7 @@ fn skinned_part_mesh(part: &Part, own: usize, matrix_joints: &[usize]) -> Mesh {
 /// slots its draw routine sets, and its scale (model units to world).
 struct RigSource {
     skeleton: Skeleton,
-    animations: [Option<Arc<Animation>>; 3],
+    animations: [Option<Arc<Animation>>; 4],
     segments: Segments,
     tluts: Vec<(usize, u32)>,
     scale: f32,
@@ -362,9 +367,9 @@ fn spawn_rig(
 
 fn read_animations(
     disc: &GameDisc,
-    names: [&str; 3],
+    names: [&str; 4],
     joints: usize,
-) -> [Option<Arc<Animation>>; 3] {
+) -> [Option<Arc<Animation>>; 4] {
     names.map(|name| {
         let a = disc.catalog.get(name)?;
         Some(Arc::new(Animation::read(&disc.rom, a.offset, joints)?))
@@ -586,11 +591,16 @@ fn play(
     let Some(anim) = rig.animations[rig.playing as usize].clone() else {
         return;
     };
-    // Repeat between frame 1 and the last (`cKF_FrameControl_repeat_proc`).
+    // Repeat between frame 1 and the last (`cKF_FrameControl_repeat_proc`);
+    // a greeting plays once and holds its last frame (stop mode).
     let last = anim.frames.max(2) as f32;
     rig.frame += speed * ticks;
-    while rig.frame >= last {
-        rig.frame -= last - 1.0;
+    if rig.playing == Motion::Greet {
+        rig.frame = rig.frame.min(last);
+    } else {
+        while rig.frame >= last {
+            rig.frame -= last - 1.0;
+        }
     }
     let locals = anim.pose(rig.frame).local_transforms(&rig.skeleton);
     for (&joint, local) in rig.joints.iter().zip(locals) {
@@ -610,7 +620,7 @@ const VILLAGER_RUN_MIN: f32 = 2.5;
 fn animate_characters(
     time: Res<Time>,
     players: Query<(&Locomotion, &Facing), With<Player>>,
-    villagers: Query<&GlobalTransform, With<Villager>>,
+    villagers: Query<(&GlobalTransform, &Villager)>,
     mut rigs: Query<(Entity, &ChildOf, &mut CharacterRig)>,
     mut transforms: Query<&mut Transform>,
 ) {
@@ -630,12 +640,14 @@ fn animate_characters(
                 loco.anim_speed()
             };
             play(&mut rig, motion, speed, ticks, &mut transforms);
-        } else if let Ok(g) = villagers.get(owner) {
+        } else if let Ok((g, villager)) = villagers.get(owner) {
             let pos = g.translation();
             let moved = rig.last_pos.map_or(0.0, |p| (pos - p).with_y(0.0).length());
             rig.last_pos = Some(pos);
             let speed = if dt > 0.0 { moved / dt } else { 0.0 };
-            let motion = if speed >= VILLAGER_RUN_MIN {
+            let motion = if villager.is_greeting() {
+                Motion::Greet
+            } else if speed >= VILLAGER_RUN_MIN {
                 Motion::Run
             } else if speed >= VILLAGER_WALK_MIN {
                 Motion::Walk

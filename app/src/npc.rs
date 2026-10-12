@@ -141,6 +141,13 @@ enum Act {
     GoHome,
 }
 
+impl Villager {
+    /// Greeting another villager (`ac_npc_act_greeting`).
+    pub fn is_greeting(&self) -> bool {
+        matches!(self.act, Act::Greet)
+    }
+}
+
 /// Present on villagers who are inside their house (hidden, can't be
 /// talked to).
 #[derive(Component)]
