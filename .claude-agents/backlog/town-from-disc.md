@@ -16,7 +16,8 @@ Draw the town ground from the disc's acre templates instead of flat planes.
 - [x] Port m_random_field_ovl.c (logic/src/random_field.rs + random_field_tables.rs; 3 tests) (+ needed parts of m_random_field.c) to logic::random_field; tables read from disc where they exist
 - [x] Ground visuals from the retail combi table (all 70 acres incl. border, rail, beach, ocean, island) (bg via data_combi_table -> data_bgd)
 - [x] Collision + ground height from data_bgd collision words (app/src/ground_map.rs); acres raised by tier
-- [ ] Houses/shop/trees/villagers placement from the retail layout (FG data per combi fg_id)
+- [x] Trees/rocks/flowers from fgdata.bin layouts; player house at HOUSE0, shop at SHOP0, resident homes re-sited onto level ground
+- [ ] Draw disc models for trees/rocks/flowers/buildings (placeholders still)
 - [ ] Retire town_gen as the town's source of truth
 
 ### Port notes (resume here)

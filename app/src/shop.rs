@@ -46,6 +46,8 @@ pub struct ShopBuilding {
     pub min_z: f32,
     pub max_z: f32,
     pub placed: bool,
+    /// Ground height under the building (disc terrain), 0 on flat ground.
+    pub base_y: f32,
 }
 
 /// True when (x, z) is inside the shop building's blocked footprint.
@@ -191,6 +193,22 @@ struct Obstacle {
 /// Find a free 5x4 grass rect near the town center for the shop building,
 /// scanning outward from the middle of the map.
 fn find_shop_spot(town: Res<Town>, mut commands: Commands) {
+    // The retail layout says where the shop is.
+    if let Some(at) = town.retail.as_ref().and_then(|r| r.shop) {
+        let center = Vec3::new(at.x, 0.0, at.z - SHOP_D / 2.0 + 0.5);
+        let base_y = town.ground_y(at);
+        commands.insert_resource(ShopBuilding {
+            door_pos: Vec3::new(center.x, base_y, center.z + SHOP_D / 2.0 + 0.7),
+            min_x: center.x - SHOP_W / 2.0,
+            max_x: center.x + SHOP_W / 2.0,
+            min_z: center.z - SHOP_D / 2.0,
+            max_z: center.z + SHOP_D / 2.0,
+            placed: true,
+            base_y,
+        });
+        println!("Shop placed from the retail layout at {center:?}");
+        return;
+    }
     // Global cell dims: 5 acres * 16 by 6 acres * 16.
     const GW: i32 = 5 * 16;
     const GD: i32 = 6 * 16;
@@ -258,6 +276,7 @@ fn find_shop_spot(town: Res<Town>, mut commands: Commands) {
         min_z: center.z - SHOP_D / 2.0,
         max_z: center.z + SHOP_D / 2.0,
         placed: true,
+        base_y: 0.0,
     });
     println!("Shop placed at {:?}, door at {:?}", center, door_pos);
 }
@@ -279,25 +298,25 @@ fn spawn_shop_exterior(
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::new(SHOP_W, SHOP_H, SHOP_D))),
         MeshMaterial3d(materials.add(Color::srgb(0.75, 0.6, 0.4))),
-        Transform::from_xyz(cx, SHOP_H / 2.0, cz),
+        Transform::from_xyz(cx, building.base_y + SHOP_H / 2.0, cz),
     ));
     // Roof slab.
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::new(SHOP_W + 0.6, 0.5, SHOP_D + 0.6))),
         MeshMaterial3d(materials.add(Color::srgb(0.6, 0.25, 0.2))),
-        Transform::from_xyz(cx, SHOP_H + 0.25, cz),
+        Transform::from_xyz(cx, building.base_y + SHOP_H + 0.25, cz),
     ));
     // Door panel on the south face.
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::new(1.2, 2.2, 0.15))),
         MeshMaterial3d(materials.add(Color::srgb(0.35, 0.22, 0.12))),
-        Transform::from_xyz(cx, 1.1, building.max_z + 0.05),
+        Transform::from_xyz(cx, building.base_y + 1.1, building.max_z + 0.05),
     ));
     // Sign board above the door.
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::new(2.6, 0.8, 0.2))),
         MeshMaterial3d(materials.add(Color::srgb(0.95, 0.9, 0.75))),
-        Transform::from_xyz(cx, 2.7, building.max_z + 0.08),
+        Transform::from_xyz(cx, building.base_y + 2.7, building.max_z + 0.08),
     ));
     println!("Shop exterior spawned");
 }
@@ -950,6 +969,7 @@ mod tests {
             min_z: -2.0,
             max_z: 2.0,
             placed: true,
+            base_y: 0.0,
         }
     }
 

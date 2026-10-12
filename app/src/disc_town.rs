@@ -21,7 +21,7 @@ use disc::{rel_bss, AssetCatalog, RomImage, RomSource, Target};
 use rustimal_logic::random_field::{
     bt, make_random_field, ComboInfo, RandomField, BLOCK_X_NUM, BLOCK_Z_NUM,
 };
-use rustimal_logic::town_gen::{CellKind, TownPlan, ACRE_DEPTH, ACRE_WIDTH};
+use rustimal_logic::town_gen::{CellKind, Feature, TownAcre, TownPlan, ACRE_DEPTH, ACRE_WIDTH};
 
 use crate::disc_gfx::{decode_texture, run_display_lists, Segments};
 use crate::game_disc::GameDisc;
@@ -245,6 +245,8 @@ pub struct DiscGround;
 pub struct RetailLayout {
     pub field: RandomField,
     pub combos: Vec<ComboInfo>,
+    /// Where the retail layout puts the shop (`SHOP0..3` item), if any.
+    pub shop: Option<Vec3>,
 }
 
 /// `fgdata.bin` entry: `fg_id` u16, `items[16][16]` u16, 4 bytes of
@@ -323,7 +325,183 @@ pub fn build_retail_town(disc: &GameDisc, plan: &mut TownPlan) -> (RetailLayout,
             }
         }
     }
-    (RetailLayout { field, combos }, ground)
+    let structures = find_structures(&field, &combos, &fg);
+    let shop = structures
+        .iter()
+        .find(|s| (SHOP0..=SHOP0 + 3).contains(&s.0))
+        .map(|&(_, ax, az, cx, cz)| Town::cell_to_world(ax, az, cx, cz));
+    resite_homes(plan, &structures, &ground);
+    (
+        RetailLayout {
+            field,
+            combos,
+            shop,
+        },
+        ground,
+    )
+}
+
+/// `STRUCTURE_START` items (`m_name_table.h`).
+const HOUSE0: u16 = 0x5800;
+const SHOP0: u16 = 0x5804;
+
+/// Structure items in the playable acres: (item, ax, az, cx, cz).
+fn find_structures(
+    field: &RandomField,
+    combos: &[ComboInfo],
+    fg: &HashMap<u16, [u16; 256]>,
+) -> Vec<(u16, usize, usize, usize, usize)> {
+    let mut out = Vec::new();
+    for az in 0..ACRE_DEPTH {
+        for ax in 0..ACRE_WIDTH {
+            let block = (az + 1) * BLOCK_X_NUM + ax + 1;
+            let Some(items) = combos
+                .get(field.combi[block].combi as usize)
+                .and_then(|c| fg.get(&c.fg_id))
+            else {
+                continue;
+            };
+            for (cell, &item) in items.iter().enumerate() {
+                if (0x5800..0x5900).contains(&item) {
+                    out.push((item, ax, az, cell % 16, cell / 16));
+                }
+            }
+        }
+    }
+    out
+}
+
+const HOME_KINDS: [CellKind; 3] = [
+    CellKind::House,
+    CellKind::HouseSign,
+    CellKind::HouseReserved,
+];
+
+/// Clears a home footprint centred on (cx, cz).
+fn clear_home(acre: &mut TownAcre, cx: usize, cz: usize) {
+    for z in cz.saturating_sub(1)..=(cz + 1).min(15) {
+        for x in cx.saturating_sub(1)..=(cx + 1).min(15) {
+            let c = &mut acre.cells[z * 16 + x];
+            if HOME_KINDS.iter().any(|k| *c == *k as u8) {
+                *c = CellKind::Grass as u8;
+            }
+        }
+    }
+}
+
+/// Stamps a home footprint as `town_gen` does: centre, sign at the
+/// south-west, the rest reserved.
+fn stamp_home(acre: &mut TownAcre, cx: usize, cz: usize) {
+    for z in cz - 1..=cz + 1 {
+        for x in cx - 1..=cx + 1 {
+            let kind = if x == cx && z == cz {
+                CellKind::House
+            } else if x + 1 == cx && z == cz + 1 {
+                CellKind::HouseSign
+            } else {
+                CellKind::HouseReserved
+            };
+            acre.cells[z * 16 + x] = kind as u8;
+        }
+    }
+}
+
+/// A 3x3 home fits at (cx, cz): free grass, walkable, level ground, and a
+/// walkable doorstep to the south.
+fn home_fits(
+    acre: &TownAcre,
+    ground: &GroundMap,
+    ax: usize,
+    az: usize,
+    cx: usize,
+    cz: usize,
+) -> bool {
+    if !(1..=14).contains(&cx) || !(1..=13).contains(&cz) {
+        return false;
+    }
+    let level = ground.height(
+        Town::cell_to_world(ax, az, cx, cz).x,
+        Town::cell_to_world(ax, az, cx, cz).z,
+    );
+    let ok = |x: usize, z: usize| {
+        let p = Town::cell_to_world(ax, az, x, z);
+        acre.cells[z * 16 + x] == CellKind::Grass as u8
+            && ground.walkable_at(p.x, p.z)
+            && ground
+                .height(p.x, p.z)
+                .zip(level)
+                .is_some_and(|(h, l)| (h - l).abs() < 0.05)
+    };
+    (cz - 1..=cz + 1).all(|z| (cx - 1..=cx + 1).all(|x| ok(x, z))) && ok(cx, cz + 2)
+}
+
+/// Nearest fitting home spot in an acre to (cx, cz).
+fn nearest_home_spot(
+    acre: &TownAcre,
+    ground: &GroundMap,
+    ax: usize,
+    az: usize,
+    cx: usize,
+    cz: usize,
+) -> Option<(usize, usize)> {
+    let mut spots: Vec<(usize, usize)> =
+        (0..16).flat_map(|z| (0..16).map(move |x| (x, z))).collect();
+    spots.sort_by_key(|&(x, z)| (x as i32 - cx as i32).pow(2) + (z as i32 - cz as i32).pow(2));
+    spots
+        .into_iter()
+        .find(|&(x, z)| home_fits(acre, ground, ax, az, x, z))
+}
+
+/// Moves the plan homes onto the retail town: the player house to the
+/// layout HOUSE0 spot, each resident home to the nearest spot in its acre
+/// where it fits on the terrain.
+fn resite_homes(
+    plan: &mut TownPlan,
+    structures: &[(u16, usize, usize, usize, usize)],
+    ground: &GroundMap,
+) {
+    // Lift every existing footprint off the map first.
+    let mut homes = Vec::new();
+    for (i, acre) in plan.acres.iter_mut().enumerate() {
+        for cell in 0..256 {
+            if acre.cells[cell] == CellKind::House as u8 {
+                homes.push((i, cell % 16, cell / 16));
+            }
+        }
+    }
+    for &(i, cx, cz) in &homes {
+        clear_home(&mut plan.acres[i], cx, cz);
+    }
+
+    // Player house on the retail spot.
+    if let Some(&(_, ax, az, cx, cz)) = structures
+        .iter()
+        .find(|s| (HOUSE0..HOUSE0 + 4).contains(&s.0))
+    {
+        for acre in plan.acres.iter_mut() {
+            if acre.feature == Feature::PlayerHouse as u8 {
+                acre.feature = Feature::None as u8;
+            }
+        }
+        let acre = &mut plan.acres[az * ACRE_WIDTH + ax];
+        acre.feature = Feature::PlayerHouse as u8;
+        stamp_home(acre, cx.clamp(1, 14), cz.clamp(1, 14));
+    }
+
+    // Resident homes: same acre, nearest spot that fits.
+    for i in 0..plan.villager_count as usize {
+        let a = plan.house_acres[i] as usize;
+        let unit = plan.house_units[i] as usize;
+        let (ax, az) = (a % ACRE_WIDTH, a / ACRE_WIDTH);
+        let spot = nearest_home_spot(&plan.acres[a], ground, ax, az, unit % 16, unit / 16);
+        match spot {
+            Some((x, z)) => {
+                stamp_home(&mut plan.acres[a], x, z);
+                plan.house_units[i] = (z * 16 + x) as u16;
+            }
+            None => warn!("no room for resident home {i} in acre ({ax},{az})"),
+        }
+    }
 }
 
 fn build_disc_town(
