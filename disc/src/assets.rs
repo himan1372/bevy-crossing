@@ -100,6 +100,15 @@ impl<'a> AssetCatalog<'a> {
     }
 }
 
+/// Offset and size of a named `.bss` object in `foresta.rel` (runtime
+/// memory the game fills, e.g. the ground texture buffers). Bss has no
+/// bytes on the disc, so these aren't in [`AssetCatalog`].
+pub fn rel_bss(name: &str) -> Option<(u32, u32)> {
+    parse(FORESTA_SYM)
+        .find(|&(n, sec, _, _)| sec == "b" && n == name)
+        .map(|(_, _, value, size)| (value, size))
+}
+
 fn located(name: &str, target: Target, size: u32) -> Option<Asset<'_>> {
     match target {
         Target::File(source, offset) => Some(Asset {
@@ -182,6 +191,12 @@ mod tests {
             "dol_tbl"
         );
         assert!(cat.containing(RomSource::Dol, 0x210).is_none());
+    }
+
+    #[test]
+    fn bss_lookup() {
+        assert_eq!(rel_bss("grass_tex_dummy"), Some((0x6AC0, 0x200)));
+        assert_eq!(rel_bss("tree_v"), None);
     }
 
     #[test]

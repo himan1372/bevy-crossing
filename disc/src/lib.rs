@@ -13,7 +13,7 @@ mod image;
 mod rom;
 mod yaz0;
 
-pub use assets::{Asset, AssetCatalog};
+pub use assets::{rel_bss, Asset, AssetCatalog};
 pub use image::{find_image, Disc, DiscError, FstFile, GAME_ID_NTSC_U};
 pub use rom::{RomImage, RomSource, Target};
 pub use yaz0::decode as decode_yaz0;
