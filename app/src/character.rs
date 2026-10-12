@@ -20,6 +20,7 @@ use bevy::prelude::*;
 use rustimal_logic::graphics::vertex::DecodedVtx;
 use rustimal_logic::player_move::LocomotionState;
 
+use crate::dialogue::VillagerTalk;
 use crate::disc_gfx::{decode_texture, run_display_lists_with_tluts, Part, Segments};
 use crate::face::{Face, FaceKind, FacePart, FaceSlot};
 use crate::game_disc::GameDisc;
@@ -164,6 +165,41 @@ enum Motion {
     Run = 2,
     /// Played once, then held (`aNPC_ANIM_AISATU1`).
     Greet = 3,
+    /// Villager moods (`aNPC_ANIM_WAIT_KI1` / `WALK_KI1`: joy,
+    /// `WAIT_DO1` / `WALK_DO1`: anger).
+    WaitJoy = 4,
+    WalkJoy = 5,
+    WaitAnger = 6,
+    WalkAnger = 7,
+}
+
+/// Animations per rig, indexed by [`Motion`].
+const MOTIONS: usize = 8;
+
+/// A villager's mood, which picks the stand/walk variant.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Feel {
+    Normal,
+    Joy,
+    Anger,
+}
+
+impl Motion {
+    /// The mood's variant of standing or walking, if it has one.
+    fn with_feel(self, feel: Feel) -> Self {
+        match (self, feel) {
+            (Motion::Wait, Feel::Joy) => Motion::WaitJoy,
+            (Motion::Walk, Feel::Joy) => Motion::WalkJoy,
+            (Motion::Wait, Feel::Anger) => Motion::WaitAnger,
+            (Motion::Walk, Feel::Anger) => Motion::WalkAnger,
+            (m, _) => m,
+        }
+    }
+
+    /// Played once and held rather than looped.
+    fn once(self) -> bool {
+        self == Motion::Greet
+    }
 }
 
 impl Motion {
@@ -177,20 +213,28 @@ impl Motion {
 }
 
 /// Player animations, indexed by [`Motion`] (no greeting).
-const PLAYER_ANIMATIONS: [&str; 4] = [
+const PLAYER_ANIMATIONS: [&str; MOTIONS] = [
     "cKF_ba_r_ply_1_wait1",
     "cKF_ba_r_ply_1_walk1",
     "cKF_ba_r_ply_1_run1",
+    "",
+    "",
+    "",
+    "",
     "",
 ];
 
 /// Villager animations (shared by every species' 26-joint skeleton).
 /// Talking (`aNPC_ANIM_TALK1`) uses `wait1` too, with the mouth moving.
-const NPC_ANIMATIONS: [&str; 4] = [
+const NPC_ANIMATIONS: [&str; MOTIONS] = [
     "cKF_ba_r_npc_1_wait1",
     "cKF_ba_r_npc_1_walk1",
     "cKF_ba_r_npc_1_run1",
     "cKF_ba_r_npc_1_aisatu1",
+    "cKF_ba_r_npc_1_wait_ki1",
+    "cKF_ba_r_npc_1_walk_ki1",
+    "cKF_ba_r_npc_1_wait_do1",
+    "cKF_ba_r_npc_1_walk_do1",
 ];
 
 /// A drawn skeleton: its joints' entities and animations.
@@ -198,7 +242,7 @@ const NPC_ANIMATIONS: [&str; 4] = [
 pub struct CharacterRig {
     skeleton: Arc<Skeleton>,
     joints: Vec<Entity>,
-    animations: [Option<Arc<Animation>>; 4],
+    animations: [Option<Arc<Animation>>; MOTIONS],
     playing: Motion,
     frame: f32,
     /// Owner's last world position (villagers: motion from movement).
@@ -261,7 +305,7 @@ fn skinned_part_mesh(part: &Part, own: usize, matrix_joints: &[usize]) -> Mesh {
 /// slots its draw routine sets, and its scale (model units to world).
 struct RigSource {
     skeleton: Skeleton,
-    animations: [Option<Arc<Animation>>; 4],
+    animations: [Option<Arc<Animation>>; MOTIONS],
     segments: Segments,
     tluts: Vec<(usize, u32)>,
     scale: f32,
@@ -391,9 +435,9 @@ fn spawn_rig(
 
 fn read_animations(
     disc: &GameDisc,
-    names: [&str; 4],
+    names: [&str; MOTIONS],
     joints: usize,
-) -> [Option<Arc<Animation>>; 4] {
+) -> [Option<Arc<Animation>>; MOTIONS] {
     names.map(|name| {
         let a = disc.catalog.get(name)?;
         Some(Arc::new(Animation::read(&disc.rom, a.offset, joints)?))
@@ -608,7 +652,7 @@ fn play(
     // a greeting plays once and holds its last frame (stop mode).
     let last = anim.frames.max(2) as f32;
     rig.frame += speed * ticks;
-    if rig.playing == Motion::Greet {
+    if rig.playing.once() {
         rig.frame = rig.frame.min(last);
     } else {
         while rig.frame >= last {
@@ -633,7 +677,7 @@ const VILLAGER_RUN_MIN: f32 = 2.5;
 fn animate_characters(
     time: Res<Time>,
     players: Query<(&Locomotion, &Facing), With<Player>>,
-    villagers: Query<(&GlobalTransform, &Villager)>,
+    villagers: Query<(&GlobalTransform, &Villager, Option<&VillagerTalk>)>,
     mut rigs: Query<(Entity, &ChildOf, &mut CharacterRig)>,
     mut transforms: Query<&mut Transform>,
 ) {
@@ -653,7 +697,7 @@ fn animate_characters(
                 loco.anim_speed()
             };
             play(&mut rig, motion, speed, ticks, &mut transforms);
-        } else if let Ok((g, villager)) = villagers.get(owner) {
+        } else if let Ok((g, villager, talk)) = villagers.get(owner) {
             let pos = g.translation();
             let moved = rig.last_pos.map_or(0.0, |p| (pos - p).with_y(0.0).length());
             rig.last_pos = Some(pos);
@@ -667,7 +711,18 @@ fn animate_characters(
             } else {
                 Motion::Wait
             };
-            play(&mut rig, motion, WAIT_SPEED, ticks, &mut transforms);
+            let feel = match talk {
+                Some(t) if t.annoyed(villager.looks) => Feel::Anger,
+                Some(t) if t.happy => Feel::Joy,
+                _ => Feel::Normal,
+            };
+            play(
+                &mut rig,
+                motion.with_feel(feel),
+                WAIT_SPEED,
+                ticks,
+                &mut transforms,
+            );
         }
     }
 }

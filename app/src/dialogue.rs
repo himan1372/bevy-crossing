@@ -77,6 +77,13 @@ pub struct VillagerTalk {
     frame_acc: f32,
 }
 
+impl VillagerTalk {
+    /// Too pestered to talk (`Patience::Annoyed`).
+    pub fn annoyed(&self, looks: u8) -> bool {
+        self.info.patience(looks as usize) == Patience::Annoyed
+    }
+}
+
 impl Default for VillagerTalk {
     fn default() -> Self {
         Self {

@@ -562,6 +562,21 @@ pub fn build_retail_town(disc: &GameDisc, plan: &mut TownPlan) -> (RetailLayout,
             .and_then(|c| bg_lists.get(&c.bg_id));
         units.push(entry.map_or([Unit::default(); 256], |e| collision_units(&disc.rom, e)));
     }
+    for (bz, row) in field.combi.chunks(BLOCK_X_NUM).enumerate() {
+        let cells: Vec<String> = row
+            .iter()
+            .map(|c| {
+                let bg = combos.get(c.combi as usize).map_or(0, |c| c.bg_id);
+                let name = bg_lists
+                    .get(&bg)
+                    .and_then(|e| e.opaque)
+                    .and_then(|o| disc.catalog.containing(disc::RomSource::Rel, o))
+                    .map_or("-", |a| a.name);
+                format!("{}:{bg:04x}:{}:{name}", c.height, c.combi)
+            })
+            .collect();
+        debug!("field row {bz}: {}", cells.join(" "));
+    }
     let ground = GroundMap::new(units, tiers);
 
     // Objects for the playable acres (blocks 1..=5, 1..=6).
