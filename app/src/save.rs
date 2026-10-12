@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
+use crate::character::PlayerLook;
 use crate::house::{HouseState, ReturnPosition};
 use crate::input::{Action, Actions, InputFocus};
 use crate::interaction::{spawn_ground_item, GroundItem, PlayerInventory, ITEM_SPOTS};
@@ -80,6 +81,13 @@ pub struct SaveData {
     /// Active quest (added later; defaults to none for old saves).
     #[serde(default)]
     pub quest: Option<crate::quest::ActiveQuest>,
+    /// The player's face type (`Private_c::face`, 0-7; added later, picked
+    /// at random for old saves like a new player's).
+    #[serde(default)]
+    pub player_face: Option<u8>,
+    /// The player's shirt (clothing bank index; added later).
+    #[serde(default)]
+    pub player_cloth: Option<u16>,
 }
 
 /// Save data loaded at startup (PreStartup), consumed by Startup systems.
@@ -129,6 +137,13 @@ fn write_save(save: &SaveData) -> bool {
     }
 }
 
+/// Seed for a new player's random look: the clock's nanoseconds.
+fn new_player_seed() -> u32 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(1, |d| d.subsec_nanos() | 1)
+}
+
 /// PreStartup: read the save file (if any) and seed resources so the
 /// Startup systems (town gen, player spawn, item spawn) can use them.
 fn init_save(mut commands: Commands) {
@@ -143,11 +158,17 @@ fn init_save(mut commands: Commands) {
             commands.insert_resource(Playtime {
                 secs: s.playtime_secs,
             });
+            let new = PlayerLook::new_player(new_player_seed());
+            commands.insert_resource(PlayerLook {
+                face: s.player_face.map_or(new.face, usize::from),
+                cloth: s.player_cloth.map_or(new.cloth, usize::from),
+            });
         }
         None => {
             println!("No save found, starting fresh");
             commands.insert_resource(TownSeed(12345));
             commands.insert_resource(Playtime::default());
+            commands.insert_resource(PlayerLook::new_player(new_player_seed()));
         }
     }
     commands.insert_resource(LoadedSave(loaded));
@@ -286,6 +307,8 @@ fn collect_save(
         shop_tier: shop.shop.shop_level as u8,
         furniture: Vec::new(),
         quest: quest.active.clone(),
+        player_face: None,
+        player_cloth: None,
     }
 }
 
@@ -359,12 +382,13 @@ fn quick_save(
     quest: Res<crate::quest::QuestState>,
     mut timer: ResMut<NotifyTimer>,
     notify_query: Query<&mut Text, With<NotifyText>>,
+    look: Res<PlayerLook>,
 ) {
     // World focus only: saving or loading mid-UI would leave that UI stale.
     if !actions.just_pressed(Action::QuickSave) || !focus.is_world() {
         return;
     }
-    let save = collect_save(
+    let mut save = collect_save(
         &player,
         &items,
         &inventory,
@@ -378,6 +402,8 @@ fn quick_save(
         &mailbox,
         &quest,
     );
+    save.player_face = Some(look.face as u8);
+    save.player_cloth = Some(look.cloth as u16);
     if write_save(&save) {
         println!("Saved to {}", save_path().display());
         show_notification("Saved!", &mut timer, notify_query);

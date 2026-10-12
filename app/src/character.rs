@@ -59,13 +59,36 @@ const EYE_TEX_NUM: usize = 8;
 const CLOTH_TEX_SIZE: usize = 0x200;
 const PALETTE_SIZE: usize = 0x20;
 
-/// The player's look; from the save once it has one (face type, shirt).
-#[derive(Clone, Copy, Debug, Default)]
+/// The player's look (face type, shirt), kept in the save.
+#[derive(Resource, Clone, Copy, Debug, Default)]
 pub struct PlayerLook {
     /// `mPr_FACE_TYPE*`, 0-7.
     pub face: usize,
     /// Shirt index into the clothing bank.
     pub cloth: usize,
+}
+
+/// Shirts a new boy can start in (`mPr_boy_cloth_table`: ITM_CLOTH000-007).
+const NEW_BOY_CLOTHS: usize = 8;
+/// `mPr_FACE_TYPE_NUM`.
+const FACE_TYPES: usize = 8;
+
+impl PlayerLook {
+    /// A new player's look (`mPr_GetRandomFace`, `mPr_GetRandomCloth`),
+    /// from any random `seed`.
+    pub fn new_player(seed: u32) -> Self {
+        let mut x = seed | 1;
+        let mut next = || {
+            x ^= x << 13;
+            x ^= x >> 17;
+            x ^= x << 5;
+            x as usize
+        };
+        Self {
+            face: next() % FACE_TYPES,
+            cloth: next() % NEW_BOY_CLOTHS,
+        }
+    }
 }
 
 /// The segments the player draw points at for `look` (boy, not swollen,
@@ -382,6 +405,7 @@ fn spawn_player_model(
     mut commands: Commands,
     disc: Option<Res<GameDisc>>,
     players: Query<Entity, With<Player>>,
+    look: Option<Res<PlayerLook>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<N64Material>>,
     mut images: ResMut<Assets<Image>>,
@@ -395,6 +419,7 @@ fn spawn_player_model(
         return;
     };
     *done = true;
+    let look = look.map_or_else(PlayerLook::default, |l| *l);
     let Some(skeleton) = disc
         .catalog
         .get("cKF_bs_r_boy_1")
@@ -407,11 +432,11 @@ fn spawn_player_model(
     let src = RigSource {
         skeleton,
         animations,
-        segments: player_segments(&disc, PlayerLook::default()),
+        segments: player_segments(&disc, look),
         tluts: Vec::new(),
         scale: MODEL_SCALE,
-        eye_frames: player_face_frames(&disc, PlayerLook::default(), 0, EYE_TEX_NUM),
-        mouth_frames: player_face_frames(&disc, PlayerLook::default(), EYE_TEX_NUM, MOUTH_TEX_NUM),
+        eye_frames: player_face_frames(&disc, look, 0, EYE_TEX_NUM),
+        mouth_frames: player_face_frames(&disc, look, EYE_TEX_NUM, MOUTH_TEX_NUM),
         face: FaceKind::Player,
     };
     let assets = (&mut *meshes, &mut *materials, &mut *images, &mut *bindposes);
