@@ -36,6 +36,20 @@ pub enum HouseState {
 #[derive(Resource)]
 pub struct PlayerHouse {
     pub door_pos: Vec3,
+    /// Which way the door faces, as a yaw from south (+Z): 0 = south,
+    /// +90 deg = east. Retail player houses face the acre path.
+    pub door_yaw: f32,
+}
+
+/// Door yaw for a player house at plan cell column `cx` of its acre: with
+/// the retail town, houses face the path through the acre centre (east
+/// from the left half, west from the right); otherwise south.
+pub fn player_house_door_yaw(retail: bool, cx: usize) -> f32 {
+    match (retail, cx < 8) {
+        (false, _) => 0.0,
+        (true, true) => std::f32::consts::FRAC_PI_2,
+        (true, false) => -std::f32::consts::FRAC_PI_2,
+    }
 }
 
 /// Town-map position to return to when leaving the house.
@@ -88,8 +102,11 @@ pub(crate) fn find_player_house(town: Res<Town>, mut commands: Commands) {
                 for cx in 0..16 {
                     if acre.cells[cz * 16 + cx] == CellKind::House as u8 {
                         let p = Town::cell_to_world(ax, az, cx, cz);
-                        // Door on the south face of the house box.
-                        door = Some(p + Vec3::new(0.0, 0.0, HOUSE_SIZE / 2.0 + DOOR_OUT));
+                        // Door on the house's front face, which way it faces.
+                        let yaw = player_house_door_yaw(town.retail.is_some(), cx);
+                        let out = Quat::from_rotation_y(yaw)
+                            * Vec3::new(0.0, 0.0, HOUSE_SIZE / 2.0 + DOOR_OUT);
+                        door = Some((p + out, yaw));
                         break 'acres;
                     }
                 }
@@ -105,7 +122,8 @@ pub(crate) fn find_player_house(town: Res<Town>, mut commands: Commands) {
                     for cx in 0..16 {
                         if acre.cells[cz * 16 + cx] == CellKind::House as u8 {
                             let p = Town::cell_to_world(ax, az, cx, cz);
-                            door = Some(p + Vec3::new(0.0, 0.0, HOUSE_SIZE / 2.0 + DOOR_OUT));
+                            door =
+                                Some((p + Vec3::new(0.0, 0.0, HOUSE_SIZE / 2.0 + DOOR_OUT), 0.0));
                             break 'acres;
                         }
                     }
@@ -113,8 +131,8 @@ pub(crate) fn find_player_house(town: Res<Town>, mut commands: Commands) {
             }
         }
     }
-    let door_pos = door.unwrap_or(Vec3::new(0.0, 0.0, 5.0));
-    commands.insert_resource(PlayerHouse { door_pos });
+    let (door_pos, door_yaw) = door.unwrap_or((Vec3::new(0.0, 0.0, 5.0), 0.0));
+    commands.insert_resource(PlayerHouse { door_pos, door_yaw });
     println!("Player house door at {:?}", door_pos);
 }
 
@@ -285,14 +303,17 @@ fn house_enter(
     let Ok((mut transform, mut facing)) = player_query.single_mut() else {
         return;
     };
-    // The door panel on the house's front (south) wall.
+    // The door panel on the house's front wall. The panel is south-facing,
+    // so check in the door's frame (turned so the door faces south).
     let door = DoorPanel {
         center_x: house.door_pos.x,
         half_w: DOOR_HALF_W,
         face_z: house.door_pos.z - DOOR_OUT,
         into_z: -1.0,
     };
-    if !door.faced_by(transform.translation, facing.dir, DOOR_RANGE_OUT, DOOR_DOT)
+    let to_local = Quat::from_rotation_y(-house.door_yaw);
+    let local_pos = house.door_pos + to_local * (transform.translation - house.door_pos);
+    if !door.faced_by(local_pos, to_local * facing.dir, DOOR_RANGE_OUT, DOOR_DOT)
         || !actions.consume(Action::Interact)
     {
         return;

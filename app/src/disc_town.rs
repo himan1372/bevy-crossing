@@ -849,10 +849,11 @@ fn door_facing_yaw(disc: &GameDisc, prefix: &str) -> f32 {
     (-x.atan2(z) / quarter).round() * quarter
 }
 
-/// Extra counter-clockwise turn for the player house (radians), judged
-/// against retail screenshots; the game's own placement angle for it isn't
-/// translated yet.
-const PLAYER_HOUSE_EXTRA_YAW: f32 = 22.5 * std::f32::consts::PI / 180.0;
+/// House models are drawn this much larger than other objects: at plain
+/// object scale a house came out one cell wide; retail houses fill the
+/// 3x3 footprint the town reserves for them (judged against retail
+/// screenshots).
+const HOUSE_SCALE: f32 = 3.0;
 
 /// Small deterministic hash for picking per-object variants.
 fn cell_hash((ax, az, cx, cz): (usize, usize, usize, usize)) -> usize {
@@ -957,11 +958,13 @@ fn spawn_disc_objects(
                 build_model(disc, &lists, pal, meshes, materials, images)
             };
             let yaw = if obj.kind == CellKind::House {
-                // The game turns the player house a little further when it
-                // places it (not in the model); Philip judged ~15-30 deg
-                // counter-clockwise from the retail look.
+                // Player houses face the acre path like retail; the model's
+                // door natively faces east (+X), a yaw of 90 deg from south.
                 let extra = if prefix.contains("myhome") {
-                    PLAYER_HOUSE_EXTRA_YAW
+                    let (_, _, cx, _) = obj.cell;
+                    crate::house::player_house_door_yaw(true, cx)
+                        - std::f32::consts::FRAC_PI_2
+                        - door_facing_yaw(disc, &prefix)
                 } else {
                     0.0
                 };
@@ -983,7 +986,12 @@ fn spawn_disc_objects(
                 DiscObject,
                 Name::new(prefix.clone()),
                 Transform::from_xyz(p.x, obj.ground_y, p.z)
-                    .with_rotation(Quat::from_rotation_y(*yaw)),
+                    .with_rotation(Quat::from_rotation_y(*yaw))
+                    .with_scale(Vec3::splat(if obj.kind == CellKind::House {
+                        HOUSE_SCALE
+                    } else {
+                        1.0
+                    })),
                 Visibility::default(),
             ))
             .id();
