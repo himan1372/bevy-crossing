@@ -69,7 +69,16 @@ impl<'a> RelGfx<'a> {
             let mut list = Vec::new();
             let mut at = start;
             while list.len() < MAX_LIST_LEN {
-                let Some(gfx) = self.gfx_at(at) else { break };
+                let Some(mut gfx) = self.gfx_at(at) else {
+                    break;
+                };
+                if gfx.opcode() == op::G_DL && gfx.addr() >> 24 != 0 {
+                    // A call into a runtime segment (e.g. the ocean's wave
+                    // list in segment 12) that game code would fill. The
+                    // interpreter ends the task on a missing list, so
+                    // skip the call instead.
+                    gfx = Gfx::new(0, 0);
+                }
                 list.push(gfx);
                 at += GFX_SIZE;
                 if matches!(gfx.opcode(), op::G_TRIN | op::G_TRIN_INDEPEND) {
@@ -412,6 +421,9 @@ mod tests {
         let rgba = decode_texture(&rom, &key, Some(pal), &Segments::default()).expect("decodes");
         assert_eq!(rgba.len(), 64 * 64 * 4);
 
+        // Calls into runtime segments are skipped, not fatal: the ocean
+        // template calls segment 12 before its own geometry.
+        assert!(run_display_lists(&rom, &[asset("grd_s_o_1_model")]).triangle_count() > 0);
         // Ground templates must cover their whole acre (G_TRIN data words
         // used to be misread as commands, leaving holes).
         let mut lists = vec![asset("grd_s_c1_r1_1_model")];

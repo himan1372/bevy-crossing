@@ -2,14 +2,12 @@
 //! the game's own acre templates (`grd_s_*`), replacing the flat
 //! placeholder planes.
 //!
-//! Template choice: the retail names encode the acre shape. `c1`..`c7` are
-//! the cliff block types (horizontal, bottom-right corner, vertical right,
-//! top-right corner, top-left corner, vertical left, bottom-left corner)
-//! and `r1`..`r7` the river block types (south, east, west, south-east,
-//! east-south, south-west, west-south), in `logic::field_gen` order. An
-//! acre's cliff/river edges pick the shape; the variant number is chosen
-//! per acre from the town seed. This is a visual mapping: collision still
-//! comes from the generated town plan.
+//! The layout comes from the retail generator (`logic::random_field`, a
+//! port of `m_random_field_ovl.c`) fed with the disc's own combination
+//! table, so cliffs, rivers, slopes, bridges, beach and ocean join up like
+//! a real town. Each acre's combination names a `bg_id`, found in
+//! `data_bgd` with its opaque and translucent display lists. The town plan
+//! (`town_gen`) still drives gameplay until that moves over too.
 //!
 //! Ground textures live in runtime buffers (.bss) that the game fills with
 //! the season's textures, and palettes are picked per month; both are
@@ -17,7 +15,10 @@
 
 use bevy::prelude::*;
 use chrono::Datelike;
-use disc::{rel_bss, AssetCatalog, RomImage};
+use std::collections::HashMap;
+
+use disc::{rel_bss, AssetCatalog, RomImage, RomSource, Target};
+use rustimal_logic::random_field::{make_random_field, ComboInfo, BLOCK_X_NUM, BLOCK_Z_NUM};
 use rustimal_logic::town_gen::{ACRE_DEPTH, ACRE_WIDTH};
 
 use crate::disc_gfx::{decode_texture, run_display_lists, Segments};
@@ -51,6 +52,14 @@ const GROUND_TEXTURES: &[(&str, &str)] = &[
     ("tekkyo_tex_dummy", "mFM_grd_s_tekkyo_tex"),
     ("tunnel_tex_dummy", "mFM_grd_s_tunnel_tex"),
     ("beach_tex_dummy", "mFM_grd_s_beach_tex"),
+    ("beach1_tex_dummy2", "mFM_grd_beachA_tex"),
+    ("beach2_tex_dummy2", "mFM_grd_beachB_tex"),
+    ("sand_tex_dummy", "mFM_grd_s_sand_tex"),
+    ("wave1_tex_dummy", "mFM_grd_wave1_tex"),
+    ("wave2_tex_dummy", "mFM_grd_wave2_tex"),
+    ("wave3_tex_dummy", "mFM_grd_wave3_tex"),
+    ("sprashA_tex_dummy", "mFM_grd_sprashA_tex"),
+    ("sprashC_tex_dummy", "mFM_grd_sprashC_tex"),
 ];
 
 /// (bss buffer, palette set); sets with several palettes are per month.
@@ -61,6 +70,8 @@ const GROUND_PALETTES: &[(&str, &str)] = &[
     ("station_pal_dummy", "mFM_grd_s_station1_pal"),
     ("bridge_1_pal_dummy", "mFM_grd_s_bridge1_pal"),
     ("bridge_2_pal_dummy", "mFM_grd_s_bridge2_pal"),
+    ("rail_pal_dummy", "mFM_rail_pal"),
+    ("beach_pal_dummy2", "mFM_beach_pal"),
 ];
 
 /// Ground palette index per month (Jan..Dec). The 12 palettes run green
@@ -96,78 +107,68 @@ fn ground_segments(catalog: &AssetCatalog, month0: u32) -> Segments {
     segs
 }
 
-/// N=1, E=2, S=4, W=8 edge bits → retail river shape 1..7.
-fn river_shape(edges: u8) -> Option<u8> {
-    match edges {
-        0b0101 => Some(1),      // N-S
-        0b1010 => Some(2),      // W-E
-        0b0011 => Some(4),      // N-E
-        0b1100 => Some(5),      // W-S
-        0b1001 => Some(6),      // N-W
-        0b0110 => Some(7),      // E-S
-        e if e != 0 => Some(1), // anything else: straight
-        _ => None,
-    }
-}
+/// `data_combi_table` entry size: bg_id u16, fg_id u16, block type u8, pad.
+const COMBI_SIZE: usize = 6;
+/// `data_bgd` entry (`mFM_bg_data_c`): bg_id at +0, opaque and translucent
+/// display lists at +4 / +8.
+const BGD_SIZE: u32 = 0x434;
 
-/// N=1, E=2, S=4, W=8 edge bits → retail cliff shape 1..7.
-fn cliff_shape(edges: u8) -> Option<u8> {
-    match edges {
-        0b1010 => Some(1), // W-E: horizontal
-        0b0110 => Some(2), // E-S: bottom-right corner
-        0b0101 => Some(3), // N-S: vertical
-        0b0011 => Some(4), // N-E: top-right corner
-        0b1001 => Some(5), // N-W: top-left corner
-        0b1100 => Some(7), // W-S: bottom-left corner
-        e if e != 0 => Some(1),
-        _ => None,
-    }
-}
-
-/// Template base names to try, most specific first.
-fn template_bases(cliff: Option<u8>, river: Option<u8>) -> Vec<String> {
-    let mut bases = Vec::new();
-    match (cliff, river) {
-        (Some(c), Some(r)) => {
-            bases.push(format!("grd_s_c{c}_r{r}"));
-            bases.push(format!("grd_s_r{r}"));
-            bases.push(format!("grd_s_c{c}"));
-        }
-        (Some(c), None) => bases.push(format!("grd_s_c{c}")),
-        (None, Some(r)) => bases.push(format!("grd_s_r{r}")),
-        (None, None) => {}
-    }
-    bases.push("grd_s_f".to_string());
-    bases
-}
-
-/// `<base>_<n>` names that have a ground model on the disc.
-fn variants(catalog: &AssetCatalog, base: &str) -> Vec<String> {
-    (1..=9)
-        .map(|n| format!("{base}_{n}"))
-        .filter(|name| catalog.get(&format!("{name}_model")).is_some())
-        .collect()
-}
-
-fn pick_template(catalog: &AssetCatalog, cliff: u8, river: u8, salt: u32) -> Option<String> {
-    template_bases(cliff_shape(cliff), river_shape(river))
+/// The retail combination table (template choices per block type).
+fn read_combos(rom: &RomImage, catalog: &AssetCatalog) -> Vec<ComboInfo> {
+    let Some(table) = catalog.get("data_combi_table") else {
+        return Vec::new();
+    };
+    let Some(raw) = rom.slice(RomSource::Rel, table.offset, table.size) else {
+        return Vec::new();
+    };
+    raw.as_chunks::<COMBI_SIZE>()
+        .0
         .iter()
-        .map(|b| variants(catalog, b))
-        .find(|v| !v.is_empty())
-        .map(|v| v[salt as usize % v.len()].clone())
-}
-
-/// REL offsets of an acre's display lists: the opaque ground, then its
-/// translucent layer (water, etc.), drawn alpha-blended.
-fn acre_lists(catalog: &AssetCatalog, name: &str) -> Vec<(u32, bool)> {
-    [("_model", false), ("_modelT", true)]
-        .iter()
-        .filter_map(|(suffix, blend)| {
-            catalog
-                .get(&format!("{name}{suffix}"))
-                .map(|a| (a.offset, *blend))
+        .map(|e| ComboInfo {
+            bg_id: u16::from_be_bytes([e[0], e[1]]),
+            fg_id: u16::from_be_bytes([e[2], e[3]]),
+            block_type: e[4],
         })
         .collect()
+}
+
+/// `bg_id` → (opaque list, translucent list) REL offsets from `data_bgd`.
+fn read_bg_lists(
+    rom: &RomImage,
+    catalog: &AssetCatalog,
+) -> HashMap<u16, (Option<u32>, Option<u32>)> {
+    let mut map = HashMap::new();
+    let Some(bgd) = catalog.get("data_bgd") else {
+        return map;
+    };
+    let list = |at: u32| match rom.pointer_at(RomSource::Rel, at) {
+        Some(Target::File(RomSource::Rel, t)) => Some(t),
+        _ => None,
+    };
+    for i in 0..bgd.size / BGD_SIZE {
+        let at = bgd.offset + i * BGD_SIZE;
+        let Some(id) = rom.slice(RomSource::Rel, at, 2) else {
+            break;
+        };
+        map.insert(
+            u16::from_be_bytes([id[0], id[1]]),
+            (list(at + 4), list(at + 8)),
+        );
+    }
+    map
+}
+
+/// Deterministic `RANDOM(max)` for a town seed.
+fn seeded_rng(seed: u32) -> impl FnMut(i32) -> i32 {
+    let mut s = seed ^ 0x5EED_ACAC;
+    move |max| {
+        s = s.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+        if max <= 0 {
+            0
+        } else {
+            ((s >> 16) % max as u32) as i32
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -221,24 +222,31 @@ fn build_disc_town(
     mut images: ResMut<Assets<Image>>,
 ) {
     let segs = ground_segments(&disc.catalog, chrono::Local::now().month0());
-    let mut used = Vec::new();
-    for az in 0..ACRE_DEPTH {
-        for ax in 0..ACRE_WIDTH {
-            let i = az * ACRE_WIDTH + ax;
-            let acre = &town.plan.acres[i];
-            let salt = town.plan.seed.wrapping_mul(31).wrapping_add(i as u32 * 7);
-            let Some(name) = pick_template(&disc.catalog, acre.cliff_edges, acre.river_edges, salt)
+    let combos = read_combos(&disc.rom, &disc.catalog);
+    let bg_lists = read_bg_lists(&disc.rom, &disc.catalog);
+    let field = make_random_field(&combos, &mut seeded_rng(town.plan.seed));
+    let mut missing = 0;
+    for bz in 0..BLOCK_Z_NUM {
+        for bx in 0..BLOCK_X_NUM {
+            let combi = field.combi[bz * BLOCK_X_NUM + bx];
+            let Some(&(opaque, translucent)) = combos
+                .get(combi.combi as usize)
+                .and_then(|c| bg_lists.get(&c.bg_id))
             else {
-                warn!("acre ({ax},{az}): no ground template on the disc");
+                missing += 1;
                 continue;
             };
-            // Acre models span 0..16 cells from their north-west corner.
+            let lists: Vec<(u32, bool)> = [(opaque, false), (translucent, true)]
+                .into_iter()
+                .filter_map(|(l, blend)| l.map(|l| (l, blend)))
+                .collect();
+            // The playable 5x6 acres are blocks (1..=5, 1..=6); the rest is
+            // the border ring, rail line, beach and ocean.
             let corner = Vec3::new(
-                ax as f32 * ACRE_SIZE - ACRE_WIDTH as f32 * ACRE_SIZE / 2.0,
+                (bx as f32 - 1.0) * ACRE_SIZE - ACRE_WIDTH as f32 * ACRE_SIZE / 2.0,
                 -GROUND_BASE_Y * GROUND_SCALE,
-                az as f32 * ACRE_SIZE - ACRE_DEPTH as f32 * ACRE_SIZE / 2.0,
+                (bz as f32 - 1.0) * ACRE_SIZE - ACRE_DEPTH as f32 * ACRE_SIZE / 2.0,
             );
-            let lists = acre_lists(&disc.catalog, &name);
             spawn_acre(
                 &mut commands,
                 &disc.rom,
@@ -249,13 +257,19 @@ fn build_disc_town(
                 &mut materials,
                 &mut images,
             );
-            used.push(name);
         }
     }
+    if missing > 0 {
+        warn!("{missing} acres have no ground template on the disc");
+    }
+    info!(
+        "retail town from disc: {} step, {} combinations",
+        if field.three_step { "3" } else { "2" },
+        combos.len()
+    );
     for e in &placeholders {
         commands.entity(e).despawn();
     }
-    info!("town ground from disc: {}", used.join(" "));
 }
 
 pub struct DiscTownPlugin;
@@ -274,14 +288,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn shapes_from_edges() {
-        assert_eq!(river_shape(0b0101), Some(1));
-        assert_eq!(river_shape(0), None);
-        assert_eq!(cliff_shape(0b1010), Some(1));
-        assert_eq!(
-            template_bases(Some(1), Some(1)),
-            ["grd_s_c1_r1", "grd_s_r1", "grd_s_c1", "grd_s_f"]
-        );
-        assert_eq!(template_bases(None, None), ["grd_s_f"]);
+    fn seeded_rng_is_in_range_and_repeatable() {
+        let (mut a, mut b) = (seeded_rng(42), seeded_rng(42));
+        for max in [1, 2, 7, 100] {
+            let v = a(max);
+            assert!((0..max).contains(&v));
+            assert_eq!(v, b(max));
+        }
+        assert_eq!(a(0), 0);
     }
 }
