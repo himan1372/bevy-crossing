@@ -44,6 +44,8 @@ pub struct Town {
     /// Terrain from the disc's acre templates, when the disc is loaded.
     /// Takes over walkability and ground height from the plan.
     pub ground: Option<crate::ground_map::GroundMap>,
+    /// The retail layout the ground and objects came from (disc only).
+    pub retail: Option<crate::disc_town::RetailLayout>,
 }
 
 /// Seed used for town generation. Set from the save file at startup
@@ -116,6 +118,15 @@ impl Town {
     /// Whether a mover at `from` may step to `to`. Anything already inside a
     /// house box (spawned or loaded there) may move on walkable ground, so it
     /// can never get stuck.
+    /// Ground height at a world position: the disc terrain when loaded,
+    /// otherwise the flat plane at 0.
+    pub fn ground_y(&self, pos: Vec3) -> f32 {
+        self.ground
+            .as_ref()
+            .and_then(|g| g.height(pos.x, pos.z))
+            .unwrap_or(0.0)
+    }
+
     pub fn can_step(&self, from: Vec3, to: Vec3) -> bool {
         if let Some(ground) = &self.ground {
             return ground.can_step(from, to);
@@ -314,12 +325,28 @@ fn river_water_tiles(plan: &TownPlan) -> HashSet<(usize, usize, usize, usize)> {
 /// Generate a town and store it as a resource.
 /// Uses `TownSeed` when the save system has set one (PreStartup),
 /// otherwise falls back to the default seed.
-pub fn generate_town(mut commands: Commands, seed: Option<Res<TownSeed>>) {
+pub fn generate_town(
+    mut commands: Commands,
+    seed: Option<Res<TownSeed>>,
+    disc: Option<Res<crate::game_disc::GameDisc>>,
+) {
     let seed_val = seed.map(|s| s.0).unwrap_or(12345);
     let pool: Vec<u16> = (0..15).collect();
-    let plan = town_gen::generate(seed_val, &pool, 6).expect("Failed to generate town");
+    let mut plan = town_gen::generate(seed_val, &pool, 6).expect("Failed to generate town");
 
-    let river_tiles = river_water_tiles(&plan);
+    // With the player disc, the town is the retail layout: its ground,
+    // water and objects replace the plan ones (resident homes are kept).
+    let (retail, ground) = match disc {
+        Some(disc) => {
+            let (retail, ground) = crate::disc_town::build_retail_town(&disc, &mut plan);
+            (Some(retail), Some(ground))
+        }
+        None => (None, None),
+    };
+    let river_tiles = match &ground {
+        Some(g) => g.water_cells(),
+        None => river_water_tiles(&plan),
+    };
     println!(
         "Town generated with seed {seed_val} (30 acres), river covers {} tiles",
         river_tiles.len()
@@ -327,7 +354,8 @@ pub fn generate_town(mut commands: Commands, seed: Option<Res<TownSeed>>) {
     commands.insert_resource(Town {
         plan,
         river_tiles,
-        ground: None,
+        ground,
+        retail,
     });
 }
 
@@ -393,6 +421,7 @@ pub fn render_town(
             for cz in 0..16 {
                 for cx in 0..16 {
                     let pos = Town::cell_to_world(ax, az, cx, cz);
+                    let gy = town.ground_y(pos);
 
                     // River water: flat blue plane, no decorations on top.
                     if town.river_tiles.contains(&(ax, az, cx, cz)) {
@@ -401,7 +430,7 @@ pub fn render_town(
                             PlaceholderGround,
                             Mesh3d(water_mesh.clone()),
                             MeshMaterial3d(water_mat.clone()),
-                            Transform::from_xyz(pos.x, 0.05, pos.z),
+                            Transform::from_xyz(pos.x, gy + 0.05, pos.z),
                         ));
                         continue;
                     }
@@ -414,31 +443,31 @@ pub fn render_town(
                         commands.spawn((
                             Mesh3d(trunk_mesh.clone()),
                             MeshMaterial3d(tree_trunk_mat.clone()),
-                            Transform::from_xyz(pos.x, 0.75, pos.z),
+                            Transform::from_xyz(pos.x, gy + 0.75, pos.z),
                         ));
                         commands.spawn((
                             Mesh3d(leaf_mesh.clone()),
                             MeshMaterial3d(tree_leaf_mat.clone()),
-                            Transform::from_xyz(pos.x, 2.2, pos.z),
+                            Transform::from_xyz(pos.x, gy + 2.2, pos.z),
                         ));
                     } else if cell == CellKind::House as u8 {
                         house_count += 1;
                         commands.spawn((
                             Mesh3d(house_mesh.clone()),
                             MeshMaterial3d(house_mat.clone()),
-                            Transform::from_xyz(pos.x, 1.25, pos.z),
+                            Transform::from_xyz(pos.x, gy + 1.25, pos.z),
                         ));
                     } else if cell == CellKind::Rock as u8 {
                         commands.spawn((
                             Mesh3d(rock_mesh.clone()),
                             MeshMaterial3d(rock_mat.clone()),
-                            Transform::from_xyz(pos.x, 0.4, pos.z),
+                            Transform::from_xyz(pos.x, gy + 0.4, pos.z),
                         ));
                     } else if cell == CellKind::Litter as u8 {
                         commands.spawn((
                             Mesh3d(litter_mesh.clone()),
                             MeshMaterial3d(litter_mat.clone()),
-                            Transform::from_xyz(pos.x + 0.15, 0.12, pos.z - 0.1)
+                            Transform::from_xyz(pos.x + 0.15, gy + 0.12, pos.z - 0.1)
                                 .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
                         ));
                     }
@@ -457,7 +486,10 @@ pub struct TownPlugin;
 
 impl Plugin for TownPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, generate_town)
-            .add_systems(Startup, render_town.after(generate_town));
+        app.add_systems(
+            Startup,
+            generate_town.after(crate::game_disc::start_disc_load),
+        )
+        .add_systems(Startup, render_town.after(generate_town));
     }
 }

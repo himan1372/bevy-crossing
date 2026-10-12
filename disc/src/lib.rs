@@ -10,11 +10,13 @@
 mod assets;
 pub mod gx_texture;
 mod image;
+mod rarc;
 mod rom;
 mod yaz0;
 
 pub use assets::{rel_bss, Asset, AssetCatalog};
 pub use image::{find_image, Disc, DiscError, FstFile, GAME_ID_NTSC_U};
+pub use rarc::{Rarc, RarcFile};
 pub use rom::{RomImage, RomSource, Target};
 pub use yaz0::decode as decode_yaz0;
 

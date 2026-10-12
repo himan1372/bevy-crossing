@@ -18,7 +18,10 @@ use chrono::Datelike;
 use std::collections::HashMap;
 
 use disc::{rel_bss, AssetCatalog, RomImage, RomSource, Target};
-use rustimal_logic::random_field::{bt, make_random_field, ComboInfo, BLOCK_X_NUM, BLOCK_Z_NUM};
+use rustimal_logic::random_field::{
+    bt, make_random_field, ComboInfo, RandomField, BLOCK_X_NUM, BLOCK_Z_NUM,
+};
+use rustimal_logic::town_gen::{CellKind, TownPlan, ACRE_DEPTH, ACRE_WIDTH};
 
 use crate::disc_gfx::{decode_texture, run_display_lists, Segments};
 use crate::game_disc::GameDisc;
@@ -237,36 +240,119 @@ fn spawn_acre(
 #[derive(Component)]
 pub struct DiscGround;
 
+/// The retail town built from the disc: layout and combination table.
+#[derive(Clone)]
+pub struct RetailLayout {
+    pub field: RandomField,
+    pub combos: Vec<ComboInfo>,
+}
+
+/// `fgdata.bin` entry: `fg_id` u16, `items[16][16]` u16, 4 bytes of
+/// `haniwa_step`.
+const FG_ENTRY_SIZE: usize = 518;
+
+/// `fg_id` to the acre's 256 item ids (`mActor_name_t`).
+fn read_fg_layouts(fgdata: &[u8]) -> HashMap<u16, [u16; 256]> {
+    fgdata
+        .as_chunks::<FG_ENTRY_SIZE>()
+        .0
+        .iter()
+        .map(|e| {
+            let mut items = [0u16; 256];
+            for (i, item) in items.iter_mut().enumerate() {
+                *item = u16::from_be_bytes([e[2 + i * 2], e[3 + i * 2]]);
+            }
+            (u16::from_be_bytes([e[0], e[1]]), items)
+        })
+        .collect()
+}
+
+/// What a retail object id becomes in the town plan (`m_name_table.h`).
+fn cell_for_item(item: u16) -> Option<CellKind> {
+    const ENV_START: u16 = 0x0800;
+    match item {
+        // Pansy/cosmos/tulip leaves and flowers (ENV_START + 60..=77).
+        i if (ENV_START + 60..=ENV_START + 77).contains(&i) => Some(CellKind::Flower),
+        // Saplings and grown trees: fruit, cedar, palm, gold, bells.
+        i if (ENV_START..ENV_START + 0x80).contains(&i) => Some(CellKind::Tree),
+        0x0063..=0x0067 => Some(CellKind::Rock), // ROCK_A..
+        _ => None,
+    }
+}
+
+/// Builds the retail town from the disc for the plan seed: the layout,
+/// the walkable ground, and the plan trees/rocks/flowers from each acre
+/// object layout (resident homes from the plan are kept).
+pub fn build_retail_town(disc: &GameDisc, plan: &mut TownPlan) -> (RetailLayout, GroundMap) {
+    let combos = read_combos(&disc.rom, &disc.catalog);
+    let bg_lists = read_bg_lists(&disc.rom, &disc.catalog);
+    let fg = read_fg_layouts(&disc.fgdata);
+    let field = make_random_field(&combos, &mut seeded_rng(plan.seed));
+    let mut units = Vec::with_capacity(BLOCK_X_NUM * BLOCK_Z_NUM);
+    let mut tiers = [0u8; BLOCK_X_NUM * BLOCK_Z_NUM];
+    for (i, combi) in field.combi.iter().enumerate() {
+        tiers[i] = combi.height;
+        let entry = combos
+            .get(combi.combi as usize)
+            .and_then(|c| bg_lists.get(&c.bg_id));
+        units.push(entry.map_or([Unit::default(); 256], |e| collision_units(&disc.rom, e)));
+    }
+    let ground = GroundMap::new(units, tiers);
+
+    // Objects for the playable acres (blocks 1..=5, 1..=6).
+    let homes = [
+        CellKind::House,
+        CellKind::HouseSign,
+        CellKind::HouseReserved,
+    ]
+    .map(|k| k as u8);
+    for az in 0..ACRE_DEPTH {
+        for ax in 0..ACRE_WIDTH {
+            let block = (az + 1) * BLOCK_X_NUM + ax + 1;
+            let items = combos
+                .get(field.combi[block].combi as usize)
+                .and_then(|c| fg.get(&c.fg_id));
+            let acre = &mut plan.acres[az * ACRE_WIDTH + ax];
+            for (cell, slot) in acre.cells.iter_mut().enumerate() {
+                if homes.contains(slot) {
+                    continue;
+                }
+                *slot = items
+                    .and_then(|it| cell_for_item(it[cell]))
+                    .unwrap_or(CellKind::Grass) as u8;
+            }
+        }
+    }
+    (RetailLayout { field, combos }, ground)
+}
+
 fn build_disc_town(
     mut commands: Commands,
     disc: Res<GameDisc>,
-    mut town: ResMut<Town>,
+    town: Res<Town>,
     placeholders: Query<Entity, With<PlaceholderGround>>,
     mut player: Query<&mut Transform, With<Player>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<N64Material>>,
     mut images: ResMut<Assets<Image>>,
 ) {
+    let (Some(retail), Some(ground)) = (&town.retail, &town.ground) else {
+        return;
+    };
     let segs = ground_segments(&disc.catalog, chrono::Local::now().month0());
-    let combos = read_combos(&disc.rom, &disc.catalog);
     let bg_lists = read_bg_lists(&disc.rom, &disc.catalog);
-    let field = make_random_field(&combos, &mut seeded_rng(town.plan.seed));
     let mut missing = 0;
-    let mut units = Vec::with_capacity(BLOCK_X_NUM * BLOCK_Z_NUM);
-    let mut tiers = [0u8; BLOCK_X_NUM * BLOCK_Z_NUM];
     for bz in 0..BLOCK_Z_NUM {
         for bx in 0..BLOCK_X_NUM {
-            let combi = field.combi[bz * BLOCK_X_NUM + bx];
-            tiers[bz * BLOCK_X_NUM + bx] = combi.height;
-            let Some(entry) = combos
+            let combi = retail.field.combi[bz * BLOCK_X_NUM + bx];
+            let Some(entry) = retail
+                .combos
                 .get(combi.combi as usize)
                 .and_then(|c| bg_lists.get(&c.bg_id))
             else {
                 missing += 1;
-                units.push([Unit::default(); 256]);
                 continue;
             };
-            units.push(collision_units(&disc.rom, entry));
             let lists: Vec<(u32, bool)> = [(entry.opaque, false), (entry.translucent, true)]
                 .into_iter()
                 .filter_map(|(l, blend)| l.map(|l| (l, blend)))
@@ -294,11 +380,14 @@ fn build_disc_town(
     if missing > 0 {
         warn!("{missing} acres have no ground template on the disc");
     }
-    let ground = GroundMap::new(units, tiers);
     // A saved position from the old layout may be in water now.
     if let Ok(mut t) = player.single_mut() {
         if !ground.walkable_at(t.translation.x, t.translation.z) {
-            let house = field.blocks.iter().position(|&b| b == bt::PLAYER_HOUSE);
+            let house = retail
+                .field
+                .blocks
+                .iter()
+                .position(|&b| b == bt::PLAYER_HOUSE);
             if let Some(spot) =
                 house.and_then(|i| ground.walkable_spot_in(i % BLOCK_X_NUM, i / BLOCK_X_NUM))
             {
@@ -308,16 +397,14 @@ fn build_disc_town(
             }
         }
     }
-    town.river_tiles = ground.water_cells();
-    town.ground = Some(ground);
-    info!(
-        "retail town from disc: {} step, {} combinations",
-        if field.three_step { "3" } else { "2" },
-        combos.len()
-    );
     for e in &placeholders {
         commands.entity(e).despawn();
     }
+    info!(
+        "retail town from disc: {} step, {} combinations",
+        if retail.field.three_step { "3" } else { "2" },
+        retail.combos.len()
+    );
 }
 
 /// Player capsule centre above the ground.

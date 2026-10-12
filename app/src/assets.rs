@@ -19,20 +19,11 @@ use bevy::prelude::*;
 
 use crate::states::AppState;
 
-/// Handles (and named non-asset jobs, like reading the disc) still being waited on.
+/// Handles still being waited on.
 #[derive(Resource, Default)]
-pub struct PendingAssets(Vec<(UntypedAssetId, String)>, Vec<&'static str>);
+pub struct PendingAssets(Vec<(UntypedAssetId, String)>);
 
 impl PendingAssets {
-    /// Hold the loading screen until [`PendingAssets::release`] is called with `job`.
-    pub fn hold(&mut self, job: &'static str) {
-        self.1.push(job);
-    }
-
-    pub fn release(&mut self, job: &'static str) {
-        self.1.retain(|j| *j != job);
-    }
-
     /// Hold the loading screen until `handle` finishes loading.
     #[allow(dead_code)] // first caller arrives with the M2 art tasks
     pub fn track<A: Asset>(&mut self, handle: &Handle<A>, path: &str) {
@@ -73,7 +64,7 @@ fn check_loading(
             _ => true,
         },
     );
-    if pending.0.is_empty() && pending.1.is_empty() {
+    if pending.0.is_empty() {
         // No title screen yet (roadmap `title-screen`): go straight in.
         next.set(AppState::InGame);
     }

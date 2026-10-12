@@ -407,6 +407,14 @@ mod tests {
         // AC keeps most code in foresta.rel; main.dol is small but non-trivial.
         assert!(dol.len() > 64 * 1024);
 
+        for name in ["forest_1st.arc", "forest_2nd.arc"] {
+            let arc = crate::Rarc::parse(disc.read_file(name).unwrap()).expect(name);
+            eprintln!(
+                "{name}: {} files, fgdata={:?}",
+                arc.files().len(),
+                arc.file("fgdata.bin").map(|f| f.len())
+            );
+        }
         let rom = crate::RomImage::new(dol, rel).unwrap();
         let n = rom.rel_pointer_count();
         eprintln!("rel data pointers={n}");

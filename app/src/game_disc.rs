@@ -2,8 +2,7 @@
 //!
 //! Search order: `--disc <path>` on the command line, then `disc_path` in
 //! `settings.json` (working directory), then any `.iso`/`.gcm`/`.ciso` in
-//! `rom/`. The disc is read and `foresta.rel` decompressed on the async
-//! compute pool while `AppState::Loading` holds. Renderers read the
+//! `rom/`. The disc is read and `foresta.rel` decompressed during startup. Renderers read the
 //! [`GameDisc`] resource; when it's absent they keep their placeholder art.
 //! A missing or wrong disc never stops the game: it shows a notice instead.
 
@@ -11,36 +10,30 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use bevy::prelude::*;
-use bevy::tasks::{futures::check_ready, AsyncComputeTaskPool, Task};
-use disc::{AssetCatalog, Disc, RomImage};
+use disc::{AssetCatalog, Disc, Rarc, RomImage};
 
-use crate::assets::PendingAssets;
 use crate::states::AppState;
 
-const LOADING_JOB: &str = "game disc";
 const SETTINGS_FILE: &str = "settings.json";
 const NOTICE_SECONDS: f32 = 10.0;
 
 /// The decoded disc, present only when one was found and read.
 #[derive(Resource, Clone)]
-#[allow(dead_code)] // first readers arrive with gx-backend-bevy
 pub struct GameDisc {
     pub path: PathBuf,
     pub rom: Arc<RomImage>,
     pub catalog: Arc<AssetCatalog<'static>>,
+    /// `fgdata.bin` from `forest_1st.arc`: the town object layouts.
+    pub fgdata: Arc<Vec<u8>>,
 }
 
 /// Why there is no [`GameDisc`], for the on-screen notice.
 #[derive(Resource, Debug, Clone, PartialEq, Eq)]
 enum DiscStatus {
-    Loading,
     Loaded,
     NotFound,
     Failed(String),
 }
-
-#[derive(Resource)]
-struct DiscTask(Task<Result<GameDisc, String>>);
 
 #[derive(Component)]
 struct DiscNotice(Timer);
@@ -62,10 +55,24 @@ fn load(path: PathBuf) -> Result<GameDisc, String> {
     let mut disc = Disc::open_path(&path).map_err(|e| fail(&e))?;
     let rom = Arc::new(RomImage::from_disc(&mut disc).map_err(|e| fail(&e))?);
     let catalog = Arc::new(AssetCatalog::builtin(&rom));
-    Ok(GameDisc { path, rom, catalog })
+    let arc = Rarc::parse(disc.read_file("forest_1st.arc").map_err(|e| fail(&e))?)
+        .ok_or_else(|| fail(&"forest_1st.arc is not a RARC archive"))?;
+    let fgdata = Arc::new(
+        arc.file("fgdata.bin")
+            .ok_or_else(|| fail(&"no fgdata.bin in forest_1st.arc"))?
+            .to_vec(),
+    );
+    Ok(GameDisc {
+        path,
+        rom,
+        catalog,
+        fgdata,
+    })
 }
 
-fn start_disc_load(mut commands: Commands, mut pending: ResMut<PendingAssets>) {
+/// Reads the disc during startup (about half a second), so the town and
+/// everything placed in it can be built from the disc's own layout.
+pub fn start_disc_load(mut commands: Commands) {
     let args: Vec<String> = std::env::args().collect();
     let settings = std::fs::read_to_string(Path::new(SETTINGS_FILE)).ok();
     let Some(path) = configured_path(&args, settings.as_deref()).or_else(disc::find_image) else {
@@ -74,23 +81,7 @@ fn start_disc_load(mut commands: Commands, mut pending: ResMut<PendingAssets>) {
         return;
     };
     info!("reading game disc {}", path.display());
-    pending.hold(LOADING_JOB);
-    commands.insert_resource(DiscStatus::Loading);
-    let task = AsyncComputeTaskPool::get().spawn(async move { load(path) });
-    commands.insert_resource(DiscTask(task));
-}
-
-fn finish_disc_load(
-    mut commands: Commands,
-    mut task: ResMut<DiscTask>,
-    mut pending: ResMut<PendingAssets>,
-) {
-    let Some(result) = check_ready(&mut task.0) else {
-        return;
-    };
-    commands.remove_resource::<DiscTask>();
-    pending.release(LOADING_JOB);
-    match result {
+    match load(path) {
         Ok(game_disc) => {
             info!(
                 "game disc ready: {} ({} assets)",
@@ -115,7 +106,7 @@ fn show_notice(mut commands: Commands, status: Res<DiscStatus>) {
         DiscStatus::Failed(e) => {
             format!("Couldn't use the disc image - using placeholder art.\n{e}")
         }
-        DiscStatus::Loading | DiscStatus::Loaded => return,
+        DiscStatus::Loaded => return,
     };
     commands.spawn((
         DiscNotice(Timer::from_seconds(NOTICE_SECONDS, TimerMode::Once)),
@@ -155,13 +146,7 @@ pub struct GameDiscPlugin;
 impl Plugin for GameDiscPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, start_disc_load)
-            .add_systems(
-                Update,
-                (
-                    finish_disc_load.run_if(resource_exists::<DiscTask>),
-                    tick_notice,
-                ),
-            )
+            .add_systems(Update, tick_notice)
             .add_systems(OnEnter(AppState::InGame), show_notice);
     }
 }
