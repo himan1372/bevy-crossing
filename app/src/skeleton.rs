@@ -339,6 +339,54 @@ mod tests {
         assert!((pose.rotations[0].x - std::f32::consts::FRAC_PI_2).abs() < 1e-3);
     }
 
+    /// Probe (needs the disc): villager names and their draw-data entries.
+    #[test]
+    #[ignore]
+    fn probe_villager_draw_data() {
+        let path = std::env::var("BEVY_CROSSING_ISO").expect("set BEVY_CROSSING_ISO");
+        let mut d = disc::Disc::open_path(std::path::Path::new(&path)).unwrap();
+        let names = disc::Rarc::parse(d.read_file("forest_2nd.arc").unwrap()).unwrap();
+        let names = names.file("npc_name_str_table.bin").unwrap().to_vec();
+        let rom = RomImage::from_disc(&mut d).unwrap();
+        let cat = disc::AssetCatalog::builtin(&rom);
+        let tbl = cat.get("npc_draw_data_tbl").unwrap().offset;
+        let sym = |off: u32| {
+            rel_pointer(&rom, off)
+                .and_then(|p| {
+                    cat.containing(RomSource::Rel, p)
+                        .map(|a| a.name.to_string())
+                })
+                .unwrap_or_default()
+        };
+        for sk in [
+            "cKF_bs_r_cat_1",
+            "cKF_bs_r_cbr_1",
+            "cKF_bs_r_wol_1",
+            "cKF_bs_r_rbt_1",
+        ] {
+            let k = Skeleton::read(&rom, cat.get(sk).unwrap().offset).unwrap();
+            println!(
+                "{sk}: {} joints, {} drawn",
+                k.joints.len(),
+                k.matrix_joints().len()
+            );
+        }
+        for i in 0..names.len() / 8 {
+            let name: String = names[i * 8..i * 8 + 8]
+                .iter()
+                .take_while(|&&c| c != 0 && c != 0x20 || false)
+                .map(|&c| c as char)
+                .collect();
+            let e = tbl + i as u32 * 0x6C;
+            let b = rom.slice(RomSource::Rel, e, 0x6C).unwrap();
+            let scale = f32::from_be_bytes([b[0x54], b[0x55], b[0x56], b[0x57]]);
+            println!(
+                "{i:3} {name:8} bank {} {} skel {} tex {} pal {} eye0 {} mouth0 {} scale {scale} eye_h {}",
+                be16(b, 0), be16(b, 2), sym(e + 4), sym(e + 8), sym(e + 12), sym(e + 16), sym(e + 0x30), b[0x5E]
+            );
+        }
+    }
+
     /// Probe (needs the disc): disc files and archive entries for the
     /// player's textures.
     #[test]

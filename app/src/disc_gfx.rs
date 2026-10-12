@@ -339,12 +339,34 @@ pub fn run_ground_lists(rom: &RomImage, entries: &[u32]) -> TriangleSink {
     run_lists(rom, entries, [255; 4], 255, BEACH_ENV_COLOR)
 }
 
+/// Runs lists after game code has loaded palettes into TLUT slots
+/// (`gDPLoadTLUT_Dolphin(slot, ...)`), e.g. a villager's body palette in
+/// slot 15: `tluts` = (slot, REL offset).
+pub fn run_display_lists_with_tluts(
+    rom: &RomImage,
+    entries: &[u32],
+    tluts: &[(usize, u32)],
+) -> TriangleSink {
+    run_lists_full(rom, entries, [255; 4], 255, [0; 4], tluts)
+}
+
 fn run_lists(
     rom: &RomImage,
     entries: &[u32],
     prim: [u8; 4],
     prim_lod: u8,
     env: [u8; 4],
+) -> TriangleSink {
+    run_lists_full(rom, entries, prim, prim_lod, env, &[])
+}
+
+fn run_lists_full(
+    rom: &RomImage,
+    entries: &[u32],
+    prim: [u8; 4],
+    prim_lod: u8,
+    env: [u8; 4],
+    tluts: &[(usize, u32)],
 ) -> TriangleSink {
     let mem = RelGfx::new(rom);
     let mut emu = Emu64::new();
@@ -373,6 +395,12 @@ fn run_lists(
     emu.state.geometry_mode = SETUP_GEOMETRY_MODE;
     emu.state.combine_l = SETUP_COMBINE.0;
     emu.state.combine_h = SETUP_COMBINE.1;
+    for &(slot, addr) in tluts {
+        if let Some(t) = emu.state.tluts.get_mut(slot) {
+            t.addr = addr;
+            t.count = 16;
+        }
+    }
     let mut sink = TriangleSink::default();
     for &entry in entries {
         let lists = mem.lists(entry);

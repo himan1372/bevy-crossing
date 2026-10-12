@@ -1,6 +1,7 @@
-//! The player's model from the disc: the boy skeleton (`cKF_bs_r_boy_1`)
-//! as a Bevy skinned mesh, animated by the game's keyframe animations
-//! (`cKF_ba_r_ply_1_*`).
+//! Character models from the disc: the player (`cKF_bs_r_boy_1`) and the
+//! villagers (their `npc_draw_data_tbl` entries) as Bevy skinned meshes,
+//! animated by the game's keyframe animations (`cKF_ba_r_ply_1_*`,
+//! `cKF_ba_r_npc_1_*`).
 //!
 //! Each joint's display list is interpreted on its own. A vertex is
 //! placed by the matrix current when it was loaded: the joint's own (the
@@ -19,13 +20,15 @@ use bevy::prelude::*;
 use rustimal_logic::graphics::vertex::DecodedVtx;
 use rustimal_logic::player_move::LocomotionState;
 
-use crate::disc_gfx::{decode_texture, run_display_lists, Part, Segments};
+use crate::disc_gfx::{decode_texture, run_display_lists_with_tluts, Part, Segments};
 use crate::game_disc::GameDisc;
 use crate::interaction::Facing;
 use crate::locomotion::Locomotion;
 use crate::n64_material::{texture_image, CombinerUniform, N64Material, ST_ONE};
+use crate::npc::Villager;
 use crate::player::Player;
 use crate::skeleton::{Animation, Skeleton};
+use disc::{RomImage, RomSource, Target};
 
 /// Model units to world units (the actor draws at scale 0.01; 40 game
 /// units per cell).
@@ -127,10 +130,17 @@ impl Motion {
 }
 
 /// Player animations, indexed by [`Motion`].
-const ANIMATIONS: [&str; 3] = [
+const PLAYER_ANIMATIONS: [&str; 3] = [
     "cKF_ba_r_ply_1_wait1",
     "cKF_ba_r_ply_1_walk1",
     "cKF_ba_r_ply_1_run1",
+];
+
+/// Villager animations (shared by every species' 26-joint skeleton).
+const NPC_ANIMATIONS: [&str; 3] = [
+    "cKF_ba_r_npc_1_wait1",
+    "cKF_ba_r_npc_1_walk1",
+    "cKF_ba_r_npc_1_run1",
 ];
 
 /// A drawn skeleton: its joints' entities and animations.
@@ -141,6 +151,8 @@ pub struct CharacterRig {
     animations: [Option<Arc<Animation>>; 3],
     playing: Motion,
     frame: f32,
+    /// Owner's last world position (villagers: motion from movement).
+    last_pos: Option<Vec3>,
 }
 
 /// Which joint places a vertex: its load-time matrix (see module docs).
@@ -194,55 +206,45 @@ fn skinned_part_mesh(part: &Part, own: usize, matrix_joints: &[usize]) -> Mesh {
     mesh
 }
 
-/// Replaces the player's placeholder capsule with the disc model, once.
-#[allow(clippy::too_many_arguments)]
-fn spawn_player_model(
-    mut commands: Commands,
-    disc: Option<Res<GameDisc>>,
-    players: Query<Entity, With<Player>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<N64Material>>,
-    mut images: ResMut<Assets<Image>>,
-    mut bindposes: ResMut<Assets<SkinnedMeshInverseBindposes>>,
-    mut done: Local<bool>,
-) {
-    if *done {
-        return;
-    }
-    let (Some(disc), Ok(player)) = (disc, players.single()) else {
-        return;
-    };
-    *done = true;
-    let rom = &disc.rom;
-    let Some(skeleton) = disc
-        .catalog
-        .get("cKF_bs_r_boy_1")
-        .and_then(|a| Skeleton::read(rom, a.offset))
-    else {
-        warn!("player skeleton not found on the disc");
-        return;
-    };
-    let animations = ANIMATIONS.map(|name| {
-        let a = disc.catalog.get(name)?;
-        Some(Arc::new(Animation::read(
-            rom,
-            a.offset,
-            skeleton.joints.len(),
-        )?))
-    });
-    let Some(wait) = &animations[Motion::Wait as usize] else {
-        warn!("player animations not found on the disc");
-        return;
-    };
+/// What a rig is drawn from: skeleton, animations, the segments and TLUT
+/// slots its draw routine sets, and its scale (model units to world).
+struct RigSource {
+    skeleton: Skeleton,
+    animations: [Option<Arc<Animation>>; 3],
+    segments: Segments,
+    tluts: Vec<(usize, u32)>,
+    scale: f32,
+}
 
-    // The model hangs under the player, at the feet.
+/// Bevy asset stores a rig is built into.
+type RigAssets<'a> = (
+    &'a mut Assets<Mesh>,
+    &'a mut Assets<N64Material>,
+    &'a mut Assets<Image>,
+    &'a mut Assets<SkinnedMeshInverseBindposes>,
+);
+
+/// Spawns a skinned model under `parent` (at its feet), returning the
+/// number of mesh parts.
+fn spawn_rig(
+    commands: &mut Commands,
+    rom: &RomImage,
+    src: RigSource,
+    parent: Entity,
+    name: String,
+    (meshes, materials, images, bindposes): RigAssets,
+) -> usize {
+    let Some(wait) = src.animations[Motion::Wait as usize].clone() else {
+        return 0;
+    };
+    let skeleton = src.skeleton;
     let feet = Vec3::Y * -crate::disc_town::PLAYER_HALF_HEIGHT;
     let root = commands
         .spawn((
-            Name::new("player model"),
-            Transform::from_translation(feet).with_scale(Vec3::splat(MODEL_SCALE)),
+            Name::new(name),
+            Transform::from_translation(feet).with_scale(Vec3::splat(src.scale)),
             Visibility::default(),
-            ChildOf(player),
+            ChildOf(parent),
         ))
         .id();
     let locals = wait.pose(1.0).local_transforms(&skeleton);
@@ -260,15 +262,15 @@ fn spawn_player_model(
         joints.len()
     ]));
     let matrix_joints = skeleton.matrix_joints();
-    let segs = player_segments(&disc, PlayerLook::default());
     let mut parts = 0;
     for &j in &matrix_joints {
         let Some(list) = skeleton.joints[j].model else {
             continue;
         };
-        for part in &run_display_lists(rom, &[list]).parts {
+        for part in &run_display_lists_with_tluts(rom, &[list], &src.tluts).parts {
             let texture = part.key.tex.as_ref().and_then(|k| {
-                decode_texture(rom, k, None, &segs).map(|rgba| images.add(texture_image(rgba, k)))
+                decode_texture(rom, k, None, &src.segments)
+                    .map(|rgba| images.add(texture_image(rgba, k)))
             });
             let material = materials.add(N64Material {
                 combiner: CombinerUniform::from_key(&part.key, false, false),
@@ -291,58 +293,283 @@ fn spawn_player_model(
     commands.entity(root).insert(CharacterRig {
         skeleton: Arc::new(skeleton),
         joints,
-        animations,
+        animations: src.animations,
         playing: Motion::Wait,
         frame: 1.0,
+        last_pos: None,
     });
+    parts
+}
+
+fn read_animations(
+    disc: &GameDisc,
+    names: [&str; 3],
+    joints: usize,
+) -> [Option<Arc<Animation>>; 3] {
+    names.map(|name| {
+        let a = disc.catalog.get(name)?;
+        Some(Arc::new(Animation::read(&disc.rom, a.offset, joints)?))
+    })
+}
+
+/// Replaces the player's placeholder capsule with the disc model, once.
+#[allow(clippy::too_many_arguments)]
+fn spawn_player_model(
+    mut commands: Commands,
+    disc: Option<Res<GameDisc>>,
+    players: Query<Entity, With<Player>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<N64Material>>,
+    mut images: ResMut<Assets<Image>>,
+    mut bindposes: ResMut<Assets<SkinnedMeshInverseBindposes>>,
+    mut done: Local<bool>,
+) {
+    if *done {
+        return;
+    }
+    let (Some(disc), Ok(player)) = (disc, players.single()) else {
+        return;
+    };
+    *done = true;
+    let Some(skeleton) = disc
+        .catalog
+        .get("cKF_bs_r_boy_1")
+        .and_then(|a| Skeleton::read(&disc.rom, a.offset))
+    else {
+        warn!("player skeleton not found on the disc");
+        return;
+    };
+    let animations = read_animations(&disc, PLAYER_ANIMATIONS, skeleton.joints.len());
+    let src = RigSource {
+        skeleton,
+        animations,
+        segments: player_segments(&disc, PlayerLook::default()),
+        tluts: Vec::new(),
+        scale: MODEL_SCALE,
+    };
+    let assets = (&mut *meshes, &mut *materials, &mut *images, &mut *bindposes);
+    let parts = spawn_rig(
+        &mut commands,
+        &disc.rom,
+        src,
+        player,
+        "player model".into(),
+        assets,
+    );
+    if parts == 0 {
+        warn!("player animations not found on the disc");
+        return;
+    }
     commands
         .entity(player)
         .remove::<(Mesh3d, MeshMaterial3d<StandardMaterial>)>();
     info!("player model from the disc: {parts} parts");
 }
 
-/// Plays the animation for the player's movement and turns the model to
-/// face where the player faces.
-fn animate_player(
-    time: Res<Time>,
-    players: Query<(&Locomotion, &Facing), With<Player>>,
-    mut rigs: Query<(Entity, &mut CharacterRig)>,
-    mut transforms: Query<&mut Transform>,
-) {
-    let Ok((loco, facing)) = players.single() else {
-        return;
+/// `npc_draw_data_tbl` entry size (`aNPC_draw_data_c`).
+const DRAW_DATA_SIZE: u32 = 0x6C;
+/// Segment and TLUT slot the villager draw sets (`ac_npc_draw`) for the
+/// body: texture in segment B, palette in TLUT 15. Eyes and mouth use
+/// segments 8 and 9 like the player's.
+const SEG_NPC_BODY: u8 = 0x0B;
+const TLUT_NPC_BODY: usize = 15;
+/// The villager draw also puts the shirt texture in segment A and its
+/// palette in TLUT 14 (`ac_npc_draw`). Our TLUT presets are addresses, so
+/// the palette is served from an otherwise unused segment.
+const SEG_NPC_CLOTH: u8 = 0x0A;
+const TLUT_NPC_CLOTH: usize = 14;
+const SEG_NPC_CLOTH_PALETTE: u8 = 0x0E;
+/// `npc_def_list` entry (`mNpc_Default_Data_c`): cloth item u16,
+/// catchphrase u16, umbrella s8, padded to 6 bytes.
+const NPC_DEFAULT_SIZE: u32 = 6;
+/// `ITM_CLOTH000`: shirt items index the clothing banks from here
+/// (`aNPC_getP_cloth_tex_rom`).
+const ITM_CLOTH000: u16 = 0x2400;
+
+/// Bytes of one eye or mouth texture (32x16, 4 bits per texel).
+const NPC_FACE_TEX_SIZE: usize = 0x100;
+/// Upper bound on a body texture (`*_tmem_txt`); segments only bound reads.
+const NPC_BODY_TEX_MAX: usize = 0x2000;
+
+/// Index into `npc_draw_data_tbl` (NPC id - `NPC_START`) for our
+/// villagers, from the disc's `npc_name_str_table.bin`.
+fn villager_draw_index(name: &str) -> Option<u32> {
+    match name {
+        "Bob" => Some(0),
+        "Maple" => Some(51),
+        "Chief" => Some(187),
+        "Pippy" => Some(206),
+        _ => None,
+    }
+}
+
+/// A villager's rig source from its `npc_draw_data_tbl` entry: skeleton,
+/// body texture and palette, first eye and mouth textures, scale.
+fn villager_source(disc: &GameDisc, index: u32) -> Option<RigSource> {
+    let rom = &disc.rom;
+    let entry = disc.catalog.get("npc_draw_data_tbl")?.offset + index * DRAW_DATA_SIZE;
+    let ptr = |o: u32| match rom.pointer_at(RomSource::Rel, entry + o) {
+        Some(Target::File(RomSource::Rel, p)) => Some(p),
+        _ => None,
     };
-    // Facing angle as the actor's shape rotation: 0 = +z, 90 deg = +x.
-    let yaw = Quat::from_rotation_y(facing.dir.x.atan2(facing.dir.z));
-    let ticks = time.delta_secs() * 60.0;
-    for (root, mut rig) in &mut rigs {
-        if let Ok(mut t) = transforms.get_mut(root) {
-            t.rotation = yaw;
+    let bytes = |p: Option<u32>, len: usize| -> Option<Arc<[u8]>> {
+        let p = p? as usize;
+        let rel = rom.bytes(RomSource::Rel);
+        Some(rel.get(p..(p + len).min(rel.len()))?.into())
+    };
+    let skeleton = Skeleton::read(rom, ptr(0x04)?)?;
+    let mut segments = Segments::default();
+    segments.set_segment(SEG_NPC_BODY, bytes(ptr(0x08), NPC_BODY_TEX_MAX)?);
+    if let Some(eye) = bytes(ptr(0x10), NPC_FACE_TEX_SIZE) {
+        segments.set_segment(SEG_EYE, eye);
+    }
+    if let Some(mouth) = bytes(ptr(0x30), NPC_FACE_TEX_SIZE) {
+        segments.set_segment(SEG_MOUTH, mouth);
+    }
+    // Default shirt (`mNpc_SetDefAnimal`: npc_def_list[id].cloth), from the
+    // same banks as the player's.
+    let mut tluts: Vec<(usize, u32)> = ptr(0x0C)
+        .map(|p| vec![(TLUT_NPC_BODY, p)])
+        .unwrap_or_default();
+    let cloth = disc.catalog.get("npc_def_list").and_then(|d| {
+        let b = rom.slice(RomSource::Rel, d.offset + index * NPC_DEFAULT_SIZE, 2)?;
+        u16::from_be_bytes([b[0], b[1]]).checked_sub(ITM_CLOTH000)
+    });
+    if let Some(cloth) = cloth.map(usize::from) {
+        let tex = disc
+            .player_cloth
+            .get(cloth * CLOTH_TEX_SIZE..(cloth + 1) * CLOTH_TEX_SIZE);
+        let pal = disc
+            .player_cloth_palettes
+            .get(cloth * PALETTE_SIZE..(cloth + 1) * PALETTE_SIZE);
+        if let (Some(tex), Some(pal)) = (tex, pal) {
+            segments.set_segment(SEG_NPC_CLOTH, tex.into());
+            segments.set_segment(SEG_NPC_CLOTH_PALETTE, pal.into());
+            tluts.push((TLUT_NPC_CLOTH, (SEG_NPC_CLOTH_PALETTE as u32) << 24));
         }
-        let state = Motion::of(loco.state());
-        if state != rig.playing && rig.animations[state as usize].is_some() {
-            rig.playing = state;
-            rig.frame = 1.0;
-        }
-        let Some(anim) = rig.animations[rig.playing as usize].clone() else {
+    }
+    let raw = rom.slice(RomSource::Rel, entry + 0x54, 4)?;
+    let scale = f32::from_be_bytes([raw[0], raw[1], raw[2], raw[3]]);
+    let animations = read_animations(disc, NPC_ANIMATIONS, skeleton.joints.len());
+    Some(RigSource {
+        skeleton,
+        animations,
+        segments,
+        tluts,
+        scale: scale / 40.0,
+    })
+}
+
+/// Marks a character whose disc model has been tried.
+#[derive(Component)]
+struct CharacterModelDone;
+
+/// Gives each villager its disc model, once the disc is loaded.
+#[allow(clippy::too_many_arguments)]
+fn spawn_villager_models(
+    mut commands: Commands,
+    disc: Option<Res<GameDisc>>,
+    villagers: Query<(Entity, &Villager), Without<CharacterModelDone>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<N64Material>>,
+    mut images: ResMut<Assets<Image>>,
+    mut bindposes: ResMut<Assets<SkinnedMeshInverseBindposes>>,
+) {
+    let Some(disc) = disc else { return };
+    for (entity, villager) in &villagers {
+        commands.entity(entity).insert(CharacterModelDone);
+        let Some(src) = villager_draw_index(villager.name).and_then(|i| villager_source(&disc, i))
+        else {
+            warn!("no disc model for villager {}", villager.name);
             continue;
         };
-        let speed = if rig.playing == Motion::Wait {
-            WAIT_SPEED
-        } else {
-            loco.anim_speed()
-        };
-        // Repeat between frame 1 and the last (`cKF_FrameControl_repeat_proc`).
-        let last = anim.frames.max(2) as f32;
-        rig.frame += speed * ticks;
-        while rig.frame >= last {
-            rig.frame -= last - 1.0;
+        let assets = (&mut *meshes, &mut *materials, &mut *images, &mut *bindposes);
+        let name = format!("{} model", villager.name);
+        let parts = spawn_rig(&mut commands, &disc.rom, src, entity, name, assets);
+        if parts > 0 {
+            commands
+                .entity(entity)
+                .remove::<(Mesh3d, MeshMaterial3d<StandardMaterial>)>();
+            info!(
+                "villager {} model from the disc: {parts} parts",
+                villager.name
+            );
         }
-        let locals = anim.pose(rig.frame).local_transforms(&rig.skeleton);
-        for (&joint, local) in rig.joints.iter().zip(locals) {
-            if let Ok(mut t) = transforms.get_mut(joint) {
-                *t = local;
+    }
+}
+
+/// Steps a rig's animation to `motion` at `speed` frames per 60 Hz tick.
+fn play(
+    rig: &mut CharacterRig,
+    motion: Motion,
+    speed: f32,
+    ticks: f32,
+    transforms: &mut Query<&mut Transform>,
+) {
+    if motion != rig.playing && rig.animations[motion as usize].is_some() {
+        rig.playing = motion;
+        rig.frame = 1.0;
+    }
+    let Some(anim) = rig.animations[rig.playing as usize].clone() else {
+        return;
+    };
+    // Repeat between frame 1 and the last (`cKF_FrameControl_repeat_proc`).
+    let last = anim.frames.max(2) as f32;
+    rig.frame += speed * ticks;
+    while rig.frame >= last {
+        rig.frame -= last - 1.0;
+    }
+    let locals = anim.pose(rig.frame).local_transforms(&rig.skeleton);
+    for (&joint, local) in rig.joints.iter().zip(locals) {
+        if let Ok(mut t) = transforms.get_mut(joint) {
+            *t = local;
+        }
+    }
+}
+
+/// World units per second above which a villager walks / runs (between
+/// their wander speeds, see `npc.rs`).
+const VILLAGER_WALK_MIN: f32 = 0.3;
+const VILLAGER_RUN_MIN: f32 = 2.5;
+
+/// Plays each rig's animation: the player's from its locomotion (turning
+/// the model to its facing), villagers' from how fast they move.
+fn animate_characters(
+    time: Res<Time>,
+    players: Query<(&Locomotion, &Facing), With<Player>>,
+    villagers: Query<&GlobalTransform, With<Villager>>,
+    mut rigs: Query<(Entity, &ChildOf, &mut CharacterRig)>,
+    mut transforms: Query<&mut Transform>,
+) {
+    let dt = time.delta_secs();
+    let ticks = dt * 60.0;
+    for (root, child_of, mut rig) in &mut rigs {
+        let owner = child_of.parent();
+        if let Ok((loco, facing)) = players.get(owner) {
+            // Facing angle as the actor's shape rotation: 0 = +z, 90 deg = +x.
+            if let Ok(mut t) = transforms.get_mut(root) {
+                t.rotation = Quat::from_rotation_y(facing.dir.x.atan2(facing.dir.z));
             }
+            let motion = Motion::of(loco.state());
+            let speed = if motion == Motion::Wait {
+                WAIT_SPEED
+            } else {
+                loco.anim_speed()
+            };
+            play(&mut rig, motion, speed, ticks, &mut transforms);
+        } else if let Ok(g) = villagers.get(owner) {
+            let pos = g.translation();
+            let moved = rig.last_pos.map_or(0.0, |p| (pos - p).with_y(0.0).length());
+            rig.last_pos = Some(pos);
+            let speed = if dt > 0.0 { moved / dt } else { 0.0 };
+            let motion = if speed >= VILLAGER_RUN_MIN {
+                Motion::Run
+            } else if speed >= VILLAGER_WALK_MIN {
+                Motion::Walk
+            } else {
+                Motion::Wait
+            };
+            play(&mut rig, motion, WAIT_SPEED, ticks, &mut transforms);
         }
     }
 }
@@ -351,6 +578,14 @@ pub struct CharacterPlugin;
 
 impl Plugin for CharacterPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (spawn_player_model, animate_player).chain());
+        app.add_systems(
+            Update,
+            (
+                spawn_player_model,
+                spawn_villager_models,
+                animate_characters,
+            )
+                .chain(),
+        );
     }
 }
