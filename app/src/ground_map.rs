@@ -13,17 +13,19 @@ use bevy::prelude::*;
 use crate::town::{ACRE_SIZE, CELL_SIZE};
 use rustimal_logic::random_field::{BLOCK_X_NUM, BLOCK_Z_NUM};
 use rustimal_logic::town_gen::{ACRE_DEPTH, ACRE_WIDTH};
+use rustimal_logic::{decode_height, search_wall_flag, wall_name};
 
 /// Game units per cell.
 const UNIT: f32 = 40.0;
 /// Game units per height tier (`3 * mFI_UT_WORLDSIZE_X`).
 const TIER_HEIGHT: f32 = 120.0;
+/// Edge height difference (game units) still stepped over; banks are
+/// 40, cliffs 120.
+const STEP_TOLERANCE: f32 = 20.0;
 /// Game units per collision height sample.
 const SAMPLE_HEIGHT: f32 = 10.0;
 /// Height of the lowest flat ground, in game units.
 const GROUND_ZERO: f32 = 40.0;
-/// Highest step the player can walk up or down, in game units.
-const MAX_STEP: f32 = 20.0;
 
 /// `mCoBG_ATTRIBUTE_*` values that can't be walked on.
 const ATTR_HOLE: u8 = 10;
@@ -33,10 +35,6 @@ const ATTR_WATERFALL: u8 = 13;
 const ATTR_RIVER_FIRST: u8 = 14; // RIVER_N .. RIVER_NE
 const ATTR_RIVER_LAST: u8 = 21;
 const ATTR_SEA: u8 = 24;
-const ATTR_WALL_FIRST: u8 = 25;
-const ATTR_WALL_LAST: u8 = 62;
-/// Largest corner height difference (samples) a walkable unit can have.
-const MAX_UNIT_RISE: u8 = 6;
 
 /// One collision word, decoded from the GameCube layout (bitfields packed
 /// from the most significant bit): slate:1 center:5 top_left:5 bot_left:5
@@ -70,16 +68,14 @@ impl Unit {
             || (ATTR_RIVER_FIRST..=ATTR_RIVER_LAST).contains(&self.attribute)
     }
 
+    /// Ground you can stand on at all: not water, sea, waves or a hole.
+    /// Cliffs and banks are handled as walls between units (`can_step`).
     pub fn walkable(self) -> bool {
-        let corners = [self.top_left, self.top_right, self.bot_left, self.bot_right];
-        let rise = corners.iter().max().unwrap_or(&0) - corners.iter().min().unwrap_or(&0);
         !self.is_water()
-            && !matches!(self.attribute, ATTR_HOLE | ATTR_WAVE | ATTR_WATERFALL | ATTR_SEA)
-            // Unnamed in the decomp; on the disc they line river banks
-            // (39-45) and cliff edges (50-57): walls.
-            && !(ATTR_WALL_FIRST..=ATTR_WALL_LAST).contains(&self.attribute)
-            // A cliff face inside one unit (a slope rises far less).
-            && rise <= MAX_UNIT_RISE
+            && !matches!(
+                self.attribute,
+                ATTR_HOLE | ATTR_WAVE | ATTR_WATERFALL | ATTR_SEA
+            )
     }
 }
 
@@ -132,6 +128,26 @@ impl GroundMap {
         Some((*unit, self.tiers[acre], ux.fract(), uz.fract()))
     }
 
+    /// Global unit coordinates (ux, uz) under a scene position.
+    fn unit_coords(&self, x: f32, z: f32) -> Option<(i32, i32)> {
+        let origin = Self::block_corner(0, 0);
+        let (ux, uz) = ((x - origin.x) / CELL_SIZE, (z - origin.y) / CELL_SIZE);
+        let in_town = ux >= 0.0
+            && uz >= 0.0
+            && ux < (BLOCK_X_NUM * 16) as f32
+            && uz < (BLOCK_Z_NUM * 16) as f32;
+        in_town.then_some((ux as i32, uz as i32))
+    }
+
+    /// The unit at global unit coordinates and its acre's base height
+    /// (game units).
+    fn unit_at(&self, ux: i32, uz: i32) -> (Unit, f32) {
+        let (bx, bz) = (ux as usize / 16, uz as usize / 16);
+        let acre = bz * BLOCK_X_NUM + bx;
+        let unit = self.units[acre * 256 + (uz as usize % 16) * 16 + ux as usize % 16];
+        (unit, self.tiers[acre] as f32 * TIER_HEIGHT)
+    }
+
     /// Ground height (scene units) at a scene position.
     pub fn height(&self, x: f32, z: f32) -> Option<f32> {
         let (u, tier, fx, fz) = self.locate(x, z)?;
@@ -181,17 +197,77 @@ impl GroundMap {
             .find(|p| self.walkable_at(p.x, p.y))
     }
 
-    /// Whether a step from `from` to `to` stays on walkable ground without
-    /// climbing or dropping a cliff.
+    /// Whether a step from `from` to `to` is allowed: the target must be
+    /// standable ground, and crossing into a neighbouring unit must not
+    /// hit a terrain wall. As in the game (`mCoBG_SearchWallFlag`), a wall
+    /// stands on a unit edge wherever the two units' edge heights differ:
+    /// cliffs and river banks; slopes and bridges line up and pass.
     pub fn can_step(&self, from: Vec3, to: Vec3) -> bool {
-        let (Some((unit, ..)), Some(h0), Some(h1)) = (
-            self.locate(to.x, to.z),
-            self.height(from.x, from.z),
-            self.height(to.x, to.z),
+        let (Some(a), Some(b)) = (
+            self.unit_coords(from.x, from.z),
+            self.unit_coords(to.x, to.z),
         ) else {
             return false;
         };
-        unit.walkable() && (h1 - h0).abs() * UNIT / CELL_SIZE <= MAX_STEP
+        let (target, _) = self.unit_at(b.0, b.1);
+        if !target.walkable() {
+            return false;
+        }
+        // Walk the unit grid from `a` to `b`, x first then z, checking
+        // every edge crossed (moves are usually within one unit).
+        let mut at = a;
+        while at != b {
+            let step = if at.0 != b.0 {
+                ((b.0 - at.0).signum(), 0)
+            } else {
+                (0, (b.1 - at.1).signum())
+            };
+            let next = (at.0 + step.0, at.1 + step.1);
+            if self.edge_wall(at, step.0, step.1) || !self.unit_at(next.0, next.1).0.walkable() {
+                return false;
+            }
+            at = next;
+        }
+        true
+    }
+
+    /// Whether a terrain wall stands between unit `a` and its neighbour in
+    /// direction (dx, dz).
+    fn edge_wall(&self, a: (i32, i32), dx: i32, dz: i32) -> bool {
+        let (ua, base_a) = self.unit_at(a.0, a.1);
+        let (ub, base_b) = self.unit_at(a.0 + dx, a.1 + dz);
+        let h = |v: u8, base: f32| decode_height(v as u32, base);
+        // Shared edge as seen from each side: (start, end) corner heights.
+        let (wall, mine, theirs) = match (dx, dz) {
+            (1, _) => (
+                wall_name::RIGHT,
+                [ua.top_right, ua.bot_right],
+                [ub.top_left, ub.bot_left],
+            ),
+            (-1, _) => (
+                wall_name::LEFT,
+                [ua.top_left, ua.bot_left],
+                [ub.top_right, ub.bot_right],
+            ),
+            (_, 1) => (
+                wall_name::DOWN,
+                [ua.bot_left, ua.bot_right],
+                [ub.top_left, ub.top_right],
+            ),
+            _ => (
+                wall_name::UP,
+                [ua.top_left, ua.top_right],
+                [ub.bot_left, ub.bot_right],
+            ),
+        };
+        let (h0, h1) = (
+            [h(mine[0], base_a), h(mine[1], base_a)],
+            [h(theirs[0], base_b), h(theirs[1], base_b)],
+        );
+        // The game only stops an actor whose body overlaps the wall's
+        // height range; small bumps between units are stepped over.
+        let rise = (h1[0] - h0[0]).abs().max((h1[1] - h0[1]).abs());
+        search_wall_flag(wall, h0, h1).is_some() && rise > STEP_TOLERANCE
     }
 }
 
@@ -237,5 +313,8 @@ mod tests {
         );
         assert!(!map.can_step(a, b), "can't walk up a cliff");
         assert!(map.can_step(a, a + Vec3::new(0.0, 0.0, 0.5)));
+        // Multi-unit steps (NPCs) walk the grid instead of recursing.
+        assert!(map.can_step(a, a + Vec3::new(-5.0, 0.0, 3.0)));
+        assert!(!map.can_step(a, a + Vec3::new(5.0, 0.0, 0.0)));
     }
 }
