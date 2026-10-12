@@ -16,6 +16,7 @@ mod items;
 mod locomotion;
 mod mail;
 mod model_view;
+mod n64_material;
 mod npc;
 mod player;
 mod pockets;
@@ -37,6 +38,7 @@ use input::InputPlugin;
 use interaction::InteractionPlugin;
 use mail::MailPlugin;
 use model_view::ModelViewPlugin;
+use n64_material::N64MaterialPlugin;
 use npc::NpcPlugin;
 use player::PlayerPlugin;
 use pockets::PocketsPlugin;
@@ -58,6 +60,7 @@ fn main() {
             GameAssetsPlugin,
             GameDiscPlugin,
             ModelViewPlugin,
+            N64MaterialPlugin,
         ))
         .add_plugins(SavePlugin)
         .add_plugins(TownPlugin)

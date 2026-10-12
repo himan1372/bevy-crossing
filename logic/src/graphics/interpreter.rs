@@ -62,6 +62,9 @@ pub struct DlFrame {
     pub pc: usize,
 }
 
+/// Most commands one `taskstart` will run before giving up (Bevy port guard).
+pub const MAX_TASK_COMMANDS: u32 = 1_000_000;
+
 /// The interpreter: GBI state + DL stack + segments + vertex cache.
 pub struct Emu64 {
     pub state: GbiState,
@@ -88,6 +91,8 @@ pub struct Emu64 {
     dl_frames: Vec<DlFrame>,
     /// Per-command trace (filled by `taskstart`).
     pub trace: Vec<CmdTrace>,
+    /// Set when a task hit [`MAX_TASK_COMMANDS`] (Bevy port guard).
+    pub task_aborted: bool,
 }
 
 impl Emu64 {
@@ -107,6 +112,7 @@ impl Emu64 {
             emitted: Vec::new(),
             dl_frames: Vec::new(),
             trace: Vec::new(),
+            task_aborted: false,
         }
     }
 
@@ -124,8 +130,16 @@ impl Emu64 {
         let mut list_addr = entry_addr;
         let mut pc: usize = 0;
         let mut end_dl = false;
+        let mut budget = MAX_TASK_COMMANDS;
 
         while !end_dl && !self.frame_cancel {
+            // Bevy port guard: malformed or looping lists (e.g. a branch
+            // back into itself) must not hang the game.
+            if budget == 0 {
+                self.task_aborted = true;
+                break;
+            }
+            budget -= 1;
             let list = match lists.get(&list_addr) {
                 Some(l) => l,
                 None => break,

@@ -19,6 +19,7 @@ use disc::AssetCatalog;
 
 use crate::disc_gfx::{decode_texture, run_display_lists, Part, TexKey};
 use crate::game_disc::GameDisc;
+use crate::n64_material::{CombinerUniform, N64Material};
 use crate::states::AppState;
 use crate::town::CELL_SIZE;
 
@@ -106,35 +107,36 @@ fn resolve_palette(catalog: &AssetCatalog, spec: &str) -> Result<(String, u32, u
     Ok((name.to_string(), asset.offset, count, index))
 }
 
-/// `vertex_colors`: use the vertex RGB as a tint. Off by default: lighting
-/// mode is often set by game code, so those bytes may be normals instead.
-/// Vertex alpha is ignored until the colour combiner (TEV) is translated.
-fn part_mesh(part: &Part, key: Option<&TexKey>, vertex_colors: bool) -> Mesh {
-    let (w, h) = key.map_or((1.0, 1.0), |k| (k.width as f32, k.height as f32));
+/// Unlit parts carry vertex colours (the combiner's SHADE input); lit
+/// parts carry the vertex normals stored in the same bytes.
+fn part_mesh(part: &Part) -> Mesh {
+    let (w, h) = part
+        .key
+        .tex
+        .map_or((1.0, 1.0), |k| (k.width as f32, k.height as f32));
     let v = &part.vertices;
     let positions: Vec<[f32; 3]> = v.iter().map(|v| v.pos.map(|c| c * MODEL_SCALE)).collect();
     let uvs: Vec<[f32; 2]> = v
         .iter()
         .map(|v| [v.st[0] / ST_ONE / w, v.st[1] / ST_ONE / h])
         .collect();
-    let colors: Vec<[f32; 4]> = v
-        .iter()
-        .map(|v| match vertex_colors && !part.lit {
-            true => {
-                let [r, g, b, _] = v.color.map(|c| c as f32 / 255.0);
-                [r, g, b, 1.0]
-            }
-            false => [1.0; 4],
-        })
-        .collect();
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
         RenderAssetUsages::RENDER_WORLD,
     )
     .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colors);
-    mesh.compute_flat_normals();
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    if part.key.lit {
+        let normals: Vec<[f32; 3]> = v.iter().map(|v| v.normal).collect();
+        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    } else {
+        let colors: Vec<[f32; 4]> = v
+            .iter()
+            .map(|v| v.color.map(|c| c as f32 / 255.0))
+            .collect();
+        mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
+        mesh.compute_flat_normals();
+    }
     mesh
 }
 
@@ -193,7 +195,7 @@ fn start_viewer(mut commands: Commands, request: Res<ViewRequest>, disc: Option<
         lists,
         palettes,
         palette_index,
-        vertex_colors: false,
+        vertex_colors: true,
         rebuild: true,
         framed: false,
         triangles: 0,
@@ -233,7 +235,7 @@ fn rebuild_model(
     disc: Res<GameDisc>,
     old: Query<Entity, With<ViewedModel>>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: ResMut<Assets<N64Material>>,
     mut images: ResMut<Assets<Image>>,
 ) {
     if !viewer.rebuild {
@@ -249,10 +251,16 @@ fn rebuild_model(
         .map(|(_, base, _)| base + viewer.palette_index * PALETTE_BYTES);
     let sink = run_display_lists(&disc.rom, &viewer.lists);
     viewer.triangles = sink.triangle_count();
+    if sink.aborted {
+        warn!(
+            "--view {}: display list never ended; drawing what it emitted",
+            viewer.names
+        );
+    }
 
     // Frame the camera on the model's bounds the first time.
     let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
-    for v in sink.parts.iter().flat_map(|(_, p)| &p.vertices) {
+    for v in sink.parts.iter().flat_map(|p| &p.vertices) {
         let p = Vec3::from(v.pos) * MODEL_SCALE;
         (lo, hi) = (lo.min(p), hi.max(p));
     }
@@ -269,24 +277,32 @@ fn rebuild_model(
             Visibility::default(),
         ))
         .id();
-    for (key, part) in &sink.parts {
-        let texture = key.as_ref().and_then(|k| {
+    for part in &sink.parts {
+        let k = &part.key;
+        debug!(
+            "part: {} tris, combine {:06x} {:08x}, prim {:?}, env {:?}, lit {}, 2cyc {}, tex {:?}",
+            part.vertices.len() / 3,
+            k.combine.0,
+            k.combine.1,
+            k.prim,
+            k.env,
+            k.lit,
+            k.two_cycle,
+            k.tex.map(|t| t.img_addr)
+        );
+        let texture = part.key.tex.as_ref().and_then(|k| {
             let rgba = decode_texture(&disc.rom, k, palette);
             if rgba.is_none() {
                 warn!("can't decode texture {k:?}");
             }
             rgba.map(|rgba| images.add(texture_image(rgba, k)))
         });
-        let material = materials.add(StandardMaterial {
-            base_color_texture: texture,
-            alpha_mode: AlphaMode::Mask(0.5),
-            double_sided: true,
-            cull_mode: None,
-            perceptual_roughness: 1.0,
-            ..default()
+        let material = materials.add(N64Material {
+            combiner: CombinerUniform::from_key(&part.key, !viewer.vertex_colors),
+            texture,
         });
         commands.spawn((
-            Mesh3d(meshes.add(part_mesh(part, key.as_ref(), viewer.vertex_colors))),
+            Mesh3d(meshes.add(part_mesh(part))),
             MeshMaterial3d(material),
             ChildOf(root),
         ));
@@ -345,7 +361,7 @@ fn update_viewer_camera(
             None => "none (--pal <name>)".to_string(),
         };
         text.0 = format!(
-            "MODEL VIEWER  {}\n{} triangles   palette: {pal}\nleft-drag: orbit   scroll: zoom   V: vertex colours {}",
+            "MODEL VIEWER  {}\n{} triangles   palette: {pal}\nleft-drag: orbit   scroll: zoom   V: shade {}",
             viewer.names,
             viewer.triangles,
             if viewer.vertex_colors { "on" } else { "off" }

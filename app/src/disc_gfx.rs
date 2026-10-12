@@ -16,12 +16,14 @@ use disc::gx_texture::{self, GxFormat, TlutFormat};
 use disc::{RomImage, RomSource, Target};
 use rustimal_logic::graphics::command::{dl_param, geo, op, Gfx};
 use rustimal_logic::graphics::interpreter::{EmittedTri, Emu64, GfxMemory, GxBackend};
-use rustimal_logic::graphics::state::{GbiState, NUM_TLUTS};
+use rustimal_logic::graphics::state::{GbiState, Rgba, NUM_TLUTS};
 use rustimal_logic::graphics::texture::GxTexFormat;
 use rustimal_logic::graphics::vertex::{DecodedVtx, Vtx};
 
 /// Flat address the interpreter can't resolve (outside the REL).
 const UNRESOLVED: u32 = 0xF000_0000;
+/// Flat REL offsets live in segment 0 (24-bit offsets).
+const REL_SEGMENT_END: u32 = 0x0100_0000;
 /// Stop runaway lists (no real list comes close).
 const MAX_LIST_LEN: usize = 16 * 1024;
 const GFX_SIZE: u32 = 8;
@@ -147,55 +149,67 @@ pub struct TexKey {
     pub tlut_addr: u32,
 }
 
-/// Triangles sharing one texture (or none) and lighting mode.
-#[derive(Default)]
-pub struct Part {
-    pub vertices: Vec<DecodedVtx>,
-    /// Vertex colour bytes are normals (G_LIGHTING), not colours.
+/// Everything a group of triangles is drawn with.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct PartKey {
+    pub tex: Option<TexKey>,
+    /// `G_SETCOMBINE` words (low 24 bits of w0, w1); (0, 0) = never set.
+    pub combine: (u32, u32),
+    pub prim: [u8; 4],
+    pub prim_lod: u8,
+    pub env: [u8; 4],
+    /// `G_LIGHTING`: vertex colour bytes are normals, shade is lit.
     pub lit: bool,
+    /// Two-cycle combiner (`G_CYC_2CYCLE`).
+    pub two_cycle: bool,
 }
 
-/// Collects emitted triangles, grouped by texture.
+/// Triangles sharing one [`PartKey`].
+pub struct Part {
+    pub key: PartKey,
+    pub vertices: Vec<DecodedVtx>,
+}
+
+/// Collects emitted triangles, grouped by render state.
 #[derive(Default)]
 pub struct TriangleSink {
-    pub parts: Vec<(Option<TexKey>, Part)>,
-    current: (Option<TexKey>, bool),
+    pub parts: Vec<Part>,
+    current: Option<PartKey>,
     pub gx_lists_skipped: usize,
+    /// The interpreter hit its command budget (looping/malformed list).
+    pub aborted: bool,
 }
 
 impl TriangleSink {
     pub fn triangle_count(&self) -> usize {
-        self.parts.iter().map(|(_, p)| p.vertices.len() / 3).sum()
+        self.parts.iter().map(|p| p.vertices.len() / 3).sum()
     }
 
     fn part(&mut self) -> &mut Part {
-        let (key, lit) = self.current;
-        let i = match self
-            .parts
-            .iter()
-            .position(|(k, p)| *k == key && p.lit == lit)
-        {
+        let Some(key) = self.current else {
+            unreachable!("set_state runs before every emit");
+        };
+        let i = match self.parts.iter().position(|p| p.key == key) {
             Some(i) => i,
             None => {
-                self.parts.push((
+                self.parts.push(Part {
                     key,
-                    Part {
-                        vertices: Vec::new(),
-                        lit,
-                    },
-                ));
+                    vertices: Vec::new(),
+                });
                 self.parts.len() - 1
             }
         };
-        &mut self.parts[i].1
+        &mut self.parts[i]
     }
 }
 
 impl GxBackend for TriangleSink {
     fn set_state(&mut self, state: &GbiState) {
         let tile = &state.tiles[0];
-        let textured = tile.img_addr != 0 && tile.img_addr < UNRESOLVED;
-        let key = textured.then(|| TexKey {
+        // Image addresses aren't segment-resolved here: anything outside
+        // segment 0 (the REL) is a runtime texture we can't see yet.
+        let textured = tile.img_addr != 0 && tile.img_addr < REL_SEGMENT_END;
+        let tex = textured.then(|| TexKey {
             img_addr: tile.img_addr,
             format: tile.gx_format,
             width: tile.width,
@@ -204,7 +218,16 @@ impl GxBackend for TriangleSink {
             wrap_t: tile.wrap_t,
             tlut_addr: state.tluts[tile.tlut as usize % NUM_TLUTS].addr,
         });
-        self.current = (key, state.geometry_mode & geo::G_LIGHTING != 0);
+        let rgba = |c: Rgba| [c.r, c.g, c.b, c.a];
+        self.current = Some(PartKey {
+            tex,
+            combine: (state.combine_l & 0x00FF_FFFF, state.combine_h),
+            prim: rgba(state.prim_color),
+            prim_lod: state.prim_lod,
+            env: rgba(state.env_color),
+            lit: state.geometry_mode & geo::G_LIGHTING != 0,
+            two_cycle: state.othermode.is_2cycle(),
+        });
     }
 
     fn emit_triangle(&mut self, tri: EmittedTri) {
@@ -236,10 +259,19 @@ pub fn run_display_lists(rom: &RomImage, entries: &[u32]) -> TriangleSink {
     for seg in 1..16 {
         emu.segments.set(seg, UNRESOLVED);
     }
+    // Game code usually sets the primitive colour before calling a model;
+    // start from white so models that rely on that aren't drawn black.
+    emu.state.prim_color = Rgba {
+        r: 255,
+        g: 255,
+        b: 255,
+        a: 255,
+    };
     let mut sink = TriangleSink::default();
     for &entry in entries {
         let lists = mem.lists(entry);
         emu.taskstart(&mem, &mut sink, &lists, entry);
+        sink.aborted |= emu.task_aborted;
     }
     sink
 }
@@ -297,8 +329,7 @@ mod tests {
             ],
         );
         assert_eq!(sink.triangle_count(), 7);
-        let (key, _) = &sink.parts[0];
-        let key = key.expect("tree is textured");
+        let key = sink.parts[0].key.tex.expect("tree is textured");
         assert_eq!(key.img_addr, asset("obj_f_tree_young_tex"));
         assert_eq!(
             (key.width, key.height, key.format),
@@ -307,5 +338,44 @@ mod tests {
         let pal = asset("mFM_obj_tree_01_pal_dol");
         let rgba = decode_texture(&rom, &key, Some(pal)).expect("decodes");
         assert_eq!(rgba.len(), 64 * 64 * 4);
+
+        // Survey: which model lists set their own combiner / colours.
+        let mem = RelGfx::new(&rom);
+        let (mut total, mut comb, mut prim, mut env, mut geo_l) = (0, 0, 0, 0, 0);
+        let mut combos: std::collections::HashMap<(u32, u32), usize> = Default::default();
+        for name in ["_mat_model", "_gfx_model", "_model", "_DL"] {
+            let _ = name;
+        }
+        let names: Vec<&str> = include_str!("../../disc/data/foresta.sym")
+            .lines()
+            .filter_map(|l| l.split('\t').next())
+            .filter(|n| n.ends_with("_model") || n.ends_with("_DL") || n.ends_with("_dl"))
+            .collect();
+        for n in names {
+            let Some(a) = cat.get(n) else { continue };
+            total += 1;
+            let cmds: Vec<Gfx> = mem.lists(a.offset).into_values().flatten().collect();
+            if cmds.iter().any(|g| g.opcode() == op::G_SETCOMBINE) {
+                comb += 1;
+            }
+            if cmds.iter().any(|g| g.opcode() == op::G_SETPRIMCOLOR) {
+                prim += 1;
+            }
+            if cmds.iter().any(|g| g.opcode() == op::G_SETENVCOLOR) {
+                env += 1;
+            }
+            if cmds.iter().any(|g| g.opcode() == op::G_GEOMETRYMODE) {
+                geo_l += 1;
+            }
+            for g in cmds.iter().filter(|g| g.opcode() == op::G_SETCOMBINE) {
+                *combos.entry((g.w0 & 0x00FF_FFFF, g.w1)).or_default() += 1;
+            }
+        }
+        let mut top: Vec<_> = combos.into_iter().collect();
+        top.sort_by_key(|(_, c)| std::cmp::Reverse(*c));
+        eprintln!("survey: lists={total} combine={comb} prim={prim} env={env} geomode={geo_l} distinct_combiners={}", top.len());
+        for ((w0, w1), c) in top.iter().take(12) {
+            eprintln!("  combine {w0:06x} {w1:08x} x{c}");
+        }
     }
 }
