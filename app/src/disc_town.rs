@@ -849,11 +849,10 @@ fn door_facing_yaw(disc: &GameDisc, prefix: &str) -> f32 {
     (-x.atan2(z) / quarter).round() * quarter
 }
 
-/// House models are drawn this much larger than other objects: at plain
-/// object scale a house came out one cell wide; retail houses fill the
-/// 3x3 footprint the town reserves for them (judged against retail
-/// screenshots).
-const HOUSE_SCALE: f32 = 3.0;
+/// House model scale relative to other objects. Back at 1.0 after a 3x
+/// try played badly; Philip's rule: change house size by at most 25% at a
+/// time.
+const HOUSE_SCALE: f32 = 1.0;
 
 /// Small deterministic hash for picking per-object variants.
 fn cell_hash((ax, az, cx, cz): (usize, usize, usize, usize)) -> usize {
