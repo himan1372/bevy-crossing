@@ -29,6 +29,8 @@ use crate::talk::{self, TalkContext, Topic, TradeKind};
 pub struct DialogueState {
     /// Whether the box is currently shown.
     pub active: bool,
+    /// The villager talking (their mouth moves while the box is up).
+    pub speaker: Option<Entity>,
     lines: Vec<String>,
     index: usize,
     /// A trade offer waiting on Y/N at the last line.
@@ -277,6 +279,7 @@ fn on_talk(
         chat.info.unlock_timer = TEMPER_TABLE[looks.min(TEMPER_TABLE.len() - 1)].0;
 
         dialogue.active = true;
+        dialogue.speaker = Some(event.villager);
         dialogue.index = 0;
         dialogue.lines = lines;
         if let Ok(mut vis) = box_query.single_mut() {
@@ -424,6 +427,7 @@ fn dialogue_input(
     dialogue.index += 1;
     if dialogue.index >= dialogue.lines.len() {
         dialogue.active = false;
+        dialogue.speaker = None;
         dialogue.lines.clear();
         dialogue.index = 0;
         if let Ok(mut vis) = box_query.single_mut() {

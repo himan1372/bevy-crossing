@@ -11,6 +11,7 @@ mod disc_gfx;
 mod disc_town;
 mod ecology;
 mod environment;
+mod face;
 mod game_disc;
 mod ground_map;
 mod house;
@@ -84,6 +85,7 @@ fn main() {
         .add_plugins(ClockPlugin)
         .add_plugins(environment::EnvironmentPlugin)
         .add_plugins(character::CharacterPlugin)
+        .add_plugins(face::FacePlugin)
         .add_systems(Startup, setup_light)
         .run();
 }

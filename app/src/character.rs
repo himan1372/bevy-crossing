@@ -21,6 +21,7 @@ use rustimal_logic::graphics::vertex::DecodedVtx;
 use rustimal_logic::player_move::LocomotionState;
 
 use crate::disc_gfx::{decode_texture, run_display_lists_with_tluts, Part, Segments};
+use crate::face::{Face, FaceKind, FacePart, FaceSlot};
 use crate::game_disc::GameDisc;
 use crate::interaction::Facing;
 use crate::locomotion::Locomotion;
@@ -106,6 +107,27 @@ fn player_segments(disc: &GameDisc, look: PlayerLook) -> Segments {
         ),
     );
     segs
+}
+
+/// Mouth textures after the eyes (`mPlayer_MOUTH_TEX_NUM`).
+const MOUTH_TEX_NUM: usize = 6;
+
+/// `count` face textures from `first` in the player's face block.
+fn player_face_frames(
+    disc: &GameDisc,
+    look: PlayerLook,
+    first: usize,
+    count: usize,
+) -> Vec<Option<Arc<[u8]>>> {
+    let face = look.face.min(7) * FACE_SIZE;
+    (first..first + count)
+        .map(|i| {
+            let start = face + i * FACE_TEX_SIZE;
+            disc.player_faces
+                .get(start..start + FACE_TEX_SIZE)
+                .map(Arc::from)
+        })
+        .collect()
 }
 
 /// Animation frames per 60 Hz tick while standing (`cKF` default 0.5).
@@ -214,6 +236,10 @@ struct RigSource {
     segments: Segments,
     tluts: Vec<(usize, u32)>,
     scale: f32,
+    /// Every eye / mouth texture, by pattern (segments 8 and 9).
+    eye_frames: Vec<Option<Arc<[u8]>>>,
+    mouth_frames: Vec<Option<Arc<[u8]>>>,
+    face: FaceKind,
 }
 
 /// Bevy asset stores a rig is built into.
@@ -263,6 +289,7 @@ fn spawn_rig(
     ]));
     let matrix_joints = skeleton.matrix_joints();
     let mut parts = 0;
+    let mut face_parts = Vec::new();
     for &j in &matrix_joints {
         let Some(list) = skeleton.joints[j].model else {
             continue;
@@ -278,6 +305,32 @@ fn spawn_rig(
                 env: default(),
                 blend: false,
             });
+            // Face parts: decode every frame of their segment.
+            let face_slot = part
+                .key
+                .tex
+                .as_ref()
+                .and_then(|k| match (k.img_addr >> 24) as u8 {
+                    SEG_EYE => Some((FaceSlot::Eye, SEG_EYE, &src.eye_frames, k)),
+                    SEG_MOUTH => Some((FaceSlot::Mouth, SEG_MOUTH, &src.mouth_frames, k)),
+                    _ => None,
+                });
+            if let Some((slot, seg, frames, k)) = face_slot {
+                let frames = frames
+                    .iter()
+                    .map(|bytes| {
+                        let mut segs = src.segments.clone();
+                        segs.set_segment(seg, bytes.clone()?);
+                        decode_texture(rom, k, None, &segs)
+                            .map(|rgba| images.add(texture_image(rgba, k)))
+                    })
+                    .collect();
+                face_parts.push(FacePart {
+                    slot,
+                    material: material.clone(),
+                    frames,
+                });
+            }
             commands.spawn((
                 Mesh3d(meshes.add(skinned_part_mesh(part, j, &matrix_joints))),
                 MeshMaterial3d(material),
@@ -298,6 +351,12 @@ fn spawn_rig(
         frame: 1.0,
         last_pos: None,
     });
+    debug!("{} face parts", face_parts.len());
+    if !face_parts.is_empty() {
+        commands
+            .entity(root)
+            .insert(Face::new(src.face, face_parts, parent));
+    }
     parts
 }
 
@@ -346,6 +405,9 @@ fn spawn_player_model(
         segments: player_segments(&disc, PlayerLook::default()),
         tluts: Vec::new(),
         scale: MODEL_SCALE,
+        eye_frames: player_face_frames(&disc, PlayerLook::default(), 0, EYE_TEX_NUM),
+        mouth_frames: player_face_frames(&disc, PlayerLook::default(), EYE_TEX_NUM, MOUTH_TEX_NUM),
+        face: FaceKind::Player,
     };
     let assets = (&mut *meshes, &mut *materials, &mut *images, &mut *bindposes);
     let parts = spawn_rig(
@@ -448,6 +510,14 @@ fn villager_source(disc: &GameDisc, index: u32) -> Option<RigSource> {
             tluts.push((TLUT_NPC_CLOTH, (SEG_NPC_CLOTH_PALETTE as u32) << 24));
         }
     }
+    // `aNPC_draw_tex_data_c`: eye_texture[8] at +0x08, mouth_texture[6] at
+    // +0x28 (entry +0x10 / +0x30).
+    let eye_frames = (0..8)
+        .map(|i| bytes(ptr(0x10 + i * 4), NPC_FACE_TEX_SIZE))
+        .collect();
+    let mouth_frames = (0..6)
+        .map(|i| bytes(ptr(0x30 + i * 4), NPC_FACE_TEX_SIZE))
+        .collect();
     let raw = rom.slice(RomSource::Rel, entry + 0x54, 4)?;
     let scale = f32::from_be_bytes([raw[0], raw[1], raw[2], raw[3]]);
     let animations = read_animations(disc, NPC_ANIMATIONS, skeleton.joints.len());
@@ -457,6 +527,9 @@ fn villager_source(disc: &GameDisc, index: u32) -> Option<RigSource> {
         segments,
         tluts,
         scale: scale / 40.0,
+        eye_frames,
+        mouth_frames,
+        face: FaceKind::Villager,
     })
 }
 
