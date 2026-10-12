@@ -325,6 +325,27 @@ pub fn run_display_lists_with_prim(
     prim: [u8; 4],
     prim_lod: u8,
 ) -> TriangleSink {
+    run_lists(rom, entries, prim, prim_lod, [0; 4])
+}
+
+/// The wet-sand colour field drawing puts in segment C for beach acres
+/// (`aFD_SetBeachColorOpaSegment`): `beach_env_color` swings between
+/// (144,128,96) and (186,164,124) with the waves; this is its midpoint.
+const BEACH_ENV_COLOR: [u8; 4] = [165, 146, 110, 255];
+
+/// Runs an acre's ground lists. Field drawing sets the environment colour
+/// (segment C) before them; the lists' beach combiners blend toward it.
+pub fn run_ground_lists(rom: &RomImage, entries: &[u32]) -> TriangleSink {
+    run_lists(rom, entries, [255; 4], 255, BEACH_ENV_COLOR)
+}
+
+fn run_lists(
+    rom: &RomImage,
+    entries: &[u32],
+    prim: [u8; 4],
+    prim_lod: u8,
+    env: [u8; 4],
+) -> TriangleSink {
     let mem = RelGfx::new(rom);
     let mut emu = Emu64::new();
     for seg in 1..16 {
@@ -339,6 +360,12 @@ pub fn run_display_lists_with_prim(
         a: prim[3],
     };
     emu.state.prim_lod = prim_lod;
+    emu.state.env_color = Rgba {
+        r: env[0],
+        g: env[1],
+        b: env[2],
+        a: env[3],
+    };
     // The render setup the game draws models after (`m_rcp.c`
     // `_texture_z_light_fog_prim` = `z_gsCPModeSet_Data[2]`): lighting on,
     // combiner G_CC_MODULATEIDECALA then G_CC_MODULATEIA_PRIM2. Lists that

@@ -23,7 +23,9 @@ use rustimal_logic::random_field::{
 };
 use rustimal_logic::town_gen::{CellKind, Feature, TownAcre, TownPlan, ACRE_DEPTH, ACRE_WIDTH};
 
-use crate::disc_gfx::{decode_texture, run_display_lists, run_display_lists_with_prim, Segments};
+use crate::disc_gfx::{
+    decode_texture, run_display_lists, run_display_lists_with_prim, run_ground_lists, Segments,
+};
 use crate::environment::BuildingLights;
 use crate::game_disc::GameDisc;
 use crate::ground_map::{GroundMap, Unit};
@@ -221,7 +223,7 @@ fn spawn_acre(
         ))
         .id();
     for &(list, blend) in lists {
-        for part in &run_display_lists(rom, &[list]).parts {
+        for part in &run_ground_lists(rom, &[list]).parts {
             let texture = part.key.tex.as_ref().and_then(|k| {
                 decode_texture(rom, k, None, segs).map(|rgba| images.add(texture_image(rgba, k)))
             });
