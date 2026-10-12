@@ -75,6 +75,24 @@ fn turn_toward(current: f32, target: f32, tilt: f32, dt: f32) -> f32 {
     player_move::wrap_deg(current + player_move::wrap_deg(target - current) * frac)
 }
 
+/// Distance between checks along a straight walk.
+const PATH_SAMPLE: f32 = 0.5;
+
+/// Whether walking straight from `from` to `to` never hits a block.
+fn straight_path_clear(from: Vec3, to: Vec3, blocked: &impl Fn(Vec3, Vec3) -> bool) -> bool {
+    let d = Vec3::new(to.x - from.x, 0.0, to.z - from.z);
+    let steps = (d.length() / PATH_SAMPLE).ceil().max(1.0) as usize;
+    let mut prev = from;
+    for i in 1..=steps {
+        let next = from + d * (i as f32 / steps as f32);
+        if blocked(next, prev) {
+            return false;
+        }
+        prev = next;
+    }
+    true
+}
+
 fn deg_of(d: Vec3) -> f32 {
     d.x.atan2(d.z).to_degrees()
 }
@@ -398,7 +416,8 @@ fn villager_move(
         };
 
         // Arrived home: go inside.
-        if v.act == Act::GoHome && (transform.translation.distance(v.door) < 0.5 || v.timer <= 0.0)
+        if v.act == Act::GoHome
+            && (transform.translation.xz().distance(v.door.xz()) < 0.5 || v.timer <= 0.0)
         {
             transform.translation = v.door;
             *vis = Visibility::Hidden;
@@ -407,7 +426,8 @@ fn villager_move(
             continue;
         }
 
-        let arrived = target.is_some_and(|t| transform.translation.distance(t) < 0.4);
+        // Horizontal distance: villagers follow the terrain height.
+        let arrived = target.is_some_and(|t| transform.translation.xz().distance(t.xz()) < 0.4);
         if v.act != Act::GoHome && (v.timer <= 0.0 || arrived) {
             // aNPC_think_wander_decide_next with the personality borders.
             let schedule = schedule_now(v.looks);
@@ -428,7 +448,9 @@ fn villager_move(
                 let angle = rng.range_f32(0.0, std::f32::consts::TAU);
                 let radius = rng.range_f32(1.0, WANDER_RADIUS);
                 let p = v.home + Vec3::new(angle.sin(), 0.0, angle.cos()) * radius;
-                if open(p) {
+                // Only spots reachable in a straight line: the retail town
+                // has cliffs and tree groves a direct walk can't cross.
+                if open(p) && straight_path_clear(transform.translation, p, &blocked) {
                     spot = Some(p);
                     break;
                 }

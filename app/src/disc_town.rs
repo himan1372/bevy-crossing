@@ -15,7 +15,7 @@
 
 use bevy::prelude::*;
 use chrono::Datelike;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use disc::{rel_bss, AssetCatalog, RomImage, RomSource, Target};
 use rustimal_logic::random_field::{
@@ -411,6 +411,7 @@ fn stamp_home(acre: &mut TownAcre, cx: usize, cz: usize) {
 fn home_fits(
     acre: &TownAcre,
     ground: &GroundMap,
+    reach: &HashSet<(usize, usize)>,
     ax: usize,
     az: usize,
     cx: usize,
@@ -432,13 +433,16 @@ fn home_fits(
                 .zip(level)
                 .is_some_and(|(h, l)| (h - l).abs() < 0.05)
     };
-    (cz - 1..=cz + 1).all(|z| (cx - 1..=cx + 1).all(|x| ok(x, z))) && ok(cx, cz + 2)
+    (cz - 1..=cz + 1).all(|z| (cx - 1..=cx + 1).all(|x| ok(x, z)))
+        && ok(cx, cz + 2)
+        && reach.contains(&(ax * 16 + cx, az * 16 + cz + 2))
 }
 
 /// Nearest fitting home spot in an acre to (cx, cz).
 fn nearest_home_spot(
     acre: &TownAcre,
     ground: &GroundMap,
+    reach: &HashSet<(usize, usize)>,
     ax: usize,
     az: usize,
     cx: usize,
@@ -449,7 +453,48 @@ fn nearest_home_spot(
     spots.sort_by_key(|&(x, z)| (x as i32 - cx as i32).pow(2) + (z as i32 - cz as i32).pow(2));
     spots
         .into_iter()
-        .find(|&(x, z)| home_fits(acre, ground, ax, az, x, z))
+        .find(|&(x, z)| home_fits(acre, ground, reach, ax, az, x, z))
+}
+
+/// Cells (global x, z over the playable acres) reachable on foot from
+/// `start`: neighbours joined when the terrain allows the step and the
+/// cell holds no tree, rock or home.
+fn reachable_cells(
+    plan: &TownPlan,
+    ground: &GroundMap,
+    start: (usize, usize),
+) -> HashSet<(usize, usize)> {
+    let (w, d) = (ACRE_WIDTH * 16, ACRE_DEPTH * 16);
+    let center = |(x, z): (usize, usize)| Town::cell_to_world(x / 16, z / 16, x % 16, z % 16);
+    let open = |(x, z): (usize, usize)| {
+        let c = plan.acres[(z / 16) * ACRE_WIDTH + x / 16].cells[(z % 16) * 16 + x % 16];
+        c == CellKind::Grass as u8 || c == CellKind::Flower as u8 || c == CellKind::Weed as u8
+    };
+    let mut seen = HashSet::new();
+    if !open(start) {
+        return seen;
+    }
+    let mut queue = vec![start];
+    seen.insert(start);
+    while let Some((x, z)) = queue.pop() {
+        let here = center((x, z));
+        let neighbours = [
+            (x.wrapping_sub(1), z),
+            (x + 1, z),
+            (x, z.wrapping_sub(1)),
+            (x, z + 1),
+        ];
+        for n in neighbours {
+            if n.0 >= w || n.1 >= d || seen.contains(&n) || !open(n) {
+                continue;
+            }
+            if ground.can_step(here, center(n)) {
+                seen.insert(n);
+                queue.push(n);
+            }
+        }
+    }
+    seen
 }
 
 /// Moves the plan homes onto the retail town: the player house to the
@@ -488,12 +533,45 @@ fn resite_homes(
         stamp_home(acre, cx.clamp(1, 14), cz.clamp(1, 14));
     }
 
-    // Resident homes: same acre, nearest spot that fits.
+    // Resident homes: same acre, nearest spot that fits and whose
+    // doorstep connects to the player house (no homes walled in by
+    // trees or cliffs).
+    let door = plan.acres.iter().enumerate().find_map(|(i, acre)| {
+        (acre.feature == Feature::PlayerHouse as u8)
+            .then(|| {
+                acre.cells
+                    .iter()
+                    .position(|&c| c == CellKind::House as u8)
+                    .map(|c| (i, c))
+            })
+            .flatten()
+    });
+    let reach = match door {
+        Some((i, c)) => {
+            let (ax, az, cx, cz) = (i % ACRE_WIDTH, i / ACRE_WIDTH, c % 16, c / 16);
+            reachable_cells(plan, ground, (ax * 16 + cx, az * 16 + cz + 2))
+        }
+        None => HashSet::new(),
+    };
     for i in 0..plan.villager_count as usize {
         let a = plan.house_acres[i] as usize;
         let unit = plan.house_units[i] as usize;
         let (ax, az) = (a % ACRE_WIDTH, a / ACRE_WIDTH);
-        let spot = nearest_home_spot(&plan.acres[a], ground, ax, az, unit % 16, unit / 16);
+        let spot = nearest_home_spot(&plan.acres[a], ground, &reach, ax, az, unit % 16, unit / 16)
+            .or_else(|| {
+                // Nothing reachable in its own acre: try the others.
+                (0..ACRE_WIDTH * ACRE_DEPTH)
+                    .find_map(|b| {
+                        let (bx, bz) = (b % ACRE_WIDTH, b / ACRE_WIDTH);
+                        nearest_home_spot(&plan.acres[b], ground, &reach, bx, bz, 8, 8)
+                            .map(|s| (b, s))
+                    })
+                    .map(|(b, s)| {
+                        plan.house_acres[i] = b as u8;
+                        s
+                    })
+            });
+        let a = plan.house_acres[i] as usize;
         match spot {
             Some((x, z)) => {
                 stamp_home(&mut plan.acres[a], x, z);
@@ -693,10 +771,13 @@ pub struct DiscTree;
 /// Player capsule centre above the ground.
 const PLAYER_HALF_HEIGHT: f32 = 1.0;
 
-/// Keeps the player on the disc terrain's surface.
-fn follow_ground(town: Res<Town>, mut player: Query<&mut Transform, With<Player>>) {
+/// Keeps the player and villagers on the disc terrain's surface.
+fn follow_ground(
+    town: Res<Town>,
+    mut walkers: Query<&mut Transform, Or<(With<Player>, With<crate::npc::Villager>)>>,
+) {
     let Some(ground) = &town.ground else { return };
-    for mut t in &mut player {
+    for mut t in &mut walkers {
         if let Some(h) = ground.height(t.translation.x, t.translation.z) {
             t.translation.y = h + PLAYER_HALF_HEIGHT;
         }
