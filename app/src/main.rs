@@ -7,6 +7,7 @@ mod assets;
 mod clock;
 mod dialogue;
 mod ecology;
+mod game_disc;
 mod house;
 mod input;
 mod interaction;
@@ -28,6 +29,7 @@ use assets::GameAssetsPlugin;
 use clock::ClockPlugin;
 use dialogue::DialoguePlugin;
 use ecology::EcologyPlugin;
+use game_disc::GameDiscPlugin;
 use house::HousePlugin;
 use input::InputPlugin;
 use interaction::InteractionPlugin;
@@ -47,7 +49,12 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugins(RemotePluginGate)
         // Foundations first: states, input, and the asset gate.
-        .add_plugins((GameStatePlugin, InputPlugin, GameAssetsPlugin))
+        .add_plugins((
+            GameStatePlugin,
+            InputPlugin,
+            GameAssetsPlugin,
+            GameDiscPlugin,
+        ))
         .add_plugins(SavePlugin)
         .add_plugins(TownPlugin)
         .add_plugins(PlayerPlugin)

@@ -391,6 +391,7 @@ dependencies = [
  "bevy",
  "bevy_brp_extras",
  "chrono",
+ "disc",
  "rustimal-logic",
  "serde",
  "serde_json",
