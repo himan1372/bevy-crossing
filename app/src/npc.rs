@@ -22,6 +22,8 @@ use rustimal_logic::movement::{
     AVOID_PROBE_ANGLES, AVOID_PROBE_DISTANCE_UNITS, TURN_BACKWARD_ANGLES,
 };
 use rustimal_logic::npc::Personality;
+
+use crate::game_disc::GameDisc;
 use rustimal_logic::npc_ai::{self, sched, WanderAct};
 use rustimal_logic::player_move;
 use rustimal_logic::town_gen::{CellKind, ACRE_DEPTH, ACRE_WIDTH};
@@ -111,6 +113,9 @@ pub struct Villager {
     pub personality: Personality,
     /// `looks` index, kept alongside for logic-crate calls.
     pub looks: u8,
+    /// Index into the disc's villager tables (NPC id - `NPC_START`), when
+    /// the villager comes from the disc.
+    pub npc_index: Option<u32>,
     /// Wander centre: in front of their house.
     home: Vec3,
     /// Where they step out of / go into their house.
@@ -227,17 +232,51 @@ fn is_out(schedule: u32) -> bool {
 }
 
 /// Spawn villagers after the town and the player's house exist.
+/// Placeholder colour per personality (`mNpc_LOOKS_*` order).
+const LOOKS_COLOURS: [(f32, f32, f32); 6] = [
+    (0.95, 0.55, 0.35),
+    (0.95, 0.35, 0.55),
+    (0.45, 0.75, 0.45),
+    (0.35, 0.55, 0.95),
+    (0.55, 0.45, 0.75),
+    (0.85, 0.75, 0.35),
+];
+
+/// Who lives in town: the disc's starting villagers for this town seed,
+/// or the built-in four without a disc.
+fn town_villagers(disc: Option<&GameDisc>, seed: u32) -> Vec<(&'static str, u8, Option<u32>)> {
+    let picked = disc
+        .and_then(crate::roster::VillagerTables::from_disc)
+        .map(|t| t.starters(seed))
+        .unwrap_or_default();
+    if picked.is_empty() {
+        return VILLAGERS
+            .iter()
+            .map(|&(name, looks, _)| (name, looks, None))
+            .collect();
+    }
+    picked
+        .into_iter()
+        // Names live for the whole game; six short strings.
+        .map(|e| (&*Box::leak(e.name.into_boxed_str()), e.looks, Some(e.index)))
+        .collect()
+}
+
 fn spawn_villagers(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     town: Res<Town>,
     player_house: Option<Res<crate::house::PlayerHouse>>,
+    disc: Option<Res<GameDisc>>,
+    seed: Res<crate::town::TownSeed>,
 ) {
     commands.insert_resource(WanderRng(0x9E3779B97F4A7C15));
     let houses = villager_house_centres(&town, player_house.map(|h| h.door_pos));
 
-    for (i, (name, looks, (r, g, b))) in VILLAGERS.iter().enumerate() {
+    for (i, (name, looks, npc_index)) in town_villagers(disc.as_deref(), seed.0).iter().enumerate()
+    {
+        let (r, g, b) = LOOKS_COLOURS[*looks as usize % LOOKS_COLOURS.len()];
         let personality = Personality::from_looks(*looks).unwrap_or(Personality::Girl);
         // Door just in front of the house's south face; home a step further out.
         let (door, home) = match houses.get(i) {
@@ -255,6 +294,7 @@ fn spawn_villagers(
                 name,
                 personality,
                 looks: *looks,
+                npc_index: *npc_index,
                 home,
                 door,
                 act: Act::Wait,
@@ -268,7 +308,7 @@ fn spawn_villagers(
                 look_deg: None,
             },
             Mesh3d(meshes.add(Capsule3d::new(0.35, 0.9))),
-            MeshMaterial3d(materials.add(Color::srgb(*r, *g, *b))),
+            MeshMaterial3d(materials.add(Color::srgb(r, g, b))),
             Transform::from_translation(if out { home } else { door }),
             if out {
                 Visibility::Inherited

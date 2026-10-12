@@ -30,6 +30,9 @@ pub struct GameDisc {
     pub player_faces: Arc<[u8]>,
     pub player_cloth: Arc<[u8]>,
     pub player_cloth_palettes: Arc<[u8]>,
+    /// `npc_name_str_table.bin` from `forest_2nd.arc`: 8 characters per
+    /// villager, by NPC index.
+    pub npc_names: Arc<[u8]>,
 }
 
 /// Why there is no [`GameDisc`], for the on-screen notice.
@@ -68,6 +71,12 @@ fn load(path: PathBuf) -> Result<GameDisc, String> {
             .to_vec(),
     );
     let bank = |name: &str| -> Arc<[u8]> { arc.file(name).unwrap_or_default().into() };
+    let npc_names: Arc<[u8]> = disc
+        .read_file("forest_2nd.arc")
+        .ok()
+        .and_then(Rarc::parse)
+        .and_then(|a| a.file("npc_name_str_table.bin").map(Arc::from))
+        .unwrap_or_else(|| Arc::from(&[][..]));
     Ok(GameDisc {
         path,
         rom,
@@ -76,6 +85,7 @@ fn load(path: PathBuf) -> Result<GameDisc, String> {
         player_faces: bank("face_boy.bin"),
         player_cloth: bank("tex_boy.bin"),
         player_cloth_palettes: bank("pallet_boy.bin"),
+        npc_names,
     })
 }
 

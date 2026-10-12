@@ -483,18 +483,6 @@ const NPC_FACE_TEX_SIZE: usize = 0x100;
 /// Upper bound on a body texture (`*_tmem_txt`); segments only bound reads.
 const NPC_BODY_TEX_MAX: usize = 0x2000;
 
-/// Index into `npc_draw_data_tbl` (NPC id - `NPC_START`) for our
-/// villagers, from the disc's `npc_name_str_table.bin`.
-fn villager_draw_index(name: &str) -> Option<u32> {
-    match name {
-        "Bob" => Some(0),
-        "Maple" => Some(51),
-        "Chief" => Some(187),
-        "Pippy" => Some(206),
-        _ => None,
-    }
-}
-
 /// A villager's rig source from its `npc_draw_data_tbl` entry: skeleton,
 /// body texture and palette, first eye and mouth textures, scale.
 fn villager_source(disc: &GameDisc, index: u32) -> Option<RigSource> {
@@ -581,8 +569,7 @@ fn spawn_villager_models(
     let Some(disc) = disc else { return };
     for (entity, villager) in &villagers {
         commands.entity(entity).insert(CharacterModelDone);
-        let Some(src) = villager_draw_index(villager.name).and_then(|i| villager_source(&disc, i))
-        else {
+        let Some(src) = villager.npc_index.and_then(|i| villager_source(&disc, i)) else {
             warn!("no disc model for villager {}", villager.name);
             continue;
         };

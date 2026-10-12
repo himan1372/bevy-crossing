@@ -27,6 +27,7 @@ mod player;
 mod pockets;
 mod quest;
 mod remote;
+mod roster;
 mod save;
 mod shop;
 mod skeleton;
