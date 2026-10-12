@@ -10,6 +10,7 @@ mod disc_gfx;
 mod disc_town;
 mod ecology;
 mod game_disc;
+mod ground_map;
 mod house;
 mod input;
 mod interaction;

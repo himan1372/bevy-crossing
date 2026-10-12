@@ -18,14 +18,15 @@ use chrono::Datelike;
 use std::collections::HashMap;
 
 use disc::{rel_bss, AssetCatalog, RomImage, RomSource, Target};
-use rustimal_logic::random_field::{make_random_field, ComboInfo, BLOCK_X_NUM, BLOCK_Z_NUM};
-use rustimal_logic::town_gen::{ACRE_DEPTH, ACRE_WIDTH};
+use rustimal_logic::random_field::{bt, make_random_field, ComboInfo, BLOCK_X_NUM, BLOCK_Z_NUM};
 
 use crate::disc_gfx::{decode_texture, run_display_lists, Segments};
 use crate::game_disc::GameDisc;
+use crate::ground_map::{GroundMap, Unit};
 use crate::n64_material::{part_mesh, texture_image, CombinerUniform, N64Material};
+use crate::player::Player;
 use crate::states::AppState;
-use crate::town::{PlaceholderGround, Town, ACRE_SIZE, CELL_SIZE};
+use crate::town::{PlaceholderGround, Town, CELL_SIZE};
 
 /// Acre models are stored at 16x; one game cell is 40 units.
 const GROUND_SCALE: f32 = CELL_SIZE / 16.0 / 40.0;
@@ -132,11 +133,31 @@ fn read_combos(rom: &RomImage, catalog: &AssetCatalog) -> Vec<ComboInfo> {
         .collect()
 }
 
-/// `bg_id` → (opaque list, translucent list) REL offsets from `data_bgd`.
-fn read_bg_lists(
-    rom: &RomImage,
-    catalog: &AssetCatalog,
-) -> HashMap<u16, (Option<u32>, Option<u32>)> {
+/// A `data_bgd` entry: display lists and where its collision grid starts.
+#[derive(Clone, Copy)]
+struct BgEntry {
+    opaque: Option<u32>,
+    translucent: Option<u32>,
+    /// REL offset of `collision[16][16]` (u32 words).
+    collision: u32,
+}
+
+/// `mFM_bg_data_c::collision` offset: after bg_id, 3 pointers, the
+/// animation count and the ROM start/end words.
+const BGD_COLLISION: u32 = 0x1C;
+
+fn collision_units(rom: &RomImage, entry: &BgEntry) -> [Unit; 256] {
+    let mut units = [Unit::default(); 256];
+    if let Some(raw) = rom.slice(RomSource::Rel, entry.collision, 256 * 4) {
+        for (u, w) in units.iter_mut().zip(raw.as_chunks::<4>().0) {
+            *u = Unit::from_raw(u32::from_be_bytes(*w));
+        }
+    }
+    units
+}
+
+/// `bg_id` → its `data_bgd` entry.
+fn read_bg_lists(rom: &RomImage, catalog: &AssetCatalog) -> HashMap<u16, BgEntry> {
     let mut map = HashMap::new();
     let Some(bgd) = catalog.get("data_bgd") else {
         return map;
@@ -152,7 +173,11 @@ fn read_bg_lists(
         };
         map.insert(
             u16::from_be_bytes([id[0], id[1]]),
-            (list(at + 4), list(at + 8)),
+            BgEntry {
+                opaque: list(at + 4),
+                translucent: list(at + 8),
+                collision: at + BGD_COLLISION,
+            },
         );
     }
     map
@@ -215,8 +240,9 @@ pub struct DiscGround;
 fn build_disc_town(
     mut commands: Commands,
     disc: Res<GameDisc>,
-    town: Res<Town>,
+    mut town: ResMut<Town>,
     placeholders: Query<Entity, With<PlaceholderGround>>,
+    mut player: Query<&mut Transform, With<Player>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<N64Material>>,
     mut images: ResMut<Assets<Image>>,
@@ -226,26 +252,32 @@ fn build_disc_town(
     let bg_lists = read_bg_lists(&disc.rom, &disc.catalog);
     let field = make_random_field(&combos, &mut seeded_rng(town.plan.seed));
     let mut missing = 0;
+    let mut units = Vec::with_capacity(BLOCK_X_NUM * BLOCK_Z_NUM);
+    let mut tiers = [0u8; BLOCK_X_NUM * BLOCK_Z_NUM];
     for bz in 0..BLOCK_Z_NUM {
         for bx in 0..BLOCK_X_NUM {
             let combi = field.combi[bz * BLOCK_X_NUM + bx];
-            let Some(&(opaque, translucent)) = combos
+            tiers[bz * BLOCK_X_NUM + bx] = combi.height;
+            let Some(entry) = combos
                 .get(combi.combi as usize)
                 .and_then(|c| bg_lists.get(&c.bg_id))
             else {
                 missing += 1;
+                units.push([Unit::default(); 256]);
                 continue;
             };
-            let lists: Vec<(u32, bool)> = [(opaque, false), (translucent, true)]
+            units.push(collision_units(&disc.rom, entry));
+            let lists: Vec<(u32, bool)> = [(entry.opaque, false), (entry.translucent, true)]
                 .into_iter()
                 .filter_map(|(l, blend)| l.map(|l| (l, blend)))
                 .collect();
             // The playable 5x6 acres are blocks (1..=5, 1..=6); the rest is
             // the border ring, rail line, beach and ocean.
+            let c = GroundMap::block_corner(bx, bz);
             let corner = Vec3::new(
-                (bx as f32 - 1.0) * ACRE_SIZE - ACRE_WIDTH as f32 * ACRE_SIZE / 2.0,
-                -GROUND_BASE_Y * GROUND_SCALE,
-                (bz as f32 - 1.0) * ACRE_SIZE - ACRE_DEPTH as f32 * ACRE_SIZE / 2.0,
+                c.x,
+                GroundMap::tier_offset(combi.height) - GROUND_BASE_Y * GROUND_SCALE,
+                c.y,
             );
             spawn_acre(
                 &mut commands,
@@ -262,6 +294,21 @@ fn build_disc_town(
     if missing > 0 {
         warn!("{missing} acres have no ground template on the disc");
     }
+    let ground = GroundMap::new(units, tiers);
+    // A saved position from the old layout may be in water now.
+    if let Ok(mut t) = player.single_mut() {
+        if !ground.walkable_at(t.translation.x, t.translation.z) {
+            let house = field.blocks.iter().position(|&b| b == bt::PLAYER_HOUSE);
+            if let Some(spot) =
+                house.and_then(|i| ground.walkable_spot_in(i % BLOCK_X_NUM, i / BLOCK_X_NUM))
+            {
+                t.translation.x = spot.x;
+                t.translation.z = spot.y;
+                info!("player moved onto walkable ground by the house");
+            }
+        }
+    }
+    town.ground = Some(ground);
     info!(
         "retail town from disc: {} step, {} combinations",
         if field.three_step { "3" } else { "2" },
@@ -272,6 +319,19 @@ fn build_disc_town(
     }
 }
 
+/// Player capsule centre above the ground.
+const PLAYER_HALF_HEIGHT: f32 = 1.0;
+
+/// Keeps the player on the disc terrain's surface.
+fn follow_ground(town: Res<Town>, mut player: Query<&mut Transform, With<Player>>) {
+    let Some(ground) = &town.ground else { return };
+    for mut t in &mut player {
+        if let Some(h) = ground.height(t.translation.x, t.translation.z) {
+            t.translation.y = h + PLAYER_HALF_HEIGHT;
+        }
+    }
+}
+
 pub struct DiscTownPlugin;
 
 impl Plugin for DiscTownPlugin {
@@ -279,7 +339,8 @@ impl Plugin for DiscTownPlugin {
         app.add_systems(
             OnEnter(AppState::InGame),
             build_disc_town.run_if(resource_exists::<GameDisc>.and_then(resource_exists::<Town>)),
-        );
+        )
+        .add_systems(Update, follow_ground.run_if(in_state(AppState::InGame)));
     }
 }
 

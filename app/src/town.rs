@@ -41,6 +41,9 @@ pub struct Town {
     pub plan: TownPlan,
     /// (ax, az, cx, cz) cells covered by river water.
     pub river_tiles: HashSet<(usize, usize, usize, usize)>,
+    /// Terrain from the disc's acre templates, when the disc is loaded.
+    /// Takes over walkability and ground height from the plan.
+    pub ground: Option<crate::ground_map::GroundMap>,
 }
 
 /// Seed used for town generation. Set from the save file at startup
@@ -114,6 +117,9 @@ impl Town {
     /// house box (spawned or loaded there) may move on walkable ground, so it
     /// can never get stuck.
     pub fn can_step(&self, from: Vec3, to: Vec3) -> bool {
+        if let Some(ground) = &self.ground {
+            return ground.can_step(from, to);
+        }
         if self.in_house_box(from) {
             self.is_walkable(to)
         } else {
@@ -318,7 +324,11 @@ pub fn generate_town(mut commands: Commands, seed: Option<Res<TownSeed>>) {
         "Town generated with seed {seed_val} (30 acres), river covers {} tiles",
         river_tiles.len()
     );
-    commands.insert_resource(Town { plan, river_tiles });
+    commands.insert_resource(Town {
+        plan,
+        river_tiles,
+        ground: None,
+    });
 }
 
 /// Render the town: acres as ground, trees, houses, rocks.
