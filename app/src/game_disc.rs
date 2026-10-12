@@ -25,6 +25,11 @@ pub struct GameDisc {
     pub catalog: Arc<AssetCatalog<'static>>,
     /// `fgdata.bin` from `forest_1st.arc`: the town object layouts.
     pub fgdata: Arc<Vec<u8>>,
+    /// The player's face, clothing and clothing-palette banks from
+    /// `forest_1st.arc` (`RESOURCE_FACE_BOY`, `_TEX_BOY`, `_PALLET_BOY`).
+    pub player_faces: Arc<[u8]>,
+    pub player_cloth: Arc<[u8]>,
+    pub player_cloth_palettes: Arc<[u8]>,
 }
 
 /// Why there is no [`GameDisc`], for the on-screen notice.
@@ -62,11 +67,15 @@ fn load(path: PathBuf) -> Result<GameDisc, String> {
             .ok_or_else(|| fail(&"no fgdata.bin in forest_1st.arc"))?
             .to_vec(),
     );
+    let bank = |name: &str| -> Arc<[u8]> { arc.file(name).unwrap_or_default().into() };
     Ok(GameDisc {
         path,
         rom,
         catalog,
         fgdata,
+        player_faces: bank("face_boy.bin"),
+        player_cloth: bank("tex_boy.bin"),
+        player_cloth_palettes: bank("pallet_boy.bin"),
     })
 }
 

@@ -383,18 +383,36 @@ fn run_lists(
 }
 
 /// Runtime memory game code would have filled, rebuilt from REL data:
-/// .bss buffers (e.g. the season's ground textures). Segment 0 is the REL
-/// itself; other segments aren't modelled yet.
+/// .bss buffers (e.g. the season's ground textures), and segments a draw
+/// routine points at other data (e.g. the player's face and clothing from
+/// `forest_1st.arc`). Segment 0 is the REL itself.
 #[derive(Default, Clone)]
 pub struct Segments {
     /// (bss offset, length, REL offset).
     bss: Vec<(u32, u32, u32)>,
+    /// (segment, bytes) the draw code sets with `gSPSegment`.
+    external: Vec<(u8, std::sync::Arc<[u8]>)>,
 }
 
 impl Segments {
     /// Fills the .bss buffer at `bss_offset` with REL data at `rel`.
     pub fn set_bss(&mut self, bss_offset: u32, len: u32, rel: u32) {
         self.bss.push((bss_offset, len, rel));
+    }
+
+    /// Points segment `seg` at `bytes` (`gSPSegment(seg, bytes)`).
+    pub fn set_segment(&mut self, seg: u8, bytes: std::sync::Arc<[u8]>) {
+        self.external.retain(|(s, _)| *s != seg);
+        self.external.push((seg, bytes));
+    }
+
+    /// The bytes at a segmented, bss-tagged or REL address.
+    pub fn bytes<'a>(&'a self, rel: &'a [u8], addr: u32) -> Option<&'a [u8]> {
+        let seg = (addr >> 24) as u8;
+        if let Some((_, b)) = self.external.iter().find(|(s, _)| *s == seg) {
+            return b.get((addr & 0x00FF_FFFF) as usize..);
+        }
+        rel.get(self.resolve(addr)? as usize..)
     }
 
     /// Segmented (or bss-tagged) address → REL offset.
@@ -434,17 +452,18 @@ pub fn decode_texture(
     };
     let (w, h) = (key.width as usize, key.height as usize);
     let rel = rom.bytes(RomSource::Rel);
-    let data = rel.get(segments.resolve(key.img_addr)? as usize..)?;
+    let data = segments.bytes(rel, key.img_addr)?;
     // A palette the lists loaded wins over the caller's. Disc palettes
     // checked so far (ground, `_dol`) are RGB5A3.
-    let pal_addr = match key.tlut_addr {
-        a if a != 0 && a < UNRESOLVED => segments.resolve(a).or(palette),
-        _ => palette,
+    let loaded = match key.tlut_addr {
+        a if a != 0 && a < UNRESOLVED => segments.bytes(rel, a),
+        _ => None,
     };
+    let fallback = palette.and_then(|a| rel.get(a as usize..));
     // Palettes hold at most 256 entries; the decoder bounds-checks.
-    let tlut = pal_addr
-        .and_then(|a| rel.get(a as usize..(a as usize + 512).min(rel.len())))
-        .map(|t| (t, TlutFormat::Rgb5A3));
+    let tlut = loaded
+        .or(fallback)
+        .map(|t| (&t[..t.len().min(512)], TlutFormat::Rgb5A3));
     gx_texture::decode(data, fmt, w, h, tlut)
 }
 

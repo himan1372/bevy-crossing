@@ -48,14 +48,12 @@ const REVERSAL_DEG: f32 = 170.0;
 
 impl Locomotion {
     /// Walk / run / wait, for animation and sound.
-    #[allow(dead_code)] // first caller: the M2 player model
     pub fn state(&self) -> LocomotionState {
         self.0.state
     }
 
     /// Playback speed for the walk/run animation (decomp formula; full
     /// tilt gives 0.6).
-    #[allow(dead_code)] // first caller: the M2 player model
     pub fn anim_speed(&self) -> f32 {
         player_move::anim_speed(self.0.speed, player_move::DASH_SPEED_NUMERATOR)
     }

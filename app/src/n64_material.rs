@@ -24,7 +24,7 @@ use bevy::shader::ShaderRef;
 use crate::disc_gfx::{Part, PartKey, TexKey};
 
 /// N64 texture coordinates are s10.5 fixed point.
-const ST_ONE: f32 = 32.0;
+pub const ST_ONE: f32 = 32.0;
 const SHADER: &str = "embedded://bevy_crossing/n64_combiner.wgsl";
 
 /// Flag bits in [`CombinerUniform::flags`].

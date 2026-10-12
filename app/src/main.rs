@@ -4,6 +4,7 @@
 use bevy::prelude::*;
 
 mod assets;
+mod character;
 mod clock;
 mod dialogue;
 mod disc_gfx;
@@ -27,6 +28,7 @@ mod quest;
 mod remote;
 mod save;
 mod shop;
+mod skeleton;
 mod states;
 mod talk;
 mod town;
@@ -81,6 +83,7 @@ fn main() {
         .add_plugins(PocketsPlugin)
         .add_plugins(ClockPlugin)
         .add_plugins(environment::EnvironmentPlugin)
+        .add_plugins(character::CharacterPlugin)
         .add_systems(Startup, setup_light)
         .run();
 }
