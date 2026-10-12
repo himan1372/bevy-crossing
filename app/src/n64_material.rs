@@ -12,10 +12,12 @@
 
 use bevy::asset::{embedded_asset, RenderAssetUsages};
 use bevy::image::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor};
-use bevy::mesh::PrimitiveTopology;
+use bevy::mesh::{MeshVertexBufferLayoutRef, PrimitiveTopology};
+use bevy::pbr::{MaterialPipeline, MaterialPipelineKey};
 use bevy::prelude::*;
 use bevy::render::render_resource::{
-    AsBindGroup, Extent3d, ShaderType, TextureDimension, TextureFormat,
+    AsBindGroup, Extent3d, RenderPipelineDescriptor, ShaderType, SpecializedMeshPipelineError,
+    TextureDimension, TextureFormat,
 };
 use bevy::shader::ShaderRef;
 
@@ -130,6 +132,18 @@ pub struct N64Material {
 impl Material for N64Material {
     fn fragment_shader() -> ShaderRef {
         SHADER.into()
+    }
+
+    /// Draw both faces: N64 models don't keep a consistent winding, so back
+    /// faces would otherwise drop whole walls.
+    fn specialize(
+        _pipeline: &MaterialPipeline,
+        descriptor: &mut RenderPipelineDescriptor,
+        _layout: &MeshVertexBufferLayoutRef,
+        _key: MaterialPipelineKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        descriptor.primitive.cull_mode = None;
+        Ok(())
     }
 
     fn alpha_mode(&self) -> AlphaMode {

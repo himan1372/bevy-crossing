@@ -823,7 +823,8 @@ fn part_lists(catalog: &AssetCatalog, prefix: &str, parts: &[&str]) -> Vec<u32> 
 }
 
 /// Yaw that turns a model so its `door` part faces south (+Z, towards the
-/// camera): the door's average vertex position gives the facing.
+/// camera): the door's average vertex position gives the facing, snapped
+/// to a quarter turn.
 fn door_facing_yaw(disc: &GameDisc, prefix: &str) -> f32 {
     let lists = part_lists(&disc.catalog, prefix, &["door"]);
     if lists.is_empty() {
@@ -842,7 +843,10 @@ fn door_facing_yaw(disc: &GameDisc, prefix: &str) -> f32 {
     let (x, z) = verts
         .iter()
         .fold((0.0, 0.0), |(x, z), v| (x + v[0] / n, z + v[2] / n));
-    -x.atan2(z)
+    // House fronts are axis-aligned in the model; a door off the front's
+    // centre skews the angle, so snap to the nearest quarter turn.
+    let quarter = std::f32::consts::FRAC_PI_2;
+    (-x.atan2(z) / quarter).round() * quarter
 }
 
 /// Small deterministic hash for picking per-object variants.
@@ -878,7 +882,12 @@ fn object_model(
                 let parts = vec![
                     "t1", "t2", "t3", "door", "window", "mark", "fuda", "kazamiA", "kazamiB",
                 ];
-                return Some(("obj_s_myhome1".to_string(), parts, None));
+                // Roof colour is the player's choice in the game; `a` for now.
+                return Some((
+                    "obj_s_myhome1".to_string(),
+                    parts,
+                    Some("obj_s_myhome_a_pal".to_string()),
+                ));
             }
             let h = cell_hash(cell);
             let shape = h % 5 + 1;
@@ -933,6 +942,10 @@ fn spawn_disc_objects(
                 .as_deref()
                 .and_then(|p| disc.catalog.get(p))
                 .map(|a| a.offset);
+            debug!(
+                "object model {prefix} palette {palette:?} -> {pal:?}, {} lists",
+                lists.len()
+            );
             let model = if lists.is_empty() {
                 Vec::new()
             } else {
@@ -955,6 +968,7 @@ fn spawn_disc_objects(
         let root = commands
             .spawn((
                 DiscObject,
+                Name::new(prefix.clone()),
                 Transform::from_xyz(p.x, obj.ground_y, p.z)
                     .with_rotation(Quat::from_rotation_y(*yaw)),
                 Visibility::default(),
@@ -1039,6 +1053,48 @@ mod tests {
                     })
                     .collect();
                 eprintln!("t{t} z{z:2} {}", row.join(" "));
+            }
+        }
+    }
+
+    /// Probe (needs the disc): house parts' textures and transparency.
+    #[test]
+    #[ignore]
+    fn probe_house_parts() {
+        let path = std::env::var("BEVY_CROSSING_ISO").expect("set BEVY_CROSSING_ISO");
+        let mut disc = disc::Disc::open_path(std::path::Path::new(&path)).unwrap();
+        let rom = RomImage::from_disc(&mut disc).unwrap();
+        let cat = AssetCatalog::builtin(&rom);
+        for shape in 1..=5 {
+            let pal = cat
+                .get(&format!("obj_s_house{shape}_a_pal"))
+                .map(|a| a.offset);
+            for part in [
+                "t1", "t2", "t3", "t4", "door", "window", "windowL", "windowR", "name",
+            ] {
+                let Some(a) = cat.get(&format!("obj_s_house{shape}_{part}_model")) else {
+                    continue;
+                };
+                let sink = run_display_lists(&rom, &[a.offset]);
+                for p in &sink.parts {
+                    let info = p.key.tex.map(|k| {
+                        let px = decode_texture(&rom, &k, pal, &Segments::default());
+                        let clear = px.as_ref().map(|px| {
+                            px.chunks(4).filter(|c| c[3] < 128).count() * 100
+                                / (px.len() / 4).max(1)
+                        });
+                        format!(
+                            "{:?} {}x{} tlut={:x} clear%={clear:?}",
+                            k.format, k.width, k.height, k.tlut_addr
+                        )
+                    });
+                    eprintln!(
+                        "house{shape} {part}: tris={} combine={:06x}/{:08x} {info:?}",
+                        p.vertices.len() / 3,
+                        p.key.combine.0,
+                        p.key.combine.1
+                    );
+                }
             }
         }
     }
