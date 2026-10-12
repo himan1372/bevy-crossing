@@ -313,6 +313,9 @@ pub fn run_display_lists(rom: &RomImage, entries: &[u32]) -> TriangleSink {
         b: 255,
         a: 255,
     };
+    // Likewise the primitive LOD fraction: windows use it as their alpha
+    // (game code dims it at night); 0 made them fully transparent.
+    emu.state.prim_lod = 255;
     let mut sink = TriangleSink::default();
     for &entry in entries {
         let lists = mem.lists(entry);

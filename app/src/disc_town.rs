@@ -849,6 +849,11 @@ fn door_facing_yaw(disc: &GameDisc, prefix: &str) -> f32 {
     (-x.atan2(z) / quarter).round() * quarter
 }
 
+/// Extra counter-clockwise turn for the player house (radians), judged
+/// against retail screenshots; the game's own placement angle for it isn't
+/// translated yet.
+const PLAYER_HOUSE_EXTRA_YAW: f32 = 22.5 * std::f32::consts::PI / 180.0;
+
 /// Small deterministic hash for picking per-object variants.
 fn cell_hash((ax, az, cx, cz): (usize, usize, usize, usize)) -> usize {
     let mut h = (ax * 16 + cx) as u32 ^ (((az * 16 + cz) as u32) << 8);
@@ -952,7 +957,15 @@ fn spawn_disc_objects(
                 build_model(disc, &lists, pal, meshes, materials, images)
             };
             let yaw = if obj.kind == CellKind::House {
-                door_facing_yaw(disc, &prefix)
+                // The game turns the player house a little further when it
+                // places it (not in the model); Philip judged ~15-30 deg
+                // counter-clockwise from the retail look.
+                let extra = if prefix.contains("myhome") {
+                    PLAYER_HOUSE_EXTRA_YAW
+                } else {
+                    0.0
+                };
+                door_facing_yaw(disc, &prefix) + extra
             } else {
                 0.0
             };
