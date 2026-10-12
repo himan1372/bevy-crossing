@@ -169,13 +169,18 @@ impl Town {
         let Some(retail) = &self.retail else {
             return false;
         };
-        retail.player_homes.iter().enumerate().any(|(house, cell)| {
-            cell.is_some_and(|cell| {
-                let (c, ..) = crate::disc_town::player_home_placement(house, cell);
-                let half = crate::disc_town::PLAYER_HOUSE_HALF * CELL_SIZE;
-                (p.x - c.x).abs() < half && (p.z - c.z).abs() < half
+        let in_building = retail
+            .buildings
+            .iter()
+            .any(|b| (p.x - b.centre.x).abs() < b.half.x && (p.z - b.centre.z).abs() < b.half.y);
+        in_building
+            || retail.player_homes.iter().enumerate().any(|(house, cell)| {
+                cell.is_some_and(|cell| {
+                    let (c, ..) = crate::disc_town::player_home_placement(house, cell);
+                    let half = crate::disc_town::PLAYER_HOUSE_HALF * CELL_SIZE;
+                    (p.x - c.x).abs() < half && (p.z - c.z).abs() < half
+                })
             })
-        })
     }
 
     /// (ax, az, cx, cz) of the plan cell under a world position.

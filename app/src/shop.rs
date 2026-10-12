@@ -193,20 +193,23 @@ struct Obstacle {
 /// Find a free 5x4 grass rect near the town center for the shop building,
 /// scanning outward from the middle of the map.
 fn find_shop_spot(town: Res<Town>, mut commands: Commands) {
-    // The retail layout says where the shop is.
-    if let Some(at) = town.retail.as_ref().and_then(|r| r.shop) {
-        let center = Vec3::new(at.x, 0.0, at.z - SHOP_D / 2.0 + 0.5);
-        let base_y = town.ground_y(at);
+    // The retail layout says where the shop is (drawn by disc_town).
+    if let Some(b) = town.retail.as_ref().and_then(|r| {
+        r.buildings
+            .iter()
+            .find(|b| b.item == crate::disc_town::SHOP0)
+    }) {
+        let base_y = town.ground_y(b.centre);
         commands.insert_resource(ShopBuilding {
-            door_pos: Vec3::new(center.x, base_y, center.z + SHOP_D / 2.0 + 0.7),
-            min_x: center.x - SHOP_W / 2.0,
-            max_x: center.x + SHOP_W / 2.0,
-            min_z: center.z - SHOP_D / 2.0,
-            max_z: center.z + SHOP_D / 2.0,
+            door_pos: Vec3::new(b.centre.x, base_y, b.centre.z + b.half.y + 0.7),
+            min_x: b.centre.x - b.half.x,
+            max_x: b.centre.x + b.half.x,
+            min_z: b.centre.z - b.half.y,
+            max_z: b.centre.z + b.half.y,
             placed: true,
             base_y,
         });
-        println!("Shop placed from the retail layout at {center:?}");
+        println!("Shop placed from the retail layout at {:?}", b.centre);
         return;
     }
     // Global cell dims: 5 acres * 16 by 6 acres * 16.
@@ -287,8 +290,10 @@ fn spawn_shop_exterior(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     building: Res<ShopBuilding>,
+    town: Res<Town>,
 ) {
-    if !building.placed {
+    // With the disc, the shop model is drawn by disc_town.
+    if !building.placed || town.retail.is_some() {
         return;
     }
     let cx = (building.min_x + building.max_x) / 2.0;

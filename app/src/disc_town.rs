@@ -247,12 +247,205 @@ pub struct DiscGround;
 pub struct RetailLayout {
     pub field: RandomField,
     pub combos: Vec<ComboInfo>,
-    /// Where the retail layout puts the shop (`SHOP0..3` item), if any.
-    pub shop: Option<Vec3>,
     /// Rock variant (0..5 = A..E) per plan cell (ax, az, cx, cz).
     pub rocks: HashMap<(usize, usize, usize, usize), u8>,
     /// The four player houses (`HOUSE0..3` items) by house number.
     pub player_homes: [Option<(usize, usize, usize, usize)>; 4],
+    /// Shop, post office, police box, museum and tailor, as placed.
+    pub buildings: Vec<RetailBuilding>,
+}
+
+/// A public building from the layout, placed like its actor does.
+#[derive(Clone, Debug)]
+pub struct RetailBuilding {
+    /// Layout item (`SHOP0`, `POST_OFFICE`, ...).
+    pub item: u16,
+    pub spec: usize,
+    pub centre: Vec3,
+    pub yaw: f32,
+    /// World-space half extents (x, z) of the model's footprint.
+    pub half: Vec2,
+    /// Where the model's origin goes (the actor's position).
+    pub origin: Vec3,
+}
+
+/// One kind of public building: layout item, model prefix, body parts,
+/// light part, `aSTR_PAL_*` palette index, and the actor's position shift
+/// in game units (from each actor's `_actor_ct`).
+struct BuildingSpec {
+    item: u16,
+    prefix: &'static str,
+    parts: &'static [&'static str],
+    light: &'static str,
+    palette: u32,
+    shift: (f32, f32),
+}
+
+const BUILDINGS: [BuildingSpec; 5] = [
+    // ac_shop.c: x -20, z +20.
+    BuildingSpec {
+        item: 0x5804,
+        prefix: "shop1",
+        parts: &["front", "side", "roof", "door"],
+        light: "light",
+        palette: 12,
+        shift: (-20.0, 20.0),
+    },
+    // ac_post_office.c: x -20, z +20.
+    BuildingSpec {
+        item: 0x5808,
+        prefix: "yubinkyoku",
+        parts: &["t1", "t2", "t3_1", "door", "neon"],
+        light: "light",
+        palette: 16,
+        shift: (-20.0, 20.0),
+    },
+    // ac_police_box.c: no shift.
+    BuildingSpec {
+        item: 0x580C,
+        prefix: "kouban",
+        parts: &["t1", "t2", "t3", "neon"],
+        light: "light",
+        palette: 34,
+        shift: (0.0, 0.0),
+    },
+    // ac_museum.c: no shift.
+    BuildingSpec {
+        item: 0x584A,
+        prefix: "museum",
+        parts: &["t1", "t2", "t3T"],
+        light: "lightT",
+        palette: 66,
+        shift: (0.0, 0.0),
+    },
+    // ac_needlework_shop.c: x -20, z +20.
+    BuildingSpec {
+        item: 0x584D,
+        prefix: "tailor",
+        parts: &["1", "2", "3", "door"],
+        light: "light",
+        palette: 68,
+        shift: (-20.0, 20.0),
+    },
+];
+
+/// Game units per cell.
+const GAME_UNITS_PER_CELL: f32 = 40.0;
+
+/// `structure_pal_adrs_(no)winter[index]`: the palette the game puts in
+/// segment 8 for a structure (`aSTR_get_pal_segment`).
+fn structure_palette(disc: &GameDisc, index: u32, winter: bool) -> Option<u32> {
+    let table = if winter {
+        "structure_pal_adrs_winter"
+    } else {
+        "structure_pal_adrs_nowinter"
+    };
+    let t = disc.catalog.get(table)?;
+    match disc.rom.pointer_at(RomSource::Rel, t.offset + index * 4) {
+        Some(Target::File(RomSource::Rel, p)) => Some(p),
+        _ => None,
+    }
+}
+
+/// Places the layout's public buildings and measures their footprints.
+fn place_buildings(
+    disc: &GameDisc,
+    structures: &[(u16, usize, usize, usize, usize)],
+) -> Vec<RetailBuilding> {
+    let mut out = Vec::new();
+    for &(item, ax, az, cx, cz) in structures {
+        let Some(spec_index) = BUILDINGS.iter().position(|b| b.item == item) else {
+            continue;
+        };
+        let spec = &BUILDINGS[spec_index];
+        let prefix = format!("obj_s_{}", spec.prefix);
+        let lists = part_lists(&disc.catalog, &prefix, spec.parts);
+        if lists.is_empty() {
+            continue;
+        }
+        let sink = run_display_lists(&disc.rom, &lists);
+        let (mut lo, mut hi) = (Vec2::splat(f32::MAX), Vec2::splat(f32::MIN));
+        for v in sink.parts.iter().flat_map(|p| &p.vertices) {
+            let q = Vec2::new(v.pos[0], v.pos[2]) * OBJECT_SCALE;
+            (lo, hi) = (lo.min(q), hi.max(q));
+        }
+        let has_door = spec.parts.contains(&"door");
+        // Same bind pose as the houses: door part at +X, turned to face south.
+        let yaw = if has_door {
+            door_facing_yaw(disc, &prefix)
+        } else {
+            -std::f32::consts::FRAC_PI_2
+        };
+        let rot = Quat::from_rotation_y(yaw);
+        let corners = [lo, Vec2::new(lo.x, hi.y), hi, Vec2::new(hi.x, lo.y)]
+            .map(|c| rot * Vec3::new(c.x, 0.0, c.y));
+        let (mut wlo, mut whi) = (Vec2::splat(f32::MAX), Vec2::splat(f32::MIN));
+        for c in corners {
+            (wlo, whi) = (wlo.min(c.xz()), whi.max(c.xz()));
+        }
+        let shift = Vec3::new(spec.shift.0, 0.0, spec.shift.1) / GAME_UNITS_PER_CELL * CELL_SIZE;
+        let centre = Town::cell_to_world(ax, az, cx, cz) + shift;
+        out.push(RetailBuilding {
+            item,
+            spec: spec_index,
+            centre: centre + Vec3::new((wlo.x + whi.x) / 2.0, 0.0, (wlo.y + whi.y) / 2.0),
+            yaw,
+            half: (whi - wlo) / 2.0,
+            origin: centre,
+        });
+    }
+    out
+}
+
+/// Draws the public buildings from the layout.
+#[allow(clippy::too_many_arguments)]
+fn spawn_buildings(
+    commands: &mut Commands,
+    disc: &GameDisc,
+    town: &Town,
+    winter: bool,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<N64Material>,
+    images: &mut Assets<Image>,
+) {
+    let Some(retail) = &town.retail else { return };
+    let season = if winter { "w" } else { "s" };
+    for b in &retail.buildings {
+        let spec = &BUILDINGS[b.spec];
+        let prefix = format!("obj_{season}_{}", spec.prefix);
+        let palette = structure_palette(disc, spec.palette, winter);
+        let lists = part_lists(&disc.catalog, &prefix, spec.parts);
+        let mut model = build_model(disc, &lists, palette, meshes, materials, images);
+        let light = part_lists(&disc.catalog, &prefix, &[spec.light]);
+        model.extend(build_model_with_prim(
+            disc,
+            &light,
+            palette,
+            HOUSE_LIGHT_PRIM_DAY,
+            0,
+            meshes,
+            materials,
+            images,
+        ));
+        let ground_y = town.ground_y(b.origin);
+        let origin = b.origin;
+        let root = commands
+            .spawn((
+                DiscObject,
+                Name::new(prefix.clone()),
+                Transform::from_xyz(origin.x, ground_y, origin.z)
+                    .with_rotation(Quat::from_rotation_y(b.yaw)),
+                Visibility::default(),
+            ))
+            .id();
+        for (mesh, material) in &model {
+            commands.spawn((
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(material.clone()),
+                ChildOf(root),
+            ));
+        }
+    }
 }
 
 /// Half-width of a player house, in cells: its front wall (and door) sits
@@ -377,18 +570,15 @@ pub fn build_retail_town(disc: &GameDisc, plan: &mut TownPlan) -> (RetailLayout,
             player_homes[(item - HOUSE0) as usize] = Some((ax, az, cx, cz));
         }
     }
-    let shop = structures
-        .iter()
-        .find(|s| (SHOP0..=SHOP0 + 3).contains(&s.0))
-        .map(|&(_, ax, az, cx, cz)| Town::cell_to_world(ax, az, cx, cz));
+    let buildings = place_buildings(disc, &structures);
     resite_homes(plan, &player_homes, &ground);
     (
         RetailLayout {
             field,
             combos,
-            shop,
             rocks,
             player_homes,
+            buildings,
         },
         ground,
     )
@@ -399,7 +589,7 @@ const ROCK_A: u16 = 0x0063;
 
 /// `STRUCTURE_START` items (`m_name_table.h`).
 const HOUSE0: u16 = 0x5800;
-const SHOP0: u16 = 0x5804;
+pub const SHOP0: u16 = 0x5804;
 
 /// Structure items in the playable acres: (item, ax, az, cx, cz).
 fn find_structures(
@@ -721,6 +911,15 @@ fn build_disc_town(
     );
     let month0 = chrono::Local::now().month0();
     let winter = TREE_MONTH_PALETTE[month0 as usize % 12] >= TREE_FIRST_SNOW_PALETTE;
+    spawn_buildings(
+        &mut commands,
+        &disc,
+        &town,
+        winter,
+        &mut meshes,
+        &mut materials,
+        &mut images,
+    );
     spawn_player_homes(
         &mut commands,
         &disc,
