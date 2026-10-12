@@ -7,7 +7,7 @@ Draw the town ground from the disc's acre templates instead of flat planes.
 - [x] bss relocations tagged (BSS_TAG) and resolved via `Segments`
 - [x] Translucent layer (`_modelT`) alpha-blended
 - [x] logic fix: G_LOADTLUT TLUT name is 4 bits (was 3; data loads name 15)
-- [ ] Holes: some acres have missing ground triangles (dark patches in the overhead view)
+- [x] Holes fixed: G_TRIN face-data words were read as commands (could look like G_ENDDL); all c/r/s/f templates now cover their acre
 - [ ] Edge -> shape mapping is a guess: rivers/cliffs don't line up across acres. Proper fix: generate retail block types (logic::field_gen) instead of mapping the rewrite plan.
 - [ ] Month -> palette table is judged from colours, not the game's calendar
 - [ ] Collision/heights still from the town plan, not the templates

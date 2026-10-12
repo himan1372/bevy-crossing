@@ -72,6 +72,17 @@ impl<'a> RelGfx<'a> {
                 let Some(gfx) = self.gfx_at(at) else { break };
                 list.push(gfx);
                 at += GFX_SIZE;
+                if matches!(gfx.opcode(), op::G_TRIN | op::G_TRIN_INDEPEND) {
+                    // The face data continues in the following words; don't
+                    // read it as commands (an index byte can look like
+                    // G_ENDDL and cut the list short).
+                    for _ in 1..trin_words(gfx, |i| self.gfx_at(at + (i as u32 - 1) * GFX_SIZE)) {
+                        let Some(data) = self.gfx_at(at) else { break };
+                        list.push(data);
+                        at += GFX_SIZE;
+                    }
+                    continue;
+                }
                 match gfx.opcode() {
                     op::G_ENDDL => break,
                     op::G_DL if gfx.addr() < UNRESOLVED && gfx.addr() != 0 => {
@@ -91,6 +102,29 @@ impl<'a> RelGfx<'a> {
         }
         lists
     }
+}
+
+/// How many `Gfx` words a `G_TRIN` run occupies (itself included), the
+/// way `Emu64::h_trin` consumes them: the first word carries 3 faces, each
+/// later word 3 (7-bit indices, bit 0 of w1 set) or 4 (5-bit indices).
+/// `word(i)` returns the run's i-th word.
+fn trin_words(first: Gfx, word: impl Fn(usize) -> Option<Gfx>) -> usize {
+    let mut faces = (((first.w0 >> 17) & 0x7F) + 1) as usize;
+    let mut words = 0;
+    while faces > 0 {
+        let per_word = if words == 0 {
+            3
+        } else {
+            match word(words) {
+                Some(g) if g.w1 & 1 == 1 => 3,
+                Some(_) => 4,
+                None => break,
+            }
+        };
+        faces = faces.saturating_sub(per_word);
+        words += 1;
+    }
+    words.max(1)
 }
 
 impl GfxMemory for RelGfx<'_> {
@@ -377,5 +411,25 @@ mod tests {
         let pal = asset("mFM_obj_tree_01_pal_dol");
         let rgba = decode_texture(&rom, &key, Some(pal), &Segments::default()).expect("decodes");
         assert_eq!(rgba.len(), 64 * 64 * 4);
+
+        // Ground templates must cover their whole acre (G_TRIN data words
+        // used to be misread as commands, leaving holes).
+        let mut lists = vec![asset("grd_s_c1_r1_1_model")];
+        lists.push(asset("grd_s_c1_r1_1_modelT"));
+        let sink = run_display_lists(&rom, &lists);
+        let area: f32 = sink
+            .parts
+            .iter()
+            .flat_map(|p| p.vertices.chunks(3))
+            .map(|t| {
+                let (a, b, c) = (t[0].pos, t[1].pos, t[2].pos);
+                ((b[0] - a[0]) * (c[2] - a[2]) - (c[0] - a[0]) * (b[2] - a[2])).abs() / 2.0
+            })
+            .sum();
+        assert!(
+            area / (10240.0 * 10240.0) > 0.97,
+            "coverage {}",
+            area / (10240.0 * 10240.0)
+        );
     }
 }
