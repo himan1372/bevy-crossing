@@ -1332,7 +1332,7 @@ pub struct DiscObject;
 pub struct DiscTree;
 
 /// Player capsule centre above the ground.
-const PLAYER_HALF_HEIGHT: f32 = 1.0;
+pub(crate) const PLAYER_HALF_HEIGHT: f32 = 1.0;
 
 /// Keeps the player and villagers on the disc terrain's surface.
 fn follow_ground(

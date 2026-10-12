@@ -31,7 +31,13 @@ pub fn spawn_player(
     // Spawn camera
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0.0, 12.0, 10.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Projection::Perspective(PerspectiveProjection {
+            fov: CAMERA_FOV_Y_DEG.to_radians(),
+            near: CAMERA_NEAR,
+            far: CAMERA_FAR,
+            ..default()
+        }),
+        Transform::from_translation(camera_eye_offset()).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
     println!("Player and camera spawned");
@@ -88,10 +94,38 @@ pub fn player_movement(
     }
 }
 
-/// Camera follows the player.
+/// Game units (as in the decomp) per world unit: one cell is 40.
+const GAME_UNIT: f32 = 1.0 / 40.0;
+/// Town camera (`Init_Camera2`, `Camera2_Get_GoalDistanceAndDirection`):
+/// 20 deg vertical field of view, 620 units from the look-at point,
+/// pitched 45 deg down, facing north.
+const CAMERA_FOV_Y_DEG: f32 = 20.0;
+const CAMERA_DISTANCE: f32 = 620.0 * GAME_UNIT;
+const CAMERA_PITCH_DEG: f32 = 45.0;
+const CAMERA_NEAR: f32 = 200.0 * GAME_UNIT;
+const CAMERA_FAR: f32 = 1600.0 * GAME_UNIT;
+/// The look-at point is the player's eye position, 33 units above the
+/// feet (`Actor_world_to_eye(actorx, 33.0f)`).
+const PLAYER_EYE_HEIGHT: f32 = 33.0 * GAME_UNIT;
+/// `Camera2_MoveCenterPosAndSpeed_fromEndCenterPos`: the look-at point
+/// closes this fraction of the gap per 60 Hz frame, by at most 8.75 units.
+const CAMERA_CHASE_FRACTION: f32 = 0.133_974_61;
+const CAMERA_CHASE_MAX_STEP: f32 = 8.75 * GAME_UNIT;
+
+/// From the look-at point to the camera.
+fn camera_eye_offset() -> Vec3 {
+    let pitch = CAMERA_PITCH_DEG.to_radians();
+    Vec3::new(0.0, pitch.sin(), pitch.cos()) * CAMERA_DISTANCE
+}
+
+/// Camera follows the player like the game's normal camera: the look-at
+/// point eases toward the player's eye, and the camera sits at a fixed
+/// distance and angle from it.
 pub fn camera_follow(
+    time: Res<Time>,
     player_query: Query<&Transform, With<Player>>,
     mut camera_query: Query<&mut Transform, (With<Camera>, Without<Player>)>,
+    mut centre: Local<Option<Vec3>>,
 ) {
     let Ok(player_transform) = player_query.single() else {
         return;
@@ -100,9 +134,23 @@ pub fn camera_follow(
         return;
     };
 
-    let target = player_transform.translation + Vec3::new(0.0, 12.0, 10.0);
-    camera_transform.translation = camera_transform.translation.lerp(target, 0.1);
-    camera_transform.look_at(player_transform.translation, Vec3::Y);
+    let feet = player_transform.translation - Vec3::Y * crate::disc_town::PLAYER_HALF_HEIGHT;
+    let target = feet + Vec3::Y * PLAYER_EYE_HEIGHT;
+    let c = centre.get_or_insert(target);
+    // add_calc per 60 Hz frame, scaled to this frame's length.
+    let frames = time.delta_secs() * 60.0;
+    let fraction = 1.0 - (1.0 - CAMERA_CHASE_FRACTION).powf(frames);
+    let gap = target - *c;
+    let step = (gap * fraction).clamp_length_max(CAMERA_CHASE_MAX_STEP * frames.max(1.0));
+    // Snap across big jumps (warps, entering buildings).
+    *c = if gap.length() > CAMERA_DISTANCE {
+        target
+    } else {
+        *c + step
+    };
+
+    camera_transform.translation = *c + camera_eye_offset();
+    camera_transform.look_at(*c, Vec3::Y);
 }
 
 pub struct PlayerPlugin;
