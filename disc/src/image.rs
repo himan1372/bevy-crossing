@@ -426,5 +426,10 @@ mod tests {
         );
         // AC keeps most code in foresta.rel; main.dol is small but non-trivial.
         assert!(dol.len() > 64 * 1024);
+
+        let rom = crate::RomImage::new(dol, rel).unwrap();
+        let n = rom.rel_pointer_count();
+        eprintln!("rel data pointers={n}");
+        assert!(n > 1000);
     }
 }

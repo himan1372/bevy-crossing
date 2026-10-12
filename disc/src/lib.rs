@@ -8,9 +8,11 @@
 //! from `BEVY_CROSSING_ISO`.
 
 mod image;
+mod rom;
 mod yaz0;
 
 pub use image::{find_image, Disc, DiscError, FstFile, GAME_ID_NTSC_U};
+pub use rom::{RomImage, RomSource, Target};
 pub use yaz0::decode as decode_yaz0;
 
 pub(crate) fn be32(bytes: &[u8]) -> Option<u32> {
