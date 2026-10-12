@@ -39,6 +39,11 @@ pub struct DecodedVtx {
     pub mtx_flag: u8,
     /// Which GX position matrix this vertex uses.
     pub gx_pnmtx: u8,
+    /// Bevy port: the modelview matrix current when the vertex was loaded
+    /// (raw G_MTX address, or the caller's value before any G_MTX). The
+    /// N64 transforms vertices on load, so this is the matrix that places
+    /// it; skinned models load other joints' matrices from segment D.
+    pub mtx: u32,
 }
 
 /// Decode one `Vtx` into the internal representation.
@@ -82,6 +87,7 @@ pub fn decode_vtx(v: &Vtx, tex_gen: bool, force_vtx_flag_copy: bool) -> DecodedV
         color: [v.r, v.g, v.b, v.a],
         mtx_flag,
         gx_pnmtx,
+        mtx: 0,
     }
 }
 

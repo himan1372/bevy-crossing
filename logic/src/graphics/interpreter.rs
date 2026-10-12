@@ -93,6 +93,9 @@ pub struct Emu64 {
     pub trace: Vec<CmdTrace>,
     /// Set when a task hit [`MAX_TASK_COMMANDS`] (Bevy port guard).
     pub task_aborted: bool,
+    /// Bevy port: raw address of the last modelview G_MTX (callers may
+    /// preset it); stamped on vertices as they load (`DecodedVtx::mtx`).
+    pub cur_mtx: u32,
 }
 
 impl Emu64 {
@@ -113,6 +116,7 @@ impl Emu64 {
             dl_frames: Vec::new(),
             trace: Vec::new(),
             task_aborted: false,
+            cur_mtx: 0,
         }
     }
 
@@ -464,11 +468,11 @@ impl Emu64 {
     }
 
     fn h_vtx<M: GfxMemory>(&mut self, mem: &M, gfx: Gfx) {
-        // Retail: n = bits 12-19 (raw, no +1); vn = bits 1-7 = v0+n in
-        // N64-index units; v0 = (vn >> 1) - n.
-        // E.g. gsSPVertex(v,16,0) -> 16 verts loaded at slot 0.
+        // Retail: n = bits 12-19 (raw, no +1); vn = bits 0-7 (`Gvtx.vn:8`)
+        // = (v0+n)*2; v0 = (vn >> 1) - n.
+        // E.g. gsSPVertex(v,13,8) -> w0 low byte 0x2A -> 13 verts at slot 8.
         let n = ((gfx.w0 >> 12) & 0xFF) as usize;
-        let vn = ((gfx.w0 >> 1) & 0x7F) as usize;
+        let vn = (gfx.w0 & 0xFF) as usize;
         let v0 = (vn >> 1).saturating_sub(n);
         let addr = match self.segments.resolve(gfx.addr()) {
             Some(a) => a,
@@ -477,6 +481,9 @@ impl Emu64 {
         if let Some(src) = mem.vertices(addr, n) {
             let tex_gen = self.state.tex_gen;
             self.vtx_cache.load(v0, n, &src, tex_gen, false);
+            for v in self.vtx_cache.verts.iter_mut().skip(v0).take(n) {
+                v.mtx = self.cur_mtx;
+            }
         }
     }
 
@@ -598,6 +605,7 @@ impl Emu64 {
         if is_proj {
             self.state.dirty.mark(Dirty::Projection);
         } else {
+            self.cur_mtx = gfx.w1;
             if typ & command::mtx_param::G_MTX_PUSH == command::mtx_param::G_MTX_NOPUSH {
                 if self.mv_stack.len() < 32 {
                     let top = *self.mv_stack.last().unwrap_or(&identity());
@@ -842,6 +850,29 @@ mod tests {
         fn cull_display_list(&mut self, _v0: u8, _vn: u8) -> bool {
             false
         }
+    }
+
+    /// Memory that serves `n` default vertices at any address.
+    struct VtxMem;
+    impl GfxMemory for VtxMem {
+        fn vertices(&self, _a: u32, n: usize) -> Option<Vec<Vtx>> {
+            Some(vec![Vtx::default(); n])
+        }
+        fn bytes(&self, _a: u32, _n: usize) -> Option<Vec<u8>> {
+            None
+        }
+    }
+
+    #[test]
+    fn vertex_load_start_slot_from_low_byte() {
+        // gsSPVertex(v, 13, 8) as on the disc: w0 = 0x0100D02A
+        // (n = 13 in bits 12-19, (v0 + n) * 2 = 42 in the low byte).
+        let mut emu = Emu64::new();
+        emu.cur_mtx = 7;
+        emu.h_vtx(&VtxMem, Gfx::new(0x0100_D02A, 0x1000));
+        assert_eq!(emu.vtx_cache.verts.len(), 21);
+        assert_eq!(emu.vtx_cache.verts[7].mtx, 0, "slots below 8 untouched");
+        assert!(emu.vtx_cache.verts[8..].iter().all(|v| v.mtx == 7));
     }
 
     fn gfx(opcode: u8, param: u8, len: u16, addr: u32) -> Gfx {
