@@ -1,0 +1,7 @@
+[package]
+name = "disc"
+version = "0.1.0"
+edition = "2021"
+description = "Reads the player's own Animal Crossing GameCube disc image (ISO/GCM/CISO, FST, Yaz0)."
+
+[dependencies]

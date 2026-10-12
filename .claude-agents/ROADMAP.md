@@ -74,7 +74,7 @@ Each milestone ends with a Philip playtest.
 - [x] **assets-scaffold** — done (claude): `app/assets/`, loading gate, placeholder fallback. (Now holds only our own UI and placeholder files; disc content never goes here.)
 - [x] **ci-gate** — done (claude): `.github/workflows/ci.yml` runs the full gate on every push to `main`.
 - [x] ~~**art-direction**~~ — replaced 2026-10-12 by the disc-asset direction; v2 sign-off no longer needed.
-- [ ] **disc-setup** (P) — Philip decides three things. Which disc formats to accept: ISO/GCM/CISO as in rustimal-crossing, with RVZ/GCZ maybe later. Which regions: NTSC-U `GAFE01` only to start? How the player points the game at the disc: a settings file, a `--disc` flag, a file picker, or a `rom/` folder next to the exe. Proposed default: `GAFE01`, ISO/GCM/CISO, look in `rom/` first, then use a path from the settings file.
+- [x] **disc-setup** — Philip OK'd the proposed default (2026-10-12). Was: Philip decides three things. Which disc formats to accept: ISO/GCM/CISO as in rustimal-crossing, with RVZ/GCZ maybe later. Which regions: NTSC-U `GAFE01` only to start? How the player points the game at the disc: a settings file, a `--disc` flag, a file picker, or a `rom/` folder next to the exe. Proposed default: `GAFE01`, ISO/GCM/CISO, look in `rom/` first, then use a path from the settings file.
 
 ### M1 — Main loop on the translated code (placeholder art) — DONE 2026-10-10 (Philip playtested; U-turn drift fixed in 6bb80f7)
 - [x] **logic-expose** — done (claude): slice modules `pub` in `logic/src/lib.rs`, one test each.
@@ -86,8 +86,8 @@ Each milestone ends with a Philip playtest.
 - [x] **game-clock** — done (claude): `app/src/clock.rs` on `logic::game_time`.
 
 ### M2 — Reading the disc (pure Rust, no Bevy; testable without a disc)
-- [ ] **disc-reader** — open ISO/GCM/CISO, check the GameCube magic number and game ID, parse the FST, and find and read files by path. Port of rustimal-crossing's `Disc`/`FstFile`. Tests build a tiny made-up GCM in memory. [blocked: disc-setup]
-- [ ] **yaz0** — Yaz0 (`.szs`) decoder, port of `decode_yaz0`. Tests round-trip through a small encoder written for the test.
+- [x] **disc-reader** — done (claude, crate `disc/`; real-disc test pending Philip): — open ISO/GCM/CISO, check the GameCube magic number and game ID, parse the FST, and find and read files by path. Port of rustimal-crossing's `Disc`/`FstFile`. Tests build a tiny made-up GCM in memory. [blocked: disc-setup]
+- [x] **yaz0** — done (claude, `disc/src/yaz0.rs`): — Yaz0 (`.szs`) decoder, port of `decode_yaz0`. Tests round-trip through a small encoder written for the test.
 - [ ] **dol-rel-image** — extract `main.dol` and decompress `foresta.rel.szs`; map the DOL and REL sections so an asset's ROM offset resolves to bytes. [blocked: disc-reader, yaz0]
 - [ ] **asset-table** — port the asset table from rustimal-crossing (`pc_assets.c` / `gen_runtime_assets.py`) into Rust: name → ROM offset, size, source (DOL/REL), swap type. It holds metadata only, no disc bytes. Plus byte-swap helpers (u16 / u32 / `Vtx`). [blocked: dol-rel-image]
 - [ ] **disc-loader-app** — Bevy side: find and open the disc at startup as decided in disc-setup. If it's missing or wrong, show a clear message and fall back to placeholder art. Expose the disc to the renderer as an `AssetSource` or resource. [blocked: asset-table]
