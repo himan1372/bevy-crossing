@@ -822,6 +822,29 @@ fn part_lists(catalog: &AssetCatalog, prefix: &str, parts: &[&str]) -> Vec<u32> 
         .collect()
 }
 
+/// Yaw that turns a model so its `door` part faces south (+Z, towards the
+/// camera): the door's average vertex position gives the facing.
+fn door_facing_yaw(disc: &GameDisc, prefix: &str) -> f32 {
+    let lists = part_lists(&disc.catalog, prefix, &["door"]);
+    if lists.is_empty() {
+        return 0.0;
+    }
+    let sink = run_display_lists(&disc.rom, &lists);
+    let verts: Vec<[f32; 3]> = sink
+        .parts
+        .iter()
+        .flat_map(|p| p.vertices.iter().map(|v| v.pos))
+        .collect();
+    if verts.is_empty() {
+        return 0.0;
+    }
+    let n = verts.len() as f32;
+    let (x, z) = verts
+        .iter()
+        .fold((0.0, 0.0), |(x, z), v| (x + v[0] / n, z + v[2] / n));
+    -x.atan2(z)
+}
+
 /// Small deterministic hash for picking per-object variants.
 fn cell_hash((ax, az, cx, cz): (usize, usize, usize, usize)) -> usize {
     let mut h = (ax * 16 + cx) as u32 ^ (((az * 16 + cz) as u32) << 8);
@@ -886,8 +909,9 @@ fn spawn_disc_objects(
     materials: &mut Assets<N64Material>,
     images: &mut Assets<Image>,
 ) {
-    let mut built: HashMap<(String, Option<String>), Vec<(Handle<Mesh>, Handle<N64Material>)>> =
-        HashMap::new();
+    /// Shared meshes/materials and the yaw that faces the door south.
+    type Model = (Vec<(Handle<Mesh>, Handle<N64Material>)>, f32);
+    let mut built: HashMap<(String, Option<String>), Model> = HashMap::new();
     let mut count = 0;
     for (entity, obj) in placeholders {
         let Some((prefix, parts, palette)) = object_model(town, obj.kind, obj.cell, winter) else {
@@ -914,9 +938,14 @@ fn spawn_disc_objects(
             } else {
                 build_model(disc, &lists, pal, meshes, materials, images)
             };
-            built.insert(key.clone(), model);
+            let yaw = if obj.kind == CellKind::House {
+                door_facing_yaw(disc, &prefix)
+            } else {
+                0.0
+            };
+            built.insert(key.clone(), (model, yaw));
         }
-        let model = &built[&key];
+        let (model, yaw) = &built[&key];
         if model.is_empty() {
             continue; // keep the placeholder when the disc lacks the model
         }
@@ -926,7 +955,8 @@ fn spawn_disc_objects(
         let root = commands
             .spawn((
                 DiscObject,
-                Transform::from_xyz(p.x, obj.ground_y, p.z),
+                Transform::from_xyz(p.x, obj.ground_y, p.z)
+                    .with_rotation(Quat::from_rotation_y(*yaw)),
                 Visibility::default(),
             ))
             .id();
