@@ -1,7 +1,6 @@
 //! GameCube disc images: ISO/GCM (raw) and CISO (block-mapped), plus the
 //! disc header, DOL location and FST (file table).
 
-use std::fmt;
 use std::fs::{self, File};
 use std::io::{self, BufReader, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -20,40 +19,21 @@ const MAX_DIR_DEPTH: usize = 32;
 /// CISO block size and logical -> physical block map.
 type CisoMap = (u32, Vec<Option<u32>>);
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum DiscError {
-    Io(io::Error),
+    #[error("disc read failed: {0}")]
+    Io(#[from] io::Error),
     /// Not a GameCube disc (bad magic or CISO header).
+    #[error("not a GameCube disc image")]
     NotGameCube,
     /// A GameCube disc, but not one we support.
+    #[error("wrong game {} (need Animal Crossing NTSC-U, GAFE01)", String::from_utf8_lossy(.0))]
     WrongGame([u8; 6]),
     /// Header, DOL or FST data points outside the image or is malformed.
+    #[error("disc image is damaged: {0}")]
     Corrupt(&'static str),
+    #[error("file not on disc: {0}")]
     FileNotFound(String),
-}
-
-impl fmt::Display for DiscError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Io(e) => write!(f, "disc read failed: {e}"),
-            Self::NotGameCube => write!(f, "not a GameCube disc image"),
-            Self::WrongGame(id) => write!(
-                f,
-                "wrong game {} (need Animal Crossing NTSC-U, GAFE01)",
-                String::from_utf8_lossy(id)
-            ),
-            Self::Corrupt(what) => write!(f, "disc image is damaged: {what}"),
-            Self::FileNotFound(p) => write!(f, "file not on disc: {p}"),
-        }
-    }
-}
-
-impl std::error::Error for DiscError {}
-
-impl From<io::Error> for DiscError {
-    fn from(e: io::Error) -> Self {
-        Self::Io(e)
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -253,7 +233,7 @@ fn read_ciso_map<R: Read + Seek>(reader: &mut R) -> Result<Option<CisoMap>, Disc
     if !is_ciso {
         return Ok(None);
     }
-    let block_size = u32::from_le_bytes(header[4..8].try_into().unwrap());
+    let block_size = u32::from_le_bytes([header[4], header[5], header[6], header[7]]);
     if block_size == 0 {
         return Err(DiscError::NotGameCube);
     }
@@ -431,5 +411,16 @@ mod tests {
         let n = rom.rel_pointer_count();
         eprintln!("rel data pointers={n}");
         assert!(n > 1000);
+
+        // Offsets cross-checked against rustimal-crossing pc_assets.c.
+        let cat = crate::AssetCatalog::builtin(&rom);
+        eprintln!("catalog={}", cat.len());
+        let font = cat.get("FONT_nes_tex_font1").unwrap();
+        assert_eq!(
+            (font.source, font.offset, font.size),
+            (crate::RomSource::Rel, 0x4E1A40, 0x6000)
+        );
+        let koi = cat.get("obj_e_koinobori_b_pal").unwrap();
+        assert_eq!((koi.source, koi.offset), (crate::RomSource::Rel, 0x355760));
     }
 }

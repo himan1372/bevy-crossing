@@ -7,10 +7,12 @@
 //! in memory. Tests that need a real disc are `#[ignore]` and read its path
 //! from `BEVY_CROSSING_ISO`.
 
+mod assets;
 mod image;
 mod rom;
 mod yaz0;
 
+pub use assets::{Asset, AssetCatalog};
 pub use image::{find_image, Disc, DiscError, FstFile, GAME_ID_NTSC_U};
 pub use rom::{RomImage, RomSource, Target};
 pub use yaz0::decode as decode_yaz0;

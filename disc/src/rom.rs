@@ -114,7 +114,7 @@ impl RomImage {
         self.rel_pointers.len()
     }
 
-    fn resolve_dol_addr(&self, addr: u32) -> Target {
+    pub(crate) fn resolve_dol_addr(&self, addr: u32) -> Target {
         self.dol_sections
             .iter()
             .find(|s| addr >= s.address && addr - s.address < s.size)
@@ -123,7 +123,7 @@ impl RomImage {
             })
     }
 
-    fn resolve_rel(&self, section: u8, addend: u32) -> Target {
+    pub(crate) fn resolve_rel(&self, section: u8, addend: u32) -> Target {
         match self.rel_sections.get(section as usize) {
             Some(s) if s.file_offset != 0 => Target::File(RomSource::Rel, s.file_offset + addend),
             _ => Target::NoData(addend),
