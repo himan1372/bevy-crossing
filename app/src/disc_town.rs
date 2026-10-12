@@ -308,6 +308,7 @@ fn build_disc_town(
             }
         }
     }
+    town.river_tiles = ground.water_cells();
     town.ground = Some(ground);
     info!(
         "retail town from disc: {} step, {} combinations",
@@ -347,6 +348,34 @@ impl Plugin for DiscTownPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Probe (needs the disc): attribute / corner samples of a river acre.
+    #[test]
+    #[ignore]
+    fn probe_river_collision() {
+        let path = std::env::var("BEVY_CROSSING_ISO").expect("set BEVY_CROSSING_ISO");
+        let mut disc = disc::Disc::open_path(std::path::Path::new(&path)).unwrap();
+        let rom = RomImage::from_disc(&mut disc).unwrap();
+        let cat = AssetCatalog::builtin(&rom);
+        let combos = read_combos(&rom, &cat);
+        let bgs = read_bg_lists(&rom, &cat);
+        for t in [bt::RIVER_SOUTH, bt::CLIFF_HORIZONTAL] {
+            let c = combos.iter().find(|c| c.block_type == t).unwrap();
+            let units = collision_units(&rom, &bgs[&c.bg_id]);
+            for z in 0..16 {
+                let row: Vec<String> = (0..16)
+                    .map(|x| {
+                        let u = units[z * 16 + x];
+                        format!(
+                            "{:2}:{:2}{:2}{:2}{:2}",
+                            u.attribute, u.top_left, u.top_right, u.bot_left, u.bot_right
+                        )
+                    })
+                    .collect();
+                eprintln!("t{t} z{z:2} {}", row.join(" "));
+            }
+        }
+    }
 
     #[test]
     fn seeded_rng_is_in_range_and_repeatable() {

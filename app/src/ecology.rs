@@ -438,6 +438,34 @@ fn update_fish(
     }
 }
 
+/// When the water layout changes (the disc terrain replaced the plan's
+/// river), move fish whose home is no longer water into the new water.
+fn rehome_fish(
+    town: Res<Town>,
+    mut fish: Query<(&mut Fish, &mut Transform)>,
+    mut rng: ResMut<EcoRng>,
+) {
+    let tiles: Vec<(usize, usize, usize, usize)> = town.river_tiles.iter().copied().collect();
+    if tiles.is_empty() {
+        return;
+    }
+    for (mut f, mut t) in &mut fish {
+        if town.is_river(f.home) {
+            continue;
+        }
+        let (ax, az, cx, cz) = tiles[rng.range_usize(tiles.len())];
+        let pos = Town::cell_to_world(ax, az, cx, cz);
+        let y = town
+            .ground
+            .as_ref()
+            .and_then(|g| g.height(pos.x, pos.z))
+            .unwrap_or(0.0)
+            + 0.12;
+        f.home = Vec3::new(pos.x, y, pos.z);
+        t.translation = f.home;
+    }
+}
+
 /// Bugs hop toward a target, pause, then pick a new one.
 fn update_bugs(
     time: Res<Time>,
@@ -741,6 +769,7 @@ impl Plugin for EcologyPlugin {
             .add_systems(
                 Update,
                 (
+                    rehome_fish.run_if(resource_changed::<Town>),
                     update_fish,
                     update_bugs,
                     update_bobber,

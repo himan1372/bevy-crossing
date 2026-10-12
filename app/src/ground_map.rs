@@ -6,6 +6,8 @@
 //! 40 per cell). Scene heights are shifted so the lowest flat ground
 //! (sample 4 on tier 0) sits at y = 0.
 
+use std::collections::HashSet;
+
 use bevy::prelude::*;
 
 use crate::town::{ACRE_SIZE, CELL_SIZE};
@@ -31,6 +33,10 @@ const ATTR_WATERFALL: u8 = 13;
 const ATTR_RIVER_FIRST: u8 = 14; // RIVER_N .. RIVER_NE
 const ATTR_RIVER_LAST: u8 = 21;
 const ATTR_SEA: u8 = 24;
+const ATTR_WALL_FIRST: u8 = 25;
+const ATTR_WALL_LAST: u8 = 62;
+/// Largest corner height difference (samples) a walkable unit can have.
+const MAX_UNIT_RISE: u8 = 6;
 
 /// One collision word, decoded from the GameCube layout (bitfields packed
 /// from the most significant bit): slate:1 center:5 top_left:5 bot_left:5
@@ -58,11 +64,22 @@ impl Unit {
         }
     }
 
+    /// River or pond water (where fish swim).
+    pub fn is_water(self) -> bool {
+        self.attribute == ATTR_WATER
+            || (ATTR_RIVER_FIRST..=ATTR_RIVER_LAST).contains(&self.attribute)
+    }
+
     pub fn walkable(self) -> bool {
-        !matches!(
-            self.attribute,
-            ATTR_HOLE | ATTR_WAVE | ATTR_WATER | ATTR_WATERFALL | ATTR_SEA
-        ) && !(ATTR_RIVER_FIRST..=ATTR_RIVER_LAST).contains(&self.attribute)
+        let corners = [self.top_left, self.top_right, self.bot_left, self.bot_right];
+        let rise = corners.iter().max().unwrap_or(&0) - corners.iter().min().unwrap_or(&0);
+        !self.is_water()
+            && !matches!(self.attribute, ATTR_HOLE | ATTR_WAVE | ATTR_WATERFALL | ATTR_SEA)
+            // Unnamed in the decomp; on the disc they line river banks
+            // (39-45) and cliff edges (50-57): walls.
+            && !(ATTR_WALL_FIRST..=ATTR_WALL_LAST).contains(&self.attribute)
+            // A cliff face inside one unit (a slope rises far less).
+            && rise <= MAX_UNIT_RISE
     }
 }
 
@@ -125,6 +142,25 @@ impl GroundMap {
         let sample = north * (1.0 - fz) + south * fz;
         let game_y = tier as f32 * TIER_HEIGHT + sample * SAMPLE_HEIGHT;
         Some((game_y - GROUND_ZERO) / UNIT * CELL_SIZE)
+    }
+
+    /// River and pond cells of the playable acres as (ax, az, cx, cz),
+    /// the town plan's cell indexing (playable acres are blocks 1..=5, 1..=6).
+    pub fn water_cells(&self) -> HashSet<(usize, usize, usize, usize)> {
+        let mut cells = HashSet::new();
+        for az in 0..ACRE_DEPTH {
+            for ax in 0..ACRE_WIDTH {
+                let acre = (az + 1) * BLOCK_X_NUM + ax + 1;
+                for cz in 0..16 {
+                    for cx in 0..16 {
+                        if self.units[acre * 256 + cz * 16 + cx].is_water() {
+                            cells.insert((ax, az, cx, cz));
+                        }
+                    }
+                }
+            }
+        }
+        cells
     }
 
     /// Whether the ground at a scene position can be stood on.
