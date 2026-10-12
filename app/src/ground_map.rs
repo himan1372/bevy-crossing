@@ -13,12 +13,18 @@ use bevy::prelude::*;
 use crate::town::{ACRE_SIZE, CELL_SIZE};
 use rustimal_logic::random_field::{BLOCK_X_NUM, BLOCK_Z_NUM};
 use rustimal_logic::town_gen::{ACRE_DEPTH, ACRE_WIDTH};
-use rustimal_logic::{decode_height, search_wall_flag, wall_name};
+use rustimal_logic::{
+    decode_height, forbid_vectors, search_slate_detail, search_wall_flag, wall_name,
+    MAKE_VECTOR_TABLE,
+};
 
 /// Game units per cell.
 const UNIT: f32 = 40.0;
 /// Game units per height tier (`3 * mFI_UT_WORLDSIZE_X`).
 const TIER_HEIGHT: f32 = 120.0;
+/// Largest corner rise (samples) of a walkable triangle: ramps rise 2-3
+/// per unit, bank drops 4, cliff faces 12.
+const MAX_TRIANGLE_RISE: u8 = 3;
 /// Edge height difference (game units) still stepped over; banks are
 /// 40, cliffs 120.
 const STEP_TOLERANCE: f32 = 20.0;
@@ -60,6 +66,89 @@ impl Unit {
             top_right: f(6),
             attribute: (raw & 0x3F) as u8,
         }
+    }
+
+    /// Synthetic attribute walls (`mCoBG_MakeForbidAttrVector`) as wall
+    /// names: UP/LEFT/DOWN/RIGHT edges, SLATE_UP/SLATE_DOWN diagonals.
+    fn attribute_walls(self) -> impl Iterator<Item = u8> {
+        forbid_vectors(self.attribute)
+            .into_iter()
+            .map(|v| MAKE_VECTOR_TABLE[v].wall_name)
+    }
+
+    fn has_wall(self, name: u8) -> bool {
+        self.attribute_walls().any(|w| w == name)
+    }
+
+    /// How the unit splits into triangles: along the top-right/bottom-left
+    /// diagonal (`SLATE_UP`) or top-left/bottom-right (`SLATE_DOWN`), from
+    /// an attribute diagonal wall or else the corner heights
+    /// (`mCoBG_SearchSlateDetail`). `None` for a flat unit.
+    fn split(self) -> Option<u8> {
+        if let Some(w) = self
+            .attribute_walls()
+            .find(|&w| w == wall_name::SLATE_UP || w == wall_name::SLATE_DOWN)
+        {
+            return Some(w);
+        }
+        let c = [self.top_left, self.top_right, self.bot_left, self.bot_right];
+        if c.iter().all(|&v| v == c[0]) {
+            return None;
+        }
+        Some(search_slate_detail(
+            self.bot_right as u32,
+            self.top_left as u32,
+            self.top_right as u32,
+            self.bot_left as u32,
+        ))
+    }
+
+    /// Which triangle (0 or 1) a point (fx, fz in 0..1) is in.
+    fn triangle(self, fx: f32, fz: f32) -> u8 {
+        match self.split() {
+            Some(w) if w == wall_name::SLATE_UP => (fx + fz >= 1.0) as u8,
+            Some(_) => (fx < fz) as u8,
+            None => 0,
+        }
+    }
+
+    /// Corner samples (TL, TR, BL, BR) that bound triangle `t`.
+    fn triangle_samples(self, t: u8) -> Vec<u8> {
+        let (tl, tr, bl, br) = (self.top_left, self.top_right, self.bot_left, self.bot_right);
+        match (self.split(), t) {
+            (None, _) => vec![tl, tr, bl, br],
+            (Some(w), 0) if w == wall_name::SLATE_UP => vec![tl, tr, bl],
+            (Some(w), _) if w == wall_name::SLATE_UP => vec![br, tr, bl],
+            (Some(_), 0) => vec![tl, tr, br],
+            (Some(_), _) => vec![tl, bl, br],
+        }
+    }
+
+    /// Height sample at (fx, fz) on its triangle's plane.
+    fn sample_at(self, fx: f32, fz: f32) -> f32 {
+        let (tl, tr, bl, br) = (
+            self.top_left as f32,
+            self.top_right as f32,
+            self.bot_left as f32,
+            self.bot_right as f32,
+        );
+        match (self.split(), self.triangle(fx, fz)) {
+            (None, _) => tl,
+            (Some(w), 0) if w == wall_name::SLATE_UP => tl + (tr - tl) * fx + (bl - tl) * fz,
+            (Some(w), _) if w == wall_name::SLATE_UP => {
+                br + (bl - br) * (1.0 - fx) + (tr - br) * (1.0 - fz)
+            }
+            (Some(_), 0) => tl + (tr - tl) * fx + (br - tr) * fz,
+            (Some(_), _) => tl + (bl - tl) * fz + (br - bl) * fx,
+        }
+    }
+
+    /// Whether triangle `t` can be stood on: standable ground and not a
+    /// cliff face or bank drop (ramps rise at most 3 samples per unit).
+    fn triangle_walkable(self, t: u8) -> bool {
+        let c = self.triangle_samples(t);
+        let rise = c.iter().max().unwrap_or(&0) - c.iter().min().unwrap_or(&0);
+        self.walkable() && rise <= MAX_TRIANGLE_RISE
     }
 
     /// River or pond water (where fish swim).
@@ -148,15 +237,11 @@ impl GroundMap {
         (unit, self.tiers[acre] as f32 * TIER_HEIGHT)
     }
 
-    /// Ground height (scene units) at a scene position.
+    /// Ground height (scene units) at a scene position, on the plane of
+    /// the triangle it stands in.
     pub fn height(&self, x: f32, z: f32) -> Option<f32> {
         let (u, tier, fx, fz) = self.locate(x, z)?;
-        let s = |v: u8| v as f32;
-        // Bilinear over the four corner samples.
-        let north = s(u.top_left) * (1.0 - fx) + s(u.top_right) * fx;
-        let south = s(u.bot_left) * (1.0 - fx) + s(u.bot_right) * fx;
-        let sample = north * (1.0 - fz) + south * fz;
-        let game_y = tier as f32 * TIER_HEIGHT + sample * SAMPLE_HEIGHT;
+        let game_y = tier as f32 * TIER_HEIGHT + u.sample_at(fx, fz) * SAMPLE_HEIGHT;
         Some((game_y - GROUND_ZERO) / UNIT * CELL_SIZE)
     }
 
@@ -203,15 +288,27 @@ impl GroundMap {
     /// stands on a unit edge wherever the two units' edge heights differ:
     /// cliffs and river banks; slopes and bridges line up and pass.
     pub fn can_step(&self, from: Vec3, to: Vec3) -> bool {
+        let (Some((ua, ..)), Some((ub, _, bfx, bfz))) =
+            (self.locate(from.x, from.z), self.locate(to.x, to.z))
+        else {
+            return false;
+        };
         let (Some(a), Some(b)) = (
             self.unit_coords(from.x, from.z),
             self.unit_coords(to.x, to.z),
         ) else {
             return false;
         };
-        let (target, _) = self.unit_at(b.0, b.1);
-        if !target.walkable() {
+        let target_tri = ub.triangle(bfx, bfz);
+        if !ub.triangle_walkable(target_tri) {
             return false;
+        }
+        if a == b {
+            // Crossing this unit's own diagonal: blocked by an attribute
+            // diagonal wall.
+            let (_, _, afx, afz) = self.locate(from.x, from.z).unwrap_or((ua, 0, 0.0, 0.0));
+            let from_tri = ua.triangle(afx, afz);
+            return from_tri == target_tri || ua.split().is_none_or(|w| !ua.has_wall(w));
         }
         // Walk the unit grid from `a` to `b`, x first then z, checking
         // every edge crossed (moves are usually within one unit).
@@ -222,11 +319,13 @@ impl GroundMap {
             } else {
                 (0, (b.1 - at.1).signum())
             };
-            let next = (at.0 + step.0, at.1 + step.1);
-            if self.edge_wall(at, step.0, step.1) || !self.unit_at(next.0, next.1).0.walkable() {
+            if self.edge_wall(at, step.0, step.1) {
                 return false;
             }
-            at = next;
+            at = (at.0 + step.0, at.1 + step.1);
+            if at != b && !self.unit_at(at.0, at.1).0.walkable() {
+                return false;
+            }
         }
         true
     }
@@ -267,7 +366,17 @@ impl GroundMap {
         // The game only stops an actor whose body overlaps the wall's
         // height range; small bumps between units are stepped over.
         let rise = (h1[0] - h0[0]).abs().max((h1[1] - h0[1]).abs());
-        search_wall_flag(wall, h0, h1).is_some() && rise > STEP_TOLERANCE
+        // Attribute walls on this edge, from either side (bridge rails,
+        // pier ends, bank corners).
+        let opposite = match wall {
+            w if w == wall_name::RIGHT => wall_name::LEFT,
+            w if w == wall_name::LEFT => wall_name::RIGHT,
+            w if w == wall_name::DOWN => wall_name::UP,
+            _ => wall_name::DOWN,
+        };
+        ua.has_wall(wall)
+            || ub.has_wall(opposite)
+            || (search_wall_flag(wall, h0, h1).is_some() && rise > STEP_TOLERANCE)
     }
 }
 
@@ -316,5 +425,45 @@ mod tests {
         // Multi-unit steps (NPCs) walk the grid instead of recursing.
         assert!(map.can_step(a, a + Vec3::new(-5.0, 0.0, 3.0)));
         assert!(!map.can_step(a, a + Vec3::new(5.0, 0.0, 0.0)));
+    }
+
+    /// Unit from (attribute, [TL, TR, BL, BR]) as in the disc probe dump.
+    fn unit(attr: u32, [tl, tr, bl, br]: [u32; 4]) -> Unit {
+        Unit::from_raw(tl << 26 | tl << 21 | bl << 16 | br << 11 | tr << 6 | attr)
+    }
+
+    #[test]
+    fn cliff_edge_unit_splits_into_floor_and_face() {
+        let u = unit(56, [16, 16, 4, 16]); // from a cliff template
+        assert_eq!(u.split(), Some(wall_name::SLATE_DOWN));
+        assert!(u.triangle_walkable(u.triangle(0.9, 0.1)), "flat top half");
+        assert!(
+            !u.triangle_walkable(u.triangle(0.1, 0.9)),
+            "cliff face half"
+        );
+    }
+
+    #[test]
+    fn bank_lip_blocks_the_drop() {
+        let u = unit(41, [4, 4, 4, 0]); // river-bank lip
+        assert!(u.triangle_walkable(u.triangle(0.1, 0.1)));
+        assert!(!u.triangle_walkable(u.triangle(0.9, 0.9)));
+    }
+
+    #[test]
+    fn attribute_edge_wall_blocks_crossing() {
+        let flat = unit(0, [4; 4]);
+        let railed = unit(32, [4; 4]); // attribute 32: wall on the north edge
+        let mut units = vec![[flat; 256]; BLOCK_X_NUM * BLOCK_Z_NUM];
+        let acre = BLOCK_X_NUM + 1; // block (1, 1)
+        units[acre][5 * 16 + 5] = railed;
+        let map = GroundMap::new(units, [0; BLOCK_X_NUM * BLOCK_Z_NUM]);
+        let c = GroundMap::block_corner(1, 1);
+        let inside = Vec3::new(c.x + 5.5, 0.0, c.y + 5.5);
+        let north = Vec3::new(c.x + 5.5, 0.0, c.y + 4.9);
+        let east = Vec3::new(c.x + 6.1, 0.0, c.y + 5.5);
+        assert!(!map.can_step(inside, north), "rail on the north edge");
+        assert!(!map.can_step(north, inside), "from either side");
+        assert!(map.can_step(inside, east));
     }
 }
