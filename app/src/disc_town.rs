@@ -29,7 +29,7 @@ use crate::ground_map::{GroundMap, Unit};
 use crate::n64_material::{part_mesh, texture_image, CombinerUniform, N64Material};
 use crate::player::Player;
 use crate::states::AppState;
-use crate::town::{PlaceholderGround, Town, CELL_SIZE};
+use crate::town::{PlaceholderGround, PlaceholderTree, Town, CELL_SIZE, PLACEHOLDER_TRUNK_Y};
 
 /// Acre models are stored at 16x; one game cell is 40 units.
 const GROUND_SCALE: f32 = CELL_SIZE / 16.0 / 40.0;
@@ -509,7 +509,8 @@ fn build_disc_town(
     disc: Res<GameDisc>,
     town: Res<Town>,
     placeholders: Query<Entity, With<PlaceholderGround>>,
-    mut player: Query<&mut Transform, With<Player>>,
+    trees: Query<(Entity, &Transform, &PlaceholderTree)>,
+    mut player: Query<&mut Transform, (With<Player>, Without<PlaceholderTree>)>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<N64Material>>,
     mut images: ResMut<Assets<Image>>,
@@ -578,12 +579,116 @@ fn build_disc_town(
     for e in &placeholders {
         commands.entity(e).despawn();
     }
+    spawn_disc_trees(
+        &mut commands,
+        &disc,
+        &trees,
+        chrono::Local::now().month0(),
+        &mut meshes,
+        &mut materials,
+        &mut images,
+    );
     info!(
         "retail town from disc: {} step, {} combinations",
         if retail.field.three_step { "3" } else { "2" },
         retail.combos.len()
     );
 }
+
+/// Tree palette per month (Jan..Dec) among the 14 in
+/// `mFM_obj_tree_01_pal_dol`, judged from their colours: 0 spring green,
+/// 1 cherry blossom, 2-3 summer, 4-9 autumn green to brown, 10-12 snow,
+/// 13 thaw. The game picks by date; that calendar isn't translated yet.
+const TREE_MONTH_PALETTE: [u32; 12] = [11, 12, 13, 0, 0, 2, 3, 3, 4, 6, 8, 10];
+const TREE_FIRST_SNOW_PALETTE: u32 = 10;
+
+/// Object models are drawn at 1/100 scale; one game cell is 40 units.
+const OBJECT_SCALE: f32 = 0.01 / 40.0 * CELL_SIZE;
+
+/// The grown tree (summer or winter set): trunk then leaves, each a
+/// material list followed by its geometry.
+fn tree_lists(catalog: &AssetCatalog, winter: bool) -> Vec<u32> {
+    let set = if winter { "obj_w_tree5" } else { "obj_s_tree5" };
+    ["trunkT_mat", "trunkT_gfx", "leafT_mat", "leafT_gfx"]
+        .iter()
+        .filter_map(|part| catalog.get(&format!("{set}_{part}_model")))
+        .map(|a| a.offset)
+        .collect()
+}
+
+/// Replaces the placeholder trees with the disc's grown-tree model, built
+/// once and shared by every tree.
+#[allow(clippy::too_many_arguments)]
+fn spawn_disc_trees(
+    commands: &mut Commands,
+    disc: &GameDisc,
+    placeholders: &Query<(Entity, &Transform, &PlaceholderTree)>,
+    month0: u32,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<N64Material>,
+    images: &mut Assets<Image>,
+) {
+    let palette_index = TREE_MONTH_PALETTE[month0 as usize % 12];
+    let lists = tree_lists(&disc.catalog, palette_index >= TREE_FIRST_SNOW_PALETTE);
+    if lists.len() != 4 {
+        warn!("tree model not found on the disc; keeping placeholder trees");
+        return;
+    }
+    // Tree colours come from the 14 `mFM_obj_tree_01_pal_dol` palettes.
+    let palette = disc
+        .catalog
+        .get("mFM_obj_tree_01_pal_dol")
+        .map(|p| p.offset + (palette_index % (p.size / PALETTE_BYTES).max(1)) * PALETTE_BYTES);
+    let sink = run_display_lists(&disc.rom, &lists);
+    let segs = Segments::default();
+    let parts: Vec<(Handle<Mesh>, Handle<N64Material>)> = sink
+        .parts
+        .iter()
+        .map(|part| {
+            let texture = part.key.tex.as_ref().and_then(|k| {
+                decode_texture(&disc.rom, k, palette, &segs)
+                    .map(|rgba| images.add(texture_image(rgba, k)))
+            });
+            let material = N64Material {
+                combiner: CombinerUniform::from_key(&part.key, false, false),
+                texture,
+                blend: false,
+            };
+            (
+                meshes.add(part_mesh(part, OBJECT_SCALE)),
+                materials.add(material),
+            )
+        })
+        .collect();
+    let mut trees = 0;
+    for (entity, t, tree) in placeholders {
+        commands.entity(entity).despawn();
+        if !tree.trunk {
+            continue;
+        }
+        let at = t.translation - Vec3::Y * PLACEHOLDER_TRUNK_Y;
+        let root = commands
+            .spawn((
+                DiscTree,
+                Transform::from_translation(at),
+                Visibility::default(),
+            ))
+            .id();
+        for (mesh, material) in &parts {
+            commands.spawn((
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(material.clone()),
+                ChildOf(root),
+            ));
+        }
+        trees += 1;
+    }
+    info!("{trees} trees drawn from the disc");
+}
+
+/// Marker for a disc-drawn tree.
+#[derive(Component)]
+pub struct DiscTree;
 
 /// Player capsule centre above the ground.
 const PLAYER_HALF_HEIGHT: f32 = 1.0;
@@ -639,6 +744,42 @@ mod tests {
                     .collect();
                 eprintln!("t{t} z{z:2} {}", row.join(" "));
             }
+        }
+    }
+
+    /// Probe (needs the disc): average colour of each tree palette.
+    #[test]
+    #[ignore]
+    fn probe_tree_palettes() {
+        let path = std::env::var("BEVY_CROSSING_ISO").expect("set BEVY_CROSSING_ISO");
+        let mut disc = disc::Disc::open_path(std::path::Path::new(&path)).unwrap();
+        let rom = RomImage::from_disc(&mut disc).unwrap();
+        let cat = AssetCatalog::builtin(&rom);
+        let a = cat.get("mFM_obj_tree_01_pal_dol").unwrap();
+        let pal = rom.slice(disc::RomSource::Rel, a.offset, a.size).unwrap();
+        for (i, p) in pal.chunks(32).enumerate() {
+            let cols: Vec<String> = p
+                .chunks(2)
+                .map(|c| {
+                    let v = u16::from_be_bytes([c[0], c[1]]);
+                    if v & 0x8000 != 0 {
+                        format!(
+                            "{:02x}{:02x}{:02x}",
+                            (v >> 10 & 31) * 8,
+                            (v >> 5 & 31) * 8,
+                            (v & 31) * 8
+                        )
+                    } else {
+                        format!(
+                            "{:02x}{:02x}{:02x}",
+                            (v >> 8 & 15) * 17,
+                            (v >> 4 & 15) * 17,
+                            (v & 15) * 17
+                        )
+                    }
+                })
+                .collect();
+            eprintln!("treepal {i:2}: {}", cols.join(" "));
         }
     }
 

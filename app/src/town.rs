@@ -35,6 +35,16 @@ fn acre_jitter(acre_idx: usize) -> usize {
 #[derive(Component)]
 pub struct PlaceholderGround;
 
+/// The capsule-and-sphere tree stand-ins (trunk and leaves), replaced by
+/// the disc's tree model when the player's disc is available.
+#[derive(Component)]
+pub struct PlaceholderTree {
+    pub trunk: bool,
+}
+
+/// Height of a placeholder trunk's centre above the ground.
+pub const PLACEHOLDER_TRUNK_Y: f32 = 0.75;
+
 /// Resource holding the generated town layout.
 #[derive(Resource)]
 pub struct Town {
@@ -444,11 +454,13 @@ pub fn render_town(
                     if cell == CellKind::Tree as u8 {
                         tree_count += 1;
                         commands.spawn((
+                            PlaceholderTree { trunk: true },
                             Mesh3d(trunk_mesh.clone()),
                             MeshMaterial3d(tree_trunk_mat.clone()),
-                            Transform::from_xyz(pos.x, gy + 0.75, pos.z),
+                            Transform::from_xyz(pos.x, gy + PLACEHOLDER_TRUNK_Y, pos.z),
                         ));
                         commands.spawn((
+                            PlaceholderTree { trunk: false },
                             Mesh3d(leaf_mesh.clone()),
                             MeshMaterial3d(tree_leaf_mat.clone()),
                             Transform::from_xyz(pos.x, gy + 2.2, pos.z),
