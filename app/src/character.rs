@@ -207,6 +207,7 @@ pub struct CharacterRig {
 
 /// Which joint places a vertex: its load-time matrix (see module docs).
 fn joint_of(v: &DecodedVtx, own: usize, matrix_joints: &[usize]) -> usize {
+    // Anything but a segment-D matrix (incl. the list tag) is the joint's own.
     if v.mtx >> 24 != MATRIX_SEGMENT {
         return own;
     }

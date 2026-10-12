@@ -200,12 +200,19 @@ fn find_shop_spot(town: Res<Town>, mut commands: Commands) {
             .find(|b| b.item == crate::disc_town::SHOP0)
     }) {
         let base_y = town.ground_y(b.centre);
+        // A step out from the door, away from the building's centre.
+        let door = b.door.unwrap_or(b.centre + Vec3::Z * b.half.y);
+        let out = (door - b.centre).with_y(0.0).normalize_or(Vec3::Z);
+        let door_pos = (door + out * 0.7).with_y(base_y);
+        let inner = b.half.min_element() * std::f32::consts::FRAC_1_SQRT_2;
         commands.insert_resource(ShopBuilding {
-            door_pos: Vec3::new(b.centre.x, base_y, b.centre.z + b.half.y + 0.7),
-            min_x: b.centre.x - b.half.x,
-            max_x: b.centre.x + b.half.x,
-            min_z: b.centre.z - b.half.y,
-            max_z: b.centre.z + b.half.y,
+            door_pos,
+            // The town blocks the real (possibly 45-deg) footprint; this
+            // box only needs to stay inside it.
+            min_x: b.centre.x - inner,
+            max_x: b.centre.x + inner,
+            min_z: b.centre.z - inner,
+            max_z: b.centre.z + inner,
             placed: true,
             base_y,
         });

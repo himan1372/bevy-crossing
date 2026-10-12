@@ -297,6 +297,11 @@ impl GxBackend for TriangleSink {
     }
 }
 
+/// `DecodedVtx::mtx` of a vertex loaded by the `i`-th entry list before
+/// any G_MTX: `LIST_TAG | i`, so callers can place each list (e.g. on its
+/// skeleton joint).
+pub const LIST_TAG: u32 = 0xA000_0000;
+
 /// Geometry mode of the game's model setup list:
 /// G_ZBUFFER | G_SHADE | G_CULL_BACK | G_FOG | G_LIGHTING | G_SHADING_SMOOTH.
 const SETUP_GEOMETRY_MODE: u32 = geo::G_ZBUFFER
@@ -402,7 +407,10 @@ fn run_lists_full(
         }
     }
     let mut sink = TriangleSink::default();
-    for &entry in entries {
+    for (i, &entry) in entries.iter().enumerate() {
+        // Vertices remember which list loaded them (see `LIST_TAG`) until
+        // a list loads a matrix of its own.
+        emu.cur_mtx = LIST_TAG | i as u32;
         let lists = mem.lists(entry);
         emu.taskstart(&mem, &mut sink, &lists, entry);
         sink.aborted |= emu.task_aborted;

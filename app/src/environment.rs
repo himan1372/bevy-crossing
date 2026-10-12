@@ -145,9 +145,11 @@ pub fn lights_on(hour: u8) -> bool {
 /// Window materials whose colour follows the lights.
 #[derive(Resource, Default)]
 pub struct BuildingLights {
-    /// `light` parts: window glass, tinted (0,0,0) off to (255,255,150) on.
+    /// `light` parts: window glass, tinted (0,0,0) off to (255,255,150) on
+    /// (primitive colour for houses, environment colour for the shop).
     pub glass: Vec<Handle<N64Material>>,
-    /// `window*` parts: glow overlay, alpha = texel x LOD fraction (0 off,
+    /// `window*` parts: the light the windows cast on the ground at night
+    /// (drawn in the shadow list), alpha = texel x LOD fraction (0 off,
     /// 120 on).
     pub glow: Vec<Handle<N64Material>>,
     /// 0 = off, 1 = on, eased like `chase_f(..., 0.019532442)` per frame.
@@ -229,7 +231,11 @@ fn update_building_lights(
     let glass = Vec4::new(p, p, p * 150.0 / 255.0, 1.0);
     for handle in &lights.glass {
         if let Some(mut m) = materials.get_mut(handle) {
+            // Houses tint the glass with the primitive colour, the shop and
+            // other buildings with the environment colour (`aSHOP` draw):
+            // each list reads only its own, so set both.
             m.combiner.prim = glass;
+            m.combiner.env = glass.with_w(0.0);
         }
     }
     for handle in &lights.glow {

@@ -25,6 +25,7 @@ use rustimal_logic::town_gen::{CellKind, Feature, TownAcre, TownPlan, ACRE_DEPTH
 
 use crate::disc_gfx::{
     decode_texture, run_display_lists, run_display_lists_with_prim, run_ground_lists, Segments,
+    LIST_TAG,
 };
 use crate::environment::BuildingLights;
 use crate::game_disc::GameDisc;
@@ -267,10 +268,15 @@ pub struct RetailBuilding {
     pub spec: usize,
     pub centre: Vec3,
     pub yaw: f32,
-    /// World-space half extents (x, z) of the model's footprint.
+    /// Half extents (x, z) of the footprint, in a frame turned by
+    /// `box_yaw` (0 or 45 deg: whichever fits the model tighter, since
+    /// several buildings stand at 45 deg).
     pub half: Vec2,
+    pub box_yaw: f32,
     /// Where the model's origin goes (the actor's position).
     pub origin: Vec3,
+    /// The door's world position, when the model has one.
+    pub door: Option<Vec3>,
 }
 
 /// One kind of public building: layout item, model prefix, body parts,
@@ -367,38 +373,70 @@ fn place_buildings(
         if lists.is_empty() {
             continue;
         }
-        let sink = run_display_lists(&disc.rom, &lists);
-        let (mut lo, mut hi) = (Vec2::splat(f32::MAX), Vec2::splat(f32::MIN));
-        for v in sink.parts.iter().flat_map(|p| &p.vertices) {
-            let q = Vec2::new(v.pos[0], v.pos[2]) * OBJECT_SCALE;
-            (lo, hi) = (lo.min(q), hi.max(q));
-        }
-        let has_door = spec.parts.contains(&"door");
-        // Same bind pose as the houses: door part at +X, turned to face south.
-        let yaw = if has_door {
-            door_facing_yaw(disc, &prefix)
-        } else {
-            -std::f32::consts::FRAC_PI_2
-        };
-        let rot = Quat::from_rotation_y(yaw);
-        let corners = [lo, Vec2::new(lo.x, hi.y), hi, Vec2::new(hi.x, lo.y)]
-            .map(|c| rot * Vec3::new(c.x, 0.0, c.y));
-        let (mut wlo, mut whi) = (Vec2::splat(f32::MAX), Vec2::splat(f32::MIN));
-        for c in corners {
-            (wlo, whi) = (wlo.min(c.xz()), whi.max(c.xz()));
-        }
+        let mut sink = run_display_lists(&disc.rom, &lists);
+        pose_parts(disc, &lists, &mut sink);
+        let points: Vec<Vec2> = sink
+            .parts
+            .iter()
+            .flat_map(|p| &p.vertices)
+            .map(|v| Vec2::new(v.pos[0], v.pos[2]) * OBJECT_SCALE)
+            .collect();
+        let (box_yaw, lo, hi) = tightest_box(&points);
         let shift = Vec3::new(spec.shift.0, 0.0, spec.shift.1) / GAME_UNITS_PER_CELL * CELL_SIZE;
-        let centre = Town::cell_to_world(ax, az, cx, cz) + shift;
+        let origin = Town::cell_to_world(ax, az, cx, cz) + shift;
+        let mid = (lo + hi) / 2.0;
+        // The actors don't turn these models (rotation 0); the posed model
+        // already faces the way the game shows it.
+        let door = posed_centroid(disc, &prefix, "door").map(|d| origin + d * OBJECT_SCALE);
         out.push(RetailBuilding {
             item,
             spec: spec_index,
-            centre: centre + Vec3::new((wlo.x + whi.x) / 2.0, 0.0, (wlo.y + whi.y) / 2.0),
-            yaw,
-            half: (whi - wlo) / 2.0,
-            origin: centre,
+            centre: origin + Quat::from_rotation_y(box_yaw) * Vec3::new(mid.x, 0.0, mid.y),
+            yaw: 0.0,
+            half: (hi - lo) / 2.0,
+            box_yaw,
+            origin,
+            door,
         });
     }
     out
+}
+
+/// The axis box (0 deg) or 45-deg box around `points`, whichever is
+/// smaller: (yaw, min, max) with min/max in the box's frame.
+fn tightest_box(points: &[Vec2]) -> (f32, Vec2, Vec2) {
+    let fit = |yaw: f32| {
+        let back = Vec2::from_angle(yaw);
+        let (mut lo, mut hi) = (Vec2::splat(f32::MAX), Vec2::splat(f32::MIN));
+        for &p in points {
+            // Bevy's rotation_y(yaw) turns (x, z) by -yaw in the xz plane.
+            let q = back.rotate(p);
+            (lo, hi) = (lo.min(q), hi.max(q));
+        }
+        (yaw, lo, hi)
+    };
+    let area = |b: &(f32, Vec2, Vec2)| (b.2 - b.1).x * (b.2 - b.1).y;
+    let straight = fit(0.0);
+    let diagonal = fit(std::f32::consts::FRAC_PI_4);
+    if area(&diagonal) < area(&straight) {
+        diagonal
+    } else {
+        straight
+    }
+}
+
+/// Model-space centroid of a structure part in its idle pose.
+fn posed_centroid(disc: &GameDisc, prefix: &str, part: &str) -> Option<Vec3> {
+    let lists = part_lists(&disc.catalog, prefix, &[part]);
+    let mut sink = run_display_lists(&disc.rom, &lists);
+    pose_parts(disc, &lists, &mut sink);
+    let verts: Vec<Vec3> = sink
+        .parts
+        .iter()
+        .flat_map(|p| &p.vertices)
+        .map(|v| Vec3::from(v.pos))
+        .collect();
+    (!verts.is_empty()).then(|| verts.iter().sum::<Vec3>() / verts.len() as f32)
 }
 
 /// Draws the public buildings from the layout.
@@ -452,9 +490,10 @@ pub const PLAYER_HOUSE_HALF: f32 = 0.5;
 /// Where and how a player house stands (`aMHS_actor_ct`): from the item's
 /// cell centre it moves half a cell toward the acre path (+20 game units
 /// in x for even houses, -20 for odd) and half a cell south (+20 in z);
-/// even houses are turned 90 deg, odd ones 0. With the model's bind pose
-/// (door at +X turned to face south) that puts even houses' doors east,
-/// toward the path, and odd houses' doors south.
+/// even houses are turned 90 deg, odd ones 0. The house model stands at
+/// 45 deg in its idle pose with the door at the south-west corner, so even
+/// houses' doors face south-east and odd ones' south-west: both toward the
+/// acre path.
 /// Returns (centre, model yaw, door yaw from south).
 pub fn player_home_placement(
     house: usize,
@@ -464,7 +503,12 @@ pub fn player_home_placement(
     let shift_x = if even { 0.5 } else { -0.5 };
     let centre = Town::cell_to_world(ax, az, cx, cz) + Vec3::new(shift_x, 0.0, 0.5) * CELL_SIZE;
     let half = std::f32::consts::FRAC_PI_2;
-    let (model_yaw, door_yaw) = if even { (0.0, half) } else { (-half, 0.0) };
+    let quarter = std::f32::consts::FRAC_PI_4;
+    let (model_yaw, door_yaw) = if even {
+        (half, quarter)
+    } else {
+        (0.0, -quarter)
+    };
     (centre, model_yaw, door_yaw)
 }
 
@@ -1047,7 +1091,8 @@ fn build_model_with_prim(
     materials: &mut Assets<N64Material>,
     images: &mut Assets<Image>,
 ) -> Vec<(Handle<Mesh>, Handle<N64Material>)> {
-    let sink = run_display_lists_with_prim(&disc.rom, lists, prim, prim_lod);
+    let mut sink = run_display_lists_with_prim(&disc.rom, lists, prim, prim_lod);
+    pose_parts(disc, lists, &mut sink);
     let segs = Segments::default();
     sink.parts
         .iter()
@@ -1070,6 +1115,94 @@ fn build_model_with_prim(
         .collect()
 }
 
+/// Structure skeletons whose parts are drawn in their idle pose: houses,
+/// player houses and public buildings, summer and winter.
+const POSED_STRUCTURES: [&str; 14] = [
+    "house1",
+    "house2",
+    "house3",
+    "house4",
+    "house5",
+    "myhome1",
+    "myhome2",
+    "myhome3",
+    "myhome4",
+    "shop1",
+    "yubinkyoku",
+    "kouban",
+    "museum",
+    "tailor",
+];
+
+/// Model-space transform of each structure part's display list (REL
+/// offset): its joint's world matrix in the structure's idle pose, frame
+/// 1 of its `cKF_ba_r_obj_*` animation (the actors start it in STOP mode,
+/// e.g. `aHUS_setup_animation`). Built once per run.
+fn structure_poses(disc: &GameDisc) -> &'static HashMap<u32, Mat4> {
+    static POSES: std::sync::OnceLock<HashMap<u32, Mat4>> = std::sync::OnceLock::new();
+    POSES.get_or_init(|| {
+        let mut out = HashMap::new();
+        for season in ["s", "w"] {
+            for name in POSED_STRUCTURES {
+                let Some(skel) = disc
+                    .catalog
+                    .get(&format!("cKF_bs_r_obj_{season}_{name}"))
+                    .and_then(|a| crate::skeleton::Skeleton::read(&disc.rom, a.offset))
+                else {
+                    continue;
+                };
+                let locals: Vec<Transform> = match disc
+                    .catalog
+                    .get(&format!("cKF_ba_r_obj_{season}_{name}"))
+                    .and_then(|a| {
+                        crate::skeleton::Animation::read(&disc.rom, a.offset, skel.joints.len())
+                    }) {
+                    Some(anim) => anim.pose(1.0).local_transforms(&skel),
+                    None => skel
+                        .joints
+                        .iter()
+                        .map(|j| {
+                            Transform::from_translation(Vec3::from(j.translation.map(f32::from)))
+                        })
+                        .collect(),
+                };
+                let mut world: Vec<Mat4> = Vec::with_capacity(locals.len());
+                for (j, local) in locals.iter().enumerate() {
+                    let parent = skel.parents[j].map_or(Mat4::IDENTITY, |p| world[p]);
+                    world.push(parent * local.to_matrix());
+                }
+                for (j, joint) in skel.joints.iter().enumerate() {
+                    if let Some(list) = joint.model {
+                        out.insert(list, world[j]);
+                    }
+                }
+            }
+        }
+        out
+    })
+}
+
+/// Moves each vertex onto its structure joint (see [`structure_poses`]).
+fn pose_parts(disc: &GameDisc, lists: &[u32], sink: &mut crate::disc_gfx::TriangleSink) {
+    let poses = structure_poses(disc);
+    for v in sink.parts.iter_mut().flat_map(|p| p.vertices.iter_mut()) {
+        if v.mtx & 0xFF00_0000 != LIST_TAG {
+            continue;
+        }
+        let Some(m) = lists
+            .get((v.mtx & 0x00FF_FFFF) as usize)
+            .and_then(|l| poses.get(l))
+        else {
+            continue;
+        };
+        v.pos = m.transform_point3(Vec3::from(v.pos)).to_array();
+        v.normal = m
+            .transform_vector3(Vec3::from(v.normal))
+            .normalize_or_zero()
+            .to_array();
+    }
+}
+
 /// Display lists of a multi-part model `<prefix>_<part>_model`, in order,
 /// skipping parts the disc doesn't have.
 fn part_lists(catalog: &AssetCatalog, prefix: &str, parts: &[&str]) -> Vec<u32> {
@@ -1088,7 +1221,8 @@ fn door_facing_yaw(disc: &GameDisc, prefix: &str) -> f32 {
     if lists.is_empty() {
         return 0.0;
     }
-    let sink = run_display_lists(&disc.rom, &lists);
+    let mut sink = run_display_lists(&disc.rom, &lists);
+    pose_parts(disc, &lists, &mut sink);
     let verts: Vec<[f32; 3]> = sink
         .parts
         .iter()
@@ -1517,15 +1651,15 @@ mod tests {
         assert!((c0 - base - Vec3::new(0.5, 0.0, 0.5) * CELL_SIZE).length() < 1e-5);
         assert_eq!(
             (m0, d0),
-            (0.0, std::f32::consts::FRAC_PI_2),
-            "even: door east"
+            (std::f32::consts::FRAC_PI_2, std::f32::consts::FRAC_PI_4),
+            "even: turned 90 deg, door south-east"
         );
         let (c1, m1, d1) = player_home_placement(1, cell);
         assert!((c1 - base - Vec3::new(-0.5, 0.0, 0.5) * CELL_SIZE).length() < 1e-5);
         assert_eq!(
             (m1, d1),
-            (-std::f32::consts::FRAC_PI_2, 0.0),
-            "odd: door south"
+            (0.0, -std::f32::consts::FRAC_PI_4),
+            "odd: not turned, door south-west"
         );
     }
 

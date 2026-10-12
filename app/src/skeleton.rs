@@ -339,6 +339,125 @@ mod tests {
         assert!((pose.rotations[0].x - std::f32::consts::FRAC_PI_2).abs() < 1e-3);
     }
 
+    /// Probe (needs the disc): door centroid of posed structures.
+    #[test]
+    #[ignore]
+    fn probe_posed_doors() {
+        let path = std::env::var("BEVY_CROSSING_ISO").expect("set BEVY_CROSSING_ISO");
+        let mut d = disc::Disc::open_path(std::path::Path::new(&path)).unwrap();
+        let rom = RomImage::from_disc(&mut d).unwrap();
+        let cat = disc::AssetCatalog::builtin(&rom);
+        for name in [
+            "obj_s_myhome1",
+            "obj_s_house3",
+            "obj_s_shop1",
+            "obj_s_tailor",
+            "obj_s_yubinkyoku",
+        ] {
+            let skel =
+                Skeleton::read(&rom, cat.get(&format!("cKF_bs_r_{name}")).unwrap().offset).unwrap();
+            let anim = Animation::read(
+                &rom,
+                cat.get(&format!("cKF_ba_r_{name}")).unwrap().offset,
+                skel.joints.len(),
+            )
+            .unwrap();
+            let locals = anim.pose(1.0).local_transforms(&skel);
+            let mut world: Vec<Mat4> = Vec::new();
+            for (j, l) in locals.iter().enumerate() {
+                let p = skel.parents[j].map_or(Mat4::IDENTITY, |p| world[p]);
+                world.push(p * l.to_matrix());
+            }
+            let door = cat.get(&format!("{name}_door_model")).map(|a| a.offset);
+            let (mut c, mut n, mut lo, mut hi) = (
+                Vec3::ZERO,
+                0.0f32,
+                Vec3::splat(f32::MAX),
+                Vec3::splat(f32::MIN),
+            );
+            for (j, joint) in skel.joints.iter().enumerate() {
+                let Some(list) = joint.model else { continue };
+                for v in crate::disc_gfx::run_display_lists(&rom, &[list])
+                    .parts
+                    .iter()
+                    .flat_map(|p| p.vertices.clone())
+                {
+                    let w = world[j].transform_point3(Vec3::from(v.pos));
+                    lo = lo.min(w);
+                    hi = hi.max(w);
+                    if Some(list) == door {
+                        c += w;
+                        n += 1.0;
+                    }
+                }
+            }
+            let pose = anim.pose(1.0);
+            for (j, r) in pose.rotations.iter().enumerate() {
+                if *r != Vec3::ZERO || skel.joints[j].translation != [0; 3] {
+                    println!(
+                        "   joint {j} rot(deg) {:?} t {:?}",
+                        *r * (180.0 / std::f32::consts::PI),
+                        skel.joints[j].translation
+                    );
+                }
+            }
+            println!(
+                "   root translation {:?} anim frames {} flags {:?}",
+                pose.translation, anim.frames, anim.flags
+            );
+            println!(
+                "{name}: door centroid {:?} bounds {lo:?}..{hi:?} root rot {:?}",
+                c / n.max(1.0),
+                anim.pose(1.0).rotations[0]
+            );
+        }
+    }
+
+    /// Probe (needs the disc): a house skeleton's joints and their lists.
+    #[test]
+    #[ignore]
+    fn probe_house_skeleton() {
+        let path = std::env::var("BEVY_CROSSING_ISO").expect("set BEVY_CROSSING_ISO");
+        let mut d = disc::Disc::open_path(std::path::Path::new(&path)).unwrap();
+        let rom = RomImage::from_disc(&mut d).unwrap();
+        let cat = disc::AssetCatalog::builtin(&rom);
+        for name in [
+            "cKF_bs_r_obj_s_house3",
+            "cKF_bs_r_obj_s_myhome1",
+            "cKF_bs_r_obj_s_shop1",
+        ] {
+            let Some(a) = cat.get(name) else {
+                println!("{name}: missing");
+                continue;
+            };
+            let k = Skeleton::read(&rom, a.offset).unwrap();
+            println!("{name}: {} joints", k.joints.len());
+            for (i, j) in k.joints.iter().enumerate() {
+                let m = j
+                    .model
+                    .and_then(|m| cat.containing(RomSource::Rel, m))
+                    .map(|a| a.name.to_string());
+                println!(
+                    "  {i} parent {:?} t {:?} {:?}",
+                    k.parents[i], j.translation, m
+                );
+                if let Some(list) = j.model {
+                    let sink = crate::disc_gfx::run_display_lists(&rom, &[list]);
+                    let mut mtx = std::collections::BTreeMap::<u32, usize>::new();
+                    let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
+                    for v in sink.parts.iter().flat_map(|p| &p.vertices) {
+                        *mtx.entry(v.mtx).or_default() += 1;
+                        for c in 0..3 {
+                            lo[c] = lo[c].min(v.pos[c]);
+                            hi[c] = hi[c].max(v.pos[c]);
+                        }
+                    }
+                    println!("     mtx {mtx:x?} bounds {lo:?}..{hi:?}");
+                }
+            }
+        }
+    }
+
     /// Probe (needs the disc): villager names and their draw-data entries.
     #[test]
     #[ignore]

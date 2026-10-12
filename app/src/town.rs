@@ -169,10 +169,10 @@ impl Town {
         let Some(retail) = &self.retail else {
             return false;
         };
-        let in_building = retail
-            .buildings
-            .iter()
-            .any(|b| (p.x - b.centre.x).abs() < b.half.x && (p.z - b.centre.z).abs() < b.half.y);
+        let in_building = retail.buildings.iter().any(|b| {
+            let d = Quat::from_rotation_y(-b.box_yaw) * (p - b.centre);
+            d.x.abs() < b.half.x && d.z.abs() < b.half.y
+        });
         in_building
             || retail.player_homes.iter().enumerate().any(|(house, cell)| {
                 cell.is_some_and(|cell| {
