@@ -300,22 +300,32 @@ impl GxBackend for TriangleSink {
 /// Interprets display lists at REL offsets `entries`, in order, sharing
 /// render state (e.g. a model's `_mat_model` list, then its `_gfx_model`).
 pub fn run_display_lists(rom: &RomImage, entries: &[u32]) -> TriangleSink {
+    run_display_lists_with_prim(rom, entries, [255; 4], 255)
+}
+
+/// As [`run_display_lists`], starting from the primitive colour and LOD
+/// fraction game code would set before calling these lists (e.g. a house
+/// actor tinting its light model).
+pub fn run_display_lists_with_prim(
+    rom: &RomImage,
+    entries: &[u32],
+    prim: [u8; 4],
+    prim_lod: u8,
+) -> TriangleSink {
     let mem = RelGfx::new(rom);
     let mut emu = Emu64::new();
     for seg in 1..16 {
         emu.segments.set(seg, UNRESOLVED);
     }
     // Game code usually sets the primitive colour before calling a model;
-    // start from white so models that rely on that aren't drawn black.
+    // callers pass what it would be (white for most models).
     emu.state.prim_color = Rgba {
-        r: 255,
-        g: 255,
-        b: 255,
-        a: 255,
+        r: prim[0],
+        g: prim[1],
+        b: prim[2],
+        a: prim[3],
     };
-    // Likewise the primitive LOD fraction: windows use it as their alpha
-    // (game code dims it at night); 0 made them fully transparent.
-    emu.state.prim_lod = 255;
+    emu.state.prim_lod = prim_lod;
     let mut sink = TriangleSink::default();
     for &entry in entries {
         let lists = mem.lists(entry);

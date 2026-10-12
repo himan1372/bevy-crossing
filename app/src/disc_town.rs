@@ -23,7 +23,7 @@ use rustimal_logic::random_field::{
 };
 use rustimal_logic::town_gen::{CellKind, Feature, TownAcre, TownPlan, ACRE_DEPTH, ACRE_WIDTH};
 
-use crate::disc_gfx::{decode_texture, run_display_lists, Segments};
+use crate::disc_gfx::{decode_texture, run_display_lists, run_display_lists_with_prim, Segments};
 use crate::game_disc::GameDisc;
 use crate::ground_map::{GroundMap, Unit};
 use crate::n64_material::{part_mesh, texture_image, CombinerUniform, N64Material};
@@ -828,7 +828,24 @@ fn build_model(
     materials: &mut Assets<N64Material>,
     images: &mut Assets<Image>,
 ) -> Vec<(Handle<Mesh>, Handle<N64Material>)> {
-    let sink = run_display_lists(&disc.rom, lists);
+    build_model_with_prim(
+        disc, lists, palette, [255; 4], 255, meshes, materials, images,
+    )
+}
+
+/// As [`build_model`], with the primitive colour/LOD game code sets first.
+#[allow(clippy::too_many_arguments)]
+fn build_model_with_prim(
+    disc: &GameDisc,
+    lists: &[u32],
+    palette: Option<u32>,
+    prim: [u8; 4],
+    prim_lod: u8,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<N64Material>,
+    images: &mut Assets<Image>,
+) -> Vec<(Handle<Mesh>, Handle<N64Material>)> {
+    let sink = run_display_lists_with_prim(&disc.rom, lists, prim, prim_lod);
     let segs = Segments::default();
     sink.parts
         .iter()
@@ -892,6 +909,14 @@ fn door_facing_yaw(disc: &GameDisc, prefix: &str) -> f32 {
 /// time.
 const HOUSE_SCALE: f32 = 1.0;
 
+/// A house's `light` part: the window glass, tinted by the primitive colour
+/// the house actor sets (`aHUS_actor_draw_before` / `aMHS_actor_draw_*`):
+/// (0, 0, 0) by day rising to (255, 255, 150) at night. Night lighting
+/// (clock, light switch) isn't wired yet, so this is the daytime colour.
+/// The `window*` lists are a separate glow overlay whose alpha is the LOD
+/// fraction, 0 by day, so they aren't drawn yet.
+const HOUSE_LIGHT_PRIM_DAY: [u8; 4] = [0, 0, 0, 255];
+
 /// Small deterministic hash for picking per-object variants.
 fn cell_hash((ax, az, cx, cz): (usize, usize, usize, usize)) -> usize {
     let mut h = (ax * 16 + cx) as u32 ^ (((az * 16 + cz) as u32) << 8);
@@ -923,9 +948,7 @@ fn object_model(
             let h = cell_hash(cell);
             let shape = h % 5 + 1;
             let colour = (b'a' + (h / 5 % 5) as u8) as char;
-            let parts = vec![
-                "t1", "t2", "t3", "t4", "door", "window", "windowL", "windowR", "name",
-            ];
+            let parts = vec!["t1", "t2", "t3", "t4", "door", "name"];
             Some((
                 format!("obj_{season}_house{shape}"),
                 parts,
@@ -977,11 +1000,24 @@ fn spawn_disc_objects(
                 "object model {prefix} palette {palette:?} -> {pal:?}, {} lists",
                 lists.len()
             );
-            let model = if lists.is_empty() {
+            let mut model = if lists.is_empty() {
                 Vec::new()
             } else {
                 build_model(disc, &lists, pal, meshes, materials, images)
             };
+            if obj.kind == CellKind::House && !model.is_empty() {
+                let light = part_lists(&disc.catalog, &prefix, &["light"]);
+                model.extend(build_model_with_prim(
+                    disc,
+                    &light,
+                    pal,
+                    HOUSE_LIGHT_PRIM_DAY,
+                    0,
+                    meshes,
+                    materials,
+                    images,
+                ));
+            }
             let yaw = if obj.kind == CellKind::House {
                 door_facing_yaw(disc, &prefix)
             } else {
@@ -1041,7 +1077,7 @@ fn spawn_player_homes(
     // House size comes from the save (upgrades); everyone starts at size 1.
     let prefix = format!("obj_{season}_myhome1");
     let parts = [
-        "t1", "t2", "t3", "door", "window", "mark", "fuda", "kazamiA", "kazamiB",
+        "t1", "t2", "t3", "door", "mark", "fuda", "kazamiA", "kazamiB",
     ];
     let lists = part_lists(&disc.catalog, &prefix, &parts);
     if lists.is_empty() {
@@ -1053,7 +1089,18 @@ fn spawn_player_homes(
         .catalog
         .get(&format!("obj_{season}_myhome_a_pal"))
         .map(|a| a.offset);
-    let model = build_model(disc, &lists, palette, meshes, materials, images);
+    let mut model = build_model(disc, &lists, palette, meshes, materials, images);
+    let light = part_lists(&disc.catalog, &prefix, &["light"]);
+    model.extend(build_model_with_prim(
+        disc,
+        &light,
+        palette,
+        HOUSE_LIGHT_PRIM_DAY,
+        0,
+        meshes,
+        materials,
+        images,
+    ));
     for (house, cell) in retail.player_homes.iter().enumerate() {
         let Some(cell) = *cell else { continue };
         let (centre, yaw, _) = player_home_placement(house, cell);
