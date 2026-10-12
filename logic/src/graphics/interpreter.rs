@@ -356,9 +356,11 @@ impl Emu64 {
             op::G_SETTIMG => self.h_settimg(gfx, pc),
             op::G_SETTILE => self.h_settile(gfx, pc),
             op::G_LOADTLUT => {
-                let tile = ((gfx.w0 >> 16) & 0x7) as usize % 8;
-                self.state.tluts[tile % super::state::NUM_TLUTS].addr = gfx.addr();
-                self.state.tluts[tile % super::state::NUM_TLUTS].count = gfx.len() >> 6;
+                // The TLUT name is 4 bits (NUM_TLUTS = 16): retail data loads
+                // e.g. `f08f4010` (name 15) for tiles set with `tlut` 15.
+                let tlut = ((gfx.w0 >> 16) & 0xF) as usize % super::state::NUM_TLUTS;
+                self.state.tluts[tlut].addr = gfx.addr();
+                self.state.tluts[tlut].count = gfx.len() >> 6;
                 self.state.dirty.mark(Dirty::Texture);
                 *pc += 1;
             }

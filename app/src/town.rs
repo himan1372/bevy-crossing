@@ -30,6 +30,11 @@ fn acre_jitter(acre_idx: usize) -> usize {
     (x % 2) as usize
 }
 
+/// The flat ground planes and river tiles, replaced by the disc's acre
+/// models when the player's disc is available (see `disc_town`).
+#[derive(Component)]
+pub struct PlaceholderGround;
+
 /// Resource holding the generated town layout.
 #[derive(Resource)]
 pub struct Town {
@@ -369,6 +374,7 @@ pub fn render_town(
             let grass_mat = grass_mats[checker * 2 + jitter].clone();
 
             commands.spawn((
+                PlaceholderGround,
                 Mesh3d(ground_mesh.clone()),
                 MeshMaterial3d(grass_mat),
                 Transform::from_xyz(wx, 0.0, wz),
@@ -382,6 +388,7 @@ pub fn render_town(
                     if town.river_tiles.contains(&(ax, az, cx, cz)) {
                         water_count += 1;
                         commands.spawn((
+                            PlaceholderGround,
                             Mesh3d(water_mesh.clone()),
                             MeshMaterial3d(water_mat.clone()),
                             Transform::from_xyz(pos.x, 0.05, pos.z),

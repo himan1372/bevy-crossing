@@ -19,6 +19,7 @@ const FLAG_LIT: u32 = 2u;
 const FLAG_TEXTURED: u32 = 4u;
 const FLAG_NO_COMBINER: u32 = 8u;
 const FLAG_NO_SHADE: u32 = 16u;
+const FLAG_BLEND: u32 = 32u;
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> cc: Combiner;
 @group(#{MATERIAL_BIND_GROUP}) @binding(1) var tex: texture_2d<f32>;
@@ -129,6 +130,12 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         if (cc.flags & FLAG_TWO_CYCLE) != 0u {
             out = cycle(cc.color1, cc.alpha1, i);
         }
+    }
+    if (cc.flags & FLAG_BLEND) != 0u {
+        if out.a < 0.01 {
+            discard;
+        }
+        return out;
     }
     if out.a < 0.5 {
         discard;

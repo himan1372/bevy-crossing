@@ -7,6 +7,7 @@ mod assets;
 mod clock;
 mod dialogue;
 mod disc_gfx;
+mod disc_town;
 mod ecology;
 mod game_disc;
 mod house;
@@ -31,6 +32,7 @@ mod town;
 use assets::GameAssetsPlugin;
 use clock::ClockPlugin;
 use dialogue::DialoguePlugin;
+use disc_town::DiscTownPlugin;
 use ecology::EcologyPlugin;
 use game_disc::GameDiscPlugin;
 use house::HousePlugin;
@@ -61,6 +63,7 @@ fn main() {
             GameDiscPlugin,
             ModelViewPlugin,
             N64MaterialPlugin,
+            DiscTownPlugin,
         ))
         .add_plugins(SavePlugin)
         .add_plugins(TownPlugin)

@@ -9,24 +9,18 @@
 //! (the town camera is switched off). Left-drag orbits, scroll zooms,
 //! `[` / `]` step through the palettes in the `--pal` asset.
 
-use bevy::asset::RenderAssetUsages;
-use bevy::image::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor};
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
-use bevy::mesh::PrimitiveTopology;
 use bevy::prelude::*;
-use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use disc::AssetCatalog;
 
-use crate::disc_gfx::{decode_texture, run_display_lists, Part, TexKey};
+use crate::disc_gfx::{decode_texture, run_display_lists, Segments};
 use crate::game_disc::GameDisc;
-use crate::n64_material::{CombinerUniform, N64Material};
+use crate::n64_material::{part_mesh, texture_image, CombinerUniform, N64Material};
 use crate::states::AppState;
 use crate::town::CELL_SIZE;
 
 /// Game models are drawn at 1/100 scale; one game cell is 40 world units.
 const MODEL_SCALE: f32 = 0.01 / 40.0 * CELL_SIZE;
-/// N64 texture coordinates are s10.5 fixed point.
-const ST_ONE: f32 = 32.0;
 const PALETTE_BYTES: u32 = 32;
 /// Where the model is shown: far from the town so nothing else is in view.
 const VIEW_ORIGIN: Vec3 = Vec3::new(0.0, 0.0, -5000.0);
@@ -105,68 +99,6 @@ fn resolve_palette(catalog: &AssetCatalog, spec: &str) -> Result<(String, u32, u
         return Err(format!("{name} has {count} palettes"));
     }
     Ok((name.to_string(), asset.offset, count, index))
-}
-
-/// Unlit parts carry vertex colours (the combiner's SHADE input); lit
-/// parts carry the vertex normals stored in the same bytes.
-fn part_mesh(part: &Part) -> Mesh {
-    let (w, h) = part
-        .key
-        .tex
-        .map_or((1.0, 1.0), |k| (k.width as f32, k.height as f32));
-    let v = &part.vertices;
-    let positions: Vec<[f32; 3]> = v.iter().map(|v| v.pos.map(|c| c * MODEL_SCALE)).collect();
-    let uvs: Vec<[f32; 2]> = v
-        .iter()
-        .map(|v| [v.st[0] / ST_ONE / w, v.st[1] / ST_ONE / h])
-        .collect();
-    let mut mesh = Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::RENDER_WORLD,
-    )
-    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-    if part.key.lit {
-        let normals: Vec<[f32; 3]> = v.iter().map(|v| v.normal).collect();
-        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-    } else {
-        let colors: Vec<[f32; 4]> = v
-            .iter()
-            .map(|v| v.color.map(|c| c as f32 / 255.0))
-            .collect();
-        mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
-        mesh.compute_flat_normals();
-    }
-    mesh
-}
-
-fn address_mode(gx_wrap: u8) -> ImageAddressMode {
-    match gx_wrap {
-        1 => ImageAddressMode::Repeat,
-        2 => ImageAddressMode::MirrorRepeat,
-        _ => ImageAddressMode::ClampToEdge,
-    }
-}
-
-fn texture_image(rgba: Vec<u8>, key: &TexKey) -> Image {
-    let size = Extent3d {
-        width: key.width as u32,
-        height: key.height as u32,
-        depth_or_array_layers: 1,
-    };
-    let mut image = Image::new(
-        size,
-        TextureDimension::D2,
-        rgba,
-        TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::RENDER_WORLD,
-    );
-    image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
-        address_mode_u: address_mode(key.wrap_s),
-        address_mode_v: address_mode(key.wrap_t),
-        ..ImageSamplerDescriptor::linear()
-    });
-    image
 }
 
 /// Turns the `--view` request into a [`Viewer`] once the disc is loaded,
@@ -291,18 +223,19 @@ fn rebuild_model(
             k.tex.map(|t| t.img_addr)
         );
         let texture = part.key.tex.as_ref().and_then(|k| {
-            let rgba = decode_texture(&disc.rom, k, palette);
+            let rgba = decode_texture(&disc.rom, k, palette, &Segments::default());
             if rgba.is_none() {
                 warn!("can't decode texture {k:?}");
             }
             rgba.map(|rgba| images.add(texture_image(rgba, k)))
         });
         let material = materials.add(N64Material {
-            combiner: CombinerUniform::from_key(&part.key, !viewer.vertex_colors),
+            combiner: CombinerUniform::from_key(&part.key, !viewer.vertex_colors, false),
             texture,
+            blend: false,
         });
         commands.spawn((
-            Mesh3d(meshes.add(part_mesh(part))),
+            Mesh3d(meshes.add(part_mesh(part, MODEL_SCALE))),
             MeshMaterial3d(material),
             ChildOf(root),
         ));

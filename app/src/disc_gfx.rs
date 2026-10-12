@@ -22,8 +22,8 @@ use rustimal_logic::graphics::vertex::{DecodedVtx, Vtx};
 
 /// Flat address the interpreter can't resolve (outside the REL).
 const UNRESOLVED: u32 = 0xF000_0000;
-/// Flat REL offsets live in segment 0 (24-bit offsets).
-const REL_SEGMENT_END: u32 = 0x0100_0000;
+/// Tag for REL .bss offsets (runtime buffers), above every real segment.
+pub const BSS_TAG: u32 = 0xE000_0000;
 /// Stop runaway lists (no real list comes close).
 const MAX_LIST_LEN: usize = 16 * 1024;
 const GFX_SIZE: u32 = 8;
@@ -49,6 +49,9 @@ impl<'a> RelGfx<'a> {
         let w0 = u32::from_be_bytes([raw[0], raw[1], raw[2], raw[3]]);
         let w1 = match self.rom.pointer_at(RomSource::Rel, offset + 4) {
             Some(Target::File(RomSource::Rel, target)) => target,
+            // Runtime memory (bss) the game fills, e.g. the ground texture
+            // buffer: keep the offset so `Segments` can map it.
+            Some(Target::NoData(addend)) if addend < 0x0100_0000 => BSS_TAG | addend,
             Some(_) => UNRESOLVED,
             None => u32::from_be_bytes([raw[4], raw[5], raw[6], raw[7]]),
         };
@@ -206,9 +209,9 @@ impl TriangleSink {
 impl GxBackend for TriangleSink {
     fn set_state(&mut self, state: &GbiState) {
         let tile = &state.tiles[0];
-        // Image addresses aren't segment-resolved here: anything outside
-        // segment 0 (the REL) is a runtime texture we can't see yet.
-        let textured = tile.img_addr != 0 && tile.img_addr < REL_SEGMENT_END;
+        // Image addresses stay segmented here; `Segments` resolves them
+        // when the texture is decoded.
+        let textured = tile.img_addr != 0 && tile.img_addr < UNRESOLVED;
         let tex = textured.then(|| TexKey {
             img_addr: tile.img_addr,
             format: tile.gx_format,
@@ -276,9 +279,43 @@ pub fn run_display_lists(rom: &RomImage, entries: &[u32]) -> TriangleSink {
     sink
 }
 
+/// Runtime memory game code would have filled, rebuilt from REL data:
+/// .bss buffers (e.g. the season's ground textures). Segment 0 is the REL
+/// itself; other segments aren't modelled yet.
+#[derive(Default, Clone)]
+pub struct Segments {
+    /// (bss offset, length, REL offset).
+    bss: Vec<(u32, u32, u32)>,
+}
+
+impl Segments {
+    /// Fills the .bss buffer at `bss_offset` with REL data at `rel`.
+    pub fn set_bss(&mut self, bss_offset: u32, len: u32, rel: u32) {
+        self.bss.push((bss_offset, len, rel));
+    }
+
+    /// Segmented (or bss-tagged) address → REL offset.
+    pub fn resolve(&self, addr: u32) -> Option<u32> {
+        if addr & 0xF000_0000 == BSS_TAG {
+            let off = addr & 0x0FFF_FFFF;
+            return self
+                .bss
+                .iter()
+                .find(|&&(start, len, _)| off >= start && off - start < len)
+                .map(|&(start, _, rel)| rel + (off - start));
+        }
+        (addr >> 24 == 0).then_some(addr)
+    }
+}
+
 /// Decodes a part's texture to RGBA8. `palette` (REL offset) is used for
 /// colour-indexed textures when the lists didn't load one themselves.
-pub fn decode_texture(rom: &RomImage, key: &TexKey, palette: Option<u32>) -> Option<Vec<u8>> {
+pub fn decode_texture(
+    rom: &RomImage,
+    key: &TexKey,
+    palette: Option<u32>,
+    segments: &Segments,
+) -> Option<Vec<u8>> {
     let fmt = match key.format {
         GxTexFormat::I4 => GxFormat::I4,
         GxTexFormat::I8 => GxFormat::I8,
@@ -294,12 +331,14 @@ pub fn decode_texture(rom: &RomImage, key: &TexKey, palette: Option<u32>) -> Opt
     };
     let (w, h) = (key.width as usize, key.height as usize);
     let rel = rom.bytes(RomSource::Rel);
-    let data = rel.get(key.img_addr as usize..)?;
+    let data = rel.get(segments.resolve(key.img_addr)? as usize..)?;
+    // A palette the lists loaded wins over the caller's. Disc palettes
+    // checked so far (ground, `_dol`) are RGB5A3.
     let pal_addr = match key.tlut_addr {
-        a if a != 0 && a < UNRESOLVED => Some(a),
+        a if a != 0 && a < UNRESOLVED => segments.resolve(a).or(palette),
         _ => palette,
     };
-    // Palettes hold at most 256 RGB5A3 entries; the decoder bounds-checks.
+    // Palettes hold at most 256 entries; the decoder bounds-checks.
     let tlut = pal_addr
         .and_then(|a| rel.get(a as usize..(a as usize + 512).min(rel.len())))
         .map(|t| (t, TlutFormat::Rgb5A3));
@@ -336,46 +375,7 @@ mod tests {
             (64, 64, GxTexFormat::C4)
         );
         let pal = asset("mFM_obj_tree_01_pal_dol");
-        let rgba = decode_texture(&rom, &key, Some(pal)).expect("decodes");
+        let rgba = decode_texture(&rom, &key, Some(pal), &Segments::default()).expect("decodes");
         assert_eq!(rgba.len(), 64 * 64 * 4);
-
-        // Survey: which model lists set their own combiner / colours.
-        let mem = RelGfx::new(&rom);
-        let (mut total, mut comb, mut prim, mut env, mut geo_l) = (0, 0, 0, 0, 0);
-        let mut combos: std::collections::HashMap<(u32, u32), usize> = Default::default();
-        for name in ["_mat_model", "_gfx_model", "_model", "_DL"] {
-            let _ = name;
-        }
-        let names: Vec<&str> = include_str!("../../disc/data/foresta.sym")
-            .lines()
-            .filter_map(|l| l.split('\t').next())
-            .filter(|n| n.ends_with("_model") || n.ends_with("_DL") || n.ends_with("_dl"))
-            .collect();
-        for n in names {
-            let Some(a) = cat.get(n) else { continue };
-            total += 1;
-            let cmds: Vec<Gfx> = mem.lists(a.offset).into_values().flatten().collect();
-            if cmds.iter().any(|g| g.opcode() == op::G_SETCOMBINE) {
-                comb += 1;
-            }
-            if cmds.iter().any(|g| g.opcode() == op::G_SETPRIMCOLOR) {
-                prim += 1;
-            }
-            if cmds.iter().any(|g| g.opcode() == op::G_SETENVCOLOR) {
-                env += 1;
-            }
-            if cmds.iter().any(|g| g.opcode() == op::G_GEOMETRYMODE) {
-                geo_l += 1;
-            }
-            for g in cmds.iter().filter(|g| g.opcode() == op::G_SETCOMBINE) {
-                *combos.entry((g.w0 & 0x00FF_FFFF, g.w1)).or_default() += 1;
-            }
-        }
-        let mut top: Vec<_> = combos.into_iter().collect();
-        top.sort_by_key(|(_, c)| std::cmp::Reverse(*c));
-        eprintln!("survey: lists={total} combine={comb} prim={prim} env={env} geomode={geo_l} distinct_combiners={}", top.len());
-        for ((w0, w1), c) in top.iter().take(12) {
-            eprintln!("  combine {w0:06x} {w1:08x} x{c}");
-        }
     }
 }

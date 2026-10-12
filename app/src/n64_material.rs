@@ -10,13 +10,19 @@
 //! Not yet modelled: TEXEL1 (second tile; uses TEXEL0), noise, LOD
 //! fraction, chroma key, fog and the blender (alpha is a 0.5 cutoff).
 
-use bevy::asset::embedded_asset;
+use bevy::asset::{embedded_asset, RenderAssetUsages};
+use bevy::image::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor};
+use bevy::mesh::PrimitiveTopology;
 use bevy::prelude::*;
-use bevy::render::render_resource::{AsBindGroup, ShaderType};
+use bevy::render::render_resource::{
+    AsBindGroup, Extent3d, ShaderType, TextureDimension, TextureFormat,
+};
 use bevy::shader::ShaderRef;
 
-use crate::disc_gfx::PartKey;
+use crate::disc_gfx::{Part, PartKey, TexKey};
 
+/// N64 texture coordinates are s10.5 fixed point.
+const ST_ONE: f32 = 32.0;
 const SHADER: &str = "embedded://bevy_crossing/n64_combiner.wgsl";
 
 /// Flag bits in [`CombinerUniform::flags`].
@@ -27,6 +33,8 @@ pub const FLAG_TEXTURED: u32 = 4;
 pub const FLAG_NO_COMBINER: u32 = 8;
 /// Debug: treat shade as white.
 pub const FLAG_NO_SHADE: u32 = 16;
+/// Alpha-blended: keep translucent pixels instead of a 0.5 cutoff.
+pub const FLAG_BLEND: u32 = 32;
 
 /// Mux selectors for one cycle: colour a b c d, alpha a b c d.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -72,7 +80,7 @@ pub struct CombinerUniform {
 }
 
 impl CombinerUniform {
-    pub fn from_key(key: &PartKey, no_shade: bool) -> Self {
+    pub fn from_key(key: &PartKey, no_shade: bool, blend: bool) -> Self {
         let [c0, c1] = decode_combiner(key.combine.0, key.combine.1);
         let rgba = |c: [u8; 4]| Vec4::from(c.map(|v| v as f32 / 255.0));
         let mut flags = 0;
@@ -90,6 +98,9 @@ impl CombinerUniform {
         }
         if no_shade {
             flags |= FLAG_NO_SHADE;
+        }
+        if blend {
+            flags |= FLAG_BLEND;
         }
         Self {
             color0: UVec4::from(c0.color),
@@ -111,6 +122,9 @@ pub struct N64Material {
     #[texture(1)]
     #[sampler(2)]
     pub texture: Option<Handle<Image>>,
+    /// Translucent (`*_modelT`, XLU) geometry is alpha-blended; the rest
+    /// uses a 0.5 alpha cutoff.
+    pub blend: bool,
 }
 
 impl Material for N64Material {
@@ -119,8 +133,74 @@ impl Material for N64Material {
     }
 
     fn alpha_mode(&self) -> AlphaMode {
-        AlphaMode::Mask(0.5)
+        if self.blend {
+            AlphaMode::Blend
+        } else {
+            AlphaMode::Mask(0.5)
+        }
     }
+}
+
+/// Unlit parts carry vertex colours (the combiner's SHADE input); lit
+/// parts carry the vertex normals stored in the same bytes.
+pub fn part_mesh(part: &Part, scale: f32) -> Mesh {
+    let (w, h) = part
+        .key
+        .tex
+        .map_or((1.0, 1.0), |k| (k.width as f32, k.height as f32));
+    let v = &part.vertices;
+    let positions: Vec<[f32; 3]> = v.iter().map(|v| v.pos.map(|c| c * scale)).collect();
+    let uvs: Vec<[f32; 2]> = v
+        .iter()
+        .map(|v| [v.st[0] / ST_ONE / w, v.st[1] / ST_ONE / h])
+        .collect();
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    if part.key.lit {
+        let normals: Vec<[f32; 3]> = v.iter().map(|v| v.normal).collect();
+        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    } else {
+        let colors: Vec<[f32; 4]> = v
+            .iter()
+            .map(|v| v.color.map(|c| c as f32 / 255.0))
+            .collect();
+        mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
+        mesh.compute_flat_normals();
+    }
+    mesh
+}
+
+fn address_mode(gx_wrap: u8) -> ImageAddressMode {
+    match gx_wrap {
+        1 => ImageAddressMode::Repeat,
+        2 => ImageAddressMode::MirrorRepeat,
+        _ => ImageAddressMode::ClampToEdge,
+    }
+}
+
+pub fn texture_image(rgba: Vec<u8>, key: &TexKey) -> Image {
+    let size = Extent3d {
+        width: key.width as u32,
+        height: key.height as u32,
+        depth_or_array_layers: 1,
+    };
+    let mut image = Image::new(
+        size,
+        TextureDimension::D2,
+        rgba,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    );
+    image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+        address_mode_u: address_mode(key.wrap_s),
+        address_mode_v: address_mode(key.wrap_t),
+        ..ImageSamplerDescriptor::linear()
+    });
+    image
 }
 
 pub struct N64MaterialPlugin;
