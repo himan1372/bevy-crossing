@@ -62,55 +62,105 @@ pub fn point_blocked(building: &ShopBuilding, x: f32, z: f32) -> bool {
 /// One item on the shelf. Serializable so the save file can persist stock.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StockItem {
+    /// The game's item number (0 in saves from before real stock).
+    #[serde(default)]
+    pub item: ItemId,
     pub name: String,
     pub price: u32,
 }
 
-/// Shop runtime data: today's stock plus the decomp-verified sales ledger.
-#[derive(Resource)]
-pub struct ShopData {
-    pub stock: Vec<StockItem>,
-    pub shop: shop::ShopState,
-}
-
-impl Default for ShopData {
-    fn default() -> Self {
+impl StockItem {
+    fn new(item: ItemId) -> Self {
         Self {
-            stock: default_stock(),
-            shop: shop::ShopState::default(),
+            item,
+            name: items::name(item),
+            price: items::price(item).unwrap_or(0),
         }
     }
 }
 
-/// Starter stock — sensible original prices (no price table in the ported
-/// decomp modules).
-fn default_stock() -> Vec<StockItem> {
-    vec![
-        StockItem {
-            name: "Wooden Chair".into(),
-            price: 800,
-        },
-        StockItem {
-            name: "Potted Plant".into(),
-            price: 900,
-        },
-        StockItem {
-            name: "Wall Clock".into(),
-            price: 1100,
-        },
-        StockItem {
-            name: "Modern Lamp".into(),
-            price: 1400,
-        },
-        StockItem {
-            name: "Bookshelf".into(),
-            price: 1800,
-        },
-        StockItem {
-            name: "Cozy Bed".into(),
-            price: 2000,
-        },
-    ]
+/// Shop runtime data: today's stock plus the decomp-verified sales ledger.
+#[derive(Resource, Default)]
+pub struct ShopData {
+    pub stock: Vec<StockItem>,
+    pub shop: shop::ShopState,
+    /// Rarity of lists A, B, C per kind; decided with the first stock.
+    pub priorities: Option<[[u8; 3]; 5]>,
+    /// Game day of the current stock (`exchange_time`).
+    pub stock_day: Option<i64>,
+    /// Next paint colour (`shop_info.paint_color`).
+    pub paint: u8,
+}
+
+impl ShopData {
+    /// Restores stock, sales and tier from a save; stock from before real
+    /// item numbers is dropped and laid out again.
+    pub fn restore(&mut self, save: &crate::save::SaveData) {
+        self.stock = save.shop_stock.clone();
+        if self.stock.iter().any(|s| s.item == 0) {
+            self.stock.clear();
+            self.stock_day = None;
+        } else {
+            self.stock_day = save.shop_stock_day;
+        }
+        self.priorities = save.shop_priorities;
+        self.paint = save.shop_paint;
+        self.shop.sales_sum = save.shop_sales;
+        self.shop.shop_level = ShopTier::from_u8(save.shop_tier).unwrap_or(ShopTier::Zakka);
+        if let Some(p) = self.priorities {
+            crate::goods::set_priorities(p);
+        }
+    }
+
+    /// Lays out the day's goods (`mSP_ExchangeLineUp_InGame`).
+    fn restock(&mut self, day: i64) {
+        let mut state = (day as u64) ^ 0x9E37_79B9_7F4A_7C15 ^ u64::from(self.shop.sales_sum);
+        let mut below = |n: u32| -> u32 {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state % u64::from(n.max(1))) as u32
+        };
+        let priorities = *self
+            .priorities
+            .get_or_insert_with(|| crate::goods::decide_priorities(&mut below));
+        crate::goods::set_priorities(priorities);
+        let now = crate::clock::now();
+        let roll = crate::goods::Roll {
+            priorities,
+            goods_power: 0,
+            month: now.month,
+            day: now.day,
+        };
+        let goods = crate::goods::make_goods_list(
+            &roll,
+            self.shop.shop_level as usize,
+            self.shop.sales_sum,
+            &mut self.paint,
+            &mut below,
+        );
+        self.stock = goods.into_iter().map(StockItem::new).collect();
+        self.stock_day = Some(day);
+        info!(
+            "Nook's goods today: {}",
+            self.stock
+                .iter()
+                .map(|s| format!("{} ({})", s.name, s.price))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+}
+
+/// New goods each day, once the disc's lists are loaded.
+fn restock_daily(mut shop: ResMut<ShopData>, disc: Option<Res<crate::game_disc::GameDisc>>) {
+    if disc.is_none() {
+        return;
+    }
+    let today = crate::clock::now().day_number;
+    if shop.stock_day != Some(today) {
+        shop.restock(today);
+    }
 }
 
 /// Display name for a shop tier.
@@ -579,11 +629,7 @@ fn apply_loaded_shop(loaded: Option<Res<crate::save::LoadedSave>>, mut shop: Res
     let Some(save) = loaded.as_ref().and_then(|l| l.0.as_ref()) else {
         return;
     };
-    if !save.shop_stock.is_empty() {
-        shop.stock = save.shop_stock.clone();
-    }
-    shop.shop.sales_sum = save.shop_sales;
-    shop.shop.shop_level = ShopTier::from_u8(save.shop_tier).unwrap_or(ShopTier::Zakka);
+    shop.restore(save);
     println!(
         "Shop restored: {} items in stock, {} sales, tier {:?}",
         shop.stock.len(),
@@ -822,15 +868,19 @@ fn shop_menu_input(
                 ui.message = "Not enough bells!".to_string();
                 return;
             }
-            let Some(id) = items::furniture(&item.name) else {
+            let id = item.item;
+            if id == 0 {
                 ui.message = format!("{} isn't for sale.", item.name);
                 return;
-            };
+            }
             if !inventory.add(id) {
                 ui.message = "Your pockets are full!".to_string();
                 return;
             }
             inventory.bells -= item.price;
+            // Each piece on display sells once (`aSD_ReportGoodsSales`).
+            shop.stock.remove(ui.selected);
+            ui.selected = ui.selected.min(shop.stock.len().saturating_sub(1));
             // Full price counts toward the shop upgrade (mSP_PlusSales).
             shop.shop.record_purchase(item.price);
             let mut msg = format!("Bought {}!", item.name);
@@ -1029,6 +1079,7 @@ impl Plugin for ShopPlugin {
                 Update,
                 shop_menu_input.in_set(InteractSet::Ui).in_set(GameplaySet),
             )
+            .add_systems(Update, restock_daily)
             .add_systems(
                 Update,
                 (refresh_shop_ui, shop_interior_movement, update_shop_hud).in_set(GameplaySet),

@@ -78,6 +78,19 @@ pub struct SaveData {
     /// Legacy furniture names (pre-pockets); read for conversion only.
     #[serde(default)]
     pub furniture: Vec<String>,
+    /// Item numbering of the pockets: 0/1 the slice's own, 2 the game's
+    /// (`crate::items`). Older pockets are migrated on load.
+    #[serde(default)]
+    pub item_numbers: u32,
+    /// Nook's list rarities (`Shop_c.priority_lists`).
+    #[serde(default)]
+    pub shop_priorities: Option<[[u8; 3]; 5]>,
+    /// Game day the stock was laid out.
+    #[serde(default)]
+    pub shop_stock_day: Option<i64>,
+    /// Next paint colour Nookway sells.
+    #[serde(default)]
+    pub shop_paint: u8,
     /// Active quest (added later; defaults to none for old saves).
     #[serde(default)]
     pub quest: Option<crate::quest::ActiveQuest>,
@@ -198,6 +211,23 @@ fn apply_loaded_player(loaded: Res<LoadedSave>, mut player: Query<&mut Transform
     }
 }
 
+/// The pockets' item numbering this build writes (see `SaveData`).
+const ITEM_NUMBERS: u32 = 2;
+
+/// A pre-pockets furniture name, as the slice's stand-in catalog had it.
+fn legacy_furniture(name: &str) -> Option<u16> {
+    const NAMES: [&str; 6] = [
+        "Wooden Chair",
+        "Potted Plant",
+        "Wall Clock",
+        "Modern Lamp",
+        "Bookshelf",
+        "Cozy Bed",
+    ];
+    let i = NAMES.iter().position(|n| *n == name)?;
+    Some(items::migrate_v1(0x1000 + i as u16))
+}
+
 /// Pockets from a save. Saves made before pockets existed carry counts
 /// instead: fruit and furniture convert directly; fish and bugs become one
 /// stand-in species each (the counts never recorded which species). An
@@ -206,7 +236,11 @@ fn pockets_from_save(save: &SaveData) -> Inventory {
     let mut inv = Inventory::default();
     if let Some(saved) = save.pockets.as_ref() {
         for (slot, &item) in saved.iter().take(POCKETS_SLOT_COUNT).enumerate() {
-            inv.pockets[slot] = item;
+            inv.pockets[slot] = if save.item_numbers < ITEM_NUMBERS {
+                items::migrate_v1(item)
+            } else {
+                item
+            };
         }
         inv.item_conditions = save.pocket_conds;
         return inv;
@@ -220,7 +254,7 @@ fn pockets_from_save(save: &SaveData) -> Inventory {
             items::bug(InsectType::CommonButterfly),
             save.bugs as usize,
         ))
-        .chain(save.furniture.iter().filter_map(|n| items::furniture(n)));
+        .chain(save.furniture.iter().filter_map(|n| legacy_furniture(n)));
     let mut dropped = 0;
     for item in legacy {
         if inv.put(item, 0).is_none() {
@@ -319,6 +353,10 @@ fn collect_save(
         shop_sales: shop.shop.sales_sum,
         shop_tier: shop.shop.shop_level as u8,
         furniture: Vec::new(),
+        item_numbers: ITEM_NUMBERS,
+        shop_priorities: shop.priorities,
+        shop_stock_day: shop.stock_day,
+        shop_paint: shop.paint,
         quest: quest.active.clone(),
         player_face: None,
         player_cloth: None,
@@ -476,12 +514,7 @@ fn quick_load(
     playtime.secs = save.playtime_secs;
     mailbox.letters = save.letters.clone();
     mailbox.sent = save.sent_letters.clone();
-    if !save.shop_stock.is_empty() {
-        shop.stock = save.shop_stock.clone();
-    }
-    shop.shop.sales_sum = save.shop_sales;
-    shop.shop.shop_level = rustimal_logic::shop::ShopTier::from_u8(save.shop_tier)
-        .unwrap_or(rustimal_logic::shop::ShopTier::Zakka);
+    shop.restore(&save);
     // Quest: restore the active quest (markers regenerate via cooldown).
     quest.active = save.quest.clone();
     if quest.active.is_some() {
@@ -560,7 +593,7 @@ mod tests {
         assert_eq!(inv.count_item(items::FRUIT), 2);
         assert_eq!(inv.count_item(items::fish(FishType::CrucianCarp)), 1);
         assert_eq!(inv.count_item(items::bug(InsectType::CommonButterfly)), 3);
-        assert_eq!(inv.count_item(items::furniture("Bookshelf").unwrap()), 1);
+        assert_eq!(inv.count_item(legacy_furniture("Bookshelf").unwrap()), 1);
         assert_eq!(inv.pockets.iter().filter(|&&i| i != 0).count(), 7);
     }
 

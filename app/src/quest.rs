@@ -322,7 +322,11 @@ fn turn_in_ready(active: &ActiveQuest, villager_name: &str, inventory: &PlayerIn
         }
         QuestKind::BuyFurniture { giver, item } => {
             villager_name == giver
-                && items::furniture(item).is_some_and(|id| inventory.count(id) > 0)
+                && inventory
+                    .pockets
+                    .pockets
+                    .iter()
+                    .any(|&id| id != 0 && items::name(id) == *item)
         }
         _ => {
             // Contests: the decomp completion rule.
@@ -365,12 +369,22 @@ fn roll_reward(active: &ActiveQuest, rng: &mut dyn FnMut() -> u64) -> Reward {
             let frac = (rng() % 1000) as f32 / 1000.0;
             Reward::Bells(quest::scaled_pay(pay, dir, frac, 0))
         }
-        reward::FTR => {
-            let n = items::FURNITURE_CATALOG.len() as u64;
-            let name = items::FURNITURE_CATALOG[(rng() % n) as usize];
-            Reward::Item(items::furniture(name).unwrap_or(items::FRUIT))
+        c => {
+            use crate::goods::Kind;
+            let kind = match c {
+                reward::FTR => Some(Kind::Furniture),
+                reward::STATIONERY => Some(Kind::Paper),
+                reward::CLOTH => Some(Kind::Cloth),
+                reward::CARPET => Some(Kind::Carpet),
+                reward::WALLPAPER => Some(Kind::Wallpaper),
+                _ => None,
+            };
+            let item = match kind {
+                Some(k) => crate::goods::random(k, &mut |n| (rng() % u64::from(n.max(1))) as u32),
+                None => items::reward_good(c).unwrap_or(items::FRUIT),
+            };
+            Reward::Item(item)
         }
-        c => Reward::Item(items::reward_good(c).unwrap_or(items::FRUIT)),
     }
 }
 
@@ -801,7 +815,12 @@ fn quest_ui_input(
                             inventory.remove_first_where(items::is_bug);
                         }
                         QuestKind::BuyFurniture { item, .. } => {
-                            if let Some(id) = items::furniture(item) {
+                            if let Some(&id) = inventory
+                                .pockets
+                                .pockets
+                                .iter()
+                                .find(|&&id| id != 0 && items::name(id) == *item)
+                            {
                                 inventory.remove(id);
                             }
                         }

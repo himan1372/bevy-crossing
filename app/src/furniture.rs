@@ -353,6 +353,27 @@ mod tests {
         println!("{} without a model: {missing:?}", missing.len());
     }
 
+    /// Probe (needs the disc): the shop's layout.
+    #[test]
+    #[ignore]
+    fn probe_shop_layout() {
+        let path = std::env::var("BEVY_CROSSING_ISO").expect("set BEVY_CROSSING_ISO");
+        let disc = crate::game_disc::load(path.into()).unwrap();
+        let recs = rustimal_logic::parse_fg_records(&disc.fgdata).unwrap();
+        for id in [0x22u16, 0x23] {
+            let Some(r) = recs.iter().find(|r| r.fg_id == id) else {
+                continue;
+            };
+            println!("fg {id:#x}");
+            for z in 0..16 {
+                let row: Vec<String> = (0..16)
+                    .map(|x| format!("{:04x}", r.items[z * 16 + x]))
+                    .collect();
+                println!("{}", row.join(" "));
+            }
+        }
+    }
+
     #[test]
     fn furniture_indices() {
         assert_eq!(furniture_index(0x1000), Some(0));

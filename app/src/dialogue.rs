@@ -14,7 +14,6 @@ use bevy::ecs::message::MessageReader;
 use bevy::prelude::*;
 use bevy::text::FontSize;
 use rustimal_logic::interaction::{Patience, TalkInfo, TEMPER_TABLE};
-use rustimal_logic::quest::reward;
 use rustimal_logic::request_selector;
 
 use crate::input::{Action, Actions, InteractSet};
@@ -229,9 +228,7 @@ fn on_talk(
                     let gift = if rng.below(2) == 0 {
                         items::FRUIT
                     } else {
-                        let n = items::FURNITURE_CATALOG.len() as u32;
-                        items::furniture(items::FURNITURE_CATALOG[rng.below(n) as usize])
-                            .unwrap_or(items::FRUIT)
+                        crate::goods::random(crate::goods::Kind::Furniture, &mut |n| rng.below(n))
                     };
                     // The topic is only chosen with a free pocket.
                     inventory.add(gift);
@@ -384,21 +381,19 @@ fn trade_offer(
     }
     let wanted = request_selector::pick_random_eligible(pockets, &eligible, rng(count))?;
     // Candidate goods: reward goods and catalog furniture, never the wanted item.
-    let pool: Vec<items::ItemId> = items::FURNITURE_CATALOG
-        .iter()
-        .filter_map(|n| items::furniture(n))
-        .chain(
-            [
-                reward::STATIONERY,
-                reward::CLOTH,
-                reward::CARPET,
-                reward::WALLPAPER,
-            ]
-            .into_iter()
-            .filter_map(items::reward_good),
-        )
-        .filter(|&it| it != wanted.item)
-        .collect();
+    use crate::goods::Kind;
+    let pool: Vec<items::ItemId> = [
+        Kind::Furniture,
+        Kind::Furniture,
+        Kind::Paper,
+        Kind::Cloth,
+        Kind::Carpet,
+        Kind::Wallpaper,
+    ]
+    .into_iter()
+    .map(|k| crate::goods::random(k, rng))
+    .filter(|&it| it != wanted.item)
+    .collect();
     let pick = |rng: &mut dyn FnMut(u32) -> u32| pool[rng(pool.len() as u32) as usize];
     let goods = [
         (pick(rng), rng(10)),

@@ -14,6 +14,7 @@ mod environment;
 mod face;
 mod furniture;
 mod game_disc;
+mod goods;
 mod ground_map;
 mod house;
 mod input;

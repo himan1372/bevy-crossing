@@ -153,7 +153,7 @@ mod tests {
         let mut inv = PlayerInventory::default();
         assert!(inv.add(items::FRUIT));
         let text = pockets_listing(&inv);
-        assert!(text.starts_with(" 1. Fruit\n 2. -\n"));
+        assert!(text.starts_with(" 1. apple\n 2. -\n"));
         assert!(text.contains("15. -"));
         assert!(text.contains("1/15 used"));
     }

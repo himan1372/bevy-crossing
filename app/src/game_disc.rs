@@ -127,6 +127,8 @@ pub fn start_disc_load(mut commands: Commands) {
                 game_disc.path.display(),
                 game_disc.catalog.len()
             );
+            crate::items::install(&game_disc);
+            crate::goods::install(&game_disc);
             commands.insert_resource(game_disc);
             commands.insert_resource(DiscStatus::Loaded);
         }
