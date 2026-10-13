@@ -31,6 +31,8 @@ pub fn spawn_player(
     // Spawn camera
     commands.spawn((
         Camera3d::default(),
+        // The GameCube shows its colours as they are: no tonemapping.
+        bevy::core_pipeline::tonemapping::Tonemapping::None,
         Projection::Perspective(PerspectiveProjection {
             fov: CAMERA_FOV_Y_DEG.to_radians(),
             near: CAMERA_NEAR,

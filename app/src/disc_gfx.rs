@@ -367,8 +367,9 @@ pub fn run_display_lists_with_colors(
     prim: [u8; 4],
     prim_lod: u8,
     env: [u8; 4],
+    tluts: &[(usize, u32)],
 ) -> TriangleSink {
-    run_lists(rom, entries, prim, prim_lod, env)
+    run_lists_full(rom, entries, prim, prim_lod, env, tluts)
 }
 
 /// The wet-sand colour field drawing puts in segment C for beach acres

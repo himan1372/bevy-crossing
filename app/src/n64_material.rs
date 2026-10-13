@@ -237,7 +237,10 @@ pub fn texture_image(rgba: Vec<u8>, key: &TexKey) -> Image {
         size,
         TextureDimension::D2,
         rgba,
-        TextureFormat::Rgba8UnormSrgb,
+        // Raw texel values: the combiner works on them as the GameCube
+        // does, alongside the raw vertex/prim/env colours, and the shader
+        // converts the result to linear once.
+        TextureFormat::Rgba8Unorm,
         RenderAssetUsages::RENDER_WORLD,
     );
     image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {

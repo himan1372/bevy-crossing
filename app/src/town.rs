@@ -182,10 +182,11 @@ impl Town {
                     (p.x - c.x).abs() < half && (p.z - c.z).abs() < half
                 })
             })
-            // Each house's mailbox fills its unit.
+            // Each house's mailbox and gyroid fill their units.
             || retail
                 .mailboxes
                 .iter()
+                .chain(&retail.gyroids)
                 .flatten()
                 .any(|&m| Self::cell_indices_of(p) == Some(m))
     }

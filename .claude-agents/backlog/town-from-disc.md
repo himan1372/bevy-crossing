@@ -9,7 +9,7 @@ Draw the town ground from the disc's acre templates instead of flat planes.
 - [x] logic fix: G_LOADTLUT TLUT name is 4 bits (was 3; data loads name 15)
 - [x] Holes fixed: G_TRIN face-data words were read as commands (could look like G_ENDDL); all c/r/s/f templates now cover their acre
 - [x] (superseded by Phase 2: retail block types from logic::random_field) Edge -> shape mapping is a guess: rivers/cliffs don't line up across acres. Proper fix: generate retail block types (logic::field_gen) instead of mapping the rewrite plan.
-- [ ] Month -> palette table is judged from colours, not the game's calendar
+- [x] Month -> palette from the game calendar (mTM_get_termIdx + mFM_SetFieldPal/mFM_SetFGPal tables)
 - [x] Collision/heights from the templates (Phase 2, ground_map.rs)
 
 ## Phase 2 (Philip OK'd 2026-10-12): retail generator + gameplay migration

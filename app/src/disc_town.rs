@@ -14,7 +14,6 @@
 //! rebuilt here as a [`Segments`] map.
 
 use bevy::prelude::*;
-use chrono::Datelike;
 use std::collections::{HashMap, HashSet};
 
 use disc::{rel_bss, AssetCatalog, RomImage, RomSource, Target};
@@ -81,18 +80,29 @@ const GROUND_PALETTES: &[(&str, &str)] = &[
     ("beach_pal_dummy2", "mFM_beach_pal"),
 ];
 
-/// Ground palette index per month (Jan..Dec). The 12 palettes run green
-/// (0-2), through autumn (3-8), to snow (9-11), judged from their colours;
-/// the game's exact calendar for them isn't translated yet. December's
-/// early weeks stay snow-free here; snow runs January-February.
-const MONTH_PALETTE: [u32; 12] = [10, 11, 0, 0, 1, 1, 2, 2, 2, 3, 5, 7];
-const FIRST_SNOW_PALETTE: u32 = 9;
+/// Ground palette per calendar term (`mFM_SetFieldPal`
+/// `field_pal_idx_table`).
+const FIELD_PAL_IDX: [u32; 18] = [9, 10, 11, 0, 1, 1, 1, 2, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9];
+/// Tree palette per calendar term (`mFM_SetFGPal` `tree_pal_idx_table`).
+const TREE_PAL_IDX: [u32; 18] = [10, 12, 13, 0, 1, 2, 2, 3, 3, 4, 5, 6, 7, 8, 9, 10, 11, 10];
 
-/// What the game would have copied into the ground buffers this month.
-fn ground_segments(catalog: &AssetCatalog, month0: u32) -> Segments {
+/// Today's calendar term on the game clock (`mTM_get_termIdx`).
+pub(crate) fn current_term() -> usize {
+    let now = crate::clock::now();
+    rustimal_logic::game_time::term_index(now.month, now.day, false).unwrap_or(0)
+}
+
+/// Whether a term is winter: snow textures and models.
+fn is_winter(term: usize) -> bool {
+    use rustimal_logic::game_time::{Season, CALENDAR_TERMS};
+    CALENDAR_TERMS[term % 18].season == Season::Winter
+}
+
+/// What the game would have copied into the ground buffers this term.
+fn ground_segments(catalog: &AssetCatalog, term: usize) -> Segments {
     let mut segs = Segments::default();
-    let palette = MONTH_PALETTE[month0 as usize % 12];
-    let winter = palette >= FIRST_SNOW_PALETTE;
+    let palette = FIELD_PAL_IDX[term % 18];
+    let winter = is_winter(term);
     for (buffer, source) in GROUND_TEXTURES {
         // Winter has its own texture set (`mFM_grd_w_*`) where one exists.
         let winter_source = source.replace("_grd_s_", "_grd_w_");
@@ -260,6 +270,8 @@ pub struct RetailLayout {
     pub items: Vec<[u16; 256]>,
     /// The four mailboxes (`ACTOR_PROP_MAILBOX0..3`) by house number.
     pub mailboxes: [Option<(usize, usize, usize, usize)>; 4],
+    /// The four houses' gyroids (`ACTOR_PROP_HANIWA0..3`).
+    pub gyroids: [Option<(usize, usize, usize, usize)>; 4],
 }
 
 /// A public building from the layout, placed like its actor does.
@@ -663,12 +675,14 @@ pub fn build_retail_town(
             field_items.push(items);
         }
     }
-    let mut mailboxes = [None; 4];
+    let (mut mailboxes, mut gyroids) = ([None; 4], [None; 4]);
     for (a, items) in field_items.iter().enumerate() {
         for (c, &item) in items.iter().enumerate() {
+            let at = Some((a % ACRE_WIDTH, a / ACRE_WIDTH, c % 16, c / 16));
             if (MAILBOX0..MAILBOX0 + 4).contains(&item) {
-                mailboxes[(item - MAILBOX0) as usize] =
-                    Some((a % ACRE_WIDTH, a / ACRE_WIDTH, c % 16, c / 16));
+                mailboxes[(item - MAILBOX0) as usize] = at;
+            } else if (HANIWA0..HANIWA0 + 4).contains(&item) {
+                gyroids[(item - HANIWA0) as usize] = at;
             }
         }
     }
@@ -680,6 +694,7 @@ pub fn build_retail_town(
             player_homes,
             buildings,
             mailboxes,
+            gyroids,
             items: field_items,
         },
         ground,
@@ -688,6 +703,8 @@ pub fn build_retail_town(
 
 /// `ACTOR_PROP_MAILBOX0` (`m_name_table.h`): the player houses' mailboxes.
 const MAILBOX0: u16 = 0xA000;
+/// `ACTOR_PROP_HANIWA0`: the houses' gyroids.
+const HANIWA0: u16 = 0xA004;
 
 /// `ROCK_A` (`m_name_table.h`); ROCK_A..=ROCK_E are 0x63..=0x67.
 const ROCK_A: u16 = 0x0063;
@@ -981,7 +998,7 @@ pub(crate) fn build_disc_town(
         return;
     };
     let house_looks = resident_house_looks(&disc, &town, roster.as_deref());
-    let segs = ground_segments(&disc.catalog, chrono::Local::now().month0());
+    let segs = ground_segments(&disc.catalog, current_term());
     let bg_lists = read_bg_lists(&disc.rom, &disc.catalog);
     let mut missing = 0;
     for bz in 0..BLOCK_Z_NUM {
@@ -1046,13 +1063,12 @@ pub(crate) fn build_disc_town(
         &mut commands,
         &disc,
         &trees,
-        chrono::Local::now().month0(),
+        current_term(),
         &mut meshes,
         &mut materials,
         &mut images,
     );
-    let month0 = chrono::Local::now().month0();
-    let winter = TREE_MONTH_PALETTE[month0 as usize % 12] >= TREE_FIRST_SNOW_PALETTE;
+    let winter = is_winter(current_term());
     let mut lights = BuildingLights::default();
     spawn_buildings(
         &mut commands,
@@ -1083,12 +1099,20 @@ pub(crate) fn build_disc_town(
         &mut materials,
         &mut images,
     );
+    spawn_gyroids(
+        &mut commands,
+        &disc,
+        &town,
+        &mut meshes,
+        &mut materials,
+        &mut images,
+    );
     spawn_disc_objects(
         &mut commands,
         &disc,
         &town,
         &objects,
-        TREE_MONTH_PALETTE[month0 as usize % 12] >= TREE_FIRST_SNOW_PALETTE,
+        winter,
         &mut meshes,
         &mut materials,
         &mut images,
@@ -1102,13 +1126,6 @@ pub(crate) fn build_disc_town(
         retail.combos.len()
     );
 }
-
-/// Tree palette per month (Jan..Dec) among the 14 in
-/// `mFM_obj_tree_01_pal_dol`, judged from their colours: 0 spring green,
-/// 1 cherry blossom, 2-3 summer, 4-9 autumn green to brown, 10-12 snow,
-/// 13 thaw. The game picks by date; that calendar isn't translated yet.
-const TREE_MONTH_PALETTE: [u32; 12] = [11, 12, 13, 0, 0, 2, 3, 3, 4, 6, 8, 10];
-const TREE_FIRST_SNOW_PALETTE: u32 = 10;
 
 /// Object models are drawn at 1/100 scale; one game cell is 40 units.
 const OBJECT_SCALE: f32 = 0.01 / 40.0 * CELL_SIZE;
@@ -1131,13 +1148,13 @@ fn spawn_disc_trees(
     commands: &mut Commands,
     disc: &GameDisc,
     placeholders: &Query<(Entity, &Transform, &PlaceholderTree)>,
-    month0: u32,
+    term: usize,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<N64Material>,
     images: &mut Assets<Image>,
 ) {
-    let palette_index = TREE_MONTH_PALETTE[month0 as usize % 12];
-    let lists = tree_lists(&disc.catalog, palette_index >= TREE_FIRST_SNOW_PALETTE);
+    let palette_index = TREE_PAL_IDX[term % 18];
+    let lists = tree_lists(&disc.catalog, is_winter(term));
     if lists.len() != 4 {
         warn!("tree model not found on the disc; keeping placeholder trees");
         return;
@@ -1213,7 +1230,7 @@ fn build_model_with_prim(
         palette,
         colors,
         blend,
-        &Segments::default(),
+        (&Segments::default(), &[]),
         (meshes, materials, images),
     )
 }
@@ -1226,15 +1243,16 @@ pub(crate) struct DrawColors {
     pub env: [u8; 4],
 }
 
-/// As [`build_model_with_prim`], with the environment colour and the
-/// segments (`gSPSegment`) the draw code sets.
+/// As [`build_model_with_prim`], with the environment colour, and the
+/// segments (`gSPSegment`) and TLUT slots (slot, REL offset) the draw
+/// code sets.
 pub(crate) fn build_model_full(
     disc: &GameDisc,
     lists: &[u32],
     palette: Option<u32>,
     colors: DrawColors,
     blend: bool,
-    segs: &Segments,
+    (segs, tluts): (&Segments, &[(usize, u32)]),
     (meshes, materials, images): (
         &mut Assets<Mesh>,
         &mut Assets<N64Material>,
@@ -1247,8 +1265,32 @@ pub(crate) fn build_model_full(
         colors.prim,
         colors.prim_lod,
         colors.env,
+        tluts,
     );
     pose_parts(disc, lists, &mut sink);
+    sink_meshes(
+        disc,
+        &sink,
+        palette,
+        blend,
+        segs,
+        (meshes, materials, images),
+    )
+}
+
+/// Meshes and materials for an already run (and placed) sink.
+fn sink_meshes(
+    disc: &GameDisc,
+    sink: &crate::disc_gfx::TriangleSink,
+    palette: Option<u32>,
+    blend: bool,
+    segs: &Segments,
+    (meshes, materials, images): (
+        &mut Assets<Mesh>,
+        &mut Assets<N64Material>,
+        &mut Assets<Image>,
+    ),
+) -> Vec<(Handle<Mesh>, Handle<N64Material>)> {
     sink.parts
         .iter()
         .map(|part| {
@@ -1746,6 +1788,76 @@ fn spawn_mailboxes(
     }
 }
 
+/// The houses' gyroids (`ac_haniwa.c`): `cKF_bs_r_hnw` posed, its
+/// `hnw_tmem_txt` in segment B (`ANIME_4_TXT_SEG`), the `hnw_face`
+/// palette in TLUT 15, prim white at LOD 128; unturned, on the layout's
+/// `HANIWA0..3` units.
+fn spawn_gyroids(
+    commands: &mut Commands,
+    disc: &GameDisc,
+    town: &Town,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<N64Material>,
+    images: &mut Assets<Image>,
+) {
+    let Some(retail) = &town.retail else { return };
+    let Some(skel) = disc
+        .catalog
+        .get("cKF_bs_r_hnw")
+        .and_then(|a| crate::skeleton::Skeleton::read(&disc.rom, a.offset))
+    else {
+        return;
+    };
+    // At rest in the first frame of its move animation (frames 1-9).
+    let anim = disc
+        .catalog
+        .get("cKF_ba_r_hnw_move")
+        .and_then(|a| crate::skeleton::Animation::read(&disc.rom, a.offset, skel.joints.len()));
+    let world = skel.world_matrices(anim.as_ref(), 1.0);
+    let (Some(tex), Some(face)) = (
+        disc.catalog.get("hnw_tmem_txt"),
+        disc.catalog.get("hnw_face"),
+    ) else {
+        warn!("gyroid model not found on the disc");
+        return;
+    };
+    let Some(bytes) = disc.rom.slice(disc::RomSource::Rel, tex.offset, tex.size) else {
+        return;
+    };
+    let mut segs = Segments::default();
+    segs.set_segment(0x0B, bytes.into());
+    // Its limbs share one vertex buffer through segment-D matrices.
+    let mut sink = crate::disc_gfx::run_display_lists_with_colors(
+        &disc.rom,
+        &skel.lists(),
+        [255; 4],
+        128,
+        [0; 4],
+        &[(15, face.offset)],
+    );
+    crate::skeleton::place_on_joints(&mut sink, &skel, &world);
+    let model = sink_meshes(disc, &sink, None, false, &segs, (meshes, materials, images));
+    for (i, cell) in retail.gyroids.iter().enumerate() {
+        let Some(&cell) = cell.as_ref() else { continue };
+        let at = mailbox_position(cell);
+        let root = commands
+            .spawn((
+                DiscObject,
+                Name::new(format!("gyroid {i}")),
+                Transform::from_xyz(at.x, town.ground_y(at), at.z),
+                Visibility::default(),
+            ))
+            .id();
+        for (mesh, material) in &model {
+            commands.spawn((
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(material.clone()),
+                ChildOf(root),
+            ));
+        }
+    }
+}
+
 /// Where a mailbox stands: its unit's centre.
 pub fn mailbox_position((ax, az, cx, cz): (usize, usize, usize, usize)) -> Vec3 {
     Town::cell_to_world(ax, az, cx, cz)
@@ -1816,6 +1928,36 @@ mod tests {
                     .collect();
                 eprintln!("t{t} z{z:2} {}", row.join(" "));
             }
+        }
+    }
+
+    /// Probe (needs the disc): the gyroid skeleton's joints and pose.
+    #[test]
+    #[ignore]
+    fn probe_gyroid_pose() {
+        let path = std::env::var("BEVY_CROSSING_ISO").expect("set BEVY_CROSSING_ISO");
+        let disc = crate::game_disc::load(path.into()).unwrap();
+        let a = disc.catalog.get("cKF_bs_r_hnw").unwrap();
+        let skel = crate::skeleton::Skeleton::read(&disc.rom, a.offset).unwrap();
+        let anim = disc
+            .catalog
+            .get("cKF_ba_r_hnw_move")
+            .and_then(|a| crate::skeleton::Animation::read(&disc.rom, a.offset, skel.joints.len()));
+        println!("anim read: {}", anim.is_some());
+        let world = skel.world_matrices(anim.as_ref(), 1.0);
+        for (j, joint) in skel.joints.iter().enumerate() {
+            let name = joint
+                .model
+                .and_then(|m| disc.catalog.containing(disc::RomSource::Rel, m))
+                .map_or("-", |a| a.name);
+            let (s, r, t) = world[j].to_scale_rotation_translation();
+            println!(
+                "{j} {name} t {:?} r {:?} s {:?} local {:?}",
+                t,
+                r.to_euler(EulerRot::XYZ),
+                s,
+                joint.translation
+            );
         }
     }
 

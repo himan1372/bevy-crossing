@@ -108,7 +108,7 @@ fn load_models(
             None,
             colors,
             true,
-            &segs,
+            (&segs, &[]),
             (&mut *meshes, &mut *materials, &mut *images),
         ));
     }
@@ -142,7 +142,7 @@ fn load_models(
                     None,
                     white,
                     true,
-                    &Segments::default(),
+                    (&Segments::default(), &[]),
                     (&mut *meshes, &mut *materials, &mut *images),
                 )
             };

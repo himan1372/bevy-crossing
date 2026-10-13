@@ -45,6 +45,14 @@ const GAME_UNITS: f32 = 40.0;
 const CAM_NEAR: f32 = 200.0;
 const CAM_FAR: f32 = 1600.0;
 
+// The combiner's output is a display (sRGB) value, like the GameCube's;
+// the render target wants linear.
+fn display_to_linear(c: vec3<f32>) -> vec3<f32> {
+    let lo = c / 12.92;
+    let hi = pow((c + 0.055) / 1.055, vec3(2.4));
+    return select(hi, lo, c <= vec3(0.04045));
+}
+
 // gSPFogPosition: fog = ((ndc_z + 1) * 500 - near) / (far - near).
 fn fog_amount(world_pos: vec3<f32>) -> f32 {
     let forward = -normalize(view.world_from_view[2].xyz);
@@ -170,10 +178,10 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         if out.a < 0.01 {
             discard;
         }
-        return out;
+        return vec4(display_to_linear(clamp(out.rgb, vec3(0.0), vec3(1.0))), out.a);
     }
     if out.a < 0.5 {
         discard;
     }
-    return vec4(out.rgb, 1.0);
+    return vec4(display_to_linear(clamp(out.rgb, vec3(0.0), vec3(1.0))), 1.0);
 }
