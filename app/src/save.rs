@@ -88,6 +88,19 @@ pub struct SaveData {
     /// The player's shirt (clothing bank index; added later).
     #[serde(default)]
     pub player_cloth: Option<u16>,
+    /// Residents by villager table index, in move-in order (added later;
+    /// none = a new town's starters).
+    #[serde(default)]
+    pub villagers: Option<Vec<u32>>,
+    /// Villagers who have lived here (`npc_used_tbl`).
+    #[serde(default)]
+    pub villagers_appeared: Vec<u32>,
+    /// Villagers the player has talked to.
+    #[serde(default)]
+    pub villagers_met: Vec<u32>,
+    /// Game day of the last move-in.
+    #[serde(default)]
+    pub last_move_in_day: Option<i64>,
 }
 
 /// Save data loaded at startup (PreStartup), consumed by Startup systems.
@@ -309,6 +322,10 @@ fn collect_save(
         quest: quest.active.clone(),
         player_face: None,
         player_cloth: None,
+        villagers: None,
+        villagers_appeared: Vec::new(),
+        villagers_met: Vec::new(),
+        last_move_in_day: None,
     }
 }
 
@@ -382,7 +399,7 @@ fn quick_save(
     quest: Res<crate::quest::QuestState>,
     mut timer: ResMut<NotifyTimer>,
     notify_query: Query<&mut Text, With<NotifyText>>,
-    look: Res<PlayerLook>,
+    (look, roster): (Res<PlayerLook>, Option<Res<crate::roster::TownRoster>>),
 ) {
     // World focus only: saving or loading mid-UI would leave that UI stale.
     if !actions.just_pressed(Action::QuickSave) || !focus.is_world() {
@@ -404,6 +421,12 @@ fn quick_save(
     );
     save.player_face = Some(look.face as u8);
     save.player_cloth = Some(look.cloth as u16);
+    if let Some(r) = roster {
+        save.villagers = Some(r.residents.iter().map(|e| e.index).collect());
+        save.villagers_appeared = r.appeared.clone();
+        save.villagers_met = r.met.clone();
+        save.last_move_in_day = r.last_grow_day;
+    }
     if write_save(&save) {
         println!("Saved to {}", save_path().display());
         show_notification("Saved!", &mut timer, notify_query);

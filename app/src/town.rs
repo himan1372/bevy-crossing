@@ -391,6 +391,7 @@ pub fn generate_town(
     mut commands: Commands,
     seed: Option<Res<TownSeed>>,
     disc: Option<Res<crate::game_disc::GameDisc>>,
+    roster: Option<Res<crate::roster::TownRoster>>,
 ) {
     let seed_val = seed.map(|s| s.0).unwrap_or(12345);
     let pool: Vec<u16> = (0..15).collect();
@@ -400,7 +401,8 @@ pub fn generate_town(
     // water and objects replace the plan ones (resident homes are kept).
     let (retail, ground) = match disc {
         Some(disc) => {
-            let (retail, ground) = crate::disc_town::build_retail_town(&disc, &mut plan);
+            let residents = roster.as_ref().map(|r| r.residents.len());
+            let (retail, ground) = crate::disc_town::build_retail_town(&disc, &mut plan, residents);
             (Some(retail), Some(ground))
         }
         None => (None, None),

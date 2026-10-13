@@ -175,6 +175,7 @@ fn on_talk(
     quest_claim: Res<crate::quest::QuestClaim>,
     mut box_query: Query<&mut Visibility, With<DialogueBox>>,
     mut text_query: Query<&mut Text, With<DialogueText>>,
+    mut roster: Option<ResMut<crate::roster::TownRoster>>,
 ) {
     for event in events.read() {
         if quest_claim.0 == Some(event.villager) {
@@ -287,6 +288,11 @@ fn on_talk(
 
         dialogue.active = true;
         dialogue.speaker = Some(event.villager);
+        if let (Some(roster), Some(idx)) = (roster.as_deref_mut(), villager.npc_index) {
+            if !roster.met.contains(&idx) {
+                roster.met.push(idx);
+            }
+        }
         dialogue.index = 0;
         dialogue.lines = lines;
         if let Ok(mut vis) = box_query.single_mut() {

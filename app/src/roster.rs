@@ -83,6 +83,168 @@ impl VillagerTables {
     }
 }
 
+/// `ANIMAL_NUM_MAX`: most villagers a town holds.
+pub const RESIDENTS_MAX: usize = 15;
+/// `mNpc_GROW_MOVE_IN`.
+const GROW_MOVE_IN: i8 = 1;
+/// `npc_grow_prob` at a middling field rank: the chance a day's check lets
+/// someone move in. Town ranking isn't modelled yet, so rank 3 of 0-6.
+const GROW_PERCENT: f32 = 70.0;
+
+/// `mNpc_GetLooks2Sex`: normal, peppy and snooty villagers are female.
+fn looks_female(looks: u8) -> bool {
+    matches!(looks, 0 | 1 | 5)
+}
+
+/// Who lives in town and the move-in bookkeeping, kept in the save.
+#[derive(bevy::prelude::Resource, Clone, Debug, Default)]
+pub struct TownRoster {
+    /// In move-in order; resident `i` lives at reserved home spot `i`.
+    pub residents: Vec<RosterEntry>,
+    /// Villagers who have lived here (`npc_used_tbl`): not picked again
+    /// until everyone of a personality has been.
+    pub appeared: Vec<u32>,
+    /// Villagers the player has talked to (`mNpc_CheckFriendAllAnimal`).
+    pub met: Vec<u32>,
+    /// Game day of the last move-in check that let someone in.
+    pub last_grow_day: Option<i64>,
+}
+
+impl VillagerTables {
+    /// The roster entry for table index `idx`.
+    pub fn entry(&self, idx: u32) -> Option<RosterEntry> {
+        Some(RosterEntry {
+            name: self.names.get(idx as usize)?.clone(),
+            looks: *self.looks.get(idx as usize)?,
+            index: idx,
+        })
+    }
+
+    /// May join a town by moving in (`mNpc_GROW_STARTER` / `_MOVE_IN`).
+    fn can_move_in(&self, idx: usize) -> bool {
+        matches!(
+            self.grow.get(idx),
+            Some(&GROW_STARTER) | Some(&GROW_MOVE_IN)
+        )
+    }
+}
+
+impl TownRoster {
+    /// `mNpc_CheckGrow` then `mNpc_Grow`: on a new day, with room in
+    /// town, once the player has talked to everyone living here, and with
+    /// the field-rank chance, a new villager moves in. Returns them.
+    pub fn grow(&mut self, tables: &VillagerTables, day: i64, seed: u32) -> Option<RosterEntry> {
+        if self.residents.len() >= RESIDENTS_MAX {
+            return None;
+        }
+        let Some(last) = self.last_grow_day else {
+            // First check: start the clock (`last_grow_time` was clear).
+            self.last_grow_day = Some(day);
+            return None;
+        };
+        let mut rng = Rng((seed ^ (day as u32).wrapping_mul(0x9E37_79B9)) | 1);
+        let met_all = self.residents.iter().all(|r| self.met.contains(&r.index));
+        if day <= last || !met_all || rng.next() * 100.0 >= GROW_PERCENT {
+            return None;
+        }
+        self.last_grow_day = Some(day);
+        let looks = self.min_looks(tables, &mut rng)?;
+        let idx = self.pick(tables, looks, &mut rng)?;
+        let entry = tables.entry(idx as u32)?;
+        self.appeared.push(entry.index);
+        self.residents.push(entry.clone());
+        Some(entry)
+    }
+
+    fn living(&self, idx: usize) -> bool {
+        self.residents.iter().any(|r| r.index as usize == idx)
+    }
+
+    /// `mNpc_GetMinLooks` (+ the sex tie-break in `mNpc_Grow`): the
+    /// personality with the fewest residents among those with someone
+    /// left to move in.
+    fn min_looks(&mut self, tables: &VillagerTables, rng: &mut Rng) -> Option<u8> {
+        let waiting = |roster: &Self, looks: u8| {
+            (0..NPC_NUM).any(|i| {
+                tables.looks.get(i) == Some(&looks)
+                    && tables.can_move_in(i)
+                    && !roster.appeared.contains(&(i as u32))
+                    && !roster.living(i)
+            })
+        };
+        let count =
+            |roster: &Self, looks: u8| roster.residents.iter().filter(|r| r.looks == looks).count();
+        let mut tied: Vec<u8> = Vec::new();
+        let mut best = usize::MAX;
+        for looks in 0..PERSONALITIES as u8 {
+            if !waiting(self, looks) {
+                continue;
+            }
+            let n = count(self, looks);
+            if n < best {
+                (best, tied) = (n, vec![looks]);
+            } else if n == best {
+                tied.push(looks);
+            }
+        }
+        if tied.is_empty() {
+            // Everyone has been here before: start over (residents stay).
+            self.appeared
+                .retain(|i| self.residents.iter().any(|r| r.index == *i));
+            tied = (0..PERSONALITIES as u8).collect();
+        }
+        if tied.len() > 1 {
+            // `mNpc_GetMinSex` (as written: male when females < males).
+            let females = self
+                .residents
+                .iter()
+                .filter(|r| looks_female(r.looks))
+                .count();
+            let males = self.residents.len() - females;
+            let want_female = females >= males;
+            let same: Vec<u8> = tied
+                .iter()
+                .copied()
+                .filter(|&l| looks_female(l) == want_female)
+                .collect();
+            if !same.is_empty() && same.len() != tied.len() {
+                tied = same;
+            }
+        }
+        let pick = ((rng.next() * tied.len() as f32) as usize).min(tied.len() - 1);
+        Some(tied[pick])
+    }
+
+    /// `mNpc_GrowLooksNpcIdx`: a random villager of `looks` who isn't here,
+    /// hasn't been, and may move in.
+    fn pick(&self, tables: &VillagerTables, looks: u8, rng: &mut Rng) -> Option<usize> {
+        let candidates: Vec<usize> = (0..NPC_NUM)
+            .filter(|&i| {
+                tables.looks.get(i) == Some(&looks)
+                    && tables.can_move_in(i)
+                    && !self.living(i)
+                    && !self.appeared.contains(&(i as u32))
+            })
+            .collect();
+        if candidates.is_empty() {
+            return None;
+        }
+        let k = ((rng.next() * candidates.len() as f32) as usize).min(candidates.len() - 1);
+        Some(candidates[k])
+    }
+}
+
+/// The reserved home spot each resident gets (`mNpc_SetNpcHome`): a random
+/// order over the `count` spots (`mNpc_MakeRandTable(.., 30)`), fixed by
+/// the town seed so residents keep their homes as others move in.
+pub fn home_spot_order(count: usize, seed: u32) -> Vec<usize> {
+    if count == 0 {
+        return Vec::new();
+    }
+    let mut rng = Rng(seed.wrapping_mul(0x85EB_CA6B) | 1);
+    rand_table(count, 30, &mut rng)
+}
+
 /// A name: printable characters up to the padding.
 fn decode_name(raw: &[u8]) -> String {
     raw.iter()
@@ -118,6 +280,51 @@ fn rand_table(count: usize, swaps: usize, rng: &mut Rng) -> Vec<usize> {
     table
 }
 
+/// Startup, before the town is built: the residents from the save (or a
+/// new town's starters), then the day's move-in check.
+fn init_roster(
+    mut commands: bevy::prelude::Commands,
+    disc: Option<bevy::prelude::Res<GameDisc>>,
+    loaded: bevy::prelude::Res<crate::save::LoadedSave>,
+    seed: bevy::prelude::Res<crate::town::TownSeed>,
+) {
+    let Some(tables) = disc.as_deref().and_then(VillagerTables::from_disc) else {
+        return;
+    };
+    let save = loaded.0.as_ref();
+    let residents: Vec<RosterEntry> = match save.and_then(|s| s.villagers.as_ref()) {
+        Some(ids) => ids.iter().filter_map(|&i| tables.entry(i)).collect(),
+        None => tables.starters(seed.0),
+    };
+    let mut roster = TownRoster {
+        appeared: save
+            .map(|s| s.villagers_appeared.clone())
+            .filter(|a| !a.is_empty())
+            .unwrap_or_else(|| residents.iter().map(|r| r.index).collect()),
+        met: save.map(|s| s.villagers_met.clone()).unwrap_or_default(),
+        last_grow_day: save.and_then(|s| s.last_move_in_day),
+        residents,
+    };
+    if let Some(new) = roster.grow(&tables, crate::clock::now().day_number, seed.0) {
+        bevy::prelude::info!("{} moved in", new.name);
+    }
+    commands.insert_resource(roster);
+}
+
+pub struct RosterPlugin;
+
+impl bevy::prelude::Plugin for RosterPlugin {
+    fn build(&self, app: &mut bevy::prelude::App) {
+        use bevy::prelude::IntoScheduleConfigs;
+        app.add_systems(
+            bevy::prelude::Startup,
+            init_roster
+                .after(crate::game_disc::start_disc_load)
+                .before(crate::town::generate_town),
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -145,6 +352,61 @@ mod tests {
         assert_eq!(looks, vec![0, 1, 2, 3, 4, 5]);
         assert!(picked.iter().all(|e| e.index % 2 == 0), "starters only");
         assert_eq!(t.starters(42), picked, "same seed, same town");
+    }
+
+    fn town(t: &VillagerTables) -> TownRoster {
+        let residents = t.starters(7);
+        TownRoster {
+            appeared: residents.iter().map(|r| r.index).collect(),
+            residents,
+            ..TownRoster::default()
+        }
+    }
+
+    #[test]
+    fn nobody_moves_in_until_everyone_is_met() {
+        let t = tables();
+        let mut r = town(&t);
+        assert!(
+            r.grow(&t, 100, 1).is_none(),
+            "first check only starts the clock"
+        );
+        for day in 101..200 {
+            assert!(r.grow(&t, day, 1).is_none());
+        }
+        assert_eq!(r.residents.len(), PERSONALITIES);
+    }
+
+    #[test]
+    fn a_new_villager_moves_in_once_a_day() {
+        let t = tables();
+        let mut r = town(&t);
+        r.met = r.residents.iter().map(|e| e.index).collect();
+        r.last_grow_day = Some(100);
+        assert!(r.grow(&t, 100, 1).is_none(), "same day");
+        let new = (101..200)
+            .find_map(|day| r.grow(&t, day, 1))
+            .expect("someone moves in");
+        assert_eq!(r.residents.len(), PERSONALITIES + 1);
+        assert!(r.appeared.contains(&new.index));
+        assert_eq!(
+            t.grow[new.index as usize], GROW_STARTER,
+            "only villagers allowed to move in"
+        );
+        let first: Vec<u32> = t.starters(7).iter().map(|e| e.index).collect();
+        assert!(
+            !first.contains(&new.index),
+            "not someone already living here"
+        );
+    }
+
+    #[test]
+    fn home_order_is_stable() {
+        let a = home_spot_order(10, 5);
+        assert_eq!(a, home_spot_order(10, 5));
+        let mut sorted = a.clone();
+        sorted.sort_unstable();
+        assert_eq!(sorted, (0..10).collect::<Vec<_>>());
     }
 
     #[test]

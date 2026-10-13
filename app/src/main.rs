@@ -87,6 +87,7 @@ fn main() {
         .add_plugins(environment::EnvironmentPlugin)
         .add_plugins(character::CharacterPlugin)
         .add_plugins(face::FacePlugin)
+        .add_plugins(roster::RosterPlugin)
         .add_systems(Startup, setup_light)
         .run();
 }

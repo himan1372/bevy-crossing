@@ -548,7 +548,13 @@ fn cell_for_item(item: u16) -> Option<CellKind> {
 /// Builds the retail town from the disc for the plan seed: the layout,
 /// the walkable ground, and the plan trees/rocks/flowers from each acre
 /// object layout (resident homes from the plan are kept).
-pub fn build_retail_town(disc: &GameDisc, plan: &mut TownPlan) -> (RetailLayout, GroundMap) {
+/// `residents`: how many villagers live here (their homes go on the
+/// layout's reserved spots); `None` keeps the plan's own homes.
+pub fn build_retail_town(
+    disc: &GameDisc,
+    plan: &mut TownPlan,
+    residents: Option<usize>,
+) -> (RetailLayout, GroundMap) {
     let combos = read_combos(&disc.rom, &disc.catalog);
     let bg_lists = read_bg_lists(&disc.rom, &disc.catalog);
     let fg = read_fg_layouts(&disc.fgdata);
@@ -627,7 +633,16 @@ pub fn build_retail_town(disc: &GameDisc, plan: &mut TownPlan) -> (RetailLayout,
         }
     }
     let buildings = place_buildings(disc, &structures);
+    // `mNT_IS_RESERVE`: SIGN00-SIGN20 mark where villager homes can go.
+    let reserved: Vec<(usize, usize, usize, usize)> = structures
+        .iter()
+        .filter(|s| (SIGN00..=SIGN20).contains(&s.0))
+        .map(|&(_, ax, az, cx, cz)| (ax, az, cx, cz))
+        .collect();
     resite_homes(plan, &player_homes, &ground);
+    if let Some(count) = residents.filter(|_| !reserved.is_empty()) {
+        place_homes_on_reserved(plan, &reserved, count);
+    }
     (
         RetailLayout {
             field,
@@ -878,6 +893,41 @@ fn resite_homes(
             None => warn!("no room for resident home {i} in acre ({ax},{az})"),
         }
     }
+}
+
+/// `SIGN00` / `SIGN20`: reserved villager home spots in the layouts.
+const SIGN00: u16 = 0x5810;
+const SIGN20: u16 = 0x5824;
+
+/// `mNpc_SetNpcHome`: resident `i` lives on reserved spot `order[i]`, the
+/// house centred on the spot's cell with its signboard down and left.
+fn place_homes_on_reserved(
+    plan: &mut TownPlan,
+    reserved: &[(usize, usize, usize, usize)],
+    count: usize,
+) {
+    // Clear the plan's homes; the reserved spots replace them.
+    for acre in plan.acres.iter_mut() {
+        let homes: Vec<usize> = (0..256)
+            .filter(|&c| acre.cells[c] == CellKind::House as u8)
+            .collect();
+        for c in homes {
+            clear_home(acre, c % 16, c / 16);
+        }
+    }
+    let order = crate::roster::home_spot_order(reserved.len(), plan.seed);
+    let count = count.min(reserved.len()).min(plan.house_acres.len());
+    for (i, &spot) in order.iter().take(count).enumerate() {
+        let (ax, az, cx, cz) = reserved[spot];
+        if !(1..15).contains(&cx) || !(1..15).contains(&cz) {
+            continue;
+        }
+        let a = az * ACRE_WIDTH + ax;
+        stamp_home(&mut plan.acres[a], cx, cz);
+        plan.house_acres[i] = a as u8;
+        plan.house_units[i] = (cz * 16 + cx) as u16;
+    }
+    plan.villager_count = count as u8;
 }
 
 fn build_disc_town(

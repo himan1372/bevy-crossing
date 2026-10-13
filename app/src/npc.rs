@@ -23,7 +23,6 @@ use rustimal_logic::movement::{
 };
 use rustimal_logic::npc::Personality;
 
-use crate::game_disc::GameDisc;
 use rustimal_logic::npc_ai::{self, sched, WanderAct};
 use rustimal_logic::player_move;
 use rustimal_logic::town_gen::{CellKind, ACRE_DEPTH, ACRE_WIDTH};
@@ -244,11 +243,10 @@ const LOOKS_COLOURS: [(f32, f32, f32); 6] = [
 
 /// Who lives in town: the disc's starting villagers for this town seed,
 /// or the built-in four without a disc.
-fn town_villagers(disc: Option<&GameDisc>, seed: u32) -> Vec<(&'static str, u8, Option<u32>)> {
-    let picked = disc
-        .and_then(crate::roster::VillagerTables::from_disc)
-        .map(|t| t.starters(seed))
-        .unwrap_or_default();
+fn town_villagers(
+    roster: Option<&crate::roster::TownRoster>,
+) -> Vec<(&'static str, u8, Option<u32>)> {
+    let picked = roster.map(|r| r.residents.clone()).unwrap_or_default();
     if picked.is_empty() {
         return VILLAGERS
             .iter()
@@ -268,14 +266,22 @@ fn spawn_villagers(
     mut materials: ResMut<Assets<StandardMaterial>>,
     town: Res<Town>,
     player_house: Option<Res<crate::house::PlayerHouse>>,
-    disc: Option<Res<GameDisc>>,
-    seed: Res<crate::town::TownSeed>,
+    roster: Option<Res<crate::roster::TownRoster>>,
 ) {
     commands.insert_resource(WanderRng(0x9E3779B97F4A7C15));
-    let houses = villager_house_centres(&town, player_house.map(|h| h.door_pos));
+    let houses = match roster {
+        // Resident i lives in home i (`plan.house_*`).
+        Some(_) => (0..town.plan.villager_count as usize)
+            .map(|i| {
+                let a = town.plan.house_acres[i] as usize;
+                let u = town.plan.house_units[i] as usize;
+                Town::cell_to_world(a % ACRE_WIDTH, a / ACRE_WIDTH, u % 16, u / 16)
+            })
+            .collect(),
+        None => villager_house_centres(&town, player_house.map(|h| h.door_pos)),
+    };
 
-    for (i, (name, looks, npc_index)) in town_villagers(disc.as_deref(), seed.0).iter().enumerate()
-    {
+    for (i, (name, looks, npc_index)) in town_villagers(roster.as_deref()).iter().enumerate() {
         let (r, g, b) = LOOKS_COLOURS[*looks as usize % LOOKS_COLOURS.len()];
         let personality = Personality::from_looks(*looks).unwrap_or(Personality::Girl);
         // Door just in front of the house's south face; home a step further out.
