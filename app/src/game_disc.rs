@@ -33,6 +33,8 @@ pub struct GameDisc {
     /// `npc_name_str_table.bin` from `forest_2nd.arc`: 8 characters per
     /// villager, by NPC index.
     pub npc_names: Arc<[u8]>,
+    /// Dialogue, strings and choice labels (`crate::messages`).
+    pub text: Option<Arc<crate::messages::GameText>>,
 }
 
 /// Why there is no [`GameDisc`], for the on-screen notice.
@@ -70,6 +72,10 @@ fn load(path: PathBuf) -> Result<GameDisc, String> {
             .ok_or_else(|| fail(&"no fgdata.bin in forest_1st.arc"))?
             .to_vec(),
     );
+    let text = crate::messages::GameText::read(&mut disc, &rom, &catalog).map(Arc::new);
+    if text.is_none() {
+        warn!("the disc's message text could not be read");
+    }
     let bank = |name: &str| -> Arc<[u8]> { arc.file(name).unwrap_or_default().into() };
     let npc_names: Arc<[u8]> = disc
         .read_file("forest_2nd.arc")
@@ -86,6 +92,7 @@ fn load(path: PathBuf) -> Result<GameDisc, String> {
         player_cloth: bank("tex_boy.bin"),
         player_cloth_palettes: bank("pallet_boy.bin"),
         npc_names,
+        text,
     })
 }
 

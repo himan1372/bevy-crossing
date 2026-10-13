@@ -20,6 +20,7 @@ mod interaction;
 mod items;
 mod locomotion;
 mod mail;
+mod messages;
 mod model_view;
 mod n64_material;
 mod npc;

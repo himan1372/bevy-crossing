@@ -176,6 +176,7 @@ fn on_talk(
     mut box_query: Query<&mut Visibility, With<DialogueBox>>,
     mut text_query: Query<&mut Text, With<DialogueText>>,
     mut roster: Option<ResMut<crate::roster::TownRoster>>,
+    disc: Option<Res<crate::game_disc::GameDisc>>,
 ) {
     for event in events.read() {
         if quest_claim.0 == Some(event.villager) {
@@ -250,13 +251,25 @@ fn on_talk(
                 }
                 _ => None,
             };
-            lines.push(say(talk::greeting(looks, rng.below(2) as usize)));
-            lines.push(say(&talk::lines(
-                topic,
-                &ctx,
-                item.as_deref(),
-                rng.below(2) as usize,
-            )));
+            // The game's own words for this message, when the disc has them.
+            let disc_pages = disc.as_deref().and_then(|d| {
+                let text = d.text.as_ref()?;
+                let msg = disc_message_context(d, villager, item.as_deref(), &now);
+                let pages = text.pages(msg_no as usize, &msg, &mut |n| rng.below(n));
+                (!pages.is_empty()).then_some(pages)
+            });
+            match disc_pages {
+                Some(pages) => lines.extend(pages.iter().map(|p| say(p))),
+                None => {
+                    lines.push(say(talk::greeting(looks, rng.below(2) as usize)));
+                    lines.push(say(&talk::lines(
+                        topic,
+                        &ctx,
+                        item.as_deref(),
+                        rng.below(2) as usize,
+                    )));
+                }
+            }
             if topic == Topic::Gift {
                 lines.push(format!(
                     "(You got the {}!)",
@@ -303,6 +316,50 @@ fn on_talk(
         }
     }
 }
+
+/// What the game fills into a villager's message: names, their
+/// catchphrase (`npc_def_list[id].catchphrase_str_idx` in the string bank),
+/// the topic's item, and the date and time.
+fn disc_message_context(
+    disc: &crate::game_disc::GameDisc,
+    villager: &Villager,
+    item: Option<&str>,
+    now: &crate::clock::Now,
+) -> crate::messages::MsgContext {
+    /// `mNpc_Default_Data_c`: cloth u16, catchphrase string u16, umbrella.
+    const DEFAULT_SIZE: u32 = 6;
+    let tail = villager
+        .npc_index
+        .and_then(|i| {
+            let list = disc.catalog.get("npc_def_list")?;
+            let b = disc
+                .rom
+                .slice(disc::RomSource::Rel, list.offset + i * DEFAULT_SIZE + 2, 2)?;
+            disc.text
+                .as_ref()?
+                .string(u16::from_be_bytes([b[0], b[1]]) as usize)
+        })
+        .unwrap_or_default();
+    let item = item.unwrap_or_default().to_string();
+    crate::messages::MsgContext {
+        player_name: PLAYER_NAME.to_string(),
+        talk_name: villager.name.to_string(),
+        tail,
+        // Which slot a message reads depends on the message; the topic's
+        // item is the only thing we fill in, so offer it everywhere.
+        free: vec![item.clone(); 20],
+        items: vec![item; 5],
+        year: chrono::Datelike::year(&chrono::Local::now()) as u16,
+        month: now.month,
+        weekday: now.weekday,
+        day: now.day,
+        hour: now.hour,
+        minute: now.minute,
+    }
+}
+
+/// The player's name until the game asks for one (the train ride).
+const PLAYER_NAME: &str = "Player";
 
 /// Build a trade offer for a trade topic: the item they want is picked
 /// uniformly among your eligible carried items
