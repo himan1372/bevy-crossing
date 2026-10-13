@@ -22,14 +22,15 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::character::PlayerLook;
+use crate::field_items::FieldItems;
 use crate::house::{HouseState, ReturnPosition};
 use crate::input::{Action, Actions, InputFocus};
-use crate::interaction::{spawn_ground_item, GroundItem, PlayerInventory, ITEM_SPOTS};
+use crate::interaction::PlayerInventory;
 use crate::items;
 use crate::mail::Mailbox;
 use crate::player::Player;
 use crate::states::GameplaySet;
-use crate::town::{Town, TownSeed};
+use crate::town::TownSeed;
 
 const SAVE_FILE_NAME: &str = "savegame.json";
 const SAVE_VERSION: u32 = 1;
@@ -58,8 +59,13 @@ pub struct SaveData {
     #[serde(default)]
     pub bugs: u32,
     pub playtime_secs: f64,
-    /// Indices into `ITEM_SPOTS` that had been picked up when saving.
+    /// Legacy stand-in ground items picked up; read and ignored.
+    #[serde(default)]
     pub picked_items: Vec<usize>,
+    /// Town field items that differ from the new town's, as
+    /// [acre, cell, item] (`crate::field_items`; added later).
+    #[serde(default)]
+    pub field_items: Option<Vec<[u16; 3]>>,
     /// Received letters (added later; defaults to empty for old saves).
     #[serde(default)]
     pub letters: Vec<crate::mail::Letter>,
@@ -305,7 +311,7 @@ fn apply_loaded_quest(loaded: Res<LoadedSave>, mut quest: ResMut<crate::quest::Q
 /// spot they entered from (interior coordinates are meaningless on load).
 fn collect_save(
     player: &Query<&Transform, With<Player>>,
-    items: &Query<&GroundItem>,
+    field: Option<&FieldItems>,
     inventory: &PlayerInventory,
     playtime: &Playtime,
     seed: &TownSeed,
@@ -331,10 +337,6 @@ fn collect_save(
             .map(|t| t.translation.to_array())
             .unwrap_or([0.0, 1.0, 0.0])
     };
-    let remaining: Vec<usize> = items.iter().map(|i| i.index).collect();
-    let picked_items: Vec<usize> = (0..ITEM_SPOTS.len())
-        .filter(|i| !remaining.contains(i))
-        .collect();
     SaveData {
         version: SAVE_VERSION,
         town_seed: seed.0,
@@ -346,7 +348,8 @@ fn collect_save(
         fish: 0,
         bugs: 0,
         playtime_secs: playtime.secs,
-        picked_items,
+        picked_items: Vec::new(),
+        field_items: field.map(FieldItems::changes),
         letters: mailbox.letters.clone(),
         sent_letters: mailbox.sent.clone(),
         shop_stock: shop.stock.clone(),
@@ -424,7 +427,7 @@ fn quick_save(
     // One tuple param: these systems are at Bevy's 16-parameter limit.
     (actions, focus): (Res<Actions>, Res<InputFocus>),
     player: Query<&Transform, With<Player>>,
-    items: Query<&GroundItem>,
+    field: Option<Res<FieldItems>>,
     inventory: Res<PlayerInventory>,
     playtime: Res<Playtime>,
     seed: Res<TownSeed>,
@@ -445,7 +448,7 @@ fn quick_save(
     }
     let mut save = collect_save(
         &player,
-        &items,
+        field.as_deref(),
         &inventory,
         &playtime,
         &seed,
@@ -479,12 +482,8 @@ fn quick_save(
 fn quick_load(
     // One tuple param: these systems are at Bevy's 16-parameter limit.
     (actions, focus): (Res<Actions>, Res<InputFocus>),
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    town: Res<Town>,
     mut player_query: Query<&mut Transform, With<Player>>,
-    items_query: Query<Entity, With<GroundItem>>,
+    field: Option<ResMut<FieldItems>>,
     mut inventory: ResMut<PlayerInventory>,
     mut playtime: ResMut<Playtime>,
     mut mailbox: ResMut<Mailbox>,
@@ -521,25 +520,8 @@ fn quick_load(
         println!("Quest restored from save");
     }
 
-    for entity in items_query.iter() {
-        commands.entity(entity).despawn();
-    }
-    for (index, (kind, x, z)) in ITEM_SPOTS.iter().enumerate() {
-        if save.picked_items.contains(&index) {
-            continue;
-        }
-        let pos = Vec3::new(*x, 0.3, *z);
-        if !town.is_walkable(Vec3::new(*x, 0.0, *z)) {
-            continue;
-        }
-        spawn_ground_item(
-            &mut commands,
-            &mut meshes,
-            &mut materials,
-            index,
-            *kind,
-            pos,
-        );
+    if let Some(mut field) = field {
+        field.restore(save.field_items.as_deref().unwrap_or_default());
     }
 
     println!("Loaded save (seed {})", save.town_seed);

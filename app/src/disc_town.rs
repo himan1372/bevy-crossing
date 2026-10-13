@@ -193,7 +193,7 @@ fn read_bg_lists(rom: &RomImage, catalog: &AssetCatalog) -> HashMap<u16, BgEntry
 }
 
 /// Deterministic `RANDOM(max)` for a town seed.
-fn seeded_rng(seed: u32) -> impl FnMut(i32) -> i32 {
+pub(crate) fn seeded_rng(seed: u32) -> impl FnMut(i32) -> i32 {
     let mut s = seed ^ 0x5EED_ACAC;
     move |max| {
         s = s.wrapping_mul(1_103_515_245).wrapping_add(12_345);
@@ -258,6 +258,9 @@ pub struct RetailLayout {
     pub player_homes: [Option<(usize, usize, usize, usize)>; 4],
     /// Shop, post office, police box, museum and tailor, as placed.
     pub buildings: Vec<RetailBuilding>,
+    /// Each playable acre's field items (`mActor_name_t`, row by row),
+    /// from its layout; objects the plan moved aside are emptied.
+    pub items: Vec<[u16; 256]>,
 }
 
 /// A public building from the layout, placed like its actor does.
@@ -533,7 +536,7 @@ fn read_fg_layouts(fgdata: &[u8]) -> HashMap<u16, [u16; 256]> {
 }
 
 /// What a retail object id becomes in the town plan (`m_name_table.h`).
-fn cell_for_item(item: u16) -> Option<CellKind> {
+pub(crate) fn cell_for_item(item: u16) -> Option<CellKind> {
     const ENV_START: u16 = 0x0800;
     match item {
         // Pansy/cosmos/tulip leaves and flowers (ENV_START + 60..=77).
@@ -643,6 +646,24 @@ pub fn build_retail_town(
     if let Some(count) = residents.filter(|_| !reserved.is_empty()) {
         place_homes_on_reserved(plan, &reserved, count);
     }
+    let mut field_items = Vec::with_capacity(ACRE_WIDTH * ACRE_DEPTH);
+    for az in 0..ACRE_DEPTH {
+        for ax in 0..ACRE_WIDTH {
+            let block = (az + 1) * BLOCK_X_NUM + ax + 1;
+            let mut items = combos
+                .get(field.combi[block].combi as usize)
+                .and_then(|c| fg.get(&c.fg_id))
+                .copied()
+                .unwrap_or([0; 256]);
+            let cells = &plan.acres[az * ACRE_WIDTH + ax].cells;
+            for (item, &cell) in items.iter_mut().zip(cells.iter()) {
+                if cell_for_item(*item).is_some_and(|k| k as u8 != cell) {
+                    *item = 0;
+                }
+            }
+            field_items.push(items);
+        }
+    }
     (
         RetailLayout {
             field,
@@ -650,6 +671,7 @@ pub fn build_retail_town(
             rocks,
             player_homes,
             buildings,
+            items: field_items,
         },
         ground,
     )
@@ -930,7 +952,7 @@ fn place_homes_on_reserved(
     plan.villager_count = count as u8;
 }
 
-fn build_disc_town(
+pub(crate) fn build_disc_town(
     mut commands: Commands,
     disc: Res<GameDisc>,
     town: Res<Town>,
@@ -1133,7 +1155,7 @@ fn spawn_disc_trees(
 
 /// Meshes and materials for a disc model made of `lists` (each a display
 /// list REL offset, run in order with shared state).
-fn build_model(
+pub(crate) fn build_model(
     disc: &GameDisc,
     lists: &[u32],
     palette: Option<u32>,

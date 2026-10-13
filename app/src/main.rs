@@ -12,6 +12,7 @@ mod disc_town;
 mod ecology;
 mod environment;
 mod face;
+mod field_items;
 mod furniture;
 mod game_disc;
 mod goods;
@@ -87,6 +88,7 @@ fn main() {
         .add_plugins(MailPlugin)
         .add_plugins(ShopPlugin)
         .add_plugins(shop_display::ShopDisplayPlugin)
+        .add_plugins(field_items::FieldItemsPlugin)
         .add_plugins(QuestPlugin)
         .add_plugins(PocketsPlugin)
         .add_plugins(ClockPlugin)

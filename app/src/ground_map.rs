@@ -194,6 +194,13 @@ impl GroundMap {
         )
     }
 
+    /// Collision attribute of unit `ut` (row by row) of block (bx, bz).
+    pub fn unit_attribute(&self, bx: usize, bz: usize, ut: usize) -> u8 {
+        self.units
+            .get((bz * BLOCK_X_NUM + bx) * 256 + ut)
+            .map_or(0, |u| u.attribute)
+    }
+
     /// Scene y offset that lifts an acre model to its tier.
     pub fn tier_offset(tier: u8) -> f32 {
         tier as f32 * TIER_HEIGHT / UNIT * CELL_SIZE
