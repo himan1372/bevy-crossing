@@ -66,7 +66,18 @@ use town::TownPlugin;
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                // BEVY_CROSSING_NO_VSYNC=1 measures the real frame cost.
+                present_mode: if std::env::var_os("BEVY_CROSSING_NO_VSYNC").is_some() {
+                    bevy::window::PresentMode::AutoNoVsync
+                } else {
+                    bevy::window::PresentMode::AutoVsync
+                },
+                ..default()
+            }),
+            ..default()
+        }))
         .add_plugins(RemotePluginGate)
         // Foundations first: states, input, and the asset gate.
         .add_plugins((

@@ -7,5 +7,8 @@ resolver = "2"
 [profile.dev]
 debug = "line-tables-only"
 
+# Dependencies (Bevy, wgpu) optimised: unoptimised they held the dev
+# build just under 60 fps; our own crates stay quick to rebuild.
 [profile.dev.package."*"]
 debug = false
+opt-level = 3

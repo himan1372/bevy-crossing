@@ -102,7 +102,7 @@ Each milestone ends with a Philip playtest.
 - [x] **player-from-disc** — done (claude, `app/src/character.rs`: cKF_bs_r_boy_1 with wait/walk/run, face and shirt from forest_1st.arc). Was: player model with idle / walk / run animations matched to the speed from `logic::player_move`. [blocked: skeletal-animation]
 - [x] **villagers-from-disc** — done (claude: npc_draw_data_tbl models, shared npc animations, blinking/talking, greeting). Was: villager models and animations per species/villager. [blocked: skeletal-animation]
 - [ ] **render-look** — camera angle and follow, and lighting (no curved horizon: that is Wild World, not GameCube), matched to the original. Compare against Philip playing his own copy of the real game, not ripped screenshots kept in the repo. [blocked: town-from-disc]
-- [ ] **render-perf** — batching/instancing, 60 fps in a release build. [blocked: town-from-disc, world-objects-from-disc]
+- [x] **render-perf** — done (claude, 2026-10-13): measured with vsync off (`BEVY_CROSSING_NO_VSYNC=1`), 1,704 meshes: release ~300 fps (3.3 ms), dev ~260 fps (3.8 ms) after optimising dependencies in dev (was 57 fps). Shared mesh/material handles already batch automatically; no instancing needed yet. Was: batching/instancing, 60 fps in a release build. [blocked: town-from-disc, world-objects-from-disc]
 
 ### M4 — UI, audio, feel
 - [ ] **ui-from-disc** — research: fonts, dialogue window and HUD textures from the disc. Fall back to our own open-licence UI when there's no disc.
