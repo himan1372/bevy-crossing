@@ -85,6 +85,7 @@ pub mod op {
     pub const G_SPNOOP: u8 = 0xE0;
     pub const G_SETOTHERMODE_L: u8 = 0xE2;
     pub const G_SETOTHERMODE_H: u8 = 0xE3;
+    pub const G_RDPSETOTHERMODE: u8 = 0xEF;
     pub const G_TEXRECT: u8 = 0xE4;
     pub const G_TEXRECTFLIP: u8 = 0xE5;
     pub const G_RDPLOADSYNC: u8 = 0xE6;

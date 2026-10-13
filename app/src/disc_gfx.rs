@@ -208,6 +208,9 @@ pub struct PartKey {
     pub lit: bool,
     /// Two-cycle combiner (`G_CYC_2CYCLE`).
     pub two_cycle: bool,
+    /// Fogged: `G_FOG` on and the blender mixes in the fog colour
+    /// (emu64 turns GX fog on only then).
+    pub fog: bool,
 }
 
 /// Triangles sharing one [`PartKey`].
@@ -299,6 +302,7 @@ impl GxBackend for TriangleSink {
             env: rgba(state.env_color),
             lit: state.geometry_mode & geo::G_LIGHTING != 0,
             two_cycle: state.othermode.is_2cycle(),
+            fog: state.geometry_mode & geo::G_FOG != 0 && state.othermode.blends_fog(),
         });
     }
 
@@ -336,6 +340,10 @@ const SETUP_GEOMETRY_MODE: u32 = geo::G_ZBUFFER
     | geo::G_FOG
     | geo::G_LIGHTING
     | geo::G_SHADING_SMOOTH;
+
+/// The setup list's `gsDPSetOtherMode`: high = G_TC_FILT | G_TF_BILERP |
+/// G_TP_PERSP | G_CYC_2CYCLE, low = G_RM_FOG_SHADE_A | G_RM_AA_ZB_OPA_SURF2.
+const SETUP_OTHERMODE: (u32, u32) = (0x0018_2C00, 0xC811_2078);
 
 /// G_SETCOMBINE words (low 24 bits of w0, w1) for TEXEL0 * SHADE (alpha
 /// TEXEL0), then COMBINED * PRIMITIVE (alpha too).
@@ -437,6 +445,8 @@ fn run_lists_full(
     // combiner G_CC_MODULATEIDECALA then G_CC_MODULATEIA_PRIM2. Lists that
     // don't set their own mode (e.g. trees) inherit it.
     emu.state.geometry_mode = SETUP_GEOMETRY_MODE;
+    emu.state.othermode.hi = SETUP_OTHERMODE.0;
+    emu.state.othermode.lo = SETUP_OTHERMODE.1;
     emu.state.combine_l = SETUP_COMBINE.0;
     emu.state.combine_h = SETUP_COMBINE.1;
     for &(slot, addr) in tluts {

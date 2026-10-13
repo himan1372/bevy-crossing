@@ -57,9 +57,29 @@ pub struct Othermode {
 }
 
 impl Othermode {
-    /// `G_CYC_2CYCLE` set in othermode high: two-cycle combiner.
+    /// Cycle type (`G_MDSFT_CYCLETYPE`, bits 20-21) is `G_CYC_2CYCLE`.
     pub fn is_2cycle(self) -> bool {
-        self.hi & 0x0030_0000 == 0x0030_0000 // G_CYC_2CYCLE
+        (self.hi >> 20) & 3 == 1
+    }
+
+    /// The blender's first-cycle P input is the fog colour
+    /// (`G_BL_CLR_FOG` in bits 30-31), e.g. `G_RM_FOG_SHADE_A`: with
+    /// `G_FOG` on, emu64 turns GX fog on for these (`emu64.c`).
+    pub fn blends_fog(self) -> bool {
+        self.lo >> 30 == 3
+    }
+
+    /// `gsSPSetOtherMode`: replace `len` bits from `shift` with `data`,
+    /// as emu64's `dl_G_SETOTHERMODE_L/H` do (`data | (old & ~mask)`).
+    pub fn merge(old: u32, w0: u32, data: u32) -> u32 {
+        let len = (w0 & 0xFF) + 1;
+        let shift = 32u32.saturating_sub(((w0 >> 8) & 0xFF) + len);
+        let mask = if len >= 32 {
+            u32::MAX
+        } else {
+            ((1u32 << len) - 1) << shift
+        };
+        data | (old & !mask)
     }
 }
 

@@ -169,6 +169,14 @@ pub struct ClockPlugin;
 
 impl Plugin for ClockPlugin {
     fn build(&self, app: &mut App) {
+        // BEVY_CROSSING_HOUR_OFFSET=N starts with N debug hours (as if F6
+        // had been pressed N times), for side-by-side checks.
+        if let Some(hours) = std::env::var("BEVY_CROSSING_HOUR_OFFSET")
+            .ok()
+            .and_then(|v| v.parse::<i32>().ok())
+        {
+            DEBUG_HOUR_OFFSET.store(hours.rem_euclid(24), Ordering::Relaxed);
+        }
         app.add_systems(Startup, setup_clock_ui).add_systems(
             Update,
             (debug_advance_hour, update_clock_text)

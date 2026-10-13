@@ -307,12 +307,22 @@ impl Emu64 {
                 *pc += 1;
             }
             op::G_SETOTHERMODE_H => {
-                self.state.othermode.hi = gfx.w1;
+                let hi = self.state.othermode.hi;
+                self.state.othermode.hi = super::state::Othermode::merge(hi, gfx.w0, gfx.w1);
                 self.state.dirty.mark(Dirty::OthermodeH);
                 *pc += 1;
             }
             op::G_SETOTHERMODE_L => {
+                let lo = self.state.othermode.lo;
+                self.state.othermode.lo = super::state::Othermode::merge(lo, gfx.w0, gfx.w1);
+                self.state.dirty.mark(Dirty::OthermodeL);
+                *pc += 1;
+            }
+            op::G_RDPSETOTHERMODE => {
+                // gsDPSetOtherMode: high word in w0's low 24 bits, low in w1.
+                self.state.othermode.hi = gfx.w0 & 0x00FF_FFFF;
                 self.state.othermode.lo = gfx.w1;
+                self.state.dirty.mark(Dirty::OthermodeH);
                 self.state.dirty.mark(Dirty::OthermodeL);
                 *pc += 1;
             }
@@ -880,6 +890,35 @@ mod tests {
             ((opcode as u32) << 24) | ((param as u32) << 16) | (len as u32),
             addr,
         )
+    }
+
+    #[test]
+    fn othermode_commands_set_only_their_bits() {
+        let mut emu = Emu64::new();
+        let mut be = TestBackend {
+            tris: 0,
+            gxdl: 0,
+            texrects: 0,
+        };
+        let mut lists = HashMap::new();
+        lists.insert(
+            0x1000,
+            vec![
+                // gsDPSetOtherMode(G_CYC_2CYCLE | ..., G_RM_FOG_SHADE_A | ...)
+                Gfx::new(0xEF18_2C00, 0xC811_2078),
+                // gsDPSetAlphaCompare(G_AC_THRESHOLD): shift 0, len 2.
+                Gfx::new(0xE200_1E01, 0x0000_0001),
+                // gsDPSetCycleType(G_CYC_1CYCLE): shift 20, len 2.
+                Gfx::new(0xE300_0A01, 0x0000_0000),
+                gfx(op::G_ENDDL, 0, 0, 0),
+            ],
+        );
+        emu.taskstart(&TestMem, &mut be, &lists, 0x1000);
+        let m = emu.state.othermode;
+        assert_eq!(m.lo, 0xC811_2079, "render mode kept, alpha compare set");
+        assert!(m.blends_fog());
+        assert!(!m.is_2cycle());
+        assert_eq!(m.hi, 0x0008_2C00, "only the cycle type cleared");
     }
 
     #[test]

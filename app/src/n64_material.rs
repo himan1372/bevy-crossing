@@ -37,6 +37,8 @@ pub const FLAG_NO_COMBINER: u32 = 8;
 pub const FLAG_NO_SHADE: u32 = 16;
 /// Alpha-blended: keep translucent pixels instead of a 0.5 cutoff.
 pub const FLAG_BLEND: u32 = 32;
+/// The part is fogged (see `PartKey::fog`).
+pub const FLAG_FOG: u32 = 64;
 
 /// Mux selectors for one cycle: colour a b c d, alpha a b c d.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -103,6 +105,9 @@ impl CombinerUniform {
         }
         if blend {
             flags |= FLAG_BLEND;
+        }
+        if key.fog {
+            flags |= FLAG_FOG;
         }
         Self {
             color0: UVec4::from(c0.color),

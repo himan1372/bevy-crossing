@@ -121,9 +121,28 @@ impl BaseLight {
             moon_dir: d(self.moon_dir),
             moon_color: c(self.moon_color),
             fog_color: c(self.fog_color),
-            fog: Vec4::new(self.fog_near.min(996.0), self.fog_far.min(1600.0), 1.0, 0.0),
+            fog: {
+                let (start, end) = gx_fog_range(self.fog_near.min(996.0), self.fog_far.min(1600.0));
+                Vec4::new(start, end, 1.0, 0.0)
+            },
         }
     }
+}
+
+/// The town camera's near and far planes (`m_camera2.c`), game units.
+const CAMERA_NEAR: f32 = 200.0;
+const CAMERA_FAR: f32 = 1600.0;
+
+/// emu64's fog range (`emu64.c`, fog dirty flag): gSPFogPosition's
+/// min/max become eye depths through the GX perspective matrix
+/// (`guMtxXFM1F_dol3`: `-m23 / (z + m22)`), min at (min - 1000) / 1064
+/// and max at (max - 1000) / 1016, for GX_FOG_PERSP_LIN.
+fn gx_fog_range(min: f32, max: f32) -> (f32, f32) {
+    let (n, f) = (CAMERA_NEAR, CAMERA_FAR);
+    let m22 = -n / (f - n);
+    let m23 = -f * n / (f - n);
+    let eye = |z: f32| m23 / (z + m22);
+    (eye((min - 1000.0) / 1064.0), eye((max - 1000.0) / 1016.0))
 }
 
 /// The eight light periods of the sunny-weather table.
