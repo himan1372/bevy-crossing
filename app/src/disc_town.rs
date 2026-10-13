@@ -941,10 +941,12 @@ fn build_disc_town(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<N64Material>>,
     mut images: ResMut<Assets<Image>>,
+    roster: Option<Res<crate::roster::TownRoster>>,
 ) {
     let (Some(retail), Some(ground)) = (&town.retail, &town.ground) else {
         return;
     };
+    let house_looks = resident_house_looks(&disc, &town, roster.as_deref());
     let segs = ground_segments(&disc.catalog, chrono::Local::now().month0());
     let bg_lists = read_bg_lists(&disc.rom, &disc.catalog);
     let mut missing = 0;
@@ -1048,6 +1050,7 @@ fn build_disc_town(
         &mut materials,
         &mut images,
         &mut lights,
+        &house_looks,
     );
     commands.insert_resource(lights);
     info!(
@@ -1377,11 +1380,49 @@ fn cell_hash((ax, az, cx, cz): (usize, usize, usize, usize)) -> usize {
 }
 
 /// Which disc model (and palette asset) a placeholder becomes.
+/// House shape (0-4) and roof palette (0-4) by home cell, per resident.
+type HouseLooks = HashMap<(usize, usize, usize, usize), (u8, u8)>;
+
+/// Each resident's house look from `npc_house_list` (type, palette),
+/// keyed by their home cell (resident i lives at plan home i).
+fn resident_house_looks(
+    disc: &GameDisc,
+    town: &Town,
+    roster: Option<&crate::roster::TownRoster>,
+) -> HouseLooks {
+    let mut out = HouseLooks::new();
+    let (Some(roster), Some(list)) = (roster, disc.catalog.get("npc_house_list")) else {
+        return out;
+    };
+    let plan = &town.plan;
+    for (i, resident) in roster
+        .residents
+        .iter()
+        .enumerate()
+        .take(plan.villager_count as usize)
+    {
+        let Some(b) = disc
+            .rom
+            .slice(RomSource::Rel, list.offset + resident.index * 8, 2)
+        else {
+            continue;
+        };
+        let a = plan.house_acres[i] as usize;
+        let u = plan.house_units[i] as usize;
+        out.insert(
+            (a % ACRE_WIDTH, a / ACRE_WIDTH, u % 16, u / 16),
+            (b[0], b[1]),
+        );
+    }
+    out
+}
+
 fn object_model(
     town: &Town,
     kind: CellKind,
     cell: (usize, usize, usize, usize),
     winter: bool,
+    house_looks: &HouseLooks,
 ) -> Option<(String, Vec<&'static str>, Option<String>)> {
     let season = if winter { "w" } else { "s" };
     match kind {
@@ -1397,9 +1438,15 @@ fn object_model(
             ))
         }
         CellKind::House => {
-            let h = cell_hash(cell);
-            let shape = h % 5 + 1;
-            let colour = (b'a' + (h / 5 % 5) as u8) as char;
+            // The resident's own house (`npc_house_list` type / palette, as
+            // `aHUS_actor_ct` picks them); a hash for houses nobody owns.
+            let (shape, colour) = match house_looks.get(&cell) {
+                Some(&(t, p)) => (t as usize % 5 + 1, (b'a' + p % 5) as char),
+                None => {
+                    let h = cell_hash(cell);
+                    (h % 5 + 1, (b'a' + (h / 5 % 5) as u8) as char)
+                }
+            };
             let parts = vec!["t1", "t2", "t3", "t4", "door", "name"];
             Some((
                 format!("obj_{season}_house{shape}"),
@@ -1424,13 +1471,16 @@ fn spawn_disc_objects(
     materials: &mut Assets<N64Material>,
     images: &mut Assets<Image>,
     lights: &mut BuildingLights,
+    house_looks: &HouseLooks,
 ) {
     /// Shared meshes/materials and the yaw that faces the door south.
     type Model = (Vec<(Handle<Mesh>, Handle<N64Material>)>, f32);
     let mut built: HashMap<(String, Option<String>), Model> = HashMap::new();
     let mut count = 0;
     for (entity, obj) in placeholders {
-        let Some((prefix, parts, palette)) = object_model(town, obj.kind, obj.cell, winter) else {
+        let Some((prefix, parts, palette)) =
+            object_model(town, obj.kind, obj.cell, winter, house_looks)
+        else {
             continue;
         };
         let key = (prefix.clone(), palette.clone());
