@@ -530,6 +530,16 @@ mod tests {
                 k.matrix_joints().len()
             );
         }
+        for i in 236..262u32 {
+            let e = tbl + i * 0x6C;
+            println!(
+                "sp {i}: skel {} tex {} scale {:?}",
+                sym(e + 4),
+                sym(e + 8),
+                rom.slice(RomSource::Rel, e + 0x54, 4)
+                    .map(|b| f32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+            );
+        }
         for i in 0..names.len() / 8 {
             let name: String = names[i * 8..i * 8 + 8]
                 .iter()

@@ -419,8 +419,10 @@ fn build_shop_interior(
         ));
     }
 
-    // Tom Nook behind the counter.
+    // Tom Nook behind the counter (his disc model replaces the capsule).
     commands.spawn((
+        Name::new("Tom Nook"),
+        crate::character::NpcModel(crate::character::NOOK),
         Mesh3d(meshes.add(Capsule3d::new(0.4, 1.0))),
         MeshMaterial3d(nook_mat),
         Transform::from_xyz(ox, 1.0, oz - 4.1 * k),

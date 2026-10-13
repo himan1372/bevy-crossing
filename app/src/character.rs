@@ -556,10 +556,16 @@ fn villager_source(disc: &GameDisc, index: u32) -> Option<RigSource> {
     let mut tluts: Vec<(usize, u32)> = ptr(0x0C)
         .map(|p| vec![(TLUT_NPC_BODY, p)])
         .unwrap_or_default();
-    let cloth = disc.catalog.get("npc_def_list").and_then(|d| {
-        let b = rom.slice(RomSource::Rel, d.offset + index * NPC_DEFAULT_SIZE, 2)?;
-        u16::from_be_bytes([b[0], b[1]]).checked_sub(ITM_CLOTH000)
-    });
+    // Only villagers have a default shirt (`npc_def_list` has one entry
+    // per villager); special NPCs wear what their texture shows.
+    let cloth = disc
+        .catalog
+        .get("npc_def_list")
+        .filter(|d| index < d.size / NPC_DEFAULT_SIZE)
+        .and_then(|d| {
+            let b = rom.slice(RomSource::Rel, d.offset + index * NPC_DEFAULT_SIZE, 2)?;
+            u16::from_be_bytes([b[0], b[1]]).checked_sub(ITM_CLOTH000)
+        });
     if let Some(cloth) = cloth.map(usize::from) {
         let tex = disc
             .player_cloth
@@ -599,6 +605,49 @@ fn villager_source(disc: &GameDisc, index: u32) -> Option<RigSource> {
 /// Marks a character whose disc model has been tried.
 #[derive(Component)]
 struct CharacterModelDone;
+
+/// An entity drawn as the `npc_draw_data_tbl` entry at this index
+/// (special NPCs follow the villagers: `ALL_NPC_NUM` + id - `SP_NPC_START`).
+#[derive(Component, Clone, Copy)]
+pub struct NpcModel(pub u32);
+
+/// Tom Nook in the first shop (`SP_NPC_SHOP_MASTER`, `cKF_bs_r_rcn_1`).
+pub const NOOK: u32 = 238 + 8;
+
+/// Gives special NPCs (Nook...) their disc model.
+#[allow(clippy::too_many_arguments)]
+fn spawn_npc_models(
+    mut commands: Commands,
+    disc: Option<Res<GameDisc>>,
+    npcs: Query<(Entity, &NpcModel), Without<CharacterModelDone>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<N64Material>>,
+    mut images: ResMut<Assets<Image>>,
+    mut bindposes: ResMut<Assets<SkinnedMeshInverseBindposes>>,
+) {
+    let Some(disc) = disc else { return };
+    for (entity, npc) in &npcs {
+        commands.entity(entity).insert(CharacterModelDone);
+        let Some(src) = villager_source(&disc, npc.0) else {
+            warn!("no disc model for NPC {}", npc.0);
+            continue;
+        };
+        let assets = (&mut *meshes, &mut *materials, &mut *images, &mut *bindposes);
+        let parts = spawn_rig(
+            &mut commands,
+            &disc.rom,
+            src,
+            entity,
+            format!("npc {} model", npc.0),
+            assets,
+        );
+        if parts > 0 {
+            commands
+                .entity(entity)
+                .remove::<(Mesh3d, MeshMaterial3d<StandardMaterial>)>();
+        }
+    }
+}
 
 /// Gives each villager its disc model, once the disc is loaded.
 #[allow(clippy::too_many_arguments)]
@@ -678,6 +727,7 @@ fn animate_characters(
     time: Res<Time>,
     players: Query<(&Locomotion, &Facing), With<Player>>,
     villagers: Query<(&GlobalTransform, &Villager, Option<&VillagerTalk>)>,
+    npcs: Query<(), With<NpcModel>>,
     mut rigs: Query<(Entity, &ChildOf, &mut CharacterRig)>,
     mut transforms: Query<&mut Transform>,
 ) {
@@ -697,6 +747,8 @@ fn animate_characters(
                 loco.anim_speed()
             };
             play(&mut rig, motion, speed, ticks, &mut transforms);
+        } else if npcs.contains(owner) {
+            play(&mut rig, Motion::Wait, WAIT_SPEED, ticks, &mut transforms);
         } else if let Ok((g, villager, talk)) = villagers.get(owner) {
             let pos = g.translation();
             let moved = rig.last_pos.map_or(0.0, |p| (pos - p).with_y(0.0).length());
@@ -736,6 +788,7 @@ impl Plugin for CharacterPlugin {
             (
                 spawn_player_model,
                 spawn_villager_models,
+                spawn_npc_models,
                 animate_characters,
             )
                 .chain(),
