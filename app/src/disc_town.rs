@@ -1692,9 +1692,10 @@ fn spawn_player_homes(
     let season = if winter { "w" } else { "s" };
     // House size comes from the save (upgrades); everyone starts at size 1.
     let prefix = format!("obj_{season}_myhome1");
-    let parts = [
-        "t1", "t2", "t3", "door", "mark", "fuda", "kazamiA", "kazamiB",
-    ];
+    // `aMHS_actor_draw_before` hides the fish weathervane (kazamiA/B,
+    // joints 3/5) and the insect plaque (fuda, joint 1) until the player
+    // has finished that encyclopedia, which nothing tracks yet.
+    let parts = ["t1", "t2", "t3", "door", "mark"];
     let lists = part_lists(&disc.catalog, &prefix, &parts);
     if lists.is_empty() {
         warn!("player house model not found on the disc");
@@ -1705,7 +1706,35 @@ fn spawn_player_homes(
         .catalog
         .get(&format!("obj_{season}_myhome_a_pal"))
         .map(|a| a.offset);
-    let mut model = build_model(disc, &lists, palette, meshes, materials, images);
+    // The door design (`mark`): segments 9/A hold the default
+    // `obj_myhome_mark_tex_txt` / `_pal` until the player hangs their own.
+    let mut segs = Segments::default();
+    for (seg, name) in [
+        (0x09, "obj_myhome_mark_tex_txt"),
+        (0x0A, "obj_myhome_mark_pal"),
+    ] {
+        if let Some(bytes) = disc
+            .catalog
+            .get(name)
+            .and_then(|a| disc.rom.slice(disc::RomSource::Rel, a.offset, a.size))
+        {
+            segs.set_segment(seg, bytes.into());
+        }
+    }
+    let colors = DrawColors {
+        prim: [255; 4],
+        prim_lod: 255,
+        env: [0; 4],
+    };
+    let mut model = build_model_full(
+        disc,
+        &lists,
+        palette,
+        colors,
+        false,
+        (&segs, &[]),
+        (meshes, materials, images),
+    );
     model.extend(build_windows(
         disc, &prefix, "light", palette, meshes, materials, images, lights,
     ));
@@ -1931,33 +1960,21 @@ mod tests {
         }
     }
 
-    /// Probe (needs the disc): the gyroid skeleton's joints and pose.
+    /// Probe (needs the disc): joints of a skeleton and their lists.
     #[test]
     #[ignore]
-    fn probe_gyroid_pose() {
+    fn probe_skeleton_joints() {
         let path = std::env::var("BEVY_CROSSING_ISO").expect("set BEVY_CROSSING_ISO");
         let disc = crate::game_disc::load(path.into()).unwrap();
-        let a = disc.catalog.get("cKF_bs_r_hnw").unwrap();
+        let name = std::env::var("SKELETON").unwrap_or("cKF_bs_r_obj_s_myhome1".into());
+        let a = disc.catalog.get(&name).unwrap();
         let skel = crate::skeleton::Skeleton::read(&disc.rom, a.offset).unwrap();
-        let anim = disc
-            .catalog
-            .get("cKF_ba_r_hnw_move")
-            .and_then(|a| crate::skeleton::Animation::read(&disc.rom, a.offset, skel.joints.len()));
-        println!("anim read: {}", anim.is_some());
-        let world = skel.world_matrices(anim.as_ref(), 1.0);
         for (j, joint) in skel.joints.iter().enumerate() {
-            let name = joint
+            let list = joint
                 .model
                 .and_then(|m| disc.catalog.containing(disc::RomSource::Rel, m))
                 .map_or("-", |a| a.name);
-            let (s, r, t) = world[j].to_scale_rotation_translation();
-            println!(
-                "{j} {name} t {:?} r {:?} s {:?} local {:?}",
-                t,
-                r.to_euler(EulerRot::XYZ),
-                s,
-                joint.translation
-            );
+            println!("{j} {list}");
         }
     }
 
