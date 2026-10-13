@@ -317,6 +317,57 @@ fn spawn_blend_lists(
     }
 }
 
+/// `mNpc_NpcHouseData_c`: type, palette, wall, floor u8, then two layer
+/// ids (8 bytes, one per villager).
+const HOUSE_DATA_SIZE: u32 = 8;
+
+/// A villager's room (`SCENE_NPC_HOUSE`): the small room shell (villager
+/// houses aren't in `aMR_GetSceneRoomKind`'s table, so kind S) with their
+/// own wallpaper and carpet (`npc_house_list` -> `mNpc_RenewalNpcRoom`).
+/// Their furniture (`fgnpcdata.bin`) waits for the item models.
+pub fn spawn_villager_room(
+    commands: &mut Commands,
+    disc: &GameDisc,
+    npc_index: u32,
+    origin: Vec3,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<N64Material>,
+    images: &mut Assets<Image>,
+) -> bool {
+    let list = |name: &str| disc.catalog.get(name).map(|a| a.offset);
+    let (Some(floor), Some(wall)) = (
+        list("rom_myhome1_floor_model"),
+        list("rom_myhome1_wall_model"),
+    ) else {
+        return false;
+    };
+    let Some(data) = disc.catalog.get("npc_house_list").and_then(|a| {
+        disc.rom.slice(
+            RomSource::Rel,
+            a.offset + npc_index * HOUSE_DATA_SIZE,
+            HOUSE_DATA_SIZE,
+        )
+    }) else {
+        return false;
+    };
+    let (wall_no, floor_no) = (data[2] as usize, data[3] as usize);
+    let assets = (&mut *meshes, &mut *materials, &mut *images);
+    spawn_shell(
+        commands,
+        disc,
+        "villager room",
+        origin,
+        ROOM_CENTRE,
+        &[(floor, false)],
+        &[(wall, false)],
+        &[],
+        floor_no,
+        wall_no,
+        assets,
+    );
+    true
+}
+
 /// Spawns display lists as N64 meshes under `parent`.
 #[allow(clippy::too_many_arguments)]
 fn spawn_lists(

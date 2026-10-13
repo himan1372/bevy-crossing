@@ -73,6 +73,54 @@ struct HouseHudText;
 
 /// Far-away origin where the interior room is built (well clear of the town).
 const INTERIOR_ORIGIN: Vec3 = Vec3::new(3000.0, 0.0, 3000.0);
+/// Villager rooms sit beside the player's, this far apart in x.
+const VILLAGER_ROOM_SPACING: f32 = 100.0;
+
+/// The room the player is in (or last entered): its origin.
+#[derive(Resource, Clone, Copy)]
+struct CurrentRoom(Vec3);
+
+impl Default for CurrentRoom {
+    fn default() -> Self {
+        Self(INTERIOR_ORIGIN)
+    }
+}
+
+/// Villager front doors and the rooms behind them.
+#[derive(Resource, Default)]
+struct VillagerDoors(Vec<(Vec3, Vec3)>);
+
+/// Startup, after the villagers: builds each villager's room and records
+/// their door.
+#[allow(clippy::too_many_arguments)]
+fn build_villager_rooms(
+    mut commands: Commands,
+    disc: Option<Res<crate::game_disc::GameDisc>>,
+    villagers: Query<&crate::npc::Villager>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut n64: ResMut<Assets<crate::n64_material::N64Material>>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    let Some(disc) = disc else { return };
+    let mut doors = Vec::new();
+    for (i, v) in villagers.iter().enumerate() {
+        let Some(idx) = v.npc_index else { continue };
+        let origin = INTERIOR_ORIGIN + Vec3::X * VILLAGER_ROOM_SPACING * (i + 1) as f32;
+        if crate::interior::spawn_villager_room(
+            &mut commands,
+            &disc,
+            idx,
+            origin,
+            &mut meshes,
+            &mut n64,
+            &mut images,
+        ) {
+            doors.push((v.door(), origin));
+        }
+    }
+    info!("{} villager rooms from the disc", doors.len());
+    commands.insert_resource(VillagerDoors(doors));
+}
 /// How far the player may walk from the room center.
 const WALK_HALF: f32 = 3.3;
 const PLAYER_RADIUS: f32 = 0.4;
@@ -364,6 +412,7 @@ fn house_enter(
     mut commands: Commands,
     mut player_query: Query<(&mut Transform, &mut Facing), With<Player>>,
     bounds: Res<RoomBounds>,
+    villager_doors: Res<VillagerDoors>,
 ) {
     if *state != HouseState::Town || *shop_loc != crate::shop::ShopLocation::Town {
         return;
@@ -375,10 +424,33 @@ fn house_enter(
     if *tool != EquippedTool::None {
         return;
     }
-    let Some(house) = house else { return };
     let Ok((mut transform, mut facing)) = player_query.single_mut() else {
         return;
     };
+    // A villager's front door (they face south, `aHUS` rotation 0).
+    let villager_room = villager_doors.0.iter().find_map(|&(door_pos, origin)| {
+        let door = DoorPanel {
+            center_x: door_pos.x,
+            half_w: DOOR_HALF_W,
+            face_z: door_pos.z - 0.5,
+            into_z: -1.0,
+        };
+        door.faced_by(transform.translation, facing.dir, DOOR_RANGE_OUT, DOOR_DOT)
+            .then_some(origin)
+    });
+    if let Some(origin) = villager_room {
+        if !actions.consume(Action::Interact) {
+            return;
+        }
+        commands.insert_resource(ReturnPosition(transform.translation));
+        commands.insert_resource(CurrentRoom(origin));
+        transform.translation = origin + Vec3::new(0.0, 1.0, RoomBounds::disc_room().spawn_z);
+        facing.dir = Vec3::new(0.0, 0.0, -1.0);
+        next_state.set(HouseState::Inside);
+        println!("Entered a villager's house");
+        return;
+    }
+    let Some(house) = house else { return };
     // The door panel on the house's front wall. The panel is south-facing,
     // so check in the door's frame (turned so the door faces south).
     let door = DoorPanel {
@@ -395,6 +467,7 @@ fn house_enter(
         return;
     }
     commands.insert_resource(ReturnPosition(transform.translation));
+    commands.insert_resource(CurrentRoom(INTERIOR_ORIGIN));
     transform.translation = INTERIOR_ORIGIN + Vec3::new(0.0, 1.0, bounds.spawn_z);
     facing.dir = Vec3::new(0.0, 0.0, -1.0);
     next_state.set(HouseState::Inside);
@@ -410,6 +483,7 @@ fn house_exit(
     return_pos: Option<Res<ReturnPosition>>,
     mut player_query: Query<(&mut Transform, &mut Facing), With<Player>>,
     bounds: Res<RoomBounds>,
+    room: Res<CurrentRoom>,
 ) {
     if *state != HouseState::Inside {
         return;
@@ -423,9 +497,9 @@ fn house_exit(
     // The door panel on the inner face of the south wall. (The old target,
     // +3.0 at floor level, sat inside the walk bound and below the player.)
     let door = DoorPanel {
-        center_x: INTERIOR_ORIGIN.x,
+        center_x: room.0.x,
         half_w: INTERIOR_DOOR_HALF_W,
-        face_z: INTERIOR_ORIGIN.z + bounds.door_z,
+        face_z: room.0.z + bounds.door_z,
         into_z: 1.0,
     };
     if !door.faced_by(transform.translation, facing.dir, DOOR_RANGE_IN, 0.5)
@@ -448,6 +522,7 @@ fn interior_movement(
     obstacles: Res<InteriorObstacles>,
     time: Res<Time>,
     bounds: Res<RoomBounds>,
+    room: Res<CurrentRoom>,
 ) {
     if *state != HouseState::Inside || !focus.is_world() {
         return;
@@ -459,13 +534,13 @@ fn interior_movement(
     let movement = locomotion::step(&actions, time.delta().as_secs_f32(), &mut facing, &mut loco);
     if movement != Vec3::ZERO {
         let nx = transform.translation.x + movement.x;
-        if (nx - INTERIOR_ORIGIN.x).abs() <= bounds.walk_half
+        if (nx - room.0.x).abs() <= bounds.walk_half
             && !hits_obstacle(nx, transform.translation.z, &obstacles)
         {
             transform.translation.x = nx;
         }
         let nz = transform.translation.z + movement.z;
-        if (nz - INTERIOR_ORIGIN.z).abs() <= bounds.walk_half
+        if (nz - room.0.z).abs() <= bounds.walk_half
             && !hits_obstacle(transform.translation.x, nz, &obstacles)
         {
             transform.translation.z = nz;
@@ -502,6 +577,12 @@ impl Plugin for HousePlugin {
         app.add_sub_state::<HouseState>()
             .add_systems(Startup, find_player_house.after(crate::town::generate_town))
             .init_resource::<RoomBounds>()
+            .init_resource::<CurrentRoom>()
+            .init_resource::<VillagerDoors>()
+            .add_systems(
+                Startup,
+                build_villager_rooms.after(crate::npc::spawn_villagers),
+            )
             .add_systems(
                 Startup,
                 build_interior.after(crate::game_disc::start_disc_load),

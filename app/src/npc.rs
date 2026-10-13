@@ -146,6 +146,11 @@ enum Act {
 }
 
 impl Villager {
+    /// Where they step out of / go into their house.
+    pub fn door(&self) -> Vec3 {
+        self.door
+    }
+
     /// Greeting another villager (`ac_npc_act_greeting`).
     pub fn is_greeting(&self) -> bool {
         matches!(self.act, Act::Greet)
@@ -260,7 +265,7 @@ fn town_villagers(
         .collect()
 }
 
-fn spawn_villagers(
+pub(crate) fn spawn_villagers(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
