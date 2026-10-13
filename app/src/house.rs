@@ -156,11 +156,40 @@ fn furniture_footprint(size: FurnitureSize) -> (f32, f32) {
 }
 
 /// Build the interior room once at the distant origin.
+#[allow(clippy::too_many_arguments)]
 fn build_interior(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    disc: Option<Res<crate::game_disc::GameDisc>>,
+    mut n64: ResMut<Assets<crate::n64_material::N64Material>>,
+    mut images: ResMut<Assets<Image>>,
 ) {
+    // The disc's room: its walls, carpet, wallpaper and starting furniture.
+    if let Some(furniture) = disc.as_deref().and_then(|d| {
+        crate::interior::spawn_player_room(
+            &mut commands,
+            d,
+            INTERIOR_ORIGIN,
+            &mut meshes,
+            &mut n64,
+            &mut images,
+        )
+    }) {
+        let obstacles = furniture
+            .iter()
+            .map(|f| Obstacle {
+                min_x: INTERIOR_ORIGIN.x + f.centre.x - f.half.x,
+                max_x: INTERIOR_ORIGIN.x + f.centre.x + f.half.x,
+                min_z: INTERIOR_ORIGIN.z + f.centre.z - f.half.y,
+                max_z: INTERIOR_ORIGIN.z + f.centre.z + f.half.y,
+            })
+            .collect();
+        commands.insert_resource(InteriorObstacles(obstacles));
+        commands.insert_resource(RoomBounds::disc_room());
+        spawn_house_hud(&mut commands);
+        return;
+    }
     let ox = INTERIOR_ORIGIN.x;
     let oz = INTERIOR_ORIGIN.z;
 
@@ -263,6 +292,13 @@ fn build_interior(
     }
     commands.insert_resource(InteriorObstacles(obstacles));
 
+    spawn_house_hud(&mut commands);
+
+    println!("House interior built at {:?}", INTERIOR_ORIGIN);
+}
+
+/// The "inside the house" HUD line.
+fn spawn_house_hud(commands: &mut Commands) {
     // Persistent "inside" indicator (hidden until the player enters).
     commands.spawn((
         HouseHudText,
@@ -280,8 +316,37 @@ fn build_interior(
         },
         Visibility::Hidden,
     ));
+}
 
-    println!("House interior built at {:?}", INTERIOR_ORIGIN);
+/// Where the player may walk inside and where the door is, relative to
+/// the interior origin: the placeholder room, or the disc's smaller room.
+#[derive(Resource, Clone, Copy)]
+struct RoomBounds {
+    walk_half: f32,
+    door_z: f32,
+    spawn_z: f32,
+}
+
+impl Default for RoomBounds {
+    fn default() -> Self {
+        Self {
+            walk_half: WALK_HALF,
+            door_z: INTERIOR_DOOR_Z,
+            spawn_z: 2.6,
+        }
+    }
+}
+
+impl RoomBounds {
+    /// The disc's 4x4-cell room: the door is in the middle of the south wall.
+    fn disc_room() -> Self {
+        let half = crate::interior::ROOM_HALF;
+        Self {
+            walk_half: half - PLAYER_RADIUS,
+            door_z: half,
+            spawn_z: half - 0.6,
+        }
+    }
 }
 
 /// E at the exterior house door: teleport into the interior.
@@ -298,6 +363,7 @@ fn house_enter(
     mut next_state: ResMut<NextState<HouseState>>,
     mut commands: Commands,
     mut player_query: Query<(&mut Transform, &mut Facing), With<Player>>,
+    bounds: Res<RoomBounds>,
 ) {
     if *state != HouseState::Town || *shop_loc != crate::shop::ShopLocation::Town {
         return;
@@ -329,7 +395,7 @@ fn house_enter(
         return;
     }
     commands.insert_resource(ReturnPosition(transform.translation));
-    transform.translation = INTERIOR_ORIGIN + Vec3::new(0.0, 1.0, 2.6);
+    transform.translation = INTERIOR_ORIGIN + Vec3::new(0.0, 1.0, bounds.spawn_z);
     facing.dir = Vec3::new(0.0, 0.0, -1.0);
     next_state.set(HouseState::Inside);
     println!("Entered house");
@@ -343,6 +409,7 @@ fn house_exit(
     mut next_state: ResMut<NextState<HouseState>>,
     return_pos: Option<Res<ReturnPosition>>,
     mut player_query: Query<(&mut Transform, &mut Facing), With<Player>>,
+    bounds: Res<RoomBounds>,
 ) {
     if *state != HouseState::Inside {
         return;
@@ -358,7 +425,7 @@ fn house_exit(
     let door = DoorPanel {
         center_x: INTERIOR_ORIGIN.x,
         half_w: INTERIOR_DOOR_HALF_W,
-        face_z: INTERIOR_ORIGIN.z + INTERIOR_DOOR_Z,
+        face_z: INTERIOR_ORIGIN.z + bounds.door_z,
         into_z: 1.0,
     };
     if !door.faced_by(transform.translation, facing.dir, DOOR_RANGE_IN, 0.5)
@@ -380,6 +447,7 @@ fn interior_movement(
     mut player_query: Query<(&mut Transform, &mut Facing, &mut Locomotion), With<Player>>,
     obstacles: Res<InteriorObstacles>,
     time: Res<Time>,
+    bounds: Res<RoomBounds>,
 ) {
     if *state != HouseState::Inside || !focus.is_world() {
         return;
@@ -391,13 +459,13 @@ fn interior_movement(
     let movement = locomotion::step(&actions, time.delta().as_secs_f32(), &mut facing, &mut loco);
     if movement != Vec3::ZERO {
         let nx = transform.translation.x + movement.x;
-        if (nx - INTERIOR_ORIGIN.x).abs() <= WALK_HALF
+        if (nx - INTERIOR_ORIGIN.x).abs() <= bounds.walk_half
             && !hits_obstacle(nx, transform.translation.z, &obstacles)
         {
             transform.translation.x = nx;
         }
         let nz = transform.translation.z + movement.z;
-        if (nz - INTERIOR_ORIGIN.z).abs() <= WALK_HALF
+        if (nz - INTERIOR_ORIGIN.z).abs() <= bounds.walk_half
             && !hits_obstacle(transform.translation.x, nz, &obstacles)
         {
             transform.translation.z = nz;
@@ -433,7 +501,11 @@ impl Plugin for HousePlugin {
     fn build(&self, app: &mut App) {
         app.add_sub_state::<HouseState>()
             .add_systems(Startup, find_player_house.after(crate::town::generate_town))
-            .add_systems(Startup, build_interior)
+            .init_resource::<RoomBounds>()
+            .add_systems(
+                Startup,
+                build_interior.after(crate::game_disc::start_disc_load),
+            )
             .add_systems(
                 Update,
                 (house_enter, house_exit)

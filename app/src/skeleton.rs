@@ -339,6 +339,46 @@ mod tests {
         assert!((pose.rotations[0].x - std::f32::consts::FRAC_PI_2).abs() < 1e-3);
     }
 
+    /// Probe (needs the disc): room model bounds in cells.
+    #[test]
+    #[ignore]
+    fn probe_room_bounds() {
+        let path = std::env::var("BEVY_CROSSING_ISO").expect("set BEVY_CROSSING_ISO");
+        let mut d = disc::Disc::open_path(std::path::Path::new(&path)).unwrap();
+        let rom = RomImage::from_disc(&mut d).unwrap();
+        let cat = disc::AssetCatalog::builtin(&rom);
+        for name in [
+            "rom_myhome1_floor_model",
+            "rom_myhome1_wall_model",
+            "rom_shop1f_model",
+            "rom_shop1w_model",
+        ] {
+            let Some(a) = cat.get(name) else { continue };
+            let sink = crate::disc_gfx::run_display_lists(&rom, &[a.offset]);
+            let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+            for v in sink.parts.iter().flat_map(|p| &p.vertices) {
+                lo = lo.min(Vec3::from(v.pos));
+                hi = hi.max(Vec3::from(v.pos));
+            }
+            let tex: Vec<String> = sink
+                .parts
+                .iter()
+                .filter_map(|p| {
+                    p.key
+                        .tex
+                        .map(|t| format!("{:x}/{:x}", t.img_addr, t.tlut_addr))
+                })
+                .collect();
+            println!(
+                "{name}: {} parts, cells {:?}..{:?}, tex {:?}",
+                sink.parts.len(),
+                lo * 0.0625 / 40.0,
+                hi * 0.0625 / 40.0,
+                tex
+            );
+        }
+    }
+
     /// Probe (needs the disc): door centroid of posed structures.
     #[test]
     #[ignore]

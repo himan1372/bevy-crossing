@@ -17,6 +17,7 @@ mod ground_map;
 mod house;
 mod input;
 mod interaction;
+mod interior;
 mod items;
 mod locomotion;
 mod mail;

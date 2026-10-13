@@ -42,6 +42,8 @@ pub struct BaseLight {
     /// Fog start and end in the N64 depth range 0..1000.
     pub fog_near: f32,
     pub fog_far: f32,
+    /// Light in rooms (`room_color`, `mEnv_GetRoomPrimColor`).
+    pub room: [f32; 3],
     pub background: [f32; 3],
 }
 
@@ -70,6 +72,7 @@ impl BaseLight {
             // `mEnv_ChangeFogLight` keeps the low 10 bits of the near value.
             fog_near: (s16(18) & 0x3FF) as f32,
             fog_far: s16(20) as f32,
+            room: rgb(25),
             background: rgb(34),
         })
     }
@@ -87,7 +90,23 @@ impl BaseLight {
             fog_color: l3(self.fog_color, next.fog_color),
             fog_near: self.fog_near + (next.fog_near - self.fog_near) * t,
             fog_far: self.fog_far + (next.fog_far - self.fog_far) * t,
+            room: l3(self.room, next.room),
             background: l3(self.background, next.background),
+        }
+    }
+
+    /// Lighting inside a room: the room colour (`Global_kankyo_set_room_prim`),
+    /// no fog (`mEnv_SetFog` turns it off away from the field).
+    pub fn indoor_uniform(&self) -> EnvUniform {
+        let room = Vec3::from(self.room) / 255.0;
+        EnvUniform {
+            ambient: (room * 0.6).extend(0.0),
+            sun_dir: Vec3::new(0.0, 0.69, 0.72).normalize().extend(0.0),
+            sun_color: (room * 0.6).extend(0.0),
+            moon_dir: Vec4::Y,
+            moon_color: Vec4::ZERO,
+            fog_color: Vec4::ZERO,
+            fog: Vec4::new(1000.0, 1000.0, 0.0, 0.0),
         }
     }
 
@@ -185,23 +204,36 @@ fn update_environment(
     table: Option<Res<LightTable>>,
     mut materials: ResMut<Assets<N64Material>>,
     mut clear: ResMut<ClearColor>,
-    mut last: Local<Option<(u32, usize)>>,
+    house: Option<Res<State<crate::house::HouseState>>>,
+    shop: Option<Res<State<crate::shop::ShopLocation>>>,
+    mut last: Local<Option<(u32, usize, bool)>>,
 ) {
     let Some(table) = table else { return };
     let now = clock::now();
     let minute = now.day_secs / 60;
+    let indoors = house.is_some_and(|h| *h.get() == crate::house::HouseState::Inside)
+        || shop.is_some_and(|s| *s.get() == crate::shop::ShopLocation::Inside);
     // Also refresh when new materials appear (town built after the table).
     let count = materials.len();
-    if *last == Some((minute, count)) {
+    if *last == Some((minute, count, indoors)) {
         return;
     }
-    *last = Some((minute, count));
+    *last = Some((minute, count, indoors));
     let light = table.at(now.day_secs);
-    let env = light.uniform();
+    let env = if indoors {
+        light.indoor_uniform()
+    } else {
+        light.uniform()
+    };
     for (_, material) in materials.iter_mut() {
         material.env = env;
     }
-    let [r, g, b] = light.background.map(|v| v / 255.0);
+    // Rooms stand in black (no sky).
+    let [r, g, b] = if indoors {
+        [0.0; 3]
+    } else {
+        light.background.map(|v| v / 255.0)
+    };
     clear.0 = Color::srgb(r, g, b);
 }
 

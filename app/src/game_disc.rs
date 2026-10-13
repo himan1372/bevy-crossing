@@ -33,6 +33,10 @@ pub struct GameDisc {
     /// `npc_name_str_table.bin` from `forest_2nd.arc`: 8 characters per
     /// villager, by NPC index.
     pub npc_names: Arc<[u8]>,
+    /// Carpet and wallpaper patterns (`player_room_floor.bin` /
+    /// `player_room_wall.bin`, `forest_2nd.arc`).
+    pub player_room_floors: Arc<[u8]>,
+    pub player_room_walls: Arc<[u8]>,
     /// Dialogue, strings and choice labels (`crate::messages`).
     pub text: Option<Arc<crate::messages::GameText>>,
 }
@@ -77,12 +81,15 @@ fn load(path: PathBuf) -> Result<GameDisc, String> {
         warn!("the disc's message text could not be read");
     }
     let bank = |name: &str| -> Arc<[u8]> { arc.file(name).unwrap_or_default().into() };
-    let npc_names: Arc<[u8]> = disc
-        .read_file("forest_2nd.arc")
-        .ok()
-        .and_then(Rarc::parse)
-        .and_then(|a| a.file("npc_name_str_table.bin").map(Arc::from))
-        .unwrap_or_else(|| Arc::from(&[][..]));
+    let second = disc.read_file("forest_2nd.arc").ok().and_then(Rarc::parse);
+    let second_bank = |name: &str| -> Arc<[u8]> {
+        second
+            .as_ref()
+            .and_then(|a| a.file(name))
+            .unwrap_or_default()
+            .into()
+    };
+    let npc_names = second_bank("npc_name_str_table.bin");
     Ok(GameDisc {
         path,
         rom,
@@ -92,6 +99,8 @@ fn load(path: PathBuf) -> Result<GameDisc, String> {
         player_cloth: bank("tex_boy.bin"),
         player_cloth_palettes: bank("pallet_boy.bin"),
         npc_names,
+        player_room_floors: second_bank("player_room_floor.bin"),
+        player_room_walls: second_bank("player_room_wall.bin"),
         text,
     })
 }
