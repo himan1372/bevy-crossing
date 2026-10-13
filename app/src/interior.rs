@@ -78,50 +78,20 @@ pub fn spawn_player_room(
         i32::from_be_bytes([d[8], d[9], d[10], d[11]]),
     );
 
-    let mut floor_segs = Segments::default();
-    let fb = floor * FLOOR_BLOCK;
-    floor_segs.set_segment(0x0C, slice(&disc.player_room_floors, fb, PALETTE));
-    for i in 0..4 {
-        floor_segs.set_segment(
-            0x08 + i as u8,
-            slice(
-                &disc.player_room_floors,
-                fb + PALETTE + i * TEXTURE,
-                TEXTURE,
-            ),
-        );
-    }
-    let mut wall_segs = Segments::default();
-    let wb = wall * WALL_BLOCK;
-    wall_segs.set_segment(0x0A, slice(&disc.player_room_walls, wb, PALETTE));
-    for i in 0..2 {
-        wall_segs.set_segment(
-            0x08 + i as u8,
-            slice(&disc.player_room_walls, wb + PALETTE + i * TEXTURE, TEXTURE),
-        );
-    }
-
-    let room = commands
-        .spawn((
-            Name::new("player room"),
-            Transform::from_translation(origin - ROOM_CENTRE).with_scale(Vec3::splat(ROOM_SCALE)),
-            Visibility::default(),
-        ))
-        .id();
-    for (list, segs) in [(floor_list, &floor_segs), (wall_list, &wall_segs)] {
-        spawn_lists(
-            commands,
-            disc,
-            room,
-            &[list],
-            None,
-            segs,
-            1.0,
-            meshes,
-            materials,
-            images,
-        );
-    }
+    let assets = (&mut *meshes, &mut *materials, &mut *images);
+    spawn_shell(
+        commands,
+        disc,
+        "player room",
+        origin,
+        ROOM_CENTRE,
+        &[(floor_list, false)],
+        &[(wall_list, false)],
+        &[],
+        floor,
+        wall,
+        assets,
+    );
 
     // Starting furniture on the room grid: unit (x, z) covers model cells
     // [x, x+1] (the floor starts at cell 1).
@@ -148,7 +118,7 @@ pub fn spawn_player_room(
             &[list],
             palette,
             &Segments::default(),
-            1.0,
+            false,
             meshes,
             materials,
             images,
@@ -162,6 +132,191 @@ pub fn spawn_player_room(
     Some(out)
 }
 
+/// Floor segments (`aMI` / `aSI` draw): textures in 8-B, palette in C.
+fn floor_segments(disc: &GameDisc, floor: usize) -> Segments {
+    let mut segs = Segments::default();
+    let fb = floor * FLOOR_BLOCK;
+    segs.set_segment(0x0C, slice(&disc.player_room_floors, fb, PALETTE));
+    for i in 0..4 {
+        segs.set_segment(
+            0x08 + i as u8,
+            slice(
+                &disc.player_room_floors,
+                fb + PALETTE + i * TEXTURE,
+                TEXTURE,
+            ),
+        );
+    }
+    segs
+}
+
+/// Wall segments: textures in 8 and 9, palette in A.
+fn wall_segments(disc: &GameDisc, wall: usize) -> Segments {
+    let mut segs = Segments::default();
+    let wb = wall * WALL_BLOCK;
+    segs.set_segment(0x0A, slice(&disc.player_room_walls, wb, PALETTE));
+    for i in 0..2 {
+        segs.set_segment(
+            0x08 + i as u8,
+            slice(&disc.player_room_walls, wb + PALETTE + i * TEXTURE, TEXTURE),
+        );
+    }
+    segs
+}
+
+type RoomAssets<'a> = (
+    &'a mut Assets<Mesh>,
+    &'a mut Assets<N64Material>,
+    &'a mut Assets<Image>,
+);
+
+/// A room's shell at `origin`: floor, wall and other lists at the room
+/// scale, with model cell `centre` on the origin.
+#[allow(clippy::too_many_arguments)]
+fn spawn_shell(
+    commands: &mut Commands,
+    disc: &GameDisc,
+    name: &str,
+    origin: Vec3,
+    centre: Vec3,
+    floor_lists: &[(u32, bool)],
+    wall_lists: &[(u32, bool)],
+    other_lists: &[(u32, bool)],
+    floor: usize,
+    wall: usize,
+    (meshes, materials, images): RoomAssets,
+) {
+    let room = commands
+        .spawn((
+            Name::new(name.to_string()),
+            Transform::from_translation(origin - centre).with_scale(Vec3::splat(ROOM_SCALE)),
+            Visibility::default(),
+        ))
+        .id();
+    let floor_segs = floor_segments(disc, floor);
+    let wall_segs = wall_segments(disc, wall);
+    for &(l, blend) in floor_lists {
+        spawn_lists(
+            commands,
+            disc,
+            room,
+            &[l],
+            None,
+            &floor_segs,
+            blend,
+            meshes,
+            materials,
+            images,
+        );
+    }
+    for &(l, blend) in wall_lists {
+        spawn_lists(
+            commands,
+            disc,
+            room,
+            &[l],
+            None,
+            &wall_segs,
+            blend,
+            meshes,
+            materials,
+            images,
+        );
+    }
+    for &(l, blend) in other_lists {
+        spawn_blend_lists(commands, disc, room, l, blend, meshes, materials, images);
+    }
+}
+
+/// The shop's floor spans model cells 0.875..7.125: centre (4, 1, 4).
+const SHOP_CENTRE: Vec3 = Vec3::new(4.0, 1.0, 4.0);
+/// Half the shop's inside width, in cells.
+pub const SHOP_HALF: f32 = 3.125;
+
+/// Nook's Cranny's room (`ac_shop_indoor`, shop level 1): floor, walls and
+/// the clothes rack, opaque and translucent, with the shop's default
+/// carpet and wallpaper (`aSI_floor_default_table` /
+/// `aSI_wall_default_table`). Returns false without the disc's room.
+pub fn spawn_shop_room(
+    commands: &mut Commands,
+    disc: &GameDisc,
+    origin: Vec3,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<N64Material>,
+    images: &mut Assets<Image>,
+) -> bool {
+    let list = |name: &str| disc.catalog.get(name).map(|a| a.offset);
+    let (Some(floor), Some(wall)) = (list("rom_shop1f_model"), list("rom_shop1w_model")) else {
+        return false;
+    };
+    let table = |name: &str| {
+        let a = disc.catalog.get(name)?;
+        let b = disc.rom.slice(RomSource::Rel, a.offset, 2)?;
+        // `(u8)ITM_*`: the low byte is the pattern number.
+        Some((i16::from_be_bytes([b[0], b[1]]) & 0xFF) as usize)
+    };
+    let floor_no = table("aSI_floor_default_table").unwrap_or(0);
+    let wall_no = table("aSI_wall_default_table").unwrap_or(0);
+    let mut floors = vec![(floor, false)];
+    floors.extend(list("rom_shop1f_modelT").map(|l| (l, true)));
+    let mut walls = vec![(wall, false)];
+    walls.extend(list("rom_shop1w_modelT").map(|l| (l, true)));
+    let others: Vec<(u32, bool)> = [
+        ("rom_shop1_fuku_model", false),
+        ("rom_shop1_fuku_modelT", true),
+    ]
+    .iter()
+    .filter_map(|&(n, blend)| list(n).map(|l| (l, blend)))
+    .collect();
+    let assets = (&mut *meshes, &mut *materials, &mut *images);
+    spawn_shell(
+        commands,
+        disc,
+        "shop room",
+        origin,
+        SHOP_CENTRE,
+        &floors,
+        &walls,
+        &others,
+        floor_no,
+        wall_no,
+        assets,
+    );
+    info!("shop room from the disc: wallpaper {wall_no}, carpet {floor_no}");
+    true
+}
+
+/// A list drawn as-is (its own textures), blended when translucent.
+#[allow(clippy::too_many_arguments)]
+fn spawn_blend_lists(
+    commands: &mut Commands,
+    disc: &GameDisc,
+    parent: Entity,
+    list: u32,
+    blend: bool,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<N64Material>,
+    images: &mut Assets<Image>,
+) {
+    let segs = Segments::default();
+    for part in &run_display_lists(&disc.rom, &[list]).parts {
+        let texture = part.key.tex.as_ref().and_then(|k| {
+            decode_texture(&disc.rom, k, None, &segs).map(|rgba| images.add(texture_image(rgba, k)))
+        });
+        let material = materials.add(N64Material {
+            combiner: CombinerUniform::from_key(&part.key, false, blend),
+            texture,
+            env: default(),
+            blend,
+        });
+        commands.spawn((
+            Mesh3d(meshes.add(part_mesh(part, 1.0))),
+            MeshMaterial3d(material),
+            ChildOf(parent),
+        ));
+    }
+}
+
 /// Spawns display lists as N64 meshes under `parent`.
 #[allow(clippy::too_many_arguments)]
 fn spawn_lists(
@@ -171,7 +326,7 @@ fn spawn_lists(
     lists: &[u32],
     palette: Option<u32>,
     segs: &Segments,
-    scale: f32,
+    blend: bool,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<N64Material>,
     images: &mut Assets<Image>,
@@ -182,13 +337,13 @@ fn spawn_lists(
                 .map(|rgba| images.add(texture_image(rgba, k)))
         });
         let material = materials.add(N64Material {
-            combiner: CombinerUniform::from_key(&part.key, false, false),
+            combiner: CombinerUniform::from_key(&part.key, false, blend),
             texture,
             env: default(),
-            blend: false,
+            blend,
         });
         commands.spawn((
-            Mesh3d(meshes.add(part_mesh(part, scale))),
+            Mesh3d(meshes.add(part_mesh(part, 1.0))),
             MeshMaterial3d(material),
             ChildOf(parent),
         ));

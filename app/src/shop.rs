@@ -334,13 +334,35 @@ fn spawn_shop_exterior(
 }
 
 /// Build the shop interior once at the distant origin.
+#[allow(clippy::too_many_arguments)]
 fn build_shop_interior(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    disc: Option<Res<crate::game_disc::GameDisc>>,
+    mut n64: ResMut<Assets<crate::n64_material::N64Material>>,
+    mut images: ResMut<Assets<Image>>,
 ) {
     let ox = SHOP_ORIGIN.x;
     let oz = SHOP_ORIGIN.z;
+    // The disc's room, or the placeholder; the counter, Nook and the
+    // stands keep their arrangement scaled into it.
+    let real = disc.as_deref().is_some_and(|d| {
+        crate::interior::spawn_shop_room(
+            &mut commands,
+            d,
+            SHOP_ORIGIN,
+            &mut meshes,
+            &mut n64,
+            &mut images,
+        )
+    });
+    let k = if real { ShopRoom::disc().k } else { 1.0 };
+    commands.insert_resource(if real {
+        ShopRoom::disc()
+    } else {
+        ShopRoom::default()
+    });
 
     let floor_mat = materials.add(Color::srgb(0.6, 0.44, 0.26));
     let wall_mat = materials.add(Color::srgb(0.88, 0.8, 0.66));
@@ -348,55 +370,60 @@ fn build_shop_interior(
     let door_mat = materials.add(Color::srgb(0.4, 0.25, 0.12));
     let nook_mat = materials.add(Color::srgb(0.55, 0.38, 0.22));
 
-    // Floor.
-    commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(12.0, 10.0))),
-        MeshMaterial3d(floor_mat),
-        Transform::from_xyz(ox, 0.02, oz),
-    ));
-
-    // Four walls (no ceiling; camera looks in from above).
-    let wall_h = 3.0;
-    let wall_t = 0.4;
-    let walls = [
-        (ox, oz - 5.0, 12.0, wall_t), // north
-        (ox, oz + 5.0, 12.0, wall_t), // south
-        (ox - 6.0, oz, wall_t, 10.0), // west
-        (ox + 6.0, oz, wall_t, 10.0), // east
-    ];
-    for (wx, wz, sx, sz) in walls {
+    // Placeholder floor, walls and door (the disc room has its own).
+    if !real {
         commands.spawn((
-            Mesh3d(meshes.add(Cuboid::new(sx, wall_h, sz))),
-            MeshMaterial3d(wall_mat.clone()),
-            Transform::from_xyz(wx, wall_h / 2.0, wz),
+            Mesh3d(meshes.add(Plane3d::default().mesh().size(12.0, 10.0))),
+            MeshMaterial3d(floor_mat),
+            Transform::from_xyz(ox, 0.02, oz),
+        ));
+
+        // Four walls (no ceiling; camera looks in from above).
+        let wall_h = 3.0;
+        let wall_t = 0.4;
+        let walls = [
+            (ox, oz - 5.0, 12.0, wall_t), // north
+            (ox, oz + 5.0, 12.0, wall_t), // south
+            (ox - 6.0, oz, wall_t, 10.0), // west
+            (ox + 6.0, oz, wall_t, 10.0), // east
+        ];
+        for (wx, wz, sx, sz) in walls {
+            commands.spawn((
+                Mesh3d(meshes.add(Cuboid::new(sx, wall_h, sz))),
+                MeshMaterial3d(wall_mat.clone()),
+                Transform::from_xyz(wx, wall_h / 2.0, wz),
+            ));
+        }
+
+        // Door panel on the south wall (visual only; exit is via E).
+        commands.spawn((
+            Mesh3d(meshes.add(Cuboid::new(1.4, 2.4, 0.15))),
+            MeshMaterial3d(door_mat),
+            Transform::from_xyz(ox, 1.2, oz + 4.85),
         ));
     }
 
-    // Door panel on the south wall (visual only; exit is via E).
-    commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(1.4, 2.4, 0.15))),
-        MeshMaterial3d(door_mat),
-        Transform::from_xyz(ox, 1.2, oz + 4.85),
-    ));
-
     // Counter at the back (north side).
     let counter = Obstacle {
-        min_x: ox - 2.25,
-        max_x: ox + 2.25,
-        min_z: oz - 3.5,
-        max_z: oz - 2.5,
+        min_x: ox - 2.25 * k,
+        max_x: ox + 2.25 * k,
+        min_z: oz - 3.5 * k,
+        max_z: oz - 2.5 * k,
     };
-    commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(4.5, 1.1, 1.0))),
-        MeshMaterial3d(counter_mat),
-        Transform::from_xyz(ox, 0.55, oz - 3.0),
-    ));
+    // The disc room has its own counter and tables.
+    if !real {
+        commands.spawn((
+            Mesh3d(meshes.add(Cuboid::new(4.5 * k, 1.1 * k, 1.0 * k))),
+            MeshMaterial3d(counter_mat),
+            Transform::from_xyz(ox, 0.55 * k, oz - 3.0 * k),
+        ));
+    }
 
     // Tom Nook behind the counter.
     commands.spawn((
         Mesh3d(meshes.add(Capsule3d::new(0.4, 1.0))),
         MeshMaterial3d(nook_mat),
-        Transform::from_xyz(ox, 1.0, oz - 4.1),
+        Transform::from_xyz(ox, 1.0, oz - 4.1 * k),
     ));
 
     // Display pedestals with sample goods (colors only; names/prices live
@@ -408,9 +435,9 @@ fn build_shop_interior(
         (0.9, 0.8, 0.4),
         (0.3, 0.7, 0.3),
     ];
-    for (i, (r, g, b)) in pedestal_cols.iter().enumerate() {
-        let lx = -3.75 + i as f32 * 2.5;
-        let lz = 0.8;
+    for (i, (r, g, b)) in pedestal_cols.iter().enumerate().filter(|_| !real) {
+        let lx = (-3.75 + i as f32 * 2.5) * k;
+        let lz = 0.8 * k;
         commands.spawn((
             Mesh3d(meshes.add(Cuboid::new(0.9, 0.8, 0.9))),
             MeshMaterial3d(materials.add(Color::srgb(0.5, 0.35, 0.2))),
@@ -441,7 +468,7 @@ fn build_shop_interior(
         TextColor(Color::WHITE),
         Node {
             position_type: PositionType::Absolute,
-            top: Val::Px(10.0),
+            top: Val::Px(70.0),
             left: Val::Px(50.0),
             ..default()
         },
@@ -449,6 +476,40 @@ fn build_shop_interior(
     ));
 
     println!("Shop interior built at {:?}", SHOP_ORIGIN);
+}
+
+/// The shop room's size: the placeholder, or the disc's room with the
+/// layout scaled by `k` to fit inside its walls.
+#[derive(Resource, Clone, Copy)]
+struct ShopRoom {
+    k: f32,
+    walk_x: f32,
+    walk_z: f32,
+    door_z: f32,
+}
+
+impl Default for ShopRoom {
+    fn default() -> Self {
+        Self {
+            k: 1.0,
+            walk_x: SHOP_WALK_X,
+            walk_z: SHOP_WALK_Z,
+            door_z: INTERIOR_DOOR_Z,
+        }
+    }
+}
+
+impl ShopRoom {
+    /// Nook's Cranny from the disc: 6.25 cells inside, door mid south wall.
+    fn disc() -> Self {
+        let half = crate::interior::SHOP_HALF;
+        Self {
+            k: half / 5.0,
+            walk_x: half - 0.4,
+            walk_z: half - 0.4,
+            door_z: half,
+        }
+    }
 }
 
 /// Build the shop menu UI (hidden until opened).
@@ -559,6 +620,7 @@ fn shop_enter(
     mut next_state: ResMut<NextState<ShopLocation>>,
     mut commands: Commands,
     mut player_query: Query<(&mut Transform, &mut Facing), With<Player>>,
+    room: Res<ShopRoom>,
 ) {
     if *state != ShopLocation::Town {
         return;
@@ -583,7 +645,7 @@ fn shop_enter(
         return;
     }
     commands.insert_resource(ShopReturnPos(transform.translation));
-    transform.translation = SHOP_ORIGIN + Vec3::new(0.0, 1.0, 3.4);
+    transform.translation = SHOP_ORIGIN + Vec3::new(0.0, 1.0, room.door_z - 0.8);
     facing.dir = Vec3::new(0.0, 0.0, -1.0);
     next_state.set(ShopLocation::Inside);
     println!("Entered the shop");
@@ -598,6 +660,7 @@ fn shop_exit(
     mut next_state: ResMut<NextState<ShopLocation>>,
     return_pos: Option<Res<ShopReturnPos>>,
     mut player_query: Query<(&mut Transform, &mut Facing), With<Player>>,
+    room: Res<ShopRoom>,
 ) {
     if *state != ShopLocation::Inside || !focus.is_world() {
         return;
@@ -612,7 +675,7 @@ fn shop_exit(
     let door = DoorPanel {
         center_x: SHOP_ORIGIN.x,
         half_w: INTERIOR_DOOR_HALF_W,
-        face_z: SHOP_ORIGIN.z + INTERIOR_DOOR_Z,
+        face_z: SHOP_ORIGIN.z + room.door_z,
         into_z: 1.0,
     };
     if !door.faced_by(transform.translation, facing.dir, DOOR_RANGE_IN, 0.5)
@@ -634,6 +697,7 @@ fn nook_interact(
     mut ui: ResMut<ShopUi>,
     player_query: Query<(&Transform, &Facing), With<Player>>,
     mut panel_query: Query<&mut Visibility, With<ShopPanel>>,
+    room: Res<ShopRoom>,
 ) {
     if *state != ShopLocation::Inside || ui.open || !focus.is_world() {
         return;
@@ -644,7 +708,7 @@ fn nook_interact(
     let Ok((transform, facing)) = player_query.single() else {
         return;
     };
-    let nook = SHOP_ORIGIN + Vec3::new(0.0, 0.0, -4.1);
+    let nook = SHOP_ORIGIN + Vec3::new(0.0, 0.0, -4.1 * room.k);
     let to_nook = nook - transform.translation;
     let dist = to_nook.length();
     if dist > NOOK_RANGE || dist < 0.001 {
@@ -881,6 +945,7 @@ fn shop_interior_movement(
     mut player_query: Query<(&mut Transform, &mut Facing, &mut Locomotion), With<Player>>,
     obstacles: Res<ShopObstacles>,
     time: Res<Time>,
+    room: Res<ShopRoom>,
 ) {
     if *state != ShopLocation::Inside || !focus.is_world() {
         return;
@@ -892,13 +957,13 @@ fn shop_interior_movement(
     let movement = locomotion::step(&actions, time.delta().as_secs_f32(), &mut facing, &mut loco);
     if movement != Vec3::ZERO {
         let nx = transform.translation.x + movement.x;
-        if (nx - SHOP_ORIGIN.x).abs() <= SHOP_WALK_X
+        if (nx - SHOP_ORIGIN.x).abs() <= room.walk_x
             && !hits_obstacle(nx, transform.translation.z, &obstacles)
         {
             transform.translation.x = nx;
         }
         let nz = transform.translation.z + movement.z;
-        if (nz - SHOP_ORIGIN.z).abs() <= SHOP_WALK_Z
+        if (nz - SHOP_ORIGIN.z).abs() <= room.walk_z
             && !hits_obstacle(transform.translation.x, nz, &obstacles)
         {
             transform.translation.z = nz;
@@ -932,7 +997,8 @@ pub struct ShopPlugin;
 
 impl Plugin for ShopPlugin {
     fn build(&self, app: &mut App) {
-        app.add_sub_state::<ShopLocation>()
+        app.init_resource::<ShopRoom>()
+            .add_sub_state::<ShopLocation>()
             .insert_resource(ShopData::default())
             .insert_resource(ShopUi::default())
             .add_systems(Startup, find_shop_spot.after(crate::town::generate_town))
@@ -940,7 +1006,7 @@ impl Plugin for ShopPlugin {
                 Startup,
                 (
                     spawn_shop_exterior.after(find_shop_spot),
-                    build_shop_interior,
+                    build_shop_interior.after(crate::game_disc::start_disc_load),
                     setup_shop_ui,
                     apply_loaded_shop,
                 ),
