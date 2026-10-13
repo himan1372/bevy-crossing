@@ -18,6 +18,7 @@ mod furniture;
 mod game_disc;
 mod goods;
 mod ground_map;
+mod gyroid;
 mod house;
 mod input;
 mod interaction;
@@ -102,6 +103,7 @@ fn main() {
         .add_plugins(shop_display::ShopDisplayPlugin)
         .add_plugins(field_items::FieldItemsPlugin)
         .add_plugins(critters::CrittersPlugin)
+        .add_plugins(gyroid::GyroidPlugin)
         .add_plugins(QuestPlugin)
         .add_plugins(PocketsPlugin)
         .add_plugins(ClockPlugin)

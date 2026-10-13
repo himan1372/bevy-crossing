@@ -1099,13 +1099,11 @@ pub(crate) fn build_disc_town(
         &mut materials,
         &mut images,
     );
-    spawn_gyroids(
+    crate::gyroid::spawn_gyroids(
         &mut commands,
         &disc,
         &town,
-        &mut meshes,
-        &mut materials,
-        &mut images,
+        (&mut meshes, &mut materials, &mut images),
     );
     spawn_disc_objects(
         &mut commands,
@@ -1279,7 +1277,7 @@ pub(crate) fn build_model_full(
 }
 
 /// Meshes and materials for an already run (and placed) sink.
-fn sink_meshes(
+pub(crate) fn sink_meshes(
     disc: &GameDisc,
     sink: &crate::disc_gfx::TriangleSink,
     palette: Option<u32>,
@@ -1804,76 +1802,6 @@ fn spawn_mailboxes(
                 Name::new(format!("mailbox {i}")),
                 Transform::from_xyz(at.x, town.ground_y(at), at.z)
                     .with_rotation(Quat::from_rotation_y(yaw)),
-                Visibility::default(),
-            ))
-            .id();
-        for (mesh, material) in &model {
-            commands.spawn((
-                Mesh3d(mesh.clone()),
-                MeshMaterial3d(material.clone()),
-                ChildOf(root),
-            ));
-        }
-    }
-}
-
-/// The houses' gyroids (`ac_haniwa.c`): `cKF_bs_r_hnw` posed, its
-/// `hnw_tmem_txt` in segment B (`ANIME_4_TXT_SEG`), the `hnw_face`
-/// palette in TLUT 15, prim white at LOD 128; unturned, on the layout's
-/// `HANIWA0..3` units.
-fn spawn_gyroids(
-    commands: &mut Commands,
-    disc: &GameDisc,
-    town: &Town,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<N64Material>,
-    images: &mut Assets<Image>,
-) {
-    let Some(retail) = &town.retail else { return };
-    let Some(skel) = disc
-        .catalog
-        .get("cKF_bs_r_hnw")
-        .and_then(|a| crate::skeleton::Skeleton::read(&disc.rom, a.offset))
-    else {
-        return;
-    };
-    // At rest in the first frame of its move animation (frames 1-9).
-    let anim = disc
-        .catalog
-        .get("cKF_ba_r_hnw_move")
-        .and_then(|a| crate::skeleton::Animation::read(&disc.rom, a.offset, skel.joints.len()));
-    let world = skel.world_matrices(anim.as_ref(), 1.0);
-    let (Some(tex), Some(face)) = (
-        disc.catalog.get("hnw_tmem_txt"),
-        disc.catalog.get("hnw_face"),
-    ) else {
-        warn!("gyroid model not found on the disc");
-        return;
-    };
-    let Some(bytes) = disc.rom.slice(disc::RomSource::Rel, tex.offset, tex.size) else {
-        return;
-    };
-    let mut segs = Segments::default();
-    segs.set_segment(0x0B, bytes.into());
-    // Its limbs share one vertex buffer through segment-D matrices.
-    let mut sink = crate::disc_gfx::run_display_lists_with_colors(
-        &disc.rom,
-        &skel.lists(),
-        [255; 4],
-        128,
-        [0; 4],
-        &[(15, face.offset)],
-    );
-    crate::skeleton::place_on_joints(&mut sink, &skel, &world);
-    let model = sink_meshes(disc, &sink, None, false, &segs, (meshes, materials, images));
-    for (i, cell) in retail.gyroids.iter().enumerate() {
-        let Some(&cell) = cell.as_ref() else { continue };
-        let at = mailbox_position(cell);
-        let root = commands
-            .spawn((
-                DiscObject,
-                Name::new(format!("gyroid {i}")),
-                Transform::from_xyz(at.x, town.ground_y(at), at.z),
                 Visibility::default(),
             ))
             .id();
