@@ -12,6 +12,7 @@ mod disc_town;
 mod ecology;
 mod environment;
 mod face;
+mod furniture;
 mod game_disc;
 mod ground_map;
 mod house;

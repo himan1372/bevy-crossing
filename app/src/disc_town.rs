@@ -1219,26 +1219,13 @@ fn structure_poses(disc: &GameDisc) -> &'static HashMap<u32, Mat4> {
                 else {
                     continue;
                 };
-                let locals: Vec<Transform> = match disc
+                let anim = disc
                     .catalog
                     .get(&format!("cKF_ba_r_obj_{season}_{name}"))
                     .and_then(|a| {
                         crate::skeleton::Animation::read(&disc.rom, a.offset, skel.joints.len())
-                    }) {
-                    Some(anim) => anim.pose(1.0).local_transforms(&skel),
-                    None => skel
-                        .joints
-                        .iter()
-                        .map(|j| {
-                            Transform::from_translation(Vec3::from(j.translation.map(f32::from)))
-                        })
-                        .collect(),
-                };
-                let mut world: Vec<Mat4> = Vec::with_capacity(locals.len());
-                for (j, local) in locals.iter().enumerate() {
-                    let parent = skel.parents[j].map_or(Mat4::IDENTITY, |p| world[p]);
-                    world.push(parent * local.to_matrix());
-                }
+                    });
+                let world = skel.world_matrices(anim.as_ref(), 1.0);
                 for (j, joint) in skel.joints.iter().enumerate() {
                     if let Some(list) = joint.model {
                         out.insert(list, world[j]);

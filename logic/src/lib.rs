@@ -47,6 +47,7 @@ mod dvd;
 mod ecology;
 mod endpoint_circle;
 mod fg_data;
+pub use fg_data::{parse_fg_records, FgRecord};
 mod field_gen;
 pub mod random_field;
 mod random_field_tables;

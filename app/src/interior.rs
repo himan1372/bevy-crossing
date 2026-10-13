@@ -321,10 +321,17 @@ fn spawn_blend_lists(
 /// ids (8 bytes, one per villager).
 const HOUSE_DATA_SIZE: u32 = 8;
 
-/// A villager's room (`SCENE_NPC_HOUSE`): the small room shell (villager
-/// houses aren't in `aMR_GetSceneRoomKind`'s table, so kind S) with their
-/// own wallpaper and carpet (`npc_house_list` -> `mNpc_RenewalNpcRoom`).
-/// Their furniture (`fgnpcdata.bin`) waits for the item models.
+/// A villager room's floor spans model cells 1..7: centre (4, 1, 4).
+const VILLAGER_ROOM_CENTRE: Vec3 = Vec3::new(4.0, 1.0, 4.0);
+/// Half a villager room's inside width, in cells.
+pub const VILLAGER_ROOM_HALF: f32 = 3.0;
+
+/// A villager's room (`npc_room01`): `ac_arrange_room` draws the 6x6 room
+/// (`rom_myhome2_floor` / `_wall` / `_wallT`) with their own wallpaper and
+/// carpet (`npc_house_list` -> `mNpc_RenewalNpcRoom`), and `ac_my_room`
+/// their furniture: the main layer and what stands on it (the layouts in
+/// `fgnpcdata.bin` named by the house data's layer ids,
+/// `mFM_ChangeFGName`). Returns the furniture to collide with.
 pub fn spawn_villager_room(
     commands: &mut Commands,
     disc: &GameDisc,
@@ -333,23 +340,23 @@ pub fn spawn_villager_room(
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<N64Material>,
     images: &mut Assets<Image>,
-) -> bool {
+) -> Option<Vec<RoomFurniture>> {
     let list = |name: &str| disc.catalog.get(name).map(|a| a.offset);
     let (Some(floor), Some(wall)) = (
-        list("rom_myhome1_floor_model"),
-        list("rom_myhome1_wall_model"),
+        list("rom_myhome2_floor_model"),
+        list("rom_myhome2_wall_model"),
     ) else {
-        return false;
+        return None;
     };
-    let Some(data) = disc.catalog.get("npc_house_list").and_then(|a| {
+    let mut walls = vec![(wall, false)];
+    walls.extend(list("rom_myhome2_wall_modelT").map(|l| (l, false)));
+    let data = disc.catalog.get("npc_house_list").and_then(|a| {
         disc.rom.slice(
             RomSource::Rel,
             a.offset + npc_index * HOUSE_DATA_SIZE,
             HOUSE_DATA_SIZE,
         )
-    }) else {
-        return false;
-    };
+    })?;
     let (wall_no, floor_no) = (data[2] as usize, data[3] as usize);
     let assets = (&mut *meshes, &mut *materials, &mut *images);
     spawn_shell(
@@ -357,15 +364,51 @@ pub fn spawn_villager_room(
         disc,
         "villager room",
         origin,
-        ROOM_CENTRE,
+        VILLAGER_ROOM_CENTRE,
         &[(floor, false)],
-        &[(wall, false)],
+        &walls,
         &[],
         floor_no,
         wall_no,
         assets,
     );
-    true
+
+    let layer = |o: usize| u16::from_be_bytes([data[o], data[o + 1]]);
+    let layouts = rustimal_logic::parse_fg_records(&disc.npc_room_layouts).ok()?;
+    let items = |id: u16| layouts.iter().find(|r| r.fg_id == id).map(|r| r.items);
+    let corner = origin - VILLAGER_ROOM_CENTRE.with_y(0.0);
+    let mut out = Vec::new();
+    // What stands on each unit of the main layer, for the upper layer.
+    let mut under = std::collections::HashMap::new();
+    for (i, &item) in items(layer(4)).iter().flatten().enumerate() {
+        let ut = ((i % 16) as i32, (i / 16) as i32);
+        if crate::furniture::furniture_index(item).is_none() {
+            continue;
+        }
+        crate::furniture::spawn_furniture(
+            commands, disc, item, ut, corner, 0.0, meshes, materials, images,
+        );
+        for cell in crate::furniture::footprint(disc, item, ut) {
+            under.insert(cell, item);
+            out.push(RoomFurniture {
+                centre: corner + Vec3::new(cell.0 as f32 + 0.5, 0.0, cell.1 as f32 + 0.5) - origin,
+                half: Vec2::splat(0.5),
+            });
+        }
+    }
+    for (i, &item) in items(layer(6)).iter().flatten().enumerate() {
+        let ut = ((i % 16) as i32, (i / 16) as i32);
+        if crate::furniture::furniture_index(item).is_none() {
+            continue;
+        }
+        let lift = under
+            .get(&ut)
+            .map_or(0.0, |&below| crate::furniture::top_height(disc, below));
+        crate::furniture::spawn_furniture(
+            commands, disc, item, ut, corner, lift, meshes, materials, images,
+        );
+    }
+    Some(out)
 }
 
 /// Spawns display lists as N64 meshes under `parent`.
@@ -382,7 +425,27 @@ fn spawn_lists(
     materials: &mut Assets<N64Material>,
     images: &mut Assets<Image>,
 ) {
-    for part in &run_display_lists(&disc.rom, lists).parts {
+    let sink = run_display_lists(&disc.rom, lists);
+    spawn_sink(
+        commands, disc, parent, &sink, palette, segs, blend, meshes, materials, images,
+    );
+}
+
+/// Spawns already-run display lists as N64 meshes under `parent`.
+#[allow(clippy::too_many_arguments)]
+pub fn spawn_sink(
+    commands: &mut Commands,
+    disc: &GameDisc,
+    parent: Entity,
+    sink: &crate::disc_gfx::TriangleSink,
+    palette: Option<u32>,
+    segs: &Segments,
+    blend: bool,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<N64Material>,
+    images: &mut Assets<Image>,
+) {
+    for part in &sink.parts {
         let texture = part.key.tex.as_ref().and_then(|k| {
             decode_texture(&disc.rom, k, palette, segs)
                 .map(|rgba| images.add(texture_image(rgba, k)))

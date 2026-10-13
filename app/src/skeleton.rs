@@ -290,6 +290,59 @@ impl Pose {
     }
 }
 
+impl Skeleton {
+    /// Every joint's model-space matrix in `frame` of `anim` (the rest
+    /// pose without one), for drawing the skeleton still.
+    pub fn world_matrices(&self, anim: Option<&Animation>, frame: f32) -> Vec<Mat4> {
+        let locals: Vec<Transform> = match anim {
+            Some(a) => a.pose(frame).local_transforms(self),
+            None => self
+                .joints
+                .iter()
+                .map(|j| Transform::from_translation(Vec3::from(j.translation.map(f32::from))))
+                .collect(),
+        };
+        let mut world: Vec<Mat4> = Vec::with_capacity(locals.len());
+        for (j, local) in locals.iter().enumerate() {
+            let parent = self.parents[j].map_or(Mat4::IDENTITY, |p| world[p]);
+            world.push(parent * local.to_matrix());
+        }
+        world
+    }
+
+    /// Display lists of the drawing joints, in drawing order (the same
+    /// order as [`Skeleton::matrix_joints`]).
+    pub fn lists(&self) -> Vec<u32> {
+        self.joints.iter().filter_map(|j| j.model).collect()
+    }
+}
+
+/// Moves the vertices of a still skeleton's lists (run in
+/// [`Skeleton::lists`] order) onto their joints: a vertex either keeps
+/// its own list's joint (`LIST_TAG | i`) or names a segment-D matrix slot.
+pub fn place_on_joints(
+    sink: &mut crate::disc_gfx::TriangleSink,
+    skeleton: &Skeleton,
+    world: &[Mat4],
+) {
+    let matrix_joints = skeleton.matrix_joints();
+    for v in sink.parts.iter_mut().flat_map(|p| p.vertices.iter_mut()) {
+        let slot = match v.mtx >> 24 {
+            t if t << 24 == crate::disc_gfx::LIST_TAG => v.mtx & 0x00FF_FFFF,
+            0x0D => (v.mtx & 0x00FF_FFFF) / 0x40,
+            _ => continue,
+        };
+        let Some(m) = matrix_joints.get(slot as usize).and_then(|&j| world.get(j)) else {
+            continue;
+        };
+        v.pos = m.transform_point3(Vec3::from(v.pos)).to_array();
+        v.normal = m
+            .transform_vector3(Vec3::from(v.normal))
+            .normalize_or_zero()
+            .to_array();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

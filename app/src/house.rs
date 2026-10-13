@@ -67,6 +67,18 @@ struct Obstacle {
     max_z: f32,
 }
 
+impl Obstacle {
+    /// A room furniture box, in a room at `origin`.
+    fn around(origin: Vec3, f: &crate::interior::RoomFurniture) -> Self {
+        Self {
+            min_x: origin.x + f.centre.x - f.half.x,
+            max_x: origin.x + f.centre.x + f.half.x,
+            min_z: origin.z + f.centre.z - f.half.y,
+            max_z: origin.z + f.centre.z + f.half.y,
+        }
+    }
+}
+
 /// Marker for the "inside house" HUD indicator.
 #[derive(Component)]
 struct HouseHudText;
@@ -76,13 +88,13 @@ const INTERIOR_ORIGIN: Vec3 = Vec3::new(3000.0, 0.0, 3000.0);
 /// Villager rooms sit beside the player's, this far apart in x.
 const VILLAGER_ROOM_SPACING: f32 = 100.0;
 
-/// The room the player is in (or last entered): its origin.
+/// The room the player is in (or last entered): its origin and bounds.
 #[derive(Resource, Clone, Copy)]
-struct CurrentRoom(Vec3);
+struct CurrentRoom(Vec3, RoomBounds);
 
 impl Default for CurrentRoom {
     fn default() -> Self {
-        Self(INTERIOR_ORIGIN)
+        Self(INTERIOR_ORIGIN, RoomBounds::default())
     }
 }
 
@@ -100,13 +112,14 @@ fn build_villager_rooms(
     mut meshes: ResMut<Assets<Mesh>>,
     mut n64: ResMut<Assets<crate::n64_material::N64Material>>,
     mut images: ResMut<Assets<Image>>,
+    mut obstacles: ResMut<InteriorObstacles>,
 ) {
     let Some(disc) = disc else { return };
     let mut doors = Vec::new();
     for (i, v) in villagers.iter().enumerate() {
         let Some(idx) = v.npc_index else { continue };
         let origin = INTERIOR_ORIGIN + Vec3::X * VILLAGER_ROOM_SPACING * (i + 1) as f32;
-        if crate::interior::spawn_villager_room(
+        let Some(furniture) = crate::interior::spawn_villager_room(
             &mut commands,
             &disc,
             idx,
@@ -114,9 +127,13 @@ fn build_villager_rooms(
             &mut meshes,
             &mut n64,
             &mut images,
-        ) {
-            doors.push((v.door(), origin));
-        }
+        ) else {
+            continue;
+        };
+        obstacles
+            .0
+            .extend(furniture.iter().map(|f| Obstacle::around(origin, f)));
+        doors.push((v.door(), origin));
     }
     info!("{} villager rooms from the disc", doors.len());
     commands.insert_resource(VillagerDoors(doors));
@@ -226,12 +243,7 @@ fn build_interior(
     }) {
         let obstacles = furniture
             .iter()
-            .map(|f| Obstacle {
-                min_x: INTERIOR_ORIGIN.x + f.centre.x - f.half.x,
-                max_x: INTERIOR_ORIGIN.x + f.centre.x + f.half.x,
-                min_z: INTERIOR_ORIGIN.z + f.centre.z - f.half.y,
-                max_z: INTERIOR_ORIGIN.z + f.centre.z + f.half.y,
-            })
+            .map(|f| Obstacle::around(INTERIOR_ORIGIN, f))
             .collect();
         commands.insert_resource(InteriorObstacles(obstacles));
         commands.insert_resource(RoomBounds::disc_room());
@@ -388,7 +400,11 @@ impl Default for RoomBounds {
 impl RoomBounds {
     /// The disc's 4x4-cell room: the door is in the middle of the south wall.
     fn disc_room() -> Self {
-        let half = crate::interior::ROOM_HALF;
+        Self::square(crate::interior::ROOM_HALF)
+    }
+
+    /// A square room `half` cells across each way, door mid-south.
+    fn square(half: f32) -> Self {
         Self {
             walk_half: half - PLAYER_RADIUS,
             door_z: half,
@@ -443,8 +459,9 @@ fn house_enter(
             return;
         }
         commands.insert_resource(ReturnPosition(transform.translation));
-        commands.insert_resource(CurrentRoom(origin));
-        transform.translation = origin + Vec3::new(0.0, 1.0, RoomBounds::disc_room().spawn_z);
+        let room = RoomBounds::square(crate::interior::VILLAGER_ROOM_HALF);
+        commands.insert_resource(CurrentRoom(origin, room));
+        transform.translation = origin + Vec3::new(0.0, 1.0, room.spawn_z);
         facing.dir = Vec3::new(0.0, 0.0, -1.0);
         next_state.set(HouseState::Inside);
         println!("Entered a villager's house");
@@ -467,7 +484,7 @@ fn house_enter(
         return;
     }
     commands.insert_resource(ReturnPosition(transform.translation));
-    commands.insert_resource(CurrentRoom(INTERIOR_ORIGIN));
+    commands.insert_resource(CurrentRoom(INTERIOR_ORIGIN, *bounds));
     transform.translation = INTERIOR_ORIGIN + Vec3::new(0.0, 1.0, bounds.spawn_z);
     facing.dir = Vec3::new(0.0, 0.0, -1.0);
     next_state.set(HouseState::Inside);
@@ -482,9 +499,9 @@ fn house_exit(
     mut next_state: ResMut<NextState<HouseState>>,
     return_pos: Option<Res<ReturnPosition>>,
     mut player_query: Query<(&mut Transform, &mut Facing), With<Player>>,
-    bounds: Res<RoomBounds>,
     room: Res<CurrentRoom>,
 ) {
+    let bounds = room.1;
     if *state != HouseState::Inside {
         return;
     }
@@ -521,9 +538,9 @@ fn interior_movement(
     mut player_query: Query<(&mut Transform, &mut Facing, &mut Locomotion), With<Player>>,
     obstacles: Res<InteriorObstacles>,
     time: Res<Time>,
-    bounds: Res<RoomBounds>,
     room: Res<CurrentRoom>,
 ) {
+    let bounds = room.1;
     if *state != HouseState::Inside || !focus.is_world() {
         return;
     }
@@ -578,10 +595,13 @@ impl Plugin for HousePlugin {
             .add_systems(Startup, find_player_house.after(crate::town::generate_town))
             .init_resource::<RoomBounds>()
             .init_resource::<CurrentRoom>()
+            .init_resource::<InteriorObstacles>()
             .init_resource::<VillagerDoors>()
             .add_systems(
                 Startup,
-                build_villager_rooms.after(crate::npc::spawn_villagers),
+                build_villager_rooms
+                    .after(crate::npc::spawn_villagers)
+                    .after(build_interior),
             )
             .add_systems(
                 Startup,

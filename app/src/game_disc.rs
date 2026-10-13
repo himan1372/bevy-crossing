@@ -37,6 +37,9 @@ pub struct GameDisc {
     /// `player_room_wall.bin`, `forest_2nd.arc`).
     pub player_room_floors: Arc<[u8]>,
     pub player_room_walls: Arc<[u8]>,
+    /// Villager room layouts (`fgnpcdata.bin`, `forest_2nd.arc`): FG
+    /// records named by each house's layer ids.
+    pub npc_room_layouts: Arc<[u8]>,
     /// Dialogue, strings and choice labels (`crate::messages`).
     pub text: Option<Arc<crate::messages::GameText>>,
 }
@@ -64,7 +67,7 @@ fn configured_path(args: &[String], settings_json: Option<&str>) -> Option<PathB
     })
 }
 
-fn load(path: PathBuf) -> Result<GameDisc, String> {
+pub(crate) fn load(path: PathBuf) -> Result<GameDisc, String> {
     let fail = |e: &dyn std::fmt::Display| format!("{}: {e}", path.display());
     let mut disc = Disc::open_path(&path).map_err(|e| fail(&e))?;
     let rom = Arc::new(RomImage::from_disc(&mut disc).map_err(|e| fail(&e))?);
@@ -101,6 +104,7 @@ fn load(path: PathBuf) -> Result<GameDisc, String> {
         npc_names,
         player_room_floors: second_bank("player_room_floor.bin"),
         player_room_walls: second_bank("player_room_wall.bin"),
+        npc_room_layouts: second_bank("fgnpcdata.bin"),
         text,
     })
 }
