@@ -284,10 +284,26 @@ fn spawn_mailbox(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     house: Option<Res<PlayerHouse>>,
+    town: Res<crate::town::Town>,
     loaded: Option<Res<crate::save::LoadedSave>>,
     mut mailbox: ResMut<Mailbox>,
 ) {
     let Some(house) = house else { return };
+    if let Some(save) = loaded.as_ref().and_then(|l| l.0.as_ref()) {
+        mailbox.letters = save.letters.clone();
+        mailbox.sent = save.sent_letters.clone();
+        println!("Restored {} letters from save", mailbox.letters.len());
+    } else {
+        mailbox.letters = starter_letters();
+        println!("Seeded starter letters");
+    }
+    // The disc town draws the real mailbox at the layout's MAILBOX0.
+    if let Some(cell) = town.retail.as_ref().and_then(|r| r.mailboxes[0]) {
+        let pos = crate::disc_town::mailbox_position(cell);
+        info!("player mailbox at {pos}");
+        commands.insert_resource(MailboxPos(pos));
+        return;
+    }
     // Beside the house (right of the door), clear of the doorway.
     let pos = house.door_pos + Vec3::new(3.0, 0.0, 0.8);
     commands.insert_resource(MailboxPos(pos));
@@ -310,15 +326,6 @@ fn spawn_mailbox(
         MeshMaterial3d(materials.add(Color::srgb(0.9, 0.15, 0.15))),
         Transform::from_translation(pos + Vec3::new(0.32, 1.6, 0.0)),
     ));
-
-    if let Some(save) = loaded.as_ref().and_then(|l| l.0.as_ref()) {
-        mailbox.letters = save.letters.clone();
-        mailbox.sent = save.sent_letters.clone();
-        println!("Restored {} letters from save", mailbox.letters.len());
-    } else {
-        mailbox.letters = starter_letters();
-        println!("Seeded starter letters");
-    }
 }
 
 /// E at the mailbox: open the mail UI.

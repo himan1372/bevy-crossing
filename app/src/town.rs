@@ -163,8 +163,9 @@ impl Town {
         }
     }
 
-    /// Inside one of the retail player houses' bodies (they block like the
-    /// game's structure actors; the reserved cells around them don't).
+    /// Inside one of the retail player houses' bodies or mailboxes (they
+    /// block like the game's structure actors; the reserved cells around
+    /// them don't).
     fn in_player_home(&self, p: Vec3) -> bool {
         let Some(retail) = &self.retail else {
             return false;
@@ -181,6 +182,12 @@ impl Town {
                     (p.x - c.x).abs() < half && (p.z - c.z).abs() < half
                 })
             })
+            // Each house's mailbox fills its unit.
+            || retail
+                .mailboxes
+                .iter()
+                .flatten()
+                .any(|&m| Self::cell_indices_of(p) == Some(m))
     }
 
     /// (ax, az, cx, cz) of the plan cell under a world position.

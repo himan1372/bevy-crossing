@@ -261,6 +261,8 @@ pub struct RetailLayout {
     /// Each playable acre's field items (`mActor_name_t`, row by row),
     /// from its layout; objects the plan moved aside are emptied.
     pub items: Vec<[u16; 256]>,
+    /// The four mailboxes (`ACTOR_PROP_MAILBOX0..3`) by house number.
+    pub mailboxes: [Option<(usize, usize, usize, usize)>; 4],
 }
 
 /// A public building from the layout, placed like its actor does.
@@ -664,6 +666,15 @@ pub fn build_retail_town(
             field_items.push(items);
         }
     }
+    let mut mailboxes = [None; 4];
+    for (a, items) in field_items.iter().enumerate() {
+        for (c, &item) in items.iter().enumerate() {
+            if (MAILBOX0..MAILBOX0 + 4).contains(&item) {
+                mailboxes[(item - MAILBOX0) as usize] =
+                    Some((a % ACRE_WIDTH, a / ACRE_WIDTH, c % 16, c / 16));
+            }
+        }
+    }
     (
         RetailLayout {
             field,
@@ -671,11 +682,15 @@ pub fn build_retail_town(
             rocks,
             player_homes,
             buildings,
+            mailboxes,
             items: field_items,
         },
         ground,
     )
 }
+
+/// `ACTOR_PROP_MAILBOX0` (`m_name_table.h`): the player houses' mailboxes.
+const MAILBOX0: u16 = 0xA000;
 
 /// `ROCK_A` (`m_name_table.h`); ROCK_A..=ROCK_E are 0x63..=0x67.
 const ROCK_A: u16 = 0x0063;
@@ -1062,6 +1077,15 @@ pub(crate) fn build_disc_town(
         &mut images,
         &mut lights,
     );
+    spawn_mailboxes(
+        &mut commands,
+        &disc,
+        &town,
+        winter,
+        &mut meshes,
+        &mut materials,
+        &mut images,
+    );
     spawn_disc_objects(
         &mut commands,
         &disc,
@@ -1207,7 +1231,7 @@ fn build_model_with_prim(
 
 /// Structure skeletons whose parts are drawn in their idle pose: houses,
 /// player houses and public buildings, summer and winter.
-const POSED_STRUCTURES: [&str; 14] = [
+const POSED_STRUCTURES: [&str; 15] = [
     "house1",
     "house2",
     "house3",
@@ -1222,6 +1246,7 @@ const POSED_STRUCTURES: [&str; 14] = [
     "kouban",
     "museum",
     "tailor",
+    "post",
 ];
 
 /// Model-space transform of each structure part's display list (REL
@@ -1241,9 +1266,12 @@ fn structure_poses(disc: &GameDisc) -> &'static HashMap<u32, Mat4> {
                 else {
                     continue;
                 };
+                // The winter mailbox has no animations of its own:
+                // ac_mailbox.c poses both skeletons with the summer ones.
                 let anim = disc
                     .catalog
                     .get(&format!("cKF_ba_r_obj_{season}_{name}"))
+                    .or_else(|| disc.catalog.get(&format!("cKF_ba_r_obj_s_{name}")))
                     .and_then(|a| {
                         crate::skeleton::Animation::read(&disc.rom, a.offset, skel.joints.len())
                     });
@@ -1619,6 +1647,67 @@ fn spawn_player_homes(
             ));
         }
     }
+}
+
+/// The player houses' mailboxes (`ac_mailbox.c`): the `obj_s/w_post`
+/// skeleton in its idle pose, at the layout's `MAILBOX0..3` units,
+/// turned like their houses (`aMBX_actor_ct` angle_table: even 90 deg,
+/// odd 0).
+fn spawn_mailboxes(
+    commands: &mut Commands,
+    disc: &GameDisc,
+    town: &Town,
+    winter: bool,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<N64Material>,
+    images: &mut Assets<Image>,
+) {
+    let Some(retail) = &town.retail else { return };
+    let season = if winter { "w" } else { "s" };
+    let prefix = format!("obj_{season}_post");
+    let lists = part_lists(
+        &disc.catalog,
+        &prefix,
+        &["main", "front", "flag_ne", "flag_saki"],
+    );
+    if lists.is_empty() {
+        warn!("mailbox model not found on the disc");
+        return;
+    }
+    let palette = disc.catalog.get(&format!("{prefix}_pal")).map(|a| a.offset);
+    let model = build_model(disc, &lists, palette, meshes, materials, images);
+    for (i, cell) in retail.mailboxes.iter().enumerate() {
+        let Some(&(ax, az, cx, cz)) = cell.as_ref() else {
+            continue;
+        };
+        let at = mailbox_position((ax, az, cx, cz));
+        let yaw = if i % 2 == 0 {
+            std::f32::consts::FRAC_PI_2
+        } else {
+            0.0
+        };
+        let root = commands
+            .spawn((
+                DiscObject,
+                Name::new(format!("mailbox {i}")),
+                Transform::from_xyz(at.x, town.ground_y(at), at.z)
+                    .with_rotation(Quat::from_rotation_y(yaw)),
+                Visibility::default(),
+            ))
+            .id();
+        for (mesh, material) in &model {
+            commands.spawn((
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(material.clone()),
+                ChildOf(root),
+            ));
+        }
+    }
+}
+
+/// Where a mailbox stands: its unit's centre.
+pub fn mailbox_position((ax, az, cx, cz): (usize, usize, usize, usize)) -> Vec3 {
+    Town::cell_to_world(ax, az, cx, cz)
 }
 
 /// Marker for a disc-drawn house or rock.
