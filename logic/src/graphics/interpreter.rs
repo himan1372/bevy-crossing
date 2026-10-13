@@ -298,12 +298,12 @@ impl Emu64 {
                 *pc += 1;
             }
             op::G_GEOMETRYMODE => {
-                let clear = gfx.w0 & 0x00FF_FFFF;
+                // emu64 dl_G_GEOMETRYMODE: w0's low 24 bits are an AND mask
+                // (gsSPClearGeometryMode puts ~flags there), w1 the bits to
+                // set: mode = set | (mode & mask).
+                let keep = gfx.w0 & 0x00FF_FFFF;
                 let set = gfx.w1 & 0x00FF_FFFF;
-                // Retail: G_GEOMETRYMODE packs clear/set; the actual
-                // handler distinguishes via the param field.
-                let _ = clear;
-                self.state.set_geometry(0, set);
+                self.state.set_geometry(!keep, set);
                 *pc += 1;
             }
             op::G_SETOTHERMODE_H => {
@@ -890,6 +890,34 @@ mod tests {
             ((opcode as u32) << 24) | ((param as u32) << 16) | (len as u32),
             addr,
         )
+    }
+
+    #[test]
+    fn geometry_mode_clears_through_its_mask() {
+        let mut emu = Emu64::new();
+        let mut be = TestBackend {
+            tris: 0,
+            gxdl: 0,
+            texrects: 0,
+        };
+        let mut lists = HashMap::new();
+        // gsSPLoadGeometryMode-style set of LIGHTING|FOG|ZBUFFER, then
+        // gsSPClearGeometryMode(G_LIGHTING | G_FOG).
+        let (light, fog, z) = (
+            super::super::command::geo::G_LIGHTING,
+            super::super::command::geo::G_FOG,
+            super::super::command::geo::G_ZBUFFER,
+        );
+        lists.insert(
+            0x1000,
+            vec![
+                Gfx::new(0xD900_0000, light | fog | z),
+                Gfx::new(0xD900_0000 | (!(light | fog) & 0x00FF_FFFF), 0),
+                gfx(op::G_ENDDL, 0, 0, 0),
+            ],
+        );
+        emu.taskstart(&TestMem, &mut be, &lists, 0x1000);
+        assert_eq!(emu.state.geometry_mode, z);
     }
 
     #[test]
