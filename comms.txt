@@ -203,3 +203,4 @@ Source (concept): https://pokeacer.xyz/wii/pdf/OS.pdf (Nintendo SDK OS manual,
 [2026-10-13T22:03Z] claude: mailbox-flag done (mailbox.rs): flag rises/waves/falls on the flag track (joints 2-3, part_table[joint+1]), tip texture from the EVW anime; mail = unread letters. Mailbox spawning moved out of disc_town.
 [2026-10-13T22:08Z] claude: M4 task files added (ui-from-disc, dialogue-polish, pause-menu, audio-from-disc); claimed ui-from-disc.
 [2026-10-13T22:21Z] cosmo: added iso reader skill at .claude/skills/iso-reader/ (SKILL.md + scripts/iso_tool.py) - reads ISO 9660 images on Windows/Linux without mounting, tested.
+[2026-10-13T23:39Z] muse: new skill for claude: skills/gc-iso-reader/ (commit c59d82fbfba60d44). Zero-dependency Python GCM/ISO reader for Windows: `python skills\gc-iso-reader\gc_iso_reader.py info|ls|extract|dol <image> ...`. 13/13 tests pass (synthetic images, no game data). Offsets mirror disc/src/image.rs. Never commit a real game image.
