@@ -227,6 +227,32 @@ pub struct TriangleSink {
 }
 
 impl TriangleSink {
+    /// The highest upward-facing surface over model point (`x`, `z`), as
+    /// a stand-in for a room's collision heights.
+    pub fn height_at(&self, x: f32, z: f32) -> Option<f32> {
+        let mut best: Option<f32> = None;
+        for tri in self
+            .parts
+            .iter()
+            .flat_map(|p| p.vertices.as_chunks::<3>().0)
+        {
+            let [a, b, c] = [tri[0].pos, tri[1].pos, tri[2].pos];
+            let d = (b[2] - c[2]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[2] - c[2]);
+            if d.abs() < 1e-6 {
+                continue;
+            }
+            let u = ((b[2] - c[2]) * (x - c[0]) + (c[0] - b[0]) * (z - c[2])) / d;
+            let v = ((c[2] - a[2]) * (x - c[0]) + (a[0] - c[0]) * (z - c[2])) / d;
+            let w = 1.0 - u - v;
+            if u < 0.0 || v < 0.0 || w < 0.0 {
+                continue;
+            }
+            let y = u * a[1] + v * b[1] + w * c[1];
+            best = Some(best.map_or(y, |h| h.max(y)));
+        }
+        best
+    }
+
     pub fn triangle_count(&self) -> usize {
         self.parts.iter().map(|p| p.vertices.len() / 3).sum()
     }

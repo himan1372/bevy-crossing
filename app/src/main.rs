@@ -34,6 +34,7 @@ mod remote;
 mod roster;
 mod save;
 mod shop;
+mod shop_display;
 mod skeleton;
 mod states;
 mod talk;
@@ -85,6 +86,7 @@ fn main() {
         .add_plugins(HousePlugin)
         .add_plugins(MailPlugin)
         .add_plugins(ShopPlugin)
+        .add_plugins(shop_display::ShopDisplayPlugin)
         .add_plugins(QuestPlugin)
         .add_plugins(PocketsPlugin)
         .add_plugins(ClockPlugin)

@@ -360,6 +360,28 @@ mod tests {
         let path = std::env::var("BEVY_CROSSING_ISO").expect("set BEVY_CROSSING_ISO");
         let disc = crate::game_disc::load(path.into()).unwrap();
         let recs = rustimal_logic::parse_fg_records(&disc.fgdata).unwrap();
+        let lists: Vec<u32> = [
+            "rom_shop1f_model",
+            "rom_shop1f_modelT",
+            "rom_shop1w_model",
+            "rom_shop1w_modelT",
+            "rom_shop1_fuku_model",
+            "rom_shop1_fuku_modelT",
+        ]
+        .iter()
+        .filter_map(|n| disc.catalog.get(n).map(|a| a.offset))
+        .collect();
+        let sink = run_display_lists(&disc.rom, &lists);
+        let r = recs.iter().find(|r| r.fg_id == 0x22).unwrap();
+        for (i, &it) in r.items.iter().enumerate() {
+            if it >> 8 != 0xFE {
+                continue;
+            }
+            let (x, z) = ((i % 16) as f32, (i / 16) as f32);
+            let k = 40.0 / 0.0625;
+            let top = sink.height_at((x + 0.5) * k, (z + 0.5) * k).map(|y| y / k);
+            println!("slot {it:04x} at ({x},{z}) top {top:?}");
+        }
         for id in [0x22u16, 0x23] {
             let Some(r) = recs.iter().find(|r| r.fg_id == id) else {
                 continue;

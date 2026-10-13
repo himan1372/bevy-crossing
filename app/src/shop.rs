@@ -67,6 +67,9 @@ pub struct StockItem {
     pub item: ItemId,
     pub name: String,
     pub price: u32,
+    /// Bought today: its slot shows a sold-out sign.
+    #[serde(default)]
+    pub sold: bool,
 }
 
 impl StockItem {
@@ -75,6 +78,7 @@ impl StockItem {
             item,
             name: items::name(item),
             price: items::price(item).unwrap_or(0),
+            sold: false,
         }
     }
 }
@@ -110,6 +114,13 @@ impl ShopData {
         if let Some(p) = self.priorities {
             crate::goods::set_priorities(p);
         }
+    }
+
+    /// Indices of the goods still for sale.
+    fn for_sale(&self) -> Vec<usize> {
+        (0..self.stock.len())
+            .filter(|&i| !self.stock[i].sold)
+            .collect()
     }
 
     /// Lays out the day's goods (`mSP_ExchangeLineUp_InGame`).
@@ -208,7 +219,7 @@ struct ShopHintText;
 struct ShopHudText;
 
 /// Far-away origin for the shop interior (house interior is at +z).
-const SHOP_ORIGIN: Vec3 = Vec3::new(3000.0, 0.0, -3000.0);
+pub const SHOP_ORIGIN: Vec3 = Vec3::new(3000.0, 0.0, -3000.0);
 /// Exterior building footprint in world units.
 const SHOP_W: f32 = 5.0;
 const SHOP_D: f32 = 4.0;
@@ -266,7 +277,10 @@ fn find_shop_spot(town: Res<Town>, mut commands: Commands) {
             placed: true,
             base_y,
         });
-        println!("Shop placed from the retail layout at {:?}", b.centre);
+        println!(
+            "Shop placed from the retail layout at {:?}, door {door_pos:?}",
+            b.centre
+        );
         return;
     }
     // Global cell dims: 5 acres * 16 by 6 acres * 16.
@@ -841,7 +855,7 @@ fn shop_menu_input(
     }
 
     let list_len = match ui.mode {
-        ShopMode::Buy => shop.stock.len(),
+        ShopMode::Buy => shop.for_sale().len(),
         ShopMode::Sell => sell_list(&inventory).len(),
     };
     if list_len == 0 {
@@ -861,9 +875,10 @@ fn shop_menu_input(
 
     match ui.mode {
         ShopMode::Buy => {
-            let Some(item) = shop.stock.get(ui.selected).cloned() else {
+            let Some(index) = shop.for_sale().get(ui.selected).copied() else {
                 return;
             };
+            let item = shop.stock[index].clone();
             if inventory.bells < item.price {
                 ui.message = "Not enough bells!".to_string();
                 return;
@@ -879,8 +894,8 @@ fn shop_menu_input(
             }
             inventory.bells -= item.price;
             // Each piece on display sells once (`aSD_ReportGoodsSales`).
-            shop.stock.remove(ui.selected);
-            ui.selected = ui.selected.min(shop.stock.len().saturating_sub(1));
+            shop.stock[index].sold = true;
+            ui.selected = ui.selected.min(shop.for_sale().len().saturating_sub(1));
             // Full price counts toward the shop upgrade (mSP_PlusSales).
             shop.shop.record_purchase(item.price);
             let mut msg = format!("Bought {}!", item.name);
@@ -950,7 +965,12 @@ fn refresh_shop_ui(
         match ui.mode {
             ShopMode::Buy => {
                 s.push_str("--- For Sale ---\n");
-                for (i, item) in shop.stock.iter().enumerate() {
+                for (i, item) in shop
+                    .for_sale()
+                    .into_iter()
+                    .map(|i| &shop.stock[i])
+                    .enumerate()
+                {
                     let cursor = if i == ui.selected { ">" } else { " " };
                     s.push_str(&format!("{cursor} {} — {} bells\n", item.name, item.price));
                 }
