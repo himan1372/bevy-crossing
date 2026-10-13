@@ -10,7 +10,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from gc_iso_reader import GcmImage, IsoError, GC_MAGIC
+from gc_iso_reader import GcmImage, IsoError, GC_MAGIC, rarc_files, resolve_image, yaz0_decode
 
 READER = os.path.join(os.path.dirname(os.path.abspath(__file__),
                                       ), "gc_iso_reader.py")
@@ -24,10 +24,9 @@ def build_image(path, game_id=b"GAFE01", corrupt_magic=False,
                 truncate_fst=False):
     img = bytearray(0x6000)
     # Header.
-    img[0x00:0x06] = game_id
-    img[0x06:0x08] = b"01"
-    img[0x08] = 0  # disc number
-    img[0x09] = 0  # version
+    img[0x00:0x06] = game_id  # game code 0-3, maker 4-5
+    img[0x06] = 1  # disc number
+    img[0x07] = 2  # version
     img[0x1C:0x20] = be32(0xDEADBEEF if corrupt_magic else GC_MAGIC)
     name = b"TEST GAME"
     img[0x20:0x20 + len(name)] = name
@@ -91,8 +90,44 @@ class TestReader(unittest.TestCase):
             self.assertEqual(img.game_id, "GAFE01")
             self.assertEqual(img.game_name, "TEST GAME")
             self.assertEqual(img.maker, "01")
+            self.assertEqual(img.disc_number, 1)
+            self.assertEqual(img.version, 2)
             self.assertEqual(img.dol_offset, 0x1000)
             self.assertEqual(img.fst_offset, 0x2000)
+
+    def test_yaz0(self):
+        # Flags 0b11100000: three literals, then copy 4 from distance 3.
+        src = b"Yaz0" + be32(7) + b"\x00" * 8 + bytes([0xE0]) + b"abc" + bytes([0x20, 0x02])
+        self.assertEqual(yaz0_decode(src), b"abcabca")
+        with self.assertRaises(IsoError):
+            yaz0_decode(b"Yaz0" + be32(9) + b"\x00" * 8 + bytes([0x00, 0x20, 0x09]))
+
+    def test_rarc(self):
+        d = bytearray(0x100)
+        d[:4] = b"RARC"
+        d[0x0C:0x10] = be32(0xC0)  # data at 0xE0
+        d[0x28:0x2C] = be32(2)  # entries
+        d[0x2C:0x30] = be32(0x20)  # entry table at 0x40
+        d[0x34:0x38] = be32(0x80)  # strings at 0xA0
+        d[0x40 + 6:0x40 + 8] = b"\x00\x00"  # file "a.bin" -> data+4, 5 bytes
+        d[0x48:0x4C] = be32(4)
+        d[0x4C:0x50] = be32(5)
+        d[0x54 + 4:0x54 + 6] = b"\x02\x00"  # a directory, skipped
+        d[0xA0:0xA6] = b"a.bin\x00"
+        d[0xE4:0xE9] = b"hello"
+        data, files = rarc_files(bytes(d))
+        self.assertEqual(files, [("a.bin", 0xE4, 5)])
+        self.assertEqual(data[0xE4:0xE9], b"hello")
+        with self.assertRaises(IsoError):
+            rarc_files(b"nope" * 8)
+
+    def test_rom_shortcut(self):
+        os.environ["BEVY_CROSSING_ISO"] = self.iso
+        try:
+            self.assertEqual(resolve_image("rom"), self.iso)
+        finally:
+            del os.environ["BEVY_CROSSING_ISO"]
+        self.assertEqual(resolve_image("x.iso"), "x.iso")
 
     def test_file_list(self):
         with GcmImage(self.iso) as img:
