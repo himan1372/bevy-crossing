@@ -6,6 +6,7 @@ use bevy::prelude::*;
 mod assets;
 mod character;
 mod clock;
+mod critters;
 mod dialogue;
 mod disc_gfx;
 mod disc_town;
@@ -89,6 +90,7 @@ fn main() {
         .add_plugins(ShopPlugin)
         .add_plugins(shop_display::ShopDisplayPlugin)
         .add_plugins(field_items::FieldItemsPlugin)
+        .add_plugins(critters::CrittersPlugin)
         .add_plugins(QuestPlugin)
         .add_plugins(PocketsPlugin)
         .add_plugins(ClockPlugin)

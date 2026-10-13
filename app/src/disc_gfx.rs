@@ -359,6 +359,18 @@ pub fn run_display_lists_with_prim(
     run_lists(rom, entries, prim, prim_lod, [0; 4])
 }
 
+/// As [`run_display_lists_with_prim`], also with the environment colour
+/// the draw code sets first (`gDPSetEnvColor`).
+pub fn run_display_lists_with_colors(
+    rom: &RomImage,
+    entries: &[u32],
+    prim: [u8; 4],
+    prim_lod: u8,
+    env: [u8; 4],
+) -> TriangleSink {
+    run_lists(rom, entries, prim, prim_lod, env)
+}
+
 /// The wet-sand colour field drawing puts in segment C for beach acres
 /// (`aFD_SetBeachColorOpaSegment`): `beach_env_color` swings between
 /// (144,128,96) and (186,164,124) with the waves; this is its midpoint.

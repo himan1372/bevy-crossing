@@ -23,10 +23,7 @@ use rustimal_logic::random_field::{
 };
 use rustimal_logic::town_gen::{CellKind, Feature, TownAcre, TownPlan, ACRE_DEPTH, ACRE_WIDTH};
 
-use crate::disc_gfx::{
-    decode_texture, run_display_lists, run_display_lists_with_prim, run_ground_lists, Segments,
-    LIST_TAG,
-};
+use crate::disc_gfx::{decode_texture, run_display_lists, run_ground_lists, Segments, LIST_TAG};
 use crate::environment::BuildingLights;
 use crate::game_disc::GameDisc;
 use crate::ground_map::{GroundMap, Unit};
@@ -1205,14 +1202,58 @@ fn build_model_with_prim(
     materials: &mut Assets<N64Material>,
     images: &mut Assets<Image>,
 ) -> Vec<(Handle<Mesh>, Handle<N64Material>)> {
-    let mut sink = run_display_lists_with_prim(&disc.rom, lists, prim, prim_lod);
+    let colors = DrawColors {
+        prim,
+        prim_lod,
+        env: [0; 4],
+    };
+    build_model_full(
+        disc,
+        lists,
+        palette,
+        colors,
+        blend,
+        &Segments::default(),
+        (meshes, materials, images),
+    )
+}
+
+/// Colours the draw code sets before a model's lists.
+#[derive(Clone, Copy)]
+pub(crate) struct DrawColors {
+    pub prim: [u8; 4],
+    pub prim_lod: u8,
+    pub env: [u8; 4],
+}
+
+/// As [`build_model_with_prim`], with the environment colour and the
+/// segments (`gSPSegment`) the draw code sets.
+pub(crate) fn build_model_full(
+    disc: &GameDisc,
+    lists: &[u32],
+    palette: Option<u32>,
+    colors: DrawColors,
+    blend: bool,
+    segs: &Segments,
+    (meshes, materials, images): (
+        &mut Assets<Mesh>,
+        &mut Assets<N64Material>,
+        &mut Assets<Image>,
+    ),
+) -> Vec<(Handle<Mesh>, Handle<N64Material>)> {
+    let mut sink = crate::disc_gfx::run_display_lists_with_colors(
+        &disc.rom,
+        lists,
+        colors.prim,
+        colors.prim_lod,
+        colors.env,
+    );
     pose_parts(disc, lists, &mut sink);
-    let segs = Segments::default();
     sink.parts
         .iter()
         .map(|part| {
             let texture = part.key.tex.as_ref().and_then(|k| {
-                decode_texture(&disc.rom, k, palette, &segs)
+                decode_texture(&disc.rom, k, palette, segs)
                     .map(|rgba| images.add(texture_image(rgba, k)))
             });
             let material = N64Material {

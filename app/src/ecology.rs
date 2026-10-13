@@ -29,6 +29,10 @@ use crate::player::Player;
 use crate::states::GameplaySet;
 use crate::town::Town;
 
+/// How far above the river bed a shadow swims: the water surface is 20
+/// game units up (`mCoBG_GetWaterHeight`) and fish 8 below it
+/// (`aGTT_Get_water_surface_position_y`), 12 of a unit's 40.
+const FISH_LIFT: f32 = 12.0 / 40.0;
 /// How many fish shadows the river holds.
 const FISH_TARGET: usize = 4;
 /// How many bugs roam the town.
@@ -56,23 +60,25 @@ pub enum EquippedTool {
 
 /// A fish shadow drifting on the river.
 #[derive(Component)]
-struct Fish {
-    species: FishType,
-    dir: Vec3,
+pub(crate) struct Fish {
+    pub(crate) species: FishType,
+    pub(crate) dir: Vec3,
     home: Vec3,
     speed: f32,
 }
 
 /// A bug hopping/crawling/flying around the town.
 #[derive(Component)]
-struct Bug {
-    insect: InsectType,
-    target: Vec3,
+pub(crate) struct Bug {
+    pub(crate) insect: InsectType,
+    pub(crate) target: Vec3,
     home: Vec3,
     pause: f32,
     speed: f32,
     /// Ground bugs stay on walkable tiles; flying bugs roam freely.
     grounded: bool,
+    /// Height above the ground.
+    lift: f32,
 }
 
 /// A cast bobber waiting for a bite.
@@ -241,7 +247,7 @@ fn spawn_fish(
             Mesh3d(mesh.clone()),
             MeshMaterial3d(mat.clone()),
             Transform {
-                translation: Vec3::new(pos.x, 0.12, pos.z),
+                translation: Vec3::new(pos.x, town.ground_y(pos) + FISH_LIFT, pos.z),
                 scale: Vec3::new(1.2, 0.22, 0.7),
                 ..default()
             },
@@ -267,17 +273,18 @@ fn spawn_bugs(
         let tree = trees[rng.range_usize(trees.len())];
         let shade = rng.range_f32(-0.03, 0.05);
         let mat = materials.add(Color::srgb(0.2 + shade, 0.14 + shade, 0.08));
-        let (pos, grounded) = match area {
-            InsectArea::OnTree => (Vec3::new(tree.x, 1.6, tree.z), false),
+        let (mut pos, grounded, lift) = match area {
+            InsectArea::OnTree => (tree, false, 1.6),
             InsectArea::Flying => {
                 let p = find_walkable_near(town, rng, tree, 6.0).unwrap_or(tree);
-                (Vec3::new(p.x, 1.3, p.z), false)
+                (p, false, 1.3)
             }
             _ => {
                 let p = find_walkable_near(town, rng, tree, 4.0).unwrap_or(tree);
-                (Vec3::new(p.x, 0.2, p.z), true)
+                (p, true, 0.05)
             }
         };
+        pos.y = town.ground_y(pos) + lift;
         commands.spawn((
             Bug {
                 insect,
@@ -286,6 +293,7 @@ fn spawn_bugs(
                 pause: rng.range_f32(0.5, 2.5),
                 speed: rng.range_f32(0.8, 1.6),
                 grounded,
+                lift,
             },
             Mesh3d(mesh.clone()),
             MeshMaterial3d(mat),
@@ -431,6 +439,7 @@ fn update_fish(
         let in_range = (next - fish.home).length() < 9.0;
         if town.is_river(next) && in_range {
             transform.translation = next;
+            transform.translation.y = town.ground_y(next) + FISH_LIFT;
         } else {
             let angle = rng.range_f32(0.0, std::f32::consts::TAU);
             fish.dir = Vec3::new(angle.cos(), 0.0, angle.sin());
@@ -460,7 +469,7 @@ fn rehome_fish(
             .as_ref()
             .and_then(|g| g.height(pos.x, pos.z))
             .unwrap_or(0.0)
-            + 0.12;
+            + FISH_LIFT;
         f.home = Vec3::new(pos.x, y, pos.z);
         t.translation = f.home;
     }
@@ -497,6 +506,7 @@ fn update_bugs(
             continue;
         }
         transform.translation += to_target.normalize() * bug.speed * time.delta().as_secs_f32();
+        transform.translation.y = town.ground_y(transform.translation) + bug.lift;
     }
 }
 
