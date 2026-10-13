@@ -1090,14 +1090,12 @@ pub(crate) fn build_disc_town(
         &mut images,
         &mut lights,
     );
-    spawn_mailboxes(
+    crate::mailbox::spawn_mailboxes(
         &mut commands,
         &disc,
         &town,
         winter,
-        &mut meshes,
-        &mut materials,
-        &mut images,
+        (&mut meshes, &mut materials, &mut images),
     );
     crate::gyroid::spawn_gyroids(
         &mut commands,
@@ -1126,7 +1124,7 @@ pub(crate) fn build_disc_town(
 }
 
 /// Object models are drawn at 1/100 scale; one game cell is 40 units.
-const OBJECT_SCALE: f32 = 0.01 / 40.0 * CELL_SIZE;
+pub(crate) const OBJECT_SCALE: f32 = 0.01 / 40.0 * CELL_SIZE;
 
 /// The grown tree (summer or winter set): trunk then leaves, each a
 /// material list followed by its geometry.
@@ -1312,7 +1310,7 @@ pub(crate) fn sink_meshes(
 
 /// Structure skeletons whose parts are drawn in their idle pose: houses,
 /// player houses and public buildings, summer and winter.
-const POSED_STRUCTURES: [&str; 15] = [
+const POSED_STRUCTURES: [&str; 14] = [
     "house1",
     "house2",
     "house3",
@@ -1327,7 +1325,6 @@ const POSED_STRUCTURES: [&str; 15] = [
     "kouban",
     "museum",
     "tailor",
-    "post",
 ];
 
 /// Model-space transform of each structure part's display list (REL
@@ -1745,62 +1742,6 @@ fn spawn_player_homes(
                 DiscObject,
                 Name::new(format!("player house {house}")),
                 Transform::from_xyz(centre.x, ground_y, centre.z)
-                    .with_rotation(Quat::from_rotation_y(yaw)),
-                Visibility::default(),
-            ))
-            .id();
-        for (mesh, material) in &model {
-            commands.spawn((
-                Mesh3d(mesh.clone()),
-                MeshMaterial3d(material.clone()),
-                ChildOf(root),
-            ));
-        }
-    }
-}
-
-/// The player houses' mailboxes (`ac_mailbox.c`): the `obj_s/w_post`
-/// skeleton in its idle pose, at the layout's `MAILBOX0..3` units,
-/// turned like their houses (`aMBX_actor_ct` angle_table: even 90 deg,
-/// odd 0).
-fn spawn_mailboxes(
-    commands: &mut Commands,
-    disc: &GameDisc,
-    town: &Town,
-    winter: bool,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<N64Material>,
-    images: &mut Assets<Image>,
-) {
-    let Some(retail) = &town.retail else { return };
-    let season = if winter { "w" } else { "s" };
-    let prefix = format!("obj_{season}_post");
-    let lists = part_lists(
-        &disc.catalog,
-        &prefix,
-        &["main", "front", "flag_ne", "flag_saki"],
-    );
-    if lists.is_empty() {
-        warn!("mailbox model not found on the disc");
-        return;
-    }
-    let palette = disc.catalog.get(&format!("{prefix}_pal")).map(|a| a.offset);
-    let model = build_model(disc, &lists, palette, meshes, materials, images);
-    for (i, cell) in retail.mailboxes.iter().enumerate() {
-        let Some(&(ax, az, cx, cz)) = cell.as_ref() else {
-            continue;
-        };
-        let at = mailbox_position((ax, az, cx, cz));
-        let yaw = if i % 2 == 0 {
-            std::f32::consts::FRAC_PI_2
-        } else {
-            0.0
-        };
-        let root = commands
-            .spawn((
-                DiscObject,
-                Name::new(format!("mailbox {i}")),
-                Transform::from_xyz(at.x, town.ground_y(at), at.z)
                     .with_rotation(Quat::from_rotation_y(yaw)),
                 Visibility::default(),
             ))

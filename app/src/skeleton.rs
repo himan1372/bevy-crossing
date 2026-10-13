@@ -302,6 +302,12 @@ impl Skeleton {
                 .map(|j| Transform::from_translation(Vec3::from(j.translation.map(f32::from))))
                 .collect(),
         };
+        self.world_from_locals(&locals)
+    }
+
+    /// Every joint's model-space matrix from its local transform (e.g.
+    /// two animation tracks mixed per joint).
+    pub fn world_from_locals(&self, locals: &[Transform]) -> Vec<Mat4> {
         let mut world: Vec<Mat4> = Vec::with_capacity(locals.len());
         for (j, local) in locals.iter().enumerate() {
             let parent = self.parents[j].map_or(Mat4::IDENTITY, |p| world[p]);

@@ -26,6 +26,7 @@ mod interior;
 mod items;
 mod locomotion;
 mod mail;
+mod mailbox;
 mod messages;
 mod model_view;
 mod n64_material;
@@ -104,6 +105,7 @@ fn main() {
         .add_plugins(field_items::FieldItemsPlugin)
         .add_plugins(critters::CrittersPlugin)
         .add_plugins(gyroid::GyroidPlugin)
+        .add_plugins(mailbox::MailboxPlugin)
         .add_plugins(QuestPlugin)
         .add_plugins(PocketsPlugin)
         .add_plugins(ClockPlugin)
