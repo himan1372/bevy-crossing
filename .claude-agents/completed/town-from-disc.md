@@ -19,7 +19,7 @@ Draw the town ground from the disc's acre templates instead of flat planes.
 - [x] Trees/rocks/flowers from fgdata.bin layouts; player house at HOUSE0, shop at SHOP0, resident homes re-sited onto level ground
 - [x] Draw disc models for trees/rocks/flowers/buildings (disc_town.rs, field_items.rs)
 - [x] River mouth: grass bank no longer runs into the sea (Philip confirmed fixed, 2026-10-13)
-- [ ] Retire town_gen as the town's source of truth
+- [x] (moved to backlog/retire-town-gen.md) Retire town_gen as the town's source of truth
 
 ### Port notes (resume here)
 - Source: shmanimal crossing/ACGC-PC-Port/src/game/m_random_field_ovl.c (entry mRF_MakeRandomField_ovl, ~55 fns) + m_random_field.c (combi lookup, island). Enum: include/m_field_make.h (108 block types, BLOCK 7x10).
