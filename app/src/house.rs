@@ -310,7 +310,7 @@ fn spawn_house_hud(commands: &mut Commands) {
         TextColor(Color::WHITE),
         Node {
             position_type: PositionType::Absolute,
-            top: Val::Px(10.0),
+            top: Val::Px(70.0),
             left: Val::Px(50.0),
             ..default()
         },

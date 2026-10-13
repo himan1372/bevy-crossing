@@ -1,3 +1,11 @@
 [workspace]
 members = ["logic", "app", "disc"]
 resolver = "2"
+
+# Line tables only: full debug info grew the app's PDB past the
+# MSVC linker's limit (LNK1318). Dependencies keep none.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
