@@ -93,3 +93,5 @@
 {"action":"claim","task":"critter-behaviour","agent":"claude","timestamp":"2026-10-14T01:01:49Z"}
 {"action":"complete","task":"critter-behaviour","agent":"claude","timestamp":"2026-10-14T08:25:16Z"}
 {"action":"claim","task":"audio-from-disc","agent":"claude","timestamp":"2026-10-14T08:41:54Z"}
+{"action":"claim","task":"villager-voice-types","agent":"codex","timestamp":"2026-10-14T21:50:14Z"}
+{"action":"release","task":"villager-voice-types","agent":"codex","timestamp":"2026-10-14T21:56:20Z"}

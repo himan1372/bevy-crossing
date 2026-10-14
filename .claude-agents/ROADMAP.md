@@ -1,4 +1,4 @@
-# bevy-crossing roadmap (revised 2026-10-12)
+# bevy-crossing roadmap (revised 2026-10-14)
 
 Claimable tasks live in `backlog/` (one file per task). Claim in `claims.jsonl`
 before starting work; announce claims, completions, blockers,
@@ -106,10 +106,10 @@ Each milestone ends with a Philip playtest.
 
 ### M4 — UI, audio, feel
 - [x] **ui-from-disc** — research: fonts, dialogue window and HUD textures from the disc. Fall back to our own open-licence UI when there's no disc.
-- [~] **dialogue-polish** — letter-by-letter text, name plate, speaker voice blips. (Text and name plate done; voice blips wait on audio.)
+- [~] **dialogue-polish** — letter-by-letter text, name plate, and Animalese voices implemented (`logic::na_voice`, `app/src/msg_window.rs`, `app/src/sound.rs`). Philip confirmed villagers make Animalese sounds on 2026-10-14. Philip has only heard one voice type so far; F8 now cycles the same spoken line across residents for comparison (see backlog/villager-voice-types.md). Disc probing produces different, non-silent output for all three retail voice sequences. Final listening comparison and task gate remain.
 - [x] **pause-menu** — Save / Settings / Quit (Settings holds the disc path).
 - [ ] **title-screen** — back burner; the flow can follow rustimal-crossing's `title_demo.rs`.
-- [ ] **audio-from-disc** — research: the original's audio formats (sound banks, sequenced music) and how much `logic::audio` already covers. Then footsteps, UI sounds and music. Large; may be split later.
+- [~] **audio-from-disc** — disc banks/sample decoding (`logic::nas_bank`), sequence player (`logic::nas_seq`), Bevy streaming, hourly town BGM, and Animalese voices (`logic::na_voice`) implemented. Philip confirmed hourly music works and villagers make Animalese sounds on 2026-10-14. Remaining: complete/verify gameplay sound effects (footsteps, UI, mailbox, etc.), check voice/music fidelity against retail, and finish the task gate/playtest. No reverb yet; indoor music and special voice modes remain follow-ups (see backlog/audio-from-disc.md).
 
 ### Later (after the slice)
 Tree shaking, furniture placement, day/night lighting, daily rollover, mail

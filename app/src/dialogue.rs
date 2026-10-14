@@ -623,6 +623,47 @@ fn update_hud(inventory: Res<PlayerInventory>, mut text_query: Query<&mut Text, 
     }
 }
 
+/// F8: compare one identical line using each resident's real voice spec.
+/// Includes residents indoors so their schedules cannot hide a voice type.
+fn debug_voice(
+    mut actions: ResMut<Actions>,
+    focus: Res<crate::input::InputFocus>,
+    villagers: Query<(Entity, &Villager)>,
+    mut dialogue: ResMut<DialogueState>,
+    mut next: Local<usize>,
+    mut boxes: Query<&mut Visibility, With<DialogueBox>>,
+    mut texts: Query<&mut Text, With<DialogueText>>,
+) {
+    if !focus.is_world() || dialogue.active || !actions.consume(Action::DebugVoice) {
+        return;
+    }
+    let mut residents: Vec<_> = villagers.iter().collect();
+    residents.sort_by_key(|(_, v)| (v.looks, v.npc_index, v.name));
+    if residents.is_empty() {
+        return;
+    }
+    let (entity, v) = residents[*next % residents.len()];
+    *next = (*next + 1) % residents.len();
+    *dialogue = DialogueState {
+        active: true,
+        speaker: Some(entity),
+        lines: vec!["Hello there! How are you doing today?".to_string()],
+        ..default()
+    };
+    let spec = rustimal_logic::na_voice::villager_spec(v.looks);
+    let sequence = rustimal_logic::na_voice::voice_sequence(spec);
+    info!(
+        "Voice comparison: {} ({}, looks {}), spec {}, sequence {:?}. E closes; F8 selects the next resident.",
+        v.name, v.personality.english_name(), v.looks, spec, sequence
+    );
+    for mut visibility in &mut boxes {
+        *visibility = Visibility::Visible;
+    }
+    for mut text in &mut texts {
+        text.0 = dialogue.shown_text();
+    }
+}
+
 pub struct DialoguePlugin;
 
 impl Plugin for DialoguePlugin {
@@ -640,6 +681,7 @@ impl Plugin for DialoguePlugin {
                 Update,
                 dialogue_input.in_set(InteractSet::Ui).in_set(GameplaySet),
             )
+            .add_systems(Update, debug_voice.after(on_talk).in_set(GameplaySet))
             .add_systems(Update, (update_hud, tick_talk_timers).in_set(GameplaySet));
     }
 }

@@ -108,6 +108,7 @@ pub use terrain_walls::{decode_height, search_slate_detail, search_wall_flag, wa
 pub mod gyo_ai;
 pub mod ins_ai;
 pub mod ins_set;
+pub mod na_voice;
 pub mod nas_bank;
 pub mod nas_seq;
 mod tool_resolvers;

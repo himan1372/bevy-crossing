@@ -62,6 +62,8 @@ pub enum Action {
     DebugHour,
     /// Debug: talk to the nearest villager outdoors, wherever they are.
     DebugTalk,
+    /// Debug: compare the same spoken line across villager personalities.
+    DebugVoice,
 }
 
 /// Keys for each action. Several actions may share a key: they are read in
@@ -101,6 +103,7 @@ impl Default for KeyBindings {
             (Pockets, vec![K::KeyI, K::Tab]),
             (DebugHour, vec![K::F6]),
             (DebugTalk, vec![K::F7]),
+            (DebugVoice, vec![K::F8]),
         ];
         Self(map.into_iter().collect())
     }

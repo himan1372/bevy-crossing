@@ -1,13 +1,14 @@
 //! Sound: the game's own sequence player (`rustimal_logic::nas_seq`)
 //! fed from the disc, streamed to Bevy's audio output. The engine runs on
-//! the audio thread, 200 samples an update, so it keeps the original's
-//! 240 updates a second; the game talks to it with the original's audio
+//! the audio thread at the sample rate and update size from `nas_seq`;
+//! the game talks to it with the original's audio
 //! commands (`rustimal_logic::AudioPort`).
 //!
 //! What plays so far: the effect player (sequence 242 on group 0, as
 //! `Na_InitAudio`) and the town's hourly music (`Sou_BgmStart` for music
 //! 1-24, fine weather's subtrack mutes) and trigger effects (`se`, as
-//! `Sou_TrgStart`). Indoor music and voices come next.
+//! `Sou_TrgStart`). Villager Animalese follows the typed dialogue through
+//! `na_voice`; indoor music and special voice modes remain to do.
 
 use std::sync::{Arc, Mutex};
 
@@ -160,6 +161,67 @@ pub mod se_id {
 }
 
 static SE_QUEUE: Mutex<Vec<u16>> = Mutex::new(Vec::new());
+/// Typed characters to voice: (speaker's spec, a, b, c phonemes).
+static VOICE_QUEUE: Mutex<Vec<(u8, u8, u8, u8)>> = Mutex::new(Vec::new());
+
+/// Voices one typed character (`sAdo_VoiceSe` from the message window):
+/// the phonemes of the character and the two after it.
+pub fn voice(spec: u8, [a, b, c]: [u8; 3]) {
+    if let Ok(mut q) = VOICE_QUEUE.lock() {
+        q.push((spec, a, b, c));
+    }
+}
+
+/// `Na_SpecChange` + `Na_VoiceSe` + `Sou_VoiceMake` for queued characters.
+fn play_voices(
+    sound: Option<Res<Sound>>,
+    mut voice: Local<rustimal_logic::na_voice::Voice>,
+    mut seed: Local<u32>,
+) {
+    let queued: Vec<_> = VOICE_QUEUE
+        .lock()
+        .map(|mut q| std::mem::take(&mut *q))
+        .unwrap_or_default();
+    let Some(sound) = sound else { return };
+    for request in queued {
+        play_voice(&sound, &mut voice, &mut seed, request);
+    }
+}
+
+/// Shared by live typing and the disc-backed voice comparison probe.
+fn play_voice(
+    sound: &Sound,
+    voice: &mut rustimal_logic::na_voice::Voice,
+    seed: &mut u32,
+    (spec, a, b, c): (u8, u8, u8, u8),
+) {
+    use rustimal_logic::na_voice::VoiceOut;
+    let voice_group = audio_group::VOICE as u8;
+    if let Some(seq) = voice.spec_change(spec) {
+        sound.send(&[
+            cmd(0x83, voice_group, 0, 0, AudioParam::S32(0)),
+            cmd(0x82, voice_group, seq, 0, AudioParam::S32(0)),
+        ]);
+    }
+    let mut rand = || {
+        *seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12345);
+        (*seed >> 16) as u8
+    };
+    for out in voice.voice_se(a, b, c, 32, &mut rand) {
+        match out {
+            VoiceOut::Bebe => se(rustimal_logic::na_voice::SE_BEBE),
+            VoiceOut::Start { slot, phoneme } => {
+                let v = voice.slots[slot as usize];
+                sound.send(&[
+                    cmd(0x01, voice_group, slot, 0, AudioParam::F32(v.volume())),
+                    cmd(0x04, voice_group, slot, 0, AudioParam::F32(v.pitch())),
+                    cmd(0x03, voice_group, slot, 0, AudioParam::S8(64)),
+                    cmd(0x06, voice_group, slot, 0, AudioParam::S8(phoneme as i8)),
+                ]);
+            }
+        }
+    }
+}
 
 /// Plays a trigger effect (`sAdo_SysTrgStart`), from anywhere.
 pub fn se(id: u16) {
@@ -266,7 +328,87 @@ impl Plugin for SoundPlugin {
             )
             .add_systems(
                 Update,
-                (hourly_music, play_effects).run_if(in_state(AppState::InGame)),
+                (hourly_music, play_effects, play_voices).run_if(in_state(AppState::InGame)),
             );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Exercises the same command path as typed dialogue, including
+    /// switching away from a voice and back. Disc-derived WAVs stay in temp.
+    #[test]
+    #[ignore = "requires BEVY_CROSSING_ISO"]
+    fn probe_villager_voice_types() {
+        let path = std::env::var("BEVY_CROSSING_ISO").expect("set BEVY_CROSSING_ISO");
+        let mut disc = disc::Disc::open_path(std::path::Path::new(&path)).unwrap();
+        let rom = disc::RomImage::from_disc(&mut disc).unwrap();
+        let catalog = disc::AssetCatalog::builtin(&rom);
+        let data = sound_rom::SoundRom::read(&mut disc, &rom, &catalog).unwrap();
+        let tables = sound_rom::tables(&rom, &catalog).unwrap();
+        let sound = Sound {
+            engine: Arc::new(Mutex::new(Engine::new(
+                Arc::new(DiscSound::new(Arc::new(data))),
+                tables,
+            ))),
+            seq_table: Arc::from(Vec::new()),
+        };
+        let out = std::env::temp_dir().join("bevy-crossing-voices");
+        std::fs::create_dir_all(&out).unwrap();
+        let phonemes: Vec<_> = b"Hello there! How are you doing today?"
+            .iter()
+            .copied()
+            .map(rustimal_logic::na_voice::phoneme_of)
+            .collect();
+        let mut voice = rustimal_logic::na_voice::Voice::default();
+        let mut seed = 0;
+        let mut clips = Vec::new();
+        for (pass, looks) in [2, 4, 0, 2].into_iter().enumerate() {
+            let spec = rustimal_logic::na_voice::villager_spec(looks);
+            let (sequence, _) = rustimal_logic::na_voice::voice_sequence(spec).unwrap();
+            let mut clip = Vec::new();
+            for (i, &a) in phonemes.iter().enumerate() {
+                let b = phonemes.get(i + 1).copied().unwrap_or(0xFF);
+                let c = phonemes.get(i + 2).copied().unwrap_or(0xFF);
+                play_voice(&sound, &mut voice, &mut seed, (spec, a, b, c));
+                // Normal typing: 30 characters per second.
+                for _ in 0..8 {
+                    let mut buf = vec![0.0; SAMPLES_PER_UPDATE * 2];
+                    sound.engine.lock().unwrap().update(&mut buf);
+                    clip.extend(buf);
+                }
+            }
+            for _ in 0..120 {
+                let mut buf = vec![0.0; SAMPLES_PER_UPDATE * 2];
+                sound.engine.lock().unwrap().update(&mut buf);
+                clip.extend(buf);
+            }
+            let rms = (clip.iter().map(|x| x * x).sum::<f32>() / clip.len() as f32).sqrt();
+            let peak = clip.iter().fold(0.0_f32, |m, x| m.max(x.abs()));
+            let file = out.join(format!("{pass}_spec{spec}_seq{sequence}.wav"));
+            std::fs::write(&file, sound_rom::wav_stereo(&clip, SAMPLE_RATE)).unwrap();
+            println!(
+                "spec {spec}, sequence {sequence}: rms {rms:.5}, peak {peak:.5}, {}",
+                file.display()
+            );
+            assert!(rms > 0.001, "voice spec {spec} is silent");
+            assert!(clip.iter().all(|x| x.is_finite()));
+            clips.push(clip);
+        }
+        for (a, b) in [(0, 1), (0, 2), (1, 2), (1, 3), (2, 3)] {
+            let difference = clips[a]
+                .iter()
+                .zip(&clips[b])
+                .map(|(x, y)| (x - y).abs())
+                .sum::<f32>()
+                / clips[a].len() as f32;
+            println!("passes {a}/{b}: mean difference {difference:.5}");
+            assert!(
+                difference > 0.001,
+                "different voice types produced the same output"
+            );
+        }
     }
 }

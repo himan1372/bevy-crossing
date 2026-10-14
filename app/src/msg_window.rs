@@ -341,6 +341,7 @@ fn window_page<'a>(page: &'a str, speaker: Option<&Villager>) -> &'a str {
 #[derive(Resource, Default)]
 struct Reveal {
     page: Option<String>,
+    speaker: Option<Entity>,
     /// Pieces of the page shown so far (`markup::Item`s).
     shown: usize,
     total: usize,
@@ -370,11 +371,12 @@ fn advance_reveal(
     };
     let speaker = dialogue.speaker.and_then(|e| villagers.get(e).ok());
     let page = window_page(page, speaker).to_string();
-    if reveal.page.as_deref() != Some(page.as_str()) {
+    if reveal.page.as_deref() != Some(page.as_str()) || reveal.speaker != dialogue.speaker {
         let items = markup::parse(&page);
         *reveal = Reveal {
             total: items.len(),
             page: Some(page.clone()),
+            speaker: dialogue.speaker,
             ..default()
         };
     }
@@ -385,9 +387,25 @@ fn advance_reveal(
     };
     reveal.timer -= time.delta_secs() * 60.0 * fast;
     let items = markup::parse(&page);
+    let spec = speaker.map(|v| rustimal_logic::na_voice::villager_spec(v.looks));
+    // Phonemes of a character and the two after it (mMsg_sound_voice_get2:
+    // a line break is 0x84; English text is ASCII message codes; past the
+    // end, 0xFF).
+    let phoneme = |i: usize| match items.get(i) {
+        Some(Item::Char(ch, _)) if ch.is_ascii() => rustimal_logic::na_voice::phoneme_of(*ch as u8),
+        Some(Item::Char(..)) => 0x85,
+        Some(Item::NewLine) => 0x84,
+        _ => 0xFF,
+    };
     while reveal.timer <= 0.0 && !reveal.done() {
         match items[reveal.shown] {
-            Item::Char(..) => reveal.timer += 2.0,
+            Item::Char(..) => {
+                reveal.timer += 2.0;
+                if let Some(spec) = spec {
+                    let i = reveal.shown;
+                    crate::sound::voice(spec, [phoneme(i), phoneme(i + 1), phoneme(i + 2)]);
+                }
+            }
             Item::Pause(t) => reveal.timer += t as f32,
             Item::NewLine => {}
         }
