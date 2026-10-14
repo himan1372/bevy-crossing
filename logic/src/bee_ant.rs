@@ -50,8 +50,8 @@ pub mod net_catch {
 /// Insect type ids used here (positions in the retail insect enum).
 pub mod insect_type {
     pub const BEE: u8 = 8;
-    pub const ANT: u8 = 41;
-    pub const COCKROACH: u8 = 42;
+    pub const ANT: u8 = 38;
+    pub const COCKROACH: u8 = 28;
 }
 
 /// Item ids (`include/m_name_table.h`).

@@ -342,6 +342,9 @@ fn animate_critters(
             // (a cicada stood up on its trunk).
             let r = |a: i16| a as f32 * std::f32::consts::PI / 32768.0;
             t.rotation = Quat::from_rotation_x(r(ai.pitch)) * Quat::from_rotation_y(r(ai.facing));
+            // aIAB_move: a pondskater stretches as it glides (0.01 +- s).
+            let s = ai.squash() * 100.0;
+            t.scale = Vec3::new(1.0 + s, 1.0 - s, 1.0);
             continue;
         }
         let to = b.target - t.translation;

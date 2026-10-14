@@ -772,12 +772,18 @@ fn update_bugs(
                 tree_shaken: None,
                 axe_hit: None,
                 raining: false,
+                busy: false,
             };
             let mut gone = false;
             while bug.ticks >= 1.0 {
                 bug.ticks -= 1.0;
                 let Some(ai) = bug.ai.as_mut() else { break };
-                gone |= ai.step(&world, &field, &mut rand) == ins_ai::Event::Gone;
+                match ai.step(&world, &field, &mut rand) {
+                    ins_ai::Event::Gone => gone = true,
+                    // No stung reaction for the player yet.
+                    ins_ai::Event::Stung => println!("A mosquito stung you"),
+                    ins_ai::Event::None => {}
+                }
             }
             if gone {
                 commands.entity(entity).despawn();

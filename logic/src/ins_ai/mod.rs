@@ -4,10 +4,13 @@
 //!
 //! Families so far: butterflies (`ac_ins_chou.c`), cicadas
 //! (`ac_ins_semi.c`), tree beetles (`ac_ins_kabuto.c`),
-//! grasshoppers and crickets (`ac_ins_batta.c`), dragonflies
+//! grasshoppers and crickets (`ac_ins_batta.c`), mosquitoes
+//! (`ac_ins_ka.c`), pondskaters (`ac_ins_amenbo.c`), dragonflies
 //! (`ac_ins_tonbo.c`).
 
+mod amenbo;
 mod batta;
+mod ka;
 mod kabuto;
 mod semi;
 mod tonbo;
@@ -81,6 +84,8 @@ pub struct World<'a> {
     /// A unit an axe hit this tick (`mPlib_Check_VibUnit_OneFrame`).
     pub axe_hit: Option<[f32; 2]>,
     pub raining: bool,
+    /// A cutscene or chore is on (`demo_clip`): mosquitoes leave.
+    pub busy: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -105,8 +110,10 @@ pub enum Action {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Event {
     None,
-    /// Faded out after flying off: remove it.
+    /// Faded out after flying off (or drowned): remove it.
     Gone,
+    /// A mosquito stung the player.
+    Stung,
 }
 
 #[derive(Clone, Debug)]
@@ -163,6 +170,8 @@ pub struct Insect {
     hits: u32,
     dips: u8,
     phase100: u32,
+    /// Kept this far over the floor by the BG check (`-bg_height`).
+    floor: f32,
 }
 
 impl Insect {
@@ -182,7 +191,8 @@ impl Insect {
                 _ => {}
             }
         }
-        let y = field.ground_y(pos[0], pos[1]) + 30.0;
+        // GetBgY_OnlyCenter(pos, 30): 30 under; jump_ctrl lifts it.
+        let y = field.ground_y(pos[0], pos[1]) - 30.0;
         let mut ins = Insect::blank(kind, [pos[0], y, pos[1]], u);
         ins.setup(Action::Fly, None, field, rand);
         Some(ins)
@@ -195,6 +205,8 @@ impl Insect {
             || kabuto::is_beetle(kind)
             || tonbo::is_dragonfly(kind)
             || batta::is_hopper(kind)
+            || kind == ka::MOSQUITO
+            || kind == amenbo::POND_SKATER
     }
 
     /// A placed insect of any supported family; `None` when it can't live
@@ -209,6 +221,10 @@ impl Insect {
             Self::butterfly(kind, pos, field, rand)
         } else if semi::is_cicada(kind) || kabuto::is_beetle(kind) {
             Self::on_trunk(kind, pos, field)
+        } else if kind == ka::MOSQUITO {
+            Self::mosquito(pos, field)
+        } else if kind == amenbo::POND_SKATER {
+            Self::pond_skater(pos, field, rand)
         } else if batta::is_hopper(kind) {
             Self::hopper(kind, pos, field, rand)
         } else if tonbo::is_dragonfly(kind) {
@@ -258,6 +274,7 @@ impl Insect {
             hits: 0,
             dips: 0,
             phase100: 0,
+            floor: 0.0,
         }
     }
 
@@ -289,6 +306,13 @@ impl Insect {
             self.cicada_step(world, rand);
             return Event::None;
         }
+        if self.kind == ka::MOSQUITO {
+            return self.mosquito_step(world, field, rand);
+        }
+        if self.kind == amenbo::POND_SKATER {
+            self.skater_step(world, field, rand);
+            return Event::None;
+        }
         if batta::is_hopper(self.kind) {
             return if self.hopper_step(world, field, rand) {
                 Event::Gone
@@ -317,12 +341,12 @@ impl Insect {
         Event::None
     }
 
-    /// `aINS_position_move` (butterflies take no gravity) with the BG
-    /// wall check.
+    /// `aINS_position_move` (butterflies, fireflies, mosquitoes and the
+    /// spirit take no gravity) with the BG wall and floor check.
     fn position_move(&mut self, field: &impl Field) {
         chase_f(&mut self.speed, self.target_speed, self.speed_step * 0.5);
         let butterfly = self.kind <= PURPLE_BUTTERFLY;
-        if !butterfly {
+        if !butterfly && !matches!(self.kind, 27 | ka::MOSQUITO | 40) {
             chase_f(&mut self.vy, self.max_vy, self.gravity * 0.5);
         }
         let to = [
@@ -339,10 +363,11 @@ impl Insect {
         // BG check with ground (dragonflies; a flying-off cicada too).
         self.on_ground = false;
         if !butterfly
+            && self.kind != amenbo::POND_SKATER
             && !((semi::is_cicada(self.kind) || kabuto::is_beetle(self.kind))
                 && self.action == Action::Wait)
         {
-            let g = field.ground_y(self.pos[0], self.pos[2]);
+            let g = field.ground_y(self.pos[0], self.pos[2]) + self.floor;
             if self.pos[1] < g {
                 self.pos[1] = g;
                 self.on_ground = true;
@@ -778,6 +803,7 @@ pub(crate) mod tests {
             tree_shaken: None,
             axe_hit: None,
             raining: false,
+            busy: false,
         }
     }
 
