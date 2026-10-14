@@ -99,7 +99,8 @@ impl Insect {
                 }
             }
             Action::LetEscape => {
-                if !self.water_ahead(field) {
+                let wet = self.water_ahead(field);
+                if !wet {
                     self.turn_off_walls();
                 }
             }
