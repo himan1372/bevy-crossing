@@ -6,7 +6,7 @@ m_msg_draw_font.c_inc, m_choice_draw.c_inc. Textures in the REL
 
 - [x] Font: decode FONT_nes_tex_font1, per-character widths/offsets (mFont_*), draw text in the AC charset as m_font does.
 - [x] Dialogue window: the window model/textures and its colours per speaker as m_msg_draw_window does; name plate.
-- [ ] Choice window (m_choice) for yes/no and menus.
+- [x] Choice window (m_choice) for yes/no and menus (trade question uses it; more menus come with the talk topics).
 - [x] Without a disc: keep our own open-licence UI.
 - [ ] Gate passes; live check; Philip compares with retail.
 

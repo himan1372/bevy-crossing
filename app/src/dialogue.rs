@@ -34,9 +34,29 @@ pub struct DialogueState {
     index: usize,
     /// A trade offer waiting on Y/N at the last line.
     trade: Option<TradeDeal>,
+    /// The highlighted choice while [`DialogueState::choices`] is up.
+    pub choice: usize,
 }
 
+/// The trade question's answers (first = yes).
+const TRADE_CHOICES: [&str; 2] = ["Let's trade!", "No thanks."];
+
 impl DialogueState {
+    /// The answers on offer, while the last page waits on one.
+    pub fn choices(&self) -> Option<&'static [&'static str]> {
+        (self.active && self.index + 1 >= self.lines.len() && self.trade.is_some())
+            .then_some(&TRADE_CHOICES[..])
+    }
+
+    /// The plain box's text: the page, plus the choices as a key hint.
+    fn shown_text(&self) -> String {
+        let page = self.page().unwrap_or_default().to_string();
+        match self.choices() {
+            Some(c) => format!("{page}\n(Y: {}    N: {})", c[0], c[1]),
+            None => page,
+        }
+    }
+
     /// The page shown in the box, while it's up.
     pub fn page(&self) -> Option<&str> {
         self.active
@@ -284,7 +304,7 @@ fn on_talk(
             }
             if let Some(deal) = dialogue.trade.as_ref() {
                 lines.push(say(&format!(
-                    "Would you trade it for my {}?\n(Y: Trade    N: No thanks)",
+                    "Would you trade it for my {}?",
                     items::name(deal.offered)
                 )));
             } else if patience == Patience::MildlyAnnoyed {
@@ -313,12 +333,13 @@ fn on_talk(
             }
         }
         dialogue.index = 0;
+        dialogue.choice = 0;
         dialogue.lines = lines;
         if let Ok(mut vis) = box_query.single_mut() {
             *vis = Visibility::Visible;
         }
         if let Ok(mut text) = text_query.single_mut() {
-            text.0 = dialogue.lines[0].clone();
+            text.0 = dialogue.shown_text();
         }
     }
 }
@@ -463,10 +484,23 @@ fn dialogue_input(
     if !dialogue.active {
         return;
     }
-    // A trade offer on the last line waits for Y / N.
-    if dialogue.index + 1 >= dialogue.lines.len() && dialogue.trade.is_some() {
-        let yes = actions.just_pressed(Action::Yes);
-        let no = actions.just_pressed(Action::No) || actions.just_pressed(Action::Cancel);
+    // A trade offer on the last line waits on its choice: up/down picks,
+    // E/Enter answers; Y / N answer directly.
+    if let Some(choices) = dialogue.choices() {
+        let n = choices.len();
+        if actions.just_pressed(Action::MenuUp) || actions.just_pressed(Action::MoveUp) {
+            dialogue.choice = (dialogue.choice + n - 1) % n;
+        }
+        if actions.just_pressed(Action::MenuDown) || actions.just_pressed(Action::MoveDown) {
+            dialogue.choice = (dialogue.choice + 1) % n;
+        }
+        let pick = actions.just_pressed(Action::Confirm)
+            || actions.just_pressed(Action::Advance)
+            || actions.consume(Action::Interact);
+        let yes = actions.just_pressed(Action::Yes) || (pick && dialogue.choice == 0);
+        let no = actions.just_pressed(Action::No)
+            || actions.just_pressed(Action::Cancel)
+            || (pick && dialogue.choice != 0);
         if !yes && !no {
             return;
         }
@@ -490,7 +524,7 @@ fn dialogue_input(
             dialogue.lines.push(line);
             dialogue.index += 1;
             if let Ok(mut text) = text_query.single_mut() {
-                text.0 = dialogue.lines[dialogue.index].clone();
+                text.0 = dialogue.shown_text();
             }
         }
         return;
@@ -509,7 +543,7 @@ fn dialogue_input(
         }
         println!("Dialogue closed");
     } else if let Ok(mut text) = text_query.single_mut() {
-        text.0 = dialogue.lines[dialogue.index].clone();
+        text.0 = dialogue.shown_text();
     }
 }
 
