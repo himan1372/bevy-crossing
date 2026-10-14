@@ -6,8 +6,8 @@
 //!
 //! What plays so far: the effect player (sequence 242 on group 0, as
 //! `Na_InitAudio`) and the town's hourly music (`Sou_BgmStart` for music
-//! 1-24, fine weather's subtrack mutes). Indoor music, sound effects and
-//! voices come next.
+//! 1-24, fine weather's subtrack mutes) and trigger effects (`se`, as
+//! `Sou_TrgStart`). Indoor music and voices come next.
 
 use std::sync::{Arc, Mutex};
 
@@ -150,6 +150,58 @@ fn start_sound(
     info!("sound engine started");
 }
 
+/// `NA_SE_*` ids the game uses so far (`audio_defs.h`).
+pub mod se_id {
+    pub const PAGE_OKURI: u16 = 0x0B;
+    pub const MENU_PAUSE: u16 = 0x30;
+    pub const ITEM_GET: u16 = 0x40;
+    pub const TOOL_FURI: u16 = 0x5A;
+    pub const AMI_HIT: u16 = 0x5C;
+}
+
+static SE_QUEUE: Mutex<Vec<u16>> = Mutex::new(Vec::new());
+
+/// Plays a trigger effect (`sAdo_SysTrgStart`), from anywhere.
+pub fn se(id: u16) {
+    if let Ok(mut q) = SE_QUEUE.lock() {
+        q.push(id);
+    }
+}
+
+/// `Sou_TrgStart`, simplified: effects take the six trigger subtracks in
+/// turn; each gets full volume, normal pitch and centre pan, then its id
+/// in ports 0 (low byte) and 1 (high nibble) for sequence 242 to play.
+fn play_effects(sound: Option<Res<Sound>>, mut slot: Local<u8>) {
+    let ids: Vec<u16> = SE_QUEUE
+        .lock()
+        .map(|mut q| std::mem::take(&mut *q))
+        .unwrap_or_default();
+    let Some(sound) = sound else { return };
+    for id in ids {
+        let s = *slot;
+        *slot = (s + 1) % 6;
+        sound.send(&[
+            cmd(0x01, SE_GROUP, s, 0, AudioParam::F32(1.0)),
+            cmd(0x04, SE_GROUP, s, 0, AudioParam::F32(1.0)),
+            cmd(0x03, SE_GROUP, s, 0, AudioParam::S8(64)),
+            cmd(
+                0x06,
+                SE_GROUP,
+                s,
+                0,
+                AudioParam::S8((id & 0xFF) as u8 as i8),
+            ),
+            cmd(
+                0x06,
+                SE_GROUP,
+                s,
+                1,
+                AudioParam::S8(((id >> 8) & 0xF) as i8),
+            ),
+        ]);
+    }
+}
+
 /// `sou_now_bgm_num` and `sou_now_bgm_handle`.
 #[derive(Resource)]
 struct Bgm {
@@ -212,6 +264,9 @@ impl Plugin for SoundPlugin {
                 OnEnter(AppState::InGame),
                 start_sound.run_if(resource_exists::<GameDisc>),
             )
-            .add_systems(Update, hourly_music.run_if(in_state(AppState::InGame)));
+            .add_systems(
+                Update,
+                (hourly_music, play_effects).run_if(in_state(AppState::InGame)),
+            );
     }
 }

@@ -599,6 +599,7 @@ fn dialogue_input(
     if !(actions.just_pressed(Action::Advance) || actions.consume(Action::Interact)) {
         return;
     }
+    crate::sound::se(crate::sound::se_id::PAGE_OKURI);
     dialogue.index += 1;
     if dialogue.index >= dialogue.lines.len() {
         close(&mut dialogue, &mut box_query);

@@ -917,6 +917,7 @@ fn tool_interact(
                                 // Left hand: about hand height, in front.
                                 at: player_pos + facing.dir * 0.35 + Vec3::Y * 0.9,
                             });
+                            crate::sound::se(crate::sound::se_id::ITEM_GET);
                             show_catch_notify(
                                 &format!("Caught a {name}!"),
                                 &mut notify_timer,
@@ -965,6 +966,7 @@ fn tool_interact(
             println!("Cast!");
         }
         EquippedTool::Net => {
+            crate::sound::se(crate::sound::se_id::TOOL_FURI);
             swing.0 = Some(player_pos + facing.dir * NET_RANGE * 0.7);
             let mut best: Option<(Entity, f32)> = None;
             for (entity, _bug, bug_transform) in bug_query.iter() {
@@ -997,6 +999,7 @@ fn tool_interact(
                         return;
                     }
                     commands.entity(entity).despawn();
+                    crate::sound::se(crate::sound::se_id::AMI_HIT);
                     show_catch_notify(
                         &format!("Caught a {name}!"),
                         &mut notify_timer,
