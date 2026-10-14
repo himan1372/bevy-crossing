@@ -3,8 +3,12 @@
 //! `ac_ins_*.c`. Game units, one step per 60 Hz tick.
 //!
 //! Families so far: butterflies (`ac_ins_chou.c`), cicadas
-//! (`ac_ins_semi.c`), dragonflies (`ac_ins_tonbo.c`).
+//! (`ac_ins_semi.c`), tree beetles (`ac_ins_kabuto.c`),
+//! grasshoppers and crickets (`ac_ins_batta.c`), dragonflies
+//! (`ac_ins_tonbo.c`).
 
+mod batta;
+mod kabuto;
 mod semi;
 mod tonbo;
 
@@ -186,7 +190,11 @@ impl Insect {
 
     /// Families with a behaviour here.
     pub fn supported(kind: u8) -> bool {
-        kind <= PURPLE_BUTTERFLY || semi::is_cicada(kind) || tonbo::is_dragonfly(kind)
+        kind <= PURPLE_BUTTERFLY
+            || semi::is_cicada(kind)
+            || kabuto::is_beetle(kind)
+            || tonbo::is_dragonfly(kind)
+            || batta::is_hopper(kind)
     }
 
     /// A placed insect of any supported family; `None` when it can't live
@@ -199,8 +207,10 @@ impl Insect {
     ) -> Option<Self> {
         if kind <= PURPLE_BUTTERFLY {
             Self::butterfly(kind, pos, field, rand)
-        } else if semi::is_cicada(kind) {
-            Self::cicada(kind, pos, field)
+        } else if semi::is_cicada(kind) || kabuto::is_beetle(kind) {
+            Self::on_trunk(kind, pos, field)
+        } else if batta::is_hopper(kind) {
+            Self::hopper(kind, pos, field, rand)
         } else if tonbo::is_dragonfly(kind) {
             Self::dragonfly(kind, pos, field, rand)
         } else {
@@ -279,6 +289,17 @@ impl Insect {
             self.cicada_step(world, rand);
             return Event::None;
         }
+        if batta::is_hopper(self.kind) {
+            return if self.hopper_step(world, field, rand) {
+                Event::Gone
+            } else {
+                Event::None
+            };
+        }
+        if kabuto::is_beetle(self.kind) {
+            self.beetle_step(world, rand);
+            return Event::None;
+        }
         if tonbo::is_dragonfly(self.kind) {
             self.dragonfly_step(world, field, rand);
             return Event::None;
@@ -317,7 +338,10 @@ impl Insect {
         }
         // BG check with ground (dragonflies; a flying-off cicada too).
         self.on_ground = false;
-        if !butterfly && !(semi::is_cicada(self.kind) && self.action == Action::Wait) {
+        if !butterfly
+            && !((semi::is_cicada(self.kind) || kabuto::is_beetle(self.kind))
+                && self.action == Action::Wait)
+        {
             let g = field.ground_y(self.pos[0], self.pos[2]);
             if self.pos[1] < g {
                 self.pos[1] = g;

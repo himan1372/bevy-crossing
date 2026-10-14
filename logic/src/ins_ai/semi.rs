@@ -24,9 +24,9 @@ fn near(p: Option<[f32; 2]>, pos: [f32; 3], r: f32) -> bool {
 }
 
 impl Insect {
-    /// `aISM_actor_init` on a tree: 35 up the trunk (30 on a cedar),
+    /// `aISM_actor_init` (and `aIKB_actor_init`) on a tree: 35 up the trunk (30 on a cedar),
     /// pitched upright, facing 180 degrees.
-    pub(super) fn cicada(kind: u8, pos: [f32; 2], field: &impl Field) -> Option<Self> {
+    pub(super) fn on_trunk(kind: u8, pos: [f32; 2], field: &impl Field) -> Option<Self> {
         let u = field.unit_of(pos[0], pos[1])?;
         let cedar = field.item(u) == Some(CEDAR_TREE);
         let (up, dz) = if cedar { (30.0, 8.0) } else { (35.0, -2.0) };
@@ -46,7 +46,7 @@ impl Insect {
             self.gravity = (self.gravity * 1.1).min(12.0);
             return;
         }
-        if self.cicada_scared(world) {
+        if self.tree_scared(world) {
             self.cicada_fly_off(Action::Avoid, world, rand);
         } else if self.patience < 50.0 {
             // Singing: shiver about home every tick the cry timer is out.
@@ -61,7 +61,7 @@ impl Insect {
     }
 
     /// `aISM_check_patience`.
-    fn cicada_scared(&mut self, world: &World) -> bool {
+    pub(super) fn tree_scared(&mut self, world: &World) -> bool {
         let shaken = near(world.tree_shaken, self.pos, UNIT);
         let axe = near(world.axe_hit, self.pos, UNIT)
             && near(
