@@ -5,14 +5,18 @@
 //! Families so far: butterflies (`ac_ins_chou.c`), cicadas
 //! (`ac_ins_semi.c`), tree beetles (`ac_ins_kabuto.c`),
 //! grasshoppers and crickets (`ac_ins_batta.c`), mosquitoes
-//! (`ac_ins_ka.c`), pondskaters (`ac_ins_amenbo.c`), dragonflies
+//! (`ac_ins_ka.c`), pondskaters (`ac_ins_amenbo.c`), ladybugs, the mantis
+//! and the snail (`ac_ins_tentou.c`), fireflies (`ac_ins_hotaru.c`),
+//! dragonflies
 //! (`ac_ins_tonbo.c`).
 
 mod amenbo;
 mod batta;
+mod hotaru;
 mod ka;
 mod kabuto;
 mod semi;
+mod tentou;
 mod tonbo;
 
 use crate::gyo_ai::{angle_to, chase_angle, chase_f, cos_s, sin_s};
@@ -172,6 +176,8 @@ pub struct Insect {
     phase100: u32,
     /// Kept this far over the floor by the BG check (`-bg_height`).
     floor: f32,
+    /// A heading being eased toward (fireflies).
+    aim: i16,
 }
 
 impl Insect {
@@ -207,6 +213,8 @@ impl Insect {
             || batta::is_hopper(kind)
             || kind == ka::MOSQUITO
             || kind == amenbo::POND_SKATER
+            || tentou::is_tentou(kind)
+            || kind == hotaru::FIREFLY
     }
 
     /// A placed insect of any supported family; `None` when it can't live
@@ -221,6 +229,10 @@ impl Insect {
             Self::butterfly(kind, pos, field, rand)
         } else if semi::is_cicada(kind) || kabuto::is_beetle(kind) {
             Self::on_trunk(kind, pos, field)
+        } else if kind == hotaru::FIREFLY {
+            Self::firefly(pos, field, rand)
+        } else if tentou::is_tentou(kind) {
+            Self::on_flower(kind, pos, field, rand)
         } else if kind == ka::MOSQUITO {
             Self::mosquito(pos, field)
         } else if kind == amenbo::POND_SKATER {
@@ -275,6 +287,7 @@ impl Insect {
             dips: 0,
             phase100: 0,
             floor: 0.0,
+            aim: 0,
         }
     }
 
@@ -304,6 +317,14 @@ impl Insect {
         }
         if semi::is_cicada(self.kind) {
             self.cicada_step(world, rand);
+            return Event::None;
+        }
+        if self.kind == hotaru::FIREFLY {
+            self.firefly_step(world, field, rand);
+            return Event::None;
+        }
+        if tentou::is_tentou(self.kind) {
+            self.tentou_step(world, field, rand);
             return Event::None;
         }
         if self.kind == ka::MOSQUITO {
@@ -346,7 +367,7 @@ impl Insect {
     fn position_move(&mut self, field: &impl Field) {
         chase_f(&mut self.speed, self.target_speed, self.speed_step * 0.5);
         let butterfly = self.kind <= PURPLE_BUTTERFLY;
-        if !butterfly && !matches!(self.kind, 27 | ka::MOSQUITO | 40) {
+        if !butterfly && !matches!(self.kind, hotaru::FIREFLY | ka::MOSQUITO | 40) {
             chase_f(&mut self.vy, self.max_vy, self.gravity * 0.5);
         }
         let to = [
