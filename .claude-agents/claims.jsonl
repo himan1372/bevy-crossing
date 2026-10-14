@@ -89,3 +89,4 @@
 {"action":"release","task":"audio-from-disc","agent":"claude","timestamp":"2026-10-14T00:56:05Z"}
 {"action":"claim","task":"pause-menu","agent":"claude","timestamp":"2026-10-14T00:56:06Z"}
 {"action":"complete","task":"pause-menu","agent":"claude","timestamp":"2026-10-14T00:58:32Z"}
+{"action":"release","task":"dialogue-polish","agent":"claude","timestamp":"2026-10-14T00:58:45Z"}
