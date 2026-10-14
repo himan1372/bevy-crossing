@@ -194,6 +194,37 @@ impl GroundMap {
         )
     }
 
+    /// Height in game units at a scene position (the triangle plane).
+    fn game_y(&self, x: f32, z: f32) -> Option<f32> {
+        let (u, tier, fx, fz) = self.locate(x, z)?;
+        Some(tier as f32 * TIER_HEIGHT + u.sample_at(fx, fz) * SAMPLE_HEIGHT)
+    }
+
+    /// Water a fish can live in: still water, falls, river, sea.
+    pub fn is_fish_water(&self, x: f32, z: f32) -> bool {
+        matches!(
+            self.attribute_at(x, z),
+            Some(ATTR_WATER..=ATTR_RIVER_LAST | ATTR_SEA)
+        )
+    }
+
+    /// Where a fish swims (scene y): 8 below the water surface
+    /// (`aGTT_Get_water_surface_position_y`), the surface being the sea's
+    /// 20 or 20 over the bed elsewhere (`mCoBG_GetWaterHeight_File`).
+    pub fn fish_y(&self, x: f32, z: f32) -> Option<f32> {
+        let surface = match self.attribute_at(x, z)? {
+            ATTR_SEA | 37 | 38 => 20.0,
+            _ => self.game_y(x, z)? + 20.0,
+        };
+        Some((surface - 8.0 - GROUND_ZERO) / UNIT * CELL_SIZE)
+    }
+
+    /// Sea at least 20 deep (`aSOG_gyoei_set_gyoei_data`'s sea fish rule).
+    pub fn deep_sea(&self, x: f32, z: f32) -> bool {
+        self.attribute_at(x, z) == Some(ATTR_SEA)
+            && self.game_y(x, z).is_some_and(|y| 20.0 - y >= 20.0)
+    }
+
     /// Collision attribute of the unit under a scene position.
     pub fn attribute_at(&self, x: f32, z: f32) -> Option<u8> {
         self.locate(x, z).map(|(u, ..)| u.attribute)

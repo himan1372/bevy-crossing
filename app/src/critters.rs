@@ -9,6 +9,13 @@
 //! `aGYO_shadow_scale[size] * 0.02` with x at 0.4 (`aGTT_actor_init`),
 //! turned to heading + 180 deg.
 //!
+//! A landed fish hangs from the hand as its own model
+//! (`aGYO_actor_draw_fish`, `aUKI_catch`): `aGYO_displayList[type]`'s
+//! frames at scale 0.01, billboarded, lowered by `aGYO_hosei_y`, swung
+//! 13 degrees by sin of a counter, flapping to the type's fast or slow
+//! pattern (`aGYO_anime_ptn`; display list = pattern x 0.5), then shrunk
+//! away over 30 frames as the rod is put away (`gyo_scale`).
+//!
 //! Bugs (`ac_insect_draw.c_inc`) draw two of their four
 //! `aINS_displayList` lists, frame `_1E0` (0/1) picking 0+1 or 2+3, at
 //! scale 0.01, 2 units up, env colour white.
@@ -47,7 +54,39 @@ struct CritterModels {
     shadow_scale: Vec<f32>,
     /// Per insect type: the two frames.
     bugs: Vec<Option<[Model; 2]>>,
+    /// Per fish type: frames a, b (c is never reached: frame x 0.5).
+    fish: Vec<Option<[Model; 2]>>,
+    /// Per fish type: `aGYO_anime_ptn` is slow (2), else fast.
+    fish_slow: Vec<bool>,
 }
+
+/// A fish was landed; `at` is the hand holding it (scene units).
+#[derive(bevy::ecs::message::Message, Clone, Copy)]
+pub struct FishCaught {
+    pub species: rustimal_logic::species::FishType,
+    pub at: Vec3,
+}
+
+/// A landed fish being shown: seconds left, pattern tick.
+#[derive(Component)]
+struct HeldFish {
+    species: usize,
+    left: f32,
+    tick: f32,
+}
+
+/// Seconds a landed fish is held up, then frames it shrinks over.
+const HOLD_SECS: f32 = 2.5;
+const PUTAWAY_TICKS: f32 = 30.0;
+/// `aGYR_frame_ptn1` / `ptn2` (fast, slow), one step per 60 Hz tick.
+const FISH_FAST: [usize; 8] = [1, 1, 0, 0, 2, 2, 0, 0];
+const FISH_SLOW: [usize; 16] = [1, 1, 1, 1, 0, 0, 0, 0, 2, 2, 2, 2, 0, 0, 0, 0];
+/// `aGYO_hosei_y` (game units), per fish type.
+const HOSEI_Y: [f32; 45] = [
+    0.0, 0.0, 2.2, 2.2, 2.2, 0.0, 1.5, 2.2, 0.0, 2.2, 2.2, 2.2, 1.5, 0.0, 0.0, //
+    0.0, 0.0, 0.0, 0.0, 2.2, 1.5, 2.2, 1.5, 0.0, 0.0, 2.2, 2.2, 0.0, 0.0, 0.0, //
+    0.0, 2.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+];
 
 /// Shadow wriggle state (`fwork0`).
 #[derive(Component)]
@@ -149,10 +188,47 @@ fn load_models(
             Some([frame(dl[0], dl[1]), frame(dl[2], dl[3])])
         })
         .collect();
+    // Landed fish: aGYO_displayList -> aGYO_DL_c { a, b, c }.
+    let fish = cat
+        .get("aGYO_displayList")
+        .map(|table| {
+            (0..table.size / 4)
+                .map(|i| {
+                    let dl = rel_ptr(disc, table.offset + i * 4)?;
+                    let mut frame = |k: u32| {
+                        let list = rel_ptr(disc, dl + k * 4)?;
+                        Some(build_model_full(
+                            disc,
+                            &[list],
+                            None,
+                            white,
+                            true,
+                            (&Segments::default(), &[]),
+                            (&mut *meshes, &mut *materials, &mut *images),
+                        ))
+                    };
+                    Some([frame(0)?, frame(1)?])
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let fish_slow = cat
+        .get("aGYO_anime_ptn")
+        .and_then(|t| rel_bytes(disc, t.offset, t.size))
+        .map(|b| {
+            b.as_chunks::<4>()
+                .0
+                .iter()
+                .map(|w| *w == [0, 0, 0, 2])
+                .collect()
+        })
+        .unwrap_or_default();
     Some(CritterModels {
         shadow,
         shadow_scale,
         bugs,
+        fish,
+        fish_slow,
     })
 }
 
@@ -285,19 +361,98 @@ fn set_parts(
     }
 }
 
+/// Holds a landed fish up over the player.
+fn show_caught(
+    mut commands: Commands,
+    mut caught: bevy::ecs::message::MessageReader<FishCaught>,
+    models: Res<CritterModels>,
+) {
+    for c in caught.read() {
+        let species = c.species as usize;
+        let Some(Some(frames)) = models.fish.get(species) else {
+            continue;
+        };
+        let root = commands
+            .spawn((
+                Name::new("landed fish"),
+                HeldFish {
+                    species,
+                    left: HOLD_SECS,
+                    tick: 0.0,
+                },
+                Transform::from_translation(
+                    c.at - Vec3::Y * HOSEI_Y.get(species).copied().unwrap_or(0.0) / 40.0,
+                ),
+                Visibility::default(),
+            ))
+            .id();
+        let parts = spawn_parts(&mut commands, root, &frames[0]);
+        commands.entity(root).insert(Parts(parts));
+    }
+}
+
+/// Faces the camera (`billboard_matrix`), wriggles, then goes.
+fn animate_held(
+    mut commands: Commands,
+    time: Res<Time>,
+    models: Res<CritterModels>,
+    camera: Query<
+        &GlobalTransform,
+        (
+            With<Camera3d>,
+            Without<crate::msg_window::OverlayCamera>,
+            Without<HeldFish>,
+        ),
+    >,
+    mut held: Query<(Entity, &mut HeldFish, &Parts, &mut Transform)>,
+    mut part_q: Query<(&mut Mesh3d, &mut MeshMaterial3d<N64Material>)>,
+) {
+    let cam = camera.iter().next().map(|c| c.translation());
+    for (e, mut h, parts, mut t) in &mut held {
+        h.left -= time.delta_secs();
+        if h.left <= 0.0 {
+            commands.entity(e).despawn();
+            continue;
+        }
+        h.tick += time.delta_secs() * FPS;
+        // Swing: 13 degrees x sin of a counter stepping 0xE38 (fast) or
+        // 0xAAA (slow) a tick.
+        let slow = models.fish_slow.get(h.species).copied().unwrap_or(false);
+        let step = if slow { 0xAAA } else { 0xE38 } as f32;
+        let swing =
+            (13.0f32.to_radians()) * (h.tick * step * std::f32::consts::TAU / 65536.0).sin();
+        if let Some(cam) = cam {
+            let to = cam - t.translation;
+            t.rotation = Quat::from_rotation_y(to.x.atan2(to.z)) * Quat::from_rotation_y(swing);
+        }
+        let shrink = (h.left * FPS / PUTAWAY_TICKS).min(1.0);
+        t.scale = Vec3::splat(shrink);
+        let tick = h.tick as usize;
+        let frame = if slow {
+            FISH_SLOW[tick % FISH_SLOW.len()]
+        } else {
+            FISH_FAST[tick % FISH_FAST.len()]
+        } / 2;
+        if let Some(Some(frames)) = models.fish.get(h.species) {
+            set_parts(&mut part_q, parts, &frames[frame]);
+        }
+    }
+}
+
 pub struct CrittersPlugin;
 
 impl Plugin for CrittersPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            OnEnter(AppState::InGame),
-            setup_models.run_if(resource_exists::<GameDisc>),
-        )
-        .add_systems(
-            Update,
-            (dress_critters, animate_critters)
-                .chain()
-                .run_if(in_state(AppState::InGame).and_then(resource_exists::<CritterModels>)),
-        );
+        app.add_message::<FishCaught>()
+            .add_systems(
+                OnEnter(AppState::InGame),
+                setup_models.run_if(resource_exists::<GameDisc>),
+            )
+            .add_systems(
+                Update,
+                (dress_critters, animate_critters, show_caught, animate_held)
+                    .chain()
+                    .run_if(in_state(AppState::InGame).and_then(resource_exists::<CritterModels>)),
+            );
     }
 }

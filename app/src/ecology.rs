@@ -239,18 +239,35 @@ fn spawn_one_fish(
 }
 
 /// Which kinds of water an acre's units hold (`aSOG_gyoei_place_check`,
-/// USA rules): river (and river mouth), still water (pool, pond), falls.
-fn acre_water(ground: &crate::ground_map::GroundMap, ax: usize, az: usize) -> [bool; 3] {
-    let mut kinds = [false; 3];
+/// USA rules): river (and river mouth), still water (pool, pond), falls,
+/// sea.
+fn acre_water(ground: &crate::ground_map::GroundMap, ax: usize, az: usize) -> [bool; 4] {
+    let mut kinds = [false; 4];
     for ut in 0..256 {
         match ground.unit_attribute(ax + 1, az + 1, ut) {
             14..=21 => kinds[0] = true,
             12 => kinds[1] = true,
             13 => kinds[2] = true,
+            24 => kinds[3] = true,
             _ => {}
         }
     }
     kinds
+}
+
+/// A fish's height over the water at `p`.
+fn fish_height(town: &Town, p: Vec3) -> f32 {
+    town.ground
+        .as_ref()
+        .and_then(|g| g.fish_y(p.x, p.z))
+        .unwrap_or_else(|| town.ground_y(p) + FISH_LIFT)
+}
+
+/// Water a fish or bobber can be in.
+fn fish_water(town: &Town, p: Vec3) -> bool {
+    town.ground
+        .as_ref()
+        .map_or_else(|| town.is_river(p), |g| g.is_fish_water(p.x, p.z))
 }
 
 /// `aSOG_gyoei_set`: when the player comes into an acre with water and no
@@ -288,29 +305,60 @@ fn place_fish(
     if fish.iter().any(|(_, t)| acre_of(t) == Some((ax, az))) {
         return;
     }
-    let [river, still, falls] = acre_water(ground, ax, az);
+    let [river, still, falls, sea] = acre_water(ground, ax, az);
     let (m, d, h) = today_mdh();
-    let entries: Vec<(FishType, u8)> = species::fish_seasonal_table(m, d, h, 0)
-        .map(|t| {
+    // The river table, plus the sea's for coastal acres and the pond's
+    // for still water (aSOG_gyoei_make_*_range_data).
+    let tables = [(0, true), (1, sea), (2, still)];
+    let entries: Vec<(FishType, u8)> = tables
+        .iter()
+        .filter(|(_, on)| *on)
+        .filter_map(|&(env, _)| species::fish_seasonal_table(m, d, h, env))
+        .flat_map(|t| {
             t.iter()
                 .filter(|e| match e.area {
                     FishArea::River | FishArea::RiverMouth => river,
                     FishArea::Pool | FishArea::Pond => still,
                     FishArea::Waterfall => falls,
-                    FishArea::Sea | FishArea::Offing => false,
+                    FishArea::Sea => sea,
+                    FishArea::Offing => false,
                 })
                 .map(|e| (e.fish, e.weight))
-                .collect()
         })
-        .unwrap_or_default();
+        .collect();
     let Some(species) = weighted_pick(&entries, &mut rng) else {
         return;
     };
+    // Per species as aSOG_gyoei_set_gyoei_data: Large Char in falls, sea
+    // fish in deep sea, salmon in either, the whale well out, the rest in
+    // fresh water.
+    let deep = |ut: usize| {
+        let c = Town::cell_to_world(ax, az, ut % 16, ut / 16);
+        ground.deep_sea(c.x, c.z)
+    };
+    let sea_fish = matches!(
+        species,
+        FishType::Coelacanth
+            | FishType::Jellyfish
+            | FishType::SeaBass
+            | FishType::RedSnapper
+            | FishType::BarredKnifejaw
+    );
     let spots: Vec<usize> = (0..256)
         .filter(|&ut| (2..14).contains(&(ut % 16)) && (2..14).contains(&(ut / 16)))
-        .filter(|&ut| match ground.unit_attribute(ax + 1, az + 1, ut) {
-            13 => true,
-            a => (12..=21).contains(&a) && species != FishType::LargeChar,
+        .filter(|&ut| {
+            let fresh = (12..=21).contains(&ground.unit_attribute(ax + 1, az + 1, ut));
+            match species {
+                FishType::LargeChar => ground.unit_attribute(ax + 1, az + 1, ut) == 13,
+                FishType::Salmon | FishType::Salmon2 => fresh || deep(ut),
+                FishType::Whale => {
+                    (5..11).contains(&(ut % 16))
+                        && (5..11).contains(&(ut / 16))
+                        && (fresh || deep(ut))
+                }
+                _ if sea_fish => deep(ut),
+                _ => fresh,
+            }
         })
         .collect();
     if spots.is_empty() {
@@ -318,7 +366,7 @@ fn place_fish(
     }
     let ut = spots[rng.range_usize(spots.len())];
     let at = Town::cell_to_world(ax, az, ut % 16, ut / 16);
-    let pos = at.with_y(town.ground_y(at) + FISH_LIFT);
+    let pos = at.with_y(fish_height(&town, at));
     spawn_one_fish(&mut commands, &mut meshes, &mut materials, species, pos);
     println!("A {species:?} in acre ({ax}, {az})");
 }
@@ -543,7 +591,7 @@ fn update_fish(
                 player_dashing: dashing,
                 tool_hit: false,
                 flow_rv: flow(here),
-                wall: !town.is_river(ahead),
+                wall: !fish_water(&town, ahead),
                 golden_rod: false,
             };
             let event = ai.step(&world, &mut rand);
@@ -568,7 +616,7 @@ fn update_fish(
         }
         if let Some(ai) = &fish.ai {
             let p = Vec3::new(ai.pos[0], 0.0, ai.pos[1]) / GAME_UNITS;
-            transform.translation = p.with_y(town.ground_y(p) + FISH_LIFT);
+            transform.translation = p.with_y(fish_height(&town, p));
             let (s, c) = (ai.angle as f32 * std::f32::consts::PI / 32768.0).sin_cos();
             fish.dir = Vec3::new(s, 0.0, c);
         }
@@ -587,7 +635,7 @@ fn rehome_fish(
         return;
     }
     for (mut f, mut t) in &mut fish {
-        if town.is_river(f.home) {
+        if fish_water(&town, f.home) {
             continue;
         }
         let (ax, az, cx, cz) = tiles[rng.range_usize(tiles.len())];
@@ -678,6 +726,7 @@ fn tool_interact(
     bug_query: Query<(Entity, &Bug, &Transform)>,
     bobber_query: Query<(Entity, &Bobber)>,
     fish_query: Query<&Fish>,
+    mut landed: bevy::ecs::message::MessageWriter<crate::critters::FishCaught>,
     mut inventory: ResMut<PlayerInventory>,
     mut notify_timer: ResMut<CatchNotifyTimer>,
     mut notify_query: Query<&mut Text, With<CatchNotifyText>>,
@@ -714,6 +763,11 @@ fn tool_interact(
                         let name = items::name(item);
                         if inventory.add(item) {
                             commands.entity(f).despawn();
+                            landed.write(crate::critters::FishCaught {
+                                species: fish.species,
+                                // Left hand: about hand height, in front.
+                                at: player_pos + facing.dir * 0.35 + Vec3::Y * 0.9,
+                            });
                             show_catch_notify(
                                 &format!("Caught a {name}!"),
                                 &mut notify_timer,
@@ -736,7 +790,7 @@ fn tool_interact(
             let mut cast_point = None;
             for d in CAST_SAMPLES {
                 let p = player_pos + facing.dir * d;
-                if town.is_river(p) {
+                if fish_water(&town, p) {
                     cast_point = Some(p);
                     break;
                 }
