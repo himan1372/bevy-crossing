@@ -91,3 +91,4 @@
 {"action":"complete","task":"pause-menu","agent":"claude","timestamp":"2026-10-14T00:58:32Z"}
 {"action":"release","task":"dialogue-polish","agent":"claude","timestamp":"2026-10-14T00:58:45Z"}
 {"action":"claim","task":"critter-behaviour","agent":"claude","timestamp":"2026-10-14T01:01:49Z"}
+{"action":"complete","task":"critter-behaviour","agent":"claude","timestamp":"2026-10-14T08:25:16Z"}
