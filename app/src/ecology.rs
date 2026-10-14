@@ -34,8 +34,6 @@ use crate::town::Town;
 /// game units up (`mCoBG_GetWaterHeight`) and fish 8 below it
 /// (`aGTT_Get_water_surface_position_y`), 12 of a unit's 40.
 const FISH_LIFT: f32 = 12.0 / 40.0;
-/// How many fish shadows the river holds.
-const FISH_TARGET: usize = 4;
 /// How many bugs roam the town.
 const BUG_TARGET: usize = 6;
 /// Seconds between critter top-up checks.
@@ -164,20 +162,6 @@ fn weighted_pick<T: Copy>(entries: &[(T, u8)], rng: &mut EcoRng) -> Option<T> {
     None
 }
 
-/// Pick a river fish species from the seasonal table (env 0 = river).
-fn pick_fish(rng: &mut EcoRng) -> FishType {
-    let (m, d, h) = today_mdh();
-    let entries: Vec<(FishType, u8)> = species::fish_seasonal_table(m, d, h, 0)
-        .map(|t| {
-            t.iter()
-                .filter(|e| e.area == FishArea::River)
-                .map(|e| (e.fish, e.weight))
-                .collect()
-        })
-        .unwrap_or_default();
-    weighted_pick(&entries, rng).unwrap_or(FishType::CrucianCarp)
-}
-
 /// Pick a bug species + renderable habitat from the seasonal table.
 fn pick_bug(rng: &mut EcoRng) -> (InsectType, InsectArea) {
     let (m, _, h) = today_mdh();
@@ -228,42 +212,115 @@ fn tree_spots(town: &Town) -> Vec<Vec3> {
     spots
 }
 
-fn spawn_fish(
+/// One fish shadow at `pos` (the critters module dresses it).
+fn spawn_one_fish(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
-    town: &Town,
-    rng: &mut EcoRng,
-    count: usize,
+    species: FishType,
+    pos: Vec3,
 ) {
-    let tiles: Vec<(usize, usize, usize, usize)> = town.river_tiles.iter().copied().collect();
-    if tiles.is_empty() {
+    commands.spawn((
+        Fish {
+            species,
+            dir: Vec3::Z,
+            home: pos,
+            ai: None,
+            ticks: 0.0,
+        },
+        Mesh3d(meshes.add(Sphere::new(0.45))),
+        MeshMaterial3d(materials.add(Color::srgb(0.08, 0.12, 0.2))),
+        Transform {
+            translation: pos,
+            scale: Vec3::new(1.2, 0.22, 0.7),
+            ..default()
+        },
+    ));
+}
+
+/// Which kinds of water an acre's units hold (`aSOG_gyoei_place_check`,
+/// USA rules): river (and river mouth), still water (pool, pond), falls.
+fn acre_water(ground: &crate::ground_map::GroundMap, ax: usize, az: usize) -> [bool; 3] {
+    let mut kinds = [false; 3];
+    for ut in 0..256 {
+        match ground.unit_attribute(ax + 1, az + 1, ut) {
+            14..=21 => kinds[0] = true,
+            12 => kinds[1] = true,
+            13 => kinds[2] = true,
+            _ => {}
+        }
+    }
+    kinds
+}
+
+/// `aSOG_gyoei_set`: when the player comes into an acre with water and no
+/// fish, one fish of the season (whose area the acre has) appears on a
+/// random water unit at least 2 units in from the edge
+/// (`aSOG_gyoei_set_gyoei_data`; the Large Char only in falls). Fish more
+/// than an acre from the player are let go.
+#[allow(clippy::too_many_arguments)]
+fn place_fish(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    town: Res<Town>,
+    player: Query<&Transform, With<Player>>,
+    fish: Query<(Entity, &Transform), With<Fish>>,
+    mut rng: ResMut<EcoRng>,
+    mut last: Local<Option<(usize, usize)>>,
+) {
+    let (Some(ground), Ok(p)) = (&town.ground, player.single()) else {
+        return;
+    };
+    let Some((ax, az, _, _)) = Town::cell_indices_of(p.translation) else {
+        return;
+    };
+    if *last == Some((ax, az)) {
         return;
     }
-    let mesh = meshes.add(Sphere::new(0.45));
-    let mat = materials.add(Color::srgb(0.08, 0.12, 0.2));
-    for _ in 0..count {
-        let (ax, az, cx, cz) = tiles[rng.range_usize(tiles.len())];
-        let pos = Town::cell_to_world(ax, az, cx, cz);
-        let angle = rng.range_f32(0.0, std::f32::consts::TAU);
-        let species = pick_fish(rng);
-        commands.spawn((
-            Fish {
-                species,
-                dir: Vec3::new(angle.cos(), 0.0, angle.sin()),
-                home: pos,
-                ai: None,
-                ticks: 0.0,
-            },
-            Mesh3d(mesh.clone()),
-            MeshMaterial3d(mat.clone()),
-            Transform {
-                translation: Vec3::new(pos.x, town.ground_y(pos) + FISH_LIFT, pos.z),
-                scale: Vec3::new(1.2, 0.22, 0.7),
-                ..default()
-            },
-        ));
+    *last = Some((ax, az));
+    let acre_of = |t: &Transform| Town::cell_indices_of(t.translation).map(|(x, z, ..)| (x, z));
+    for (e, t) in &fish {
+        if acre_of(t).is_none_or(|(x, z)| x.abs_diff(ax) > 1 || z.abs_diff(az) > 1) {
+            commands.entity(e).despawn();
+        }
     }
+    if fish.iter().any(|(_, t)| acre_of(t) == Some((ax, az))) {
+        return;
+    }
+    let [river, still, falls] = acre_water(ground, ax, az);
+    let (m, d, h) = today_mdh();
+    let entries: Vec<(FishType, u8)> = species::fish_seasonal_table(m, d, h, 0)
+        .map(|t| {
+            t.iter()
+                .filter(|e| match e.area {
+                    FishArea::River | FishArea::RiverMouth => river,
+                    FishArea::Pool | FishArea::Pond => still,
+                    FishArea::Waterfall => falls,
+                    FishArea::Sea | FishArea::Offing => false,
+                })
+                .map(|e| (e.fish, e.weight))
+                .collect()
+        })
+        .unwrap_or_default();
+    let Some(species) = weighted_pick(&entries, &mut rng) else {
+        return;
+    };
+    let spots: Vec<usize> = (0..256)
+        .filter(|&ut| (2..14).contains(&(ut % 16)) && (2..14).contains(&(ut / 16)))
+        .filter(|&ut| match ground.unit_attribute(ax + 1, az + 1, ut) {
+            13 => true,
+            a => (12..=21).contains(&a) && species != FishType::LargeChar,
+        })
+        .collect();
+    if spots.is_empty() {
+        return;
+    }
+    let ut = spots[rng.range_usize(spots.len())];
+    let at = Town::cell_to_world(ax, az, ut % 16, ut / 16);
+    let pos = at.with_y(town.ground_y(at) + FISH_LIFT);
+    spawn_one_fish(&mut commands, &mut meshes, &mut materials, species, pos);
+    println!("A {species:?} in acre ({ax}, {az})");
 }
 
 fn spawn_bugs(
@@ -334,14 +391,6 @@ fn spawn_initial_critters(
     town: Res<Town>,
 ) {
     let mut rng = EcoRng(0xC0FFEE1234567890);
-    spawn_fish(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &town,
-        &mut rng,
-        FISH_TARGET,
-    );
     spawn_bugs(
         &mut commands,
         &mut meshes,
@@ -351,7 +400,7 @@ fn spawn_initial_critters(
         BUG_TARGET,
     );
     commands.insert_resource(rng);
-    println!("Ecology spawned: {FISH_TARGET} fish, {BUG_TARGET} bugs");
+    println!("Ecology spawned: {BUG_TARGET} bugs");
 }
 
 // ---- UI ----
@@ -784,25 +833,14 @@ fn respawn_critters(
     mut materials: ResMut<Assets<StandardMaterial>>,
     town: Res<Town>,
     mut rng: ResMut<EcoRng>,
-    fish_query: Query<&Fish>,
     bug_query: Query<&Bug>,
 ) {
     timer.0.tick(time.delta());
     if !timer.0.just_finished() {
         return;
     }
-    let fish_count = fish_query.iter().len();
+    // Fish come and go per acre (`place_fish`).
     let bug_count = bug_query.iter().len();
-    if fish_count < FISH_TARGET {
-        spawn_fish(
-            &mut commands,
-            &mut meshes,
-            &mut materials,
-            &town,
-            &mut rng,
-            FISH_TARGET - fish_count,
-        );
-    }
     if bug_count < BUG_TARGET {
         spawn_bugs(
             &mut commands,
@@ -813,8 +851,8 @@ fn respawn_critters(
             BUG_TARGET - bug_count,
         );
     }
-    if fish_count < FISH_TARGET || bug_count < BUG_TARGET {
-        println!("Respawned critters (fish: {fish_count}, bugs: {bug_count})");
+    if bug_count < BUG_TARGET {
+        println!("Respawned bugs ({bug_count})");
     }
 }
 
@@ -843,6 +881,7 @@ impl Plugin for EcologyPlugin {
                 Update,
                 (
                     rehome_fish.run_if(resource_changed::<Town>),
+                    place_fish,
                     update_fish,
                     update_bugs,
                     update_bobber,
