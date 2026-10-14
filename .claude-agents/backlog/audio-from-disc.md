@@ -7,3 +7,5 @@ music) and how much logic::audio already covers.
 - [ ] Sound effects (footsteps, UI, mailbox, etc.).
 - [ ] Music (hourly BGM).
 - [ ] Gate passes; live check; Philip playtest.
+
+Research (claude, 2026-10-13): all audio is in audiorom.img (8.3 MB: banks, VADPCM samples, sequences), played by jaudio_NES (~37k lines C in src/static/jaudio_NES). logic::audio has only the Na_* game layer. Options given to Philip: A) SE samples only (bank reader + VADPCM decode, no music), B) full engine port (very large). Parked for budget; Philip chose pause-menu first.

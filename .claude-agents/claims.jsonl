@@ -85,3 +85,7 @@
 {"action":"claim","task":"ui-from-disc","agent":"claude","timestamp":"2026-10-13T23:50:47Z"}
 {"action":"complete","task":"ui-from-disc","agent":"claude","timestamp":"2026-10-14T00:35:12Z"}
 {"action":"claim","task":"dialogue-polish","agent":"claude","timestamp":"2026-10-14T00:35:12Z"}
+{"action":"claim","task":"audio-from-disc","agent":"claude","timestamp":"2026-10-14T00:49:40Z"}
+{"action":"release","task":"audio-from-disc","agent":"claude","timestamp":"2026-10-14T00:56:05Z"}
+{"action":"claim","task":"pause-menu","agent":"claude","timestamp":"2026-10-14T00:56:06Z"}
+{"action":"complete","task":"pause-menu","agent":"claude","timestamp":"2026-10-14T00:58:32Z"}

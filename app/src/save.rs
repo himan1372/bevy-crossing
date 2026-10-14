@@ -425,7 +425,11 @@ fn tick_notification(
 /// F5: write the current state to disk.
 fn quick_save(
     // One tuple param: these systems are at Bevy's 16-parameter limit.
-    (actions, focus): (Res<Actions>, Res<InputFocus>),
+    (actions, focus, mut request): (
+        Res<Actions>,
+        Res<InputFocus>,
+        ResMut<crate::pause_menu::SaveRequest>,
+    ),
     player: Query<&Transform, With<Player>>,
     field: Option<Res<FieldItems>>,
     inventory: Res<PlayerInventory>,
@@ -443,7 +447,12 @@ fn quick_save(
     (look, roster): (Res<PlayerLook>, Option<Res<crate::roster::TownRoster>>),
 ) {
     // World focus only: saving or loading mid-UI would leave that UI stale.
-    if !actions.just_pressed(Action::QuickSave) || !focus.is_world() {
+    // F5, or Save in the pause menu (taken once play resumes).
+    if !focus.is_world() {
+        return;
+    }
+    let asked = std::mem::take(&mut request.0);
+    if !(actions.just_pressed(Action::QuickSave) || asked) {
         return;
     }
     let mut save = collect_save(
