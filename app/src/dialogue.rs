@@ -36,6 +36,16 @@ pub struct DialogueState {
     trade: Option<TradeDeal>,
     /// The highlighted choice while [`DialogueState::choices`] is up.
     pub choice: usize,
+    /// The talk window is still typing the page out: E waits.
+    pub revealing: bool,
+    /// A question the last page asks (the game's own message): its
+    /// answers and branches, with the speaker's name and the message
+    /// context to render the chosen branch.
+    ask: Option<(
+        crate::messages::MsgChoice,
+        &'static str,
+        crate::messages::MsgContext,
+    )>,
 }
 
 /// The trade question's answers (first = yes).
@@ -43,14 +53,19 @@ const TRADE_CHOICES: [&str; 2] = ["Let's trade!", "No thanks."];
 
 impl DialogueState {
     /// The answers on offer, while the last page waits on one.
-    pub fn choices(&self) -> Option<&'static [&'static str]> {
-        (self.active && self.index + 1 >= self.lines.len() && self.trade.is_some())
-            .then_some(&TRADE_CHOICES[..])
+    pub fn choices(&self) -> Option<Vec<String>> {
+        if !self.active || self.index + 1 < self.lines.len() {
+            return None;
+        }
+        if self.trade.is_some() {
+            return Some(TRADE_CHOICES.iter().map(|s| s.to_string()).collect());
+        }
+        self.ask.as_ref().map(|(c, ..)| c.labels.clone())
     }
 
     /// The plain box's text: the page, plus the choices as a key hint.
     fn shown_text(&self) -> String {
-        let page = self.page().unwrap_or_default().to_string();
+        let page = crate::messages::markup::strip(self.page().unwrap_or_default());
         match self.choices() {
             Some(c) => format!("{page}\n(Y: {}    N: {})", c[0], c[1]),
             None => page,
@@ -281,11 +296,17 @@ fn on_talk(
             let disc_pages = disc.as_deref().and_then(|d| {
                 let text = d.text.as_ref()?;
                 let msg = disc_message_context(d, villager, item.as_deref(), &now);
-                let pages = text.pages(msg_no as usize, &msg, &mut |n| rng.below(n));
-                (!pages.is_empty()).then_some(pages)
+                let (pages, ask) = text.talk(msg_no as usize, &msg, &mut |n| rng.below(n));
+                (!pages.is_empty()).then_some((pages, ask.map(|a| (a, villager.name, msg))))
             });
             match disc_pages {
-                Some(pages) => lines.extend(pages.iter().map(|p| say(p))),
+                Some((pages, ask)) => {
+                    lines.extend(pages.iter().map(|p| say(p)));
+                    if let Some((a, ..)) = &ask {
+                        println!("{} asks: {:?}", villager.name, a.labels);
+                    }
+                    dialogue.ask = ask;
+                }
                 None => {
                     lines.push(say(talk::greeting(looks, rng.below(2) as usize)));
                     lines.push(say(&talk::lines(
@@ -334,6 +355,9 @@ fn on_talk(
         }
         dialogue.index = 0;
         dialogue.choice = 0;
+        if dialogue.trade.is_some() {
+            dialogue.ask = None;
+        }
         dialogue.lines = lines;
         if let Ok(mut vis) = box_query.single_mut() {
             *vis = Visibility::Visible;
@@ -470,6 +494,19 @@ fn tick_talk_timers(
     }
 }
 
+/// Ends the talk and hides the plain box.
+fn close(dialogue: &mut DialogueState, box_query: &mut Query<&mut Visibility, With<DialogueBox>>) {
+    dialogue.active = false;
+    dialogue.speaker = None;
+    dialogue.lines.clear();
+    dialogue.index = 0;
+    dialogue.ask = None;
+    if let Ok(mut vis) = box_query.single_mut() {
+        *vis = Visibility::Hidden;
+    }
+    println!("Dialogue closed");
+}
+
 /// Space or E advances the dialogue; the last line dismisses it.
 ///
 /// Runs in [`InteractSet::Ui`], after talk: the E press that opened the
@@ -480,8 +517,9 @@ fn dialogue_input(
     mut inventory: ResMut<PlayerInventory>,
     mut box_query: Query<&mut Visibility, With<DialogueBox>>,
     mut text_query: Query<&mut Text, With<DialogueText>>,
+    (disc, mut rng): (Option<Res<crate::game_disc::GameDisc>>, ResMut<TalkRng>),
 ) {
-    if !dialogue.active {
+    if !dialogue.active || dialogue.revealing {
         return;
     }
     // A trade offer on the last line waits on its choice: up/down picks,
@@ -497,6 +535,35 @@ fn dialogue_input(
         let pick = actions.just_pressed(Action::Confirm)
             || actions.just_pressed(Action::Advance)
             || actions.consume(Action::Interact);
+        // The game's own question: go on down the chosen branch.
+        if pick && dialogue.trade.is_none() {
+            if let Some((ask, speaker, ctx)) = dialogue.ask.take() {
+                let next = ask.next.get(dialogue.choice).copied().flatten();
+                let branch = disc
+                    .as_deref()
+                    .and_then(|d| d.text.as_ref())
+                    .zip(next)
+                    .map(|(text, no)| text.talk(no, &ctx, &mut |n| rng.below(n)));
+                dialogue.choice = 0;
+                match branch {
+                    Some((pages, ask)) if !pages.is_empty() => {
+                        dialogue
+                            .lines
+                            .extend(pages.iter().map(|p| format!("{speaker}: {p}")));
+                        dialogue.ask = ask.map(|a| (a, speaker, ctx));
+                        dialogue.index += 1;
+                        if let Ok(mut text) = text_query.single_mut() {
+                            text.0 = dialogue.shown_text();
+                        }
+                    }
+                    _ => close(&mut dialogue, &mut box_query),
+                }
+            }
+            return;
+        }
+        if dialogue.trade.is_none() {
+            return;
+        }
         let yes = actions.just_pressed(Action::Yes) || (pick && dialogue.choice == 0);
         let no = actions.just_pressed(Action::No)
             || actions.just_pressed(Action::Cancel)
@@ -534,14 +601,7 @@ fn dialogue_input(
     }
     dialogue.index += 1;
     if dialogue.index >= dialogue.lines.len() {
-        dialogue.active = false;
-        dialogue.speaker = None;
-        dialogue.lines.clear();
-        dialogue.index = 0;
-        if let Ok(mut vis) = box_query.single_mut() {
-            *vis = Visibility::Hidden;
-        }
-        println!("Dialogue closed");
+        close(&mut dialogue, &mut box_query);
     } else if let Ok(mut text) = text_query.single_mut() {
         text.0 = dialogue.shown_text();
     }

@@ -47,11 +47,93 @@ const CONTROL: u8 = 0x7F;
 const TAG: u8 = 0x80;
 const NEW_LINE: u8 = 0xCD;
 
+/// Page text keeps the display codes the talk window needs as private-use
+/// characters, each followed by its arguments as `ARG + value` characters:
+/// [`markup::COLOR_CHARS`] r g b n (the next n characters, from
+/// `mFont_CONT_CODE_SET_COLOR_CHAR`), [`markup::LINE_COLOR`] r g b (the
+/// line, `mFont_CONT_CODE_COLOR`) and [`markup::PAUSE`] t (t ticks,
+/// `mFont_CONT_CODE_CURSOR_SET_TIME`). [`markup::strip`] removes them.
+pub mod markup {
+    pub const COLOR_CHARS: char = '\u{E000}';
+    pub const LINE_COLOR: char = '\u{E001}';
+    pub const PAUSE: char = '\u{E002}';
+    /// Argument characters: `ARG + byte`.
+    const ARG: u32 = 0xE100;
+
+    pub fn arg(v: u8) -> char {
+        char::from_u32(ARG + v as u32).unwrap_or(' ')
+    }
+
+    fn value(c: char) -> u8 {
+        (c as u32).wrapping_sub(ARG) as u8
+    }
+
+    /// One shown piece of a page.
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    pub enum Item {
+        Char(char, Option<[u8; 3]>),
+        NewLine,
+        /// The cursor waits this many 60 Hz ticks.
+        Pause(u32),
+    }
+
+    /// The page as characters with their colours, line breaks and pauses.
+    pub fn parse(s: &str) -> Vec<Item> {
+        let mut out = Vec::new();
+        let mut chars = s.chars();
+        let (mut run, mut run_left, mut line): (Option<[u8; 3]>, u32, Option<[u8; 3]>) =
+            (None, 0, None);
+        while let Some(c) = chars.next() {
+            let mut rgb = || [chars.next(), chars.next(), chars.next()].map(|c| c.map_or(0, value));
+            match c {
+                COLOR_CHARS => {
+                    run = Some(rgb());
+                    run_left = chars.next().map_or(0, value) as u32;
+                }
+                LINE_COLOR => line = Some(rgb()),
+                PAUSE => out.push(Item::Pause(chars.next().map_or(0, value) as u32 * 2)),
+                '\n' => {
+                    line = None;
+                    out.push(Item::NewLine);
+                }
+                _ => {
+                    let color = if run_left > 0 {
+                        run_left -= 1;
+                        run
+                    } else {
+                        line
+                    };
+                    out.push(Item::Char(c, color));
+                }
+            }
+        }
+        out
+    }
+
+    /// The page as plain text.
+    pub fn strip(s: &str) -> String {
+        parse(s)
+            .into_iter()
+            .filter_map(|i| match i {
+                Item::Char(c, _) => Some(c),
+                Item::NewLine => Some('\n'),
+                Item::Pause(_) => None,
+            })
+            .collect()
+    }
+}
+
+/// `mMsg_Set_PlayerNameColor`: the player's name in (75, 95, 155).
+const PLAYER_NAME_COLOR: [u8; 3] = [75, 95, 155];
+
 /// `mFont_CONT_CODE_*` values used here.
 mod code {
     pub const LAST: u8 = 0;
     pub const CONTINUE: u8 = 1;
     pub const CLEAR: u8 = 2;
+    pub const CURSOR_SET_TIME: u8 = 3;
+    pub const COLOR: u8 = 5;
+    pub const SET_COLOR_CHAR: u8 = 80;
     pub const NEXT_F: u8 = 14;
     pub const NEXT_0: u8 = 15;
     pub const NEXT_3: u8 = 18;
@@ -146,6 +228,32 @@ pub fn ac_code(ch: char) -> u8 {
         t
     });
     table.get(&ch).copied().unwrap_or(b'?')
+}
+
+#[cfg(test)]
+mod markup_tests {
+    use super::markup::{self, Item};
+
+    #[test]
+    fn colours_runs_lines_and_pauses() {
+        let mut s = String::from("Hi ");
+        s.push(markup::COLOR_CHARS);
+        s.extend([75, 95, 155, 2].map(markup::arg));
+        s.push_str("Bob!");
+        s.push(markup::PAUSE);
+        s.push(markup::arg(5));
+        s.push('\n');
+        s.push(markup::LINE_COLOR);
+        s.extend([1, 2, 3].map(markup::arg));
+        s.push('x');
+        let items = markup::parse(&s);
+        assert_eq!(items[3], Item::Char('B', Some([75, 95, 155])));
+        assert_eq!(items[4], Item::Char('o', Some([75, 95, 155])));
+        assert_eq!(items[5], Item::Char('b', None));
+        assert_eq!(items[7], Item::Pause(10));
+        assert_eq!(items[9], Item::Char('x', Some([1, 2, 3])));
+        assert_eq!(markup::strip(&s), "Hi Bob!\nx");
+    }
 }
 
 /// Plain text of a string-bank entry (names, catchphrases): no codes.
@@ -252,17 +360,29 @@ impl GameText {
     }
 
     /// Message `msg_no` and the ones it chains to, as pages of text.
-    /// Choices are listed on the page that asks; the first choice's
-    /// branch is followed. `pick(n)` is a random 0..n.
+    /// `pick(n)` is a random 0..n.
+    #[cfg(test)]
     pub fn pages(
         &self,
         msg_no: usize,
         ctx: &MsgContext,
         pick: &mut dyn FnMut(u32) -> u32,
     ) -> Vec<String> {
+        self.talk(msg_no, ctx, pick).0
+    }
+
+    /// As [`GameText::pages`], stopping at a question: its answers
+    /// (`SELECT_n`) and the message each leads to (`NEXT_0`..`NEXT_5`).
+    pub fn talk(
+        &self,
+        msg_no: usize,
+        ctx: &MsgContext,
+        pick: &mut dyn FnMut(u32) -> u32,
+    ) -> (Vec<String>, Option<MsgChoice>) {
         let mut pages = vec![String::new()];
         let mut next = Some(msg_no);
         let mut followed = 0;
+        let mut choice = None;
         while let Some(no) = next.take() {
             followed += 1;
             if followed > MAX_CHAIN {
@@ -274,21 +394,30 @@ impl GameText {
             if !pages.last().is_some_and(String::is_empty) {
                 pages.push(String::new());
             }
-            next = self.render(text, ctx, &mut pages, pick);
+            let (then, asks) = self.render(text, ctx, &mut pages, pick);
+            if asks.is_some() {
+                choice = asks;
+                break;
+            }
+            next = then;
         }
         pages.retain(|p| !p.trim().is_empty());
-        pages.iter().map(|p| p.trim_end().to_string()).collect()
+        let pages = pages.iter().map(|p| p.trim_end().to_string()).collect();
+        (pages, choice)
     }
 
-    /// Appends one message to `pages`; returns the message it continues to.
+    /// Appends one message to `pages`; returns the message it continues to,
+    /// or the question it ends on.
     fn render(
         &self,
         text: &[u8],
         ctx: &MsgContext,
         pages: &mut Vec<String>,
         pick: &mut dyn FnMut(u32) -> u32,
-    ) -> Option<usize> {
+    ) -> (Option<usize>, Option<MsgChoice>) {
         let mut next = None;
+        let mut labels: Option<Vec<String>> = None;
+        let mut branches: [Option<usize>; 6] = [None; 6];
         let mut capital = false;
         let mut i = 0;
         let u16_at = |i: usize| -> u16 {
@@ -316,13 +445,22 @@ impl GameText {
                     match k {
                         code::LAST => break,
                         code::CONTINUE | code::CLEAR => pages.push(String::new()),
-                        code::NEXT_F | code::NEXT_0 => {
+                        code::NEXT_F => {
                             next = Some(u16_at(i + 2))
                                 .filter(|&n| n != 0xFFFF)
                                 .map(usize::from);
                         }
-                        // Branches for later choices: we follow choice 0.
-                        16..=code::NEXT_3 | code::NEXT_4 | code::NEXT_5 => {}
+                        // Where each answer leads (NEXT_0..3, NEXT_4/5).
+                        code::NEXT_0..=code::NEXT_3 | code::NEXT_4 | code::NEXT_5 => {
+                            let slot = match k {
+                                code::NEXT_4 => 4,
+                                code::NEXT_5 => 5,
+                                _ => (k - code::NEXT_0) as usize,
+                            };
+                            branches[slot] = Some(u16_at(i + 2))
+                                .filter(|&n| n != 0xFFFF)
+                                .map(usize::from);
+                        }
                         code::NEXT_RANDOM_2..=code::NEXT_RANDOM_4 => {
                             let n = (k - code::NEXT_RANDOM_2 + 2) as u32;
                             let which = pick(n) as usize;
@@ -336,14 +474,37 @@ impl GameText {
                                 code::SELECT_6 => 6,
                                 _ => (k - code::SELECT_2 + 2) as usize,
                             };
-                            let labels: Vec<String> = (0..n)
-                                .filter_map(|j| {
-                                    self.choices.get(u16_at(i + 2 + j * 2) as usize).map(plain)
-                                })
-                                .collect();
-                            page.push_str(&format!("\n[{}]", labels.join(" / ")));
+                            labels = Some(
+                                (0..n)
+                                    .filter_map(|j| {
+                                        self.choices.get(u16_at(i + 2 + j * 2) as usize).map(plain)
+                                    })
+                                    .collect(),
+                            );
                         }
-                        code::PLAYER_NAME => put(&ctx.player_name, page),
+                        code::PLAYER_NAME => {
+                            let n = ctx.player_name.chars().count().min(255) as u8;
+                            page.push(markup::COLOR_CHARS);
+                            page.extend(PLAYER_NAME_COLOR.map(markup::arg));
+                            page.push(markup::arg(n));
+                            put(&ctx.player_name, page);
+                        }
+                        code::CURSOR_SET_TIME => {
+                            page.push(markup::PAUSE);
+                            page.push(markup::arg(text.get(i + 2).copied().unwrap_or(0)));
+                        }
+                        code::COLOR => {
+                            page.push(markup::LINE_COLOR);
+                            page.extend(
+                                (2..5).map(|o| markup::arg(text.get(i + o).copied().unwrap_or(0))),
+                            );
+                        }
+                        code::SET_COLOR_CHAR => {
+                            page.push(markup::COLOR_CHARS);
+                            page.extend(
+                                (2..6).map(|o| markup::arg(text.get(i + o).copied().unwrap_or(0))),
+                            );
+                        }
                         code::TALK_NAME => put(&ctx.talk_name, page),
                         code::TAIL => put(&ctx.tail, page),
                         code::YEAR => put(&ctx.year.to_string(), page),
@@ -394,8 +555,24 @@ impl GameText {
             }
             i += 1;
         }
-        next
+        let choice = labels.map(|labels| MsgChoice {
+            next: branches[..labels.len().min(6)].to_vec(),
+            labels,
+        });
+        // Without a question, NEXT_0 is where the talk goes on.
+        (
+            next.or(if choice.is_none() { branches[0] } else { None }),
+            choice,
+        )
     }
+}
+
+/// A question a message ends on: its answers, and the message each one
+/// leads to.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MsgChoice {
+    pub labels: Vec<String>,
+    pub next: Vec<Option<usize>>,
 }
 
 #[cfg(test)]
@@ -463,7 +640,11 @@ mod tests {
             tail: "hmm".into(),
             ..default_ctx()
         };
-        let pages = t.pages(0, &ctx, &mut |_| 0);
+        let pages: Vec<String> = t
+            .pages(0, &ctx, &mut |_| 0)
+            .iter()
+            .map(|p| markup::strip(p))
+            .collect();
         assert_eq!(pages, vec!["Hi, Phil!", "hmm!", "Bye\nx"]);
     }
 
@@ -487,7 +668,38 @@ mod tests {
         let mut t = text(&[m0, b"one", b"two"]);
         t.code_size[code::SELECT_2 as usize] = 6;
         let pages = t.pages(0, &default_ctx(), &mut |_| 1);
-        assert_eq!(pages, vec!["Q\n[Yes / No]", "two"]);
+        // The question stops the page; its answers come back separately.
+        assert_eq!(pages, vec!["Q"]);
+    }
+
+    #[test]
+    fn questions_stop_with_their_branches() {
+        let m0: &[u8] = &[
+            b'Q',
+            CONTROL,
+            code::SELECT_2,
+            0,
+            0,
+            0,
+            1,
+            CONTROL,
+            code::NEXT_0,
+            0,
+            1,
+            CONTROL,
+            16, // NEXT_1
+            0,
+            2,
+        ];
+        let mut t = text(&[m0, b"one", b"two"]);
+        t.code_size[code::SELECT_2 as usize] = 6;
+        t.code_size[code::NEXT_0 as usize] = 4;
+        t.code_size[16] = 4;
+        let (pages, choice) = t.talk(0, &default_ctx(), &mut |_| 0);
+        assert_eq!(pages, vec!["Q"]);
+        let choice = choice.expect("asks");
+        assert_eq!(choice.labels, vec!["Yes", "No"]);
+        assert_eq!(choice.next, vec![Some(1), Some(2)]);
     }
 
     /// Probe (needs the disc): a few real messages.

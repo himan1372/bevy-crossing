@@ -83,3 +83,5 @@
 {"action":"claim","task":"gc-iso-reader-tune","agent":"claude","timestamp":"2026-10-13T23:46:46Z"}
 {"action":"complete","task":"gc-iso-reader-tune","agent":"claude","timestamp":"2026-10-13T23:50:46Z"}
 {"action":"claim","task":"ui-from-disc","agent":"claude","timestamp":"2026-10-13T23:50:47Z"}
+{"action":"complete","task":"ui-from-disc","agent":"claude","timestamp":"2026-10-14T00:35:12Z"}
+{"action":"claim","task":"dialogue-polish","agent":"claude","timestamp":"2026-10-14T00:35:12Z"}

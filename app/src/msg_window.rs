@@ -35,6 +35,8 @@ use disc::RomSource;
 use crate::dialogue::{DialogueBox, DialogueState};
 use crate::disc_gfx::Segments;
 use crate::game_disc::GameDisc;
+use crate::input::{Action, Actions};
+use crate::messages::markup::{self, Item};
 use crate::n64_material::N64Material;
 use crate::npc::Villager;
 use crate::states::AppState;
@@ -94,7 +96,7 @@ struct MsgAssets {
 /// The window currently drawn, and what for.
 #[derive(Resource, Default)]
 struct Shown {
-    key: Option<(String, Option<Entity>, Option<usize>)>,
+    key: Option<(String, Option<Entity>, Option<usize>, usize)>,
     root: Option<Entity>,
 }
 
@@ -278,15 +280,24 @@ fn choice_layout(answers: &[&str], widths: &[u8; 256]) -> (Vec2, Vec2, Vec2) {
 }
 
 /// A text mesh: one quad per character from `origin` (screen pixels),
-/// `\n` starting a new 16-pixel line.
-fn text_mesh(text: &str, origin: Vec2, widths: &[u8; 256]) -> Mesh {
-    let (mut pos, mut uv, mut idx) = (Vec::new(), Vec::new(), Vec::new());
+/// `\n` starting a new 16-pixel line, the first `limit` pieces of the page
+/// (`messages::markup`), each character in its own colour or `color`.
+fn text_mesh(text: &str, origin: Vec2, widths: &[u8; 256], color: [u8; 4], limit: usize) -> Mesh {
+    let (mut pos, mut uv, mut idx, mut col) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     let mut cursor = origin;
-    for ch in text.chars() {
-        if ch == '\n' {
-            cursor = Vec2::new(origin.x, cursor.y + CELL.y);
-            continue;
-        }
+    for item in markup::parse(text).into_iter().take(limit) {
+        let (ch, rgb) = match item {
+            Item::Char(ch, rgb) => (ch, rgb),
+            Item::NewLine => {
+                cursor = Vec2::new(origin.x, cursor.y + CELL.y);
+                continue;
+            }
+            Item::Pause(_) => continue,
+        };
+        let [r, g, b] = rgb.unwrap_or([color[0], color[1], color[2]]);
+        let tint = Color::srgba_u8(r, g, b, color[3])
+            .to_linear()
+            .to_f32_array();
         let c = crate::messages::ac_code(ch);
         let w = widths[c as usize] as f32;
         let cell = Vec2::new((c % 16) as f32 * CELL.x, (c / 16) as f32 * CELL.y);
@@ -295,6 +306,7 @@ fn text_mesh(text: &str, origin: Vec2, widths: &[u8; 256]) -> Mesh {
             let p = screen(cursor + Vec2::new(dx, dy));
             pos.push([p.x, p.y, 0.0]);
             uv.push([(cell.x + dx) / 192.0, (cell.y + dy) / 256.0]);
+            col.push(tint);
         }
         idx.extend([base, base + 2, base + 1, base, base + 3, base + 2]);
         cursor.x += w;
@@ -305,13 +317,83 @@ fn text_mesh(text: &str, origin: Vec2, widths: &[u8; 256]) -> Mesh {
     )
     .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
     .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)
     .with_inserted_indices(Indices::U32(idx))
 }
 
 fn text_width(text: &str, widths: &[u8; 256]) -> f32 {
-    text.chars()
+    markup::strip(text)
+        .chars()
         .map(|c| widths[crate::messages::ac_code(c) as usize] as f32)
         .sum()
+}
+
+/// The page the window shows: the plain box's "Name: " dropped, since the
+/// name plate says who's talking.
+fn window_page<'a>(page: &'a str, speaker: Option<&Villager>) -> &'a str {
+    speaker
+        .and_then(|v| page.strip_prefix(v.name))
+        .and_then(|p| p.strip_prefix(": "))
+        .unwrap_or(page)
+}
+
+/// How far the page has been typed out (`mMsg_Main_Cursol_ControlCursol`).
+#[derive(Resource, Default)]
+struct Reveal {
+    page: Option<String>,
+    /// Pieces of the page shown so far (`markup::Item`s).
+    shown: usize,
+    total: usize,
+    /// `cursor_timer`, in 60 Hz ticks.
+    timer: f32,
+}
+
+impl Reveal {
+    fn done(&self) -> bool {
+        self.shown >= self.total
+    }
+}
+
+/// Types the page out: a character every 2 ticks (30 a second), twice as
+/// fast while B (run) is held, waiting out `CURSOR_SET_TIME` pauses.
+fn advance_reveal(
+    time: Res<Time>,
+    actions: Res<Actions>,
+    villagers: Query<&Villager>,
+    mut dialogue: ResMut<DialogueState>,
+    mut reveal: ResMut<Reveal>,
+) {
+    let Some(page) = dialogue.page() else {
+        *reveal = Reveal::default();
+        dialogue.revealing = false;
+        return;
+    };
+    let speaker = dialogue.speaker.and_then(|e| villagers.get(e).ok());
+    let page = window_page(page, speaker).to_string();
+    if reveal.page.as_deref() != Some(page.as_str()) {
+        let items = markup::parse(&page);
+        *reveal = Reveal {
+            total: items.len(),
+            page: Some(page.clone()),
+            ..default()
+        };
+    }
+    let fast = if actions.pressed(Action::Run) {
+        2.0
+    } else {
+        1.0
+    };
+    reveal.timer -= time.delta_secs() * 60.0 * fast;
+    let items = markup::parse(&page);
+    while reveal.timer <= 0.0 && !reveal.done() {
+        match items[reveal.shown] {
+            Item::Char(..) => reveal.timer += 2.0,
+            Item::Pause(t) => reveal.timer += t as f32,
+            Item::NewLine => {}
+        }
+        reveal.shown += 1;
+    }
+    dialogue.revealing = !reveal.done();
 }
 
 /// Shows the window for the dialogue's current page.
@@ -320,6 +402,7 @@ fn draw_window(
     mut commands: Commands,
     assets: Res<MsgAssets>,
     dialogue: Res<DialogueState>,
+    reveal: Res<Reveal>,
     villagers: Query<&Villager>,
     mut shown: ResMut<Shown>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -330,6 +413,7 @@ fn draw_window(
             p.to_string(),
             dialogue.speaker,
             dialogue.choices().map(|_| dialogue.choice),
+            reveal.shown,
         )
     });
     if key == shown.key {
@@ -339,7 +423,7 @@ fn draw_window(
         commands.entity(root).despawn();
     }
     shown.key = key.clone();
-    let Some((page, speaker, _)) = key else {
+    let Some((page, speaker, _, typed)) = key else {
         return;
     };
     let layer = RenderLayers::layer(LAYER);
@@ -385,13 +469,9 @@ fn draw_window(
         };
     let font = assets.font.clone();
     let widths = assets.widths;
-    let mut page = page.as_str();
-    if let Some(v) = speaker.and_then(|e| villagers.get(e).ok()) {
-        // The plain box writes "Name: "; the name plate says it here.
-        page = page
-            .strip_prefix(v.name)
-            .and_then(|p| p.strip_prefix(": "))
-            .unwrap_or(page);
+    let speaker = speaker.and_then(|e| villagers.get(e).ok());
+    let page = window_page(&page, speaker);
+    if let Some(v) = speaker {
         let sex = if crate::roster::looks_female(v.looks) {
             1
         } else {
@@ -406,24 +486,29 @@ fn draw_window(
         let origin = WINDOW_CENTRE + local - SCREEN * 0.5;
         put(
             &mut commands,
-            text_mesh(v.name, origin, &widths),
+            text_mesh(v.name, origin, &widths, name_color, usize::MAX),
             &font,
-            name_color,
+            [255; 4],
             2.0,
         );
     }
     let origin = WINDOW_CENTRE - Vec2::new(96.0, 32.0);
     put(
         &mut commands,
-        text_mesh(page, origin, &widths),
+        text_mesh(page, origin, &widths, TEXT_COLOR, typed),
         &font,
-        TEXT_COLOR,
+        [255; 4],
         2.0,
     );
 
+    // The arrow and the answers wait for the page to finish typing.
+    if !reveal.done() {
+        return;
+    }
     match dialogue.choices() {
         Some(answers) => {
-            let (centre, scale, at) = choice_layout(answers, &assets.widths);
+            let answers: Vec<&str> = answers.iter().map(String::as_str).collect();
+            let (centre, scale, at) = choice_layout(&answers, &assets.widths);
             for (mesh, material) in &assets.choice_body {
                 commands.spawn((
                     Mesh3d(mesh.clone()),
@@ -453,9 +538,9 @@ fn draw_window(
                 };
                 put(
                     &mut commands,
-                    text_mesh(answer, origin, &widths),
+                    text_mesh(answer, origin, &widths, color, usize::MAX),
                     &font,
-                    color,
+                    [255; 4],
                     4.0,
                 );
                 y += CELL.y;
@@ -479,11 +564,17 @@ pub struct MsgWindowPlugin;
 impl Plugin for MsgWindowPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Shown>()
+            .init_resource::<Reveal>()
             .add_systems(
                 OnEnter(AppState::InGame),
                 setup.run_if(resource_exists::<GameDisc>),
             )
-            .add_systems(Update, draw_window.run_if(resource_exists::<MsgAssets>));
+            .add_systems(
+                Update,
+                (advance_reveal, draw_window)
+                    .chain()
+                    .run_if(resource_exists::<MsgAssets>),
+            );
     }
 }
 

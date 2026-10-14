@@ -221,6 +221,29 @@ pub fn interact(
     );
 }
 
+/// F7 (debug): talk to the nearest villager outdoors, however far away,
+/// so dialogue can be checked without walking up to someone.
+fn debug_talk(
+    actions: Res<Actions>,
+    focus: Res<InputFocus>,
+    mut talk_events: MessageWriter<TalkEvent>,
+    player: Query<&Transform, With<Player>>,
+    villagers: Query<(Entity, &Transform), (With<Villager>, Without<crate::npc::Indoors>)>,
+) {
+    if !actions.just_pressed(Action::DebugTalk) || !focus.is_world() {
+        return;
+    }
+    let Ok(p) = player.single() else { return };
+    let nearest = villagers.iter().min_by(|a, b| {
+        let da = a.1.translation.distance_squared(p.translation);
+        let db = b.1.translation.distance_squared(p.translation);
+        da.total_cmp(&db)
+    });
+    if let Some((villager, _)) = nearest {
+        talk_events.write(TalkEvent { villager });
+    }
+}
+
 pub struct InteractionPlugin;
 
 impl Plugin for InteractionPlugin {
@@ -229,7 +252,9 @@ impl Plugin for InteractionPlugin {
             .add_message::<TalkEvent>()
             .add_systems(
                 Update,
-                interact.in_set(InteractSet::Talk).in_set(GameplaySet),
+                (interact, debug_talk)
+                    .in_set(InteractSet::Talk)
+                    .in_set(GameplaySet),
             );
     }
 }
