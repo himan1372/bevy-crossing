@@ -43,7 +43,6 @@ pub struct GameDisc {
     /// Dialogue, strings and choice labels (`crate::messages`).
     pub text: Option<Arc<crate::messages::GameText>>,
     /// The sound banks, samples and sequences (`crate::sound_rom`).
-    #[allow(dead_code)] // played from audio step 2
     pub sound: Option<Arc<crate::sound_rom::SoundRom>>,
 }
 

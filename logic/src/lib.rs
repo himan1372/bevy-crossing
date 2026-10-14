@@ -103,6 +103,7 @@ mod template_select;
 mod terrain_walls;
 // Terrain-wall rules used by the Bevy app's ground map.
 pub use attr_walls::{forbid_vectors, MAKE_VECTOR_TABLE};
+pub use audio::{group as audio_group, AudioParam, AudioPort, BGM_MUTE_TABLE_FINE};
 pub use terrain_walls::{decode_height, search_slate_detail, search_wall_flag, wall_name};
 pub mod gyo_ai;
 pub mod ins_ai;

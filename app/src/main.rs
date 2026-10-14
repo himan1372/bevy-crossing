@@ -42,6 +42,7 @@ mod save;
 mod shop;
 mod shop_display;
 mod skeleton;
+mod sound;
 mod sound_rom;
 mod states;
 mod talk;
@@ -107,6 +108,7 @@ fn main() {
         .add_plugins(shop_display::ShopDisplayPlugin)
         .add_plugins(field_items::FieldItemsPlugin)
         .add_plugins(critters::CrittersPlugin)
+        .add_plugins(sound::SoundPlugin)
         .add_plugins(gyroid::GyroidPlugin)
         .add_plugins(mailbox::MailboxPlugin)
         .add_plugins(pause_menu::PauseMenuPlugin)

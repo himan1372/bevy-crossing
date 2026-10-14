@@ -381,6 +381,9 @@ pub struct Engine {
     decay_table: [f32; 256],
     seed: u32,
     random: u32,
+    /// `thread_cmd_group_mask`: which subtracks an all-subtracks command
+    /// reaches.
+    group_mask: [u16; GROUPS],
 }
 
 fn sub_fresh(index: usize) -> Sub {
@@ -462,6 +465,7 @@ impl Engine {
             decay_table,
             seed: 0x1234_5678,
             random: 0x3039,
+            group_mask: [0xFFFF; GROUPS],
             t: tables,
         };
         for _ in 0..=GROUPS {
@@ -531,6 +535,11 @@ impl Engine {
         };
         let mut fresh = self.group_fresh();
         fresh.port = self.groups[g].port;
+        // Nas_InitSubTrack leaves `muted` alone: a mute set before the
+        // start (the hourly mute masks) holds.
+        for (new, old) in fresh.subs.iter_mut().zip(&self.groups[g].subs) {
+            new.muted = old.muted;
+        }
         fresh.seq = seq;
         fresh.seq_id = id;
         fresh.bank = bank;
@@ -581,6 +590,206 @@ impl Engine {
         if let Some(g) = self.groups.get_mut(g) {
             g.fade_volume_scale = v;
             g.recalc_volume = true;
+        }
+    }
+
+    /// `Nap_Process1Command`: one command from the game's audio layer
+    /// (`AudioPort`, `audiocommon.h`'s `AUDIOCMD_*`). Loads, callbacks,
+    /// filters and the sound mode don't apply here.
+    pub fn process(&mut self, c: &crate::audio::AudioPort) {
+        use crate::audio::AudioParam as P;
+        let s32 = match c.param {
+            P::S8(v) => v as i32,
+            P::U8(v) => v as i32,
+            P::S16(v) => v as i32,
+            P::U16(v) => v as i32,
+            P::S32(v) => v,
+            P::U32(v) => v as i32,
+            P::F32(v) => v as i32,
+        };
+        let f32v = match c.param {
+            P::F32(v) => v,
+            _ => s32 as f32,
+        };
+        let s8 = s32 as i8;
+        let g = c.arg0 as usize;
+        match c.opcode {
+            // AUDIOCMD_START_SEQ (fade-in time in param: start at once).
+            0x82 => {
+                if g < GROUPS {
+                    self.start_sequence(g, c.arg1 as usize);
+                    if s32 > 0 {
+                        let gr = &mut self.groups[g];
+                        gr.fade_volume = 0.0;
+                        gr.state = 0;
+                        gr.fade_timer = s32 as u16;
+                        gr.fade_velocity = 1.0 / s32 as f32;
+                    }
+                }
+            }
+            0x85 => {
+                if g < GROUPS {
+                    self.start_sequence(g, c.arg1 as usize);
+                }
+            }
+            // AUDIOCMD_STOP_SEQ: at once, or fading over the param.
+            0x83 => {
+                if g < GROUPS && self.groups[g].enabled {
+                    if s32 == 0 {
+                        self.release_group(g);
+                    } else {
+                        self.fade_out(g, s32 as u16);
+                    }
+                }
+            }
+            0xF1 | 0xF2 => {
+                let mute = c.opcode == 0xF1;
+                for (i, gr) in self.groups.iter_mut().enumerate().take(GROUPS) {
+                    if c.arg0 == 0xFF || i == g {
+                        gr.muted = mute;
+                        gr.recalc_volume = true;
+                    }
+                }
+            }
+            0x90 => {
+                if g < GROUPS {
+                    self.group_mask[g] = s32 as u16;
+                }
+            }
+            // AUDIOCMD_FORCE_STOP_ALL_GROUPS
+            0xFE => {
+                for g in 0..GROUPS {
+                    if self.groups[g].enabled {
+                        self.release_group(g);
+                    }
+                }
+            }
+            // AUDIOCMD_MAIN_GROUP_SUBPORT_CMD
+            0xFA => {
+                let port = &mut self.groups[GROUPS].subs[0].port;
+                if s32 == 0 {
+                    port[4] = -1;
+                } else {
+                    port[2] = c.arg1 as i8;
+                    port[1] = c.arg0 as i8;
+                    port[0] = c.arg2 as i8;
+                }
+            }
+            // AUDIOCMD_MAIN_GROUP_SET_FREQ_SCALE
+            0xFD => {
+                let pc = self.t.pcent2[(128 + s32).clamp(0, 255) as usize];
+                let sub = &mut self.groups[GROUPS].subs[0];
+                sub.frequency_scale = pc;
+                sub.changes |= CHANGE_FREQ;
+                sub.vibrato.depth_target = c.arg2 as u16 * 4;
+                sub.vibrato.depth_delay = 32;
+            }
+            // AUDIOCMD_MAIN_GROUP_SET_VOL_SCALE
+            0xFF => {
+                let sub = &mut self.groups[GROUPS].subs[0];
+                sub.volume_scale = f32v;
+                sub.changes |= CHANGE_VOLUME;
+            }
+            0x41..=0x4F if g < GROUPS => self.group_param(g, c, s32, f32v, s8),
+            0x01..=0x15 if g < GROUPS => {
+                if (c.arg1 as usize) < SUBTRACKS {
+                    self.sub_param(g, c.arg1 as usize, c.opcode, c.arg2, s32, f32v, s8);
+                } else if c.arg1 == 0xFF {
+                    let mask = self.group_mask[g];
+                    for i in 0..SUBTRACKS {
+                        if mask >> i & 1 != 0 {
+                            self.sub_param(g, i, c.opcode, c.arg2, s32, f32v, s8);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// `__SetGrpParam`.
+    fn group_param(&mut self, g: usize, c: &crate::audio::AudioPort, s32: i32, f: f32, s8: i8) {
+        let gr = &mut self.groups[g];
+        match c.opcode {
+            0x41 => {
+                if gr.fade_volume_scale != f {
+                    gr.fade_volume_scale = f;
+                    gr.recalc_volume = true;
+                }
+            }
+            0x47 => gr.tempo = s32 * TATUMS,
+            0x49 => gr.tempo_change = s32 * TATUMS,
+            0x4E => gr.tempo_change = s32,
+            0x48 => gr.transposition = s8,
+            0x46 => {
+                if let Some(p) = gr.port.get_mut(c.arg2 as usize) {
+                    *p = s8;
+                }
+            }
+            0x4A | 0x4B => {
+                let v = if c.opcode == 0x4A {
+                    c.arg1 as f32 / 127.0
+                } else {
+                    c.arg1 as f32 / 100.0 * gr.fade_volume
+                };
+                if gr.state != STATE_FADE_OUT {
+                    if s32 == 0 {
+                        gr.fade_volume = v;
+                    } else {
+                        gr.fade_velocity = (v - gr.fade_volume) / s32 as f32;
+                        gr.state = 0;
+                        gr.fade_timer = s32 as u16;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// `__SetSubParam`.
+    #[allow(clippy::too_many_arguments)]
+    fn sub_param(&mut self, g: usize, s: usize, op: u8, arg2: u8, s32: i32, f: f32, s8: i8) {
+        let sub = &mut self.groups[g].subs[s];
+        match op {
+            0x01 => {
+                sub.volume_scale = f;
+                sub.changes |= CHANGE_VOLUME;
+            }
+            0x02 => {
+                sub.volume = f;
+                sub.changes |= CHANGE_VOLUME;
+            }
+            0x03 => {
+                sub.new_pan = s8 as u8;
+                sub.changes |= CHANGE_PAN;
+            }
+            0x07 => {
+                sub.pan_weight = s8 as u8;
+                sub.changes |= CHANGE_PAN;
+            }
+            0x04 => {
+                sub.frequency_scale = f;
+                sub.changes |= CHANGE_FREQ;
+            }
+            0x05 => sub.reverb = s8 as u8,
+            0x06 => {
+                if let Some(p) = sub.port.get_mut(arg2 as usize) {
+                    *p = s8;
+                }
+            }
+            0x08 => sub.muted = s8 != 0,
+            0x09 => sub.mute_flags = s8 as u8,
+            0x0A => {
+                sub.vibrato.depth_target = (s32 as u8) as u16 * 8;
+                sub.vibrato.depth_delay = 1;
+            }
+            0x0B => {
+                sub.vibrato.rate_target = (s32 as u8) as u16 * 32;
+                sub.vibrato.rate_delay = 1;
+            }
+            0x0F => sub.sample_start = s32 as u16,
+            0x15 => sub.transposition = s8,
+            _ => {}
         }
     }
 
