@@ -108,6 +108,7 @@ pub mod gyo_ai;
 pub mod ins_ai;
 pub mod ins_set;
 pub mod nas_bank;
+pub mod nas_seq;
 mod tool_resolvers;
 pub mod town_gen;
 mod uki;

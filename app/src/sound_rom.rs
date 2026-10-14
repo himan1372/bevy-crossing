@@ -7,8 +7,12 @@
 // Read at disc load; the player that uses it is audio step 2.
 #![allow(dead_code)]
 
-use disc::{AssetCatalog, Disc, RomImage, RomSource};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
+use disc::{AssetCatalog, Disc, RomImage, RomSource, Target};
 use rustimal_logic::nas_bank::{self, ArcEntry, Bank, BankInfo, Sample, MEDIUM_CART, MEDIUM_DISK};
+use rustimal_logic::nas_seq::{self, Pcm, SoundData, Tables};
 
 /// `SEQUENCE_TABLE`, `BANK_TABLE`, `WAVE_TABLE` in the data table.
 const SEQ: usize = 0;
@@ -91,11 +95,185 @@ impl SoundRom {
         Some(nas_bank::decode(s, bank.get(at..at + s.size as usize)?))
     }
 
+    /// Bank `id`'s raw bytes (its envelopes are read from them).
+    fn bank_bytes(&self, id: usize) -> Option<&[u8]> {
+        let (_, e) = nas_bank::resolve(&self.banks, id)?;
+        self.bytes(BANK, &e)
+    }
+
     /// Sequence `id`'s bytes.
     pub fn sequence(&self, id: usize) -> Option<&[u8]> {
         let (_, e) = nas_bank::resolve(&self.sequences, id)?;
         self.bytes(SEQ, &e)
     }
+}
+
+/// The engine's tables from the DOL (`audiotable.c`, `audioconst.c`).
+pub fn tables(rom: &RomImage, catalog: &AssetCatalog) -> Option<Tables> {
+    let bytes = |name: &str| {
+        let a = catalog.get(name)?;
+        rom.slice(a.source, a.offset, a.size)
+    };
+    let f32s = |b: &[u8]| -> Vec<f32> {
+        b.as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| f32::from_be_bytes(*c))
+            .collect()
+    };
+    let arr = |v: Vec<f32>| -> Option<[f32; 256]> { v.get(..256)?.try_into().ok() };
+    let pitch: [f32; 128] = f32s(bytes("PITCHTABLE")?).get(..128)?.try_into().ok()?;
+    let stereo: [f32; 128] = f32s(bytes("StereoLeft")?).get(..128)?.try_into().ok()?;
+    let wavemem = catalog.get("WAVEMEM_TABLE")?;
+    let Some(Target::File(src, at)) = rom.pointer_at(wavemem.source, wavemem.offset + 2 * 4) else {
+        return None;
+    };
+    let curve = rom.slice(src, at, 128)?;
+    let vibrato: [i16; 64] =
+        std::array::from_fn(|i| i16::from_be_bytes([curve[i * 2], curve[i * 2 + 1]]));
+    let env = bytes("DEFAULT_ENV")?;
+    Some(Tables {
+        pitch,
+        pcent: arr(f32s(bytes("PCENTTABLE")?))?,
+        pcent2: arr(f32s(bytes("PCENTTABLE2")?))?,
+        velocities: bytes("DEFAULT_VTABLE")?.get(..16)?.try_into().ok()?,
+        gate_times: bytes("DEFAULT_GTABLE")?.get(..16)?.try_into().ok()?,
+        default_env: nas_seq::read_envelope(env, 0),
+        stereo,
+        vibrato,
+        main_script: bytes("BDB_SEQDATA")?.to_vec(),
+    })
+}
+
+/// The disc's sound data for the engine: banks are turned into playable
+/// ones (decoded samples, envelopes) the first time they are asked for.
+pub struct DiscSound {
+    rom: Arc<SoundRom>,
+    banks: Mutex<HashMap<usize, Option<Arc<nas_seq::Bank>>>>,
+    pcm: Mutex<HashMap<(u8, u8, u32), Arc<Pcm>>>,
+}
+
+impl DiscSound {
+    pub fn new(rom: Arc<SoundRom>) -> Self {
+        DiscSound {
+            rom,
+            banks: Mutex::new(HashMap::new()),
+            pcm: Mutex::new(HashMap::new()),
+        }
+    }
+
+    fn tuned(&self, info: &BankInfo, t: &nas_bank::Tuned) -> Option<nas_seq::Tuned> {
+        let s = &t.sample;
+        let wave = if s.medium == MEDIUM_DISK {
+            info.wave_banks[1]
+        } else {
+            info.wave_banks[0]
+        };
+        let key = (wave, s.codec, s.offset);
+        let cached = self.pcm.lock().ok()?.get(&key).cloned();
+        let pcm = match cached {
+            Some(p) => p,
+            None => {
+                let data = self.rom.pcm(info, s)?;
+                // A sample that doesn't loop plays to its end.
+                let end = if s.looping.end == 0 {
+                    data.len() as u32
+                } else {
+                    s.looping.end
+                };
+                let p = Arc::new(Pcm {
+                    data,
+                    loop_start: s.looping.start,
+                    loop_end: end,
+                    loop_count: s.looping.count,
+                });
+                self.pcm.lock().ok()?.insert(key, p.clone());
+                p
+            }
+        };
+        Some(nas_seq::Tuned {
+            pcm,
+            tuning: t.tuning,
+        })
+    }
+
+    fn build(&self, id: usize) -> Option<nas_seq::Bank> {
+        let (info, bank) = self.rom.bank(id)?;
+        let bytes = self.rom.bank_bytes(id)?;
+        let env = |at: u32| nas_seq::read_envelope(bytes, at as usize);
+        let tuned = |t: &Option<nas_bank::Tuned>| t.as_ref().and_then(|t| self.tuned(&info, t));
+        Some(nas_seq::Bank {
+            instruments: bank
+                .instruments
+                .iter()
+                .map(|i| {
+                    i.as_ref().map(|i| nas_seq::Instrument {
+                        range: i.range,
+                        decay: i.release,
+                        envelope: env(i.envelope),
+                        low: tuned(&i.low),
+                        normal: tuned(&i.normal),
+                        high: tuned(&i.high),
+                    })
+                })
+                .collect(),
+            drums: bank
+                .drums
+                .iter()
+                .map(|d| {
+                    let d = d.as_ref()?;
+                    Some(nas_seq::Drum {
+                        decay: d.release,
+                        pan: d.pan,
+                        sample: tuned(&d.sample)?,
+                        envelope: env(d.envelope),
+                    })
+                })
+                .collect(),
+            sfx: bank.sfx.iter().map(tuned).collect(),
+        })
+    }
+}
+
+impl SoundData for DiscSound {
+    fn sequence(&self, id: usize) -> Option<Vec<u8>> {
+        self.rom.sequence(id).map(<[u8]>::to_vec)
+    }
+
+    fn bank(&self, id: usize) -> Option<Arc<nas_seq::Bank>> {
+        if let Some(b) = self.banks.lock().ok()?.get(&id) {
+            return b.clone();
+        }
+        let b = self.build(id).map(Arc::new);
+        self.banks.lock().ok()?.insert(id, b.clone());
+        b
+    }
+
+    fn map(&self) -> &[u8] {
+        &self.rom.map
+    }
+}
+
+/// A stereo 16-bit WAV file from interleaved floats.
+pub fn wav_stereo(pcm: &[f32], rate: u32) -> Vec<u8> {
+    let data = pcm.len() as u32 * 2;
+    let mut w = Vec::with_capacity(44 + data as usize);
+    w.extend_from_slice(b"RIFF");
+    w.extend_from_slice(&(36 + data).to_le_bytes());
+    w.extend_from_slice(b"WAVEfmt ");
+    w.extend_from_slice(&16u32.to_le_bytes());
+    w.extend_from_slice(&1u16.to_le_bytes());
+    w.extend_from_slice(&2u16.to_le_bytes());
+    w.extend_from_slice(&rate.to_le_bytes());
+    w.extend_from_slice(&(rate * 4).to_le_bytes());
+    w.extend_from_slice(&4u16.to_le_bytes());
+    w.extend_from_slice(&16u16.to_le_bytes());
+    w.extend_from_slice(b"data");
+    w.extend_from_slice(&data.to_le_bytes());
+    for s in pcm {
+        w.extend_from_slice(&((s.clamp(-1.0, 1.0) * 32767.0) as i16).to_le_bytes());
+    }
+    w
 }
 
 /// A mono 16-bit WAV file.
@@ -223,6 +401,34 @@ mod tests {
             }
         }
         println!("wrote bank 0's instruments to {}", out.display());
+        // Render a few sequences through the player.
+        let t = tables(&rom, &catalog).expect("engine tables");
+        let data = Arc::new(DiscSound::new(Arc::new(s)));
+        for id in [1usize, 2, 3, 10, 20, 40] {
+            let mut e = nas_seq::Engine::new(data.clone(), t.clone());
+            if !e.start_sequence(0, id) {
+                println!("seq {id}: could not start");
+                continue;
+            }
+            let updates = 240 * 15;
+            let mut all = Vec::with_capacity(updates * nas_seq::SAMPLES_PER_UPDATE * 2);
+            for _ in 0..updates {
+                let mut buf = vec![0.0f32; nas_seq::SAMPLES_PER_UPDATE * 2];
+                e.update(&mut buf);
+                all.extend_from_slice(&buf);
+            }
+            let rms = (all.iter().map(|x| x * x).sum::<f32>() / all.len() as f32).sqrt();
+            let peak = all.iter().fold(0.0f32, |m, x| m.max(x.abs()));
+            println!(
+                "seq {id}: rms {rms:.3}, peak {peak:.2}, still playing {}",
+                e.playing(0)
+            );
+            std::fs::write(
+                out.join(format!("seq{id:03}.wav")),
+                wav_stereo(&all, nas_seq::SAMPLE_RATE),
+            )
+            .unwrap();
+        }
         assert!(banks > 0 && samples > 0);
     }
 }
