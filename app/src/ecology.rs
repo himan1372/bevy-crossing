@@ -18,6 +18,7 @@
 
 use bevy::prelude::*;
 use bevy::text::FontSize;
+use rustimal_logic::gyo_ai;
 use rustimal_logic::species::{self, FishArea, FishType, InsectArea, InsectType};
 use rustimal_logic::town_gen::{CellKind, ACRE_WIDTH};
 
@@ -41,8 +42,6 @@ const BUG_TARGET: usize = 6;
 const RESPAWN_SECS: f32 = 30.0;
 /// Rod cast: how far ahead we look for water (facing cone samples).
 const CAST_SAMPLES: [f32; 4] = [1.5, 2.5, 3.5, 4.5];
-/// Max distance from the bobber a fish can be and still bite.
-const BITE_RADIUS: f32 = 2.5;
 /// Net reach.
 const NET_RANGE: f32 = 3.0;
 /// Facing-cone cosine threshold, matching `interaction.rs`.
@@ -64,7 +63,10 @@ pub(crate) struct Fish {
     pub(crate) species: FishType,
     pub(crate) dir: Vec3,
     home: Vec3,
-    speed: f32,
+    /// `ac_gyo_test` behaviour, made on its first tick in the water.
+    ai: Option<gyo_ai::Gyo>,
+    /// 60 Hz ticks not yet run.
+    ticks: f32,
 }
 
 /// A bug hopping/crawling/flying around the town.
@@ -85,8 +87,16 @@ pub(crate) struct Bug {
 #[derive(Component)]
 struct Bobber {
     timer: f32,
-    bite_at: f32,
+    /// The fish that has hold of it, and whether it's biting now.
+    hooked: Option<Entity>,
+    biting: bool,
 }
+
+/// Game units per scene unit (one unit is 40).
+const GAME_UNITS: f32 = 40.0;
+/// The bobber settles this long after landing (`cast_timer`); a fish
+/// within reach of the splash before then flees (`hit_water_flag`).
+const BOBBER_SETTLE_SECS: f32 = 0.5;
 
 /// Tiny xorshift RNG — same pattern as `npc.rs`, no `rand` dependency.
 #[derive(Resource)]
@@ -242,7 +252,8 @@ fn spawn_fish(
                 species,
                 dir: Vec3::new(angle.cos(), 0.0, angle.sin()),
                 home: pos,
-                speed: rng.range_f32(0.3, 0.7),
+                ai: None,
+                ticks: 0.0,
             },
             Mesh3d(mesh.clone()),
             MeshMaterial3d(mat.clone()),
@@ -426,23 +437,91 @@ fn update_tool_hud(tool: Res<EquippedTool>, mut query: Query<&mut Text, With<Too
 
 // ---- behavior ----
 
-/// Fish drift along the river; turn around at banks or past their home range.
+/// Fish behave as `ac_gyo_test` does (`rustimal_logic::gyo_ai`): wait,
+/// swim, come to the bobber, nibble, bite, flee a running player.
+#[allow(clippy::too_many_arguments)]
 fn update_fish(
     time: Res<Time>,
     town: Res<Town>,
-    mut query: Query<(&mut Fish, &mut Transform)>,
+    actions: Res<Actions>,
+    player: Query<&Transform, (With<Player>, Without<Fish>)>,
+    mut fish_q: Query<(Entity, &mut Fish, &mut Transform), Without<Bobber>>,
+    mut bobbers: Query<(&mut Bobber, &Transform), Without<Fish>>,
     mut rng: ResMut<EcoRng>,
+    mut notify: (
+        ResMut<CatchNotifyTimer>,
+        Query<&mut Text, With<CatchNotifyText>>,
+    ),
 ) {
-    for (mut fish, mut transform) in query.iter_mut() {
-        let step = fish.dir * fish.speed * time.delta().as_secs_f32();
-        let next = transform.translation + step;
-        let in_range = (next - fish.home).length() < 9.0;
-        if town.is_river(next) && in_range {
-            transform.translation = next;
-            transform.translation.y = town.ground_y(next) + FISH_LIFT;
-        } else {
-            let angle = rng.range_f32(0.0, std::f32::consts::TAU);
-            fish.dir = Vec3::new(angle.cos(), 0.0, angle.sin());
+    let to_game = |p: Vec3| [p.x * GAME_UNITS, p.z * GAME_UNITS];
+    let player_pos = player
+        .single()
+        .map_or([1e6, 1e6], |t| to_game(t.translation));
+    let dashing = actions.pressed(Action::Run) && actions.move_dir() != Vec3::ZERO;
+    let mut rand = |n: f32| rng.range_f32(0.0, n);
+    for (entity, mut fish, mut transform) in &mut fish_q {
+        fish.ticks += time.delta_secs() * 60.0;
+        let flow = |p: Vec3| {
+            town.ground
+                .as_ref()
+                .and_then(|g| g.attribute_at(p.x, p.z))
+                .map_or(0, gyo_ai::flow_angle_rv)
+        };
+        if fish.ai.is_none() {
+            let start = to_game(transform.translation);
+            fish.ai = Some(gyo_ai::Gyo::new(
+                fish.species as u8,
+                start,
+                flow(transform.translation),
+                &mut rand,
+            ));
+        }
+        while fish.ticks >= 1.0 {
+            fish.ticks -= 1.0;
+            let bobber = bobbers.iter().next().map(|(b, t)| gyo_ai::Bobber {
+                pos: to_game(t.translation),
+                splashed: b.timer < 0.1,
+                settled: b.timer >= BOBBER_SETTLE_SECS,
+                free: b.hooked.is_none_or(|h| h == entity),
+            });
+            let Some(ai) = fish.ai.as_mut() else { break };
+            let here = Vec3::new(ai.pos[0], 0.0, ai.pos[1]) / GAME_UNITS;
+            let (s, c) = (ai.angle as f32 * std::f32::consts::PI / 32768.0).sin_cos();
+            let ahead = here + Vec3::new(s, 0.0, c) * 0.6;
+            let world = gyo_ai::World {
+                bobber,
+                player: player_pos,
+                player_dashing: dashing,
+                tool_hit: false,
+                flow_rv: flow(here),
+                wall: !town.is_river(ahead),
+                golden_rod: false,
+            };
+            let event = ai.step(&world, &mut rand);
+            if let Some((mut b, _)) = bobbers.iter_mut().next() {
+                match event {
+                    gyo_ai::Event::Took => {
+                        b.hooked = Some(entity);
+                        println!("{:?} took the bobber", fish.species);
+                    }
+                    gyo_ai::Event::Bit => {
+                        b.biting = true;
+                        println!("{:?} bit", fish.species);
+                        show_catch_notify("A bite! Press E!", &mut notify.0, &mut notify.1);
+                    }
+                    gyo_ai::Event::GotAway if b.hooked == Some(entity) => {
+                        b.hooked = None;
+                        b.biting = false;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        if let Some(ai) = &fish.ai {
+            let p = Vec3::new(ai.pos[0], 0.0, ai.pos[1]) / GAME_UNITS;
+            transform.translation = p.with_y(town.ground_y(p) + FISH_LIFT);
+            let (s, c) = (ai.angle as f32 * std::f32::consts::PI / 32768.0).sin_cos();
+            fish.dir = Vec3::new(s, 0.0, c);
         }
     }
 }
@@ -471,6 +550,7 @@ fn rehome_fish(
             .unwrap_or(0.0)
             + FISH_LIFT;
         f.home = Vec3::new(pos.x, y, pos.z);
+        f.ai = None;
         t.translation = f.home;
     }
 }
@@ -547,9 +627,9 @@ fn tool_interact(
     player_query: Query<(&Transform, &Facing), With<Player>>,
     town: Res<Town>,
     bug_query: Query<(Entity, &Bug, &Transform)>,
-    bobber_query: Query<Entity, With<Bobber>>,
+    bobber_query: Query<(Entity, &Bobber)>,
+    fish_query: Query<&Fish>,
     mut inventory: ResMut<PlayerInventory>,
-    mut rng: ResMut<EcoRng>,
     mut notify_timer: ResMut<CatchNotifyTimer>,
     mut notify_query: Query<&mut Text, With<CatchNotifyText>>,
 ) {
@@ -574,10 +654,33 @@ fn tool_interact(
 
     match *tool {
         EquippedTool::Rod => {
-            // Reel in if a bobber is already out.
-            if let Ok(bobber) = bobber_query.single() {
+            // Reel in if a bobber is already out: a biting fish is caught;
+            // otherwise whatever was nibbling lets go.
+            if let Ok((bobber, b)) = bobber_query.single() {
                 commands.entity(bobber).despawn();
-                show_catch_notify("Reeled in.", &mut notify_timer, &mut notify_query);
+                let caught = b.hooked.filter(|_| b.biting);
+                match caught.and_then(|f| fish_query.get(f).ok().map(|fish| (f, fish))) {
+                    Some((f, fish)) => {
+                        let item = items::fish(fish.species);
+                        let name = items::name(item);
+                        if inventory.add(item) {
+                            commands.entity(f).despawn();
+                            show_catch_notify(
+                                &format!("Caught a {name}!"),
+                                &mut notify_timer,
+                                &mut notify_query,
+                            );
+                            println!("Caught a {name} ({}/15 pockets)", inventory.used());
+                        } else {
+                            show_catch_notify(
+                                "Your pockets are full!",
+                                &mut notify_timer,
+                                &mut notify_query,
+                            );
+                        }
+                    }
+                    None => show_catch_notify("Reeled in.", &mut notify_timer, &mut notify_query),
+                }
                 return;
             }
             // Find the first river tile along the facing direction.
@@ -597,17 +700,17 @@ fn tool_interact(
                 );
                 return;
             };
-            let bite_at = rng.range_f32(1.5, 3.5);
             commands.spawn((
                 Bobber {
                     timer: 0.0,
-                    bite_at,
+                    hooked: None,
+                    biting: false,
                 },
                 Mesh3d(meshes.add(Sphere::new(0.18))),
                 MeshMaterial3d(materials.add(Color::srgb(0.9, 0.15, 0.1))),
-                Transform::from_xyz(cp.x, 0.35, cp.z),
+                Transform::from_xyz(cp.x, town.ground_y(cp) + 0.5, cp.z),
             ));
-            println!("Cast! (bite in {bite_at:.1}s)");
+            println!("Cast!");
         }
         EquippedTool::Net => {
             let mut best: Option<(Entity, f32)> = None;
@@ -657,57 +760,17 @@ fn tool_interact(
     }
 }
 
-/// Bobbers wait for their bite time, then resolve the catch.
-#[allow(clippy::too_many_arguments)]
+/// The bobber's clock (it settles after landing) and its dip while a
+/// fish is biting. Catching is the rod's E press (`tool_interact`).
 fn update_bobber(
     time: Res<Time>,
-    mut commands: Commands,
-    mut bobber_query: Query<(Entity, &mut Bobber, &Transform)>,
-    fish_query: Query<(Entity, &Fish, &Transform)>,
-    mut inventory: ResMut<PlayerInventory>,
-    mut notify_timer: ResMut<CatchNotifyTimer>,
-    mut notify_query: Query<&mut Text, With<CatchNotifyText>>,
+    town: Res<Town>,
+    mut bobbers: Query<(&mut Bobber, &mut Transform)>,
 ) {
-    for (entity, mut bobber, bobber_transform) in bobber_query.iter_mut() {
-        bobber.timer += time.delta().as_secs_f32();
-        if bobber.timer < bobber.bite_at {
-            continue;
-        }
-        let mut best: Option<(Entity, f32)> = None;
-        for (fish_entity, _fish, fish_transform) in fish_query.iter() {
-            let dist = (fish_transform.translation - bobber_transform.translation).length();
-            if dist < BITE_RADIUS && best.is_none_or(|(_, d)| dist < d) {
-                best = Some((fish_entity, dist));
-            }
-        }
-        match best {
-            Some((fish_entity, _)) => {
-                if let Ok((_, fish, _)) = fish_query.get(fish_entity) {
-                    let item = items::fish(fish.species);
-                    let name = items::name(item);
-                    if inventory.add(item) {
-                        commands.entity(fish_entity).despawn();
-                        show_catch_notify(
-                            &format!("Caught a {name}!"),
-                            &mut notify_timer,
-                            &mut notify_query,
-                        );
-                        println!("Caught a {name} ({}/15 pockets)", inventory.used());
-                    } else {
-                        // The fish swims off.
-                        show_catch_notify(
-                            "Your pockets are full!",
-                            &mut notify_timer,
-                            &mut notify_query,
-                        );
-                    }
-                }
-            }
-            None => {
-                show_catch_notify("Nothing bit...", &mut notify_timer, &mut notify_query);
-            }
-        }
-        commands.entity(entity).despawn();
+    for (mut b, mut t) in &mut bobbers {
+        b.timer += time.delta_secs();
+        let rest = town.ground_y(t.translation) + 0.5;
+        t.translation.y = if b.biting { rest - 0.2 } else { rest };
     }
 }
 

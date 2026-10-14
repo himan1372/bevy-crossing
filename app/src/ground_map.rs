@@ -194,6 +194,11 @@ impl GroundMap {
         )
     }
 
+    /// Collision attribute of the unit under a scene position.
+    pub fn attribute_at(&self, x: f32, z: f32) -> Option<u8> {
+        self.locate(x, z).map(|(u, ..)| u.attribute)
+    }
+
     /// Collision attribute of unit `ut` (row by row) of block (bx, bz).
     pub fn unit_attribute(&self, bx: usize, bz: usize, ut: usize) -> u8 {
         self.units
