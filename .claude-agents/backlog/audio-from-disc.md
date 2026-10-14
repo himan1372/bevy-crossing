@@ -3,7 +3,8 @@
 M4; research first. How the original stores audio (sound banks, sequenced
 music) and how much logic::audio already covers.
 
-- [ ] Research: formats on the disc, what logic::audio translates, the player needed.
+- [x] Research: formats on the disc, what logic::audio translates, the player needed.
+- [x] Step 1: tables, sound banks and sample decoding (logic::nas_bank, app sound_rom, loaded as GameDisc::sound). All 159 banks parse; 5203 samples decode (step/amplitude median 0.25, so the VADPCM decode is right). Sound effects are instruments played by the SE sequence, so step 2 needs the sequence player for most effects.
 - [ ] Sound effects (footsteps, UI, mailbox, etc.).
 - [ ] Music (hourly BGM).
 - [ ] Gate passes; live check; Philip playtest.

@@ -42,6 +42,9 @@ pub struct GameDisc {
     pub npc_room_layouts: Arc<[u8]>,
     /// Dialogue, strings and choice labels (`crate::messages`).
     pub text: Option<Arc<crate::messages::GameText>>,
+    /// The sound banks, samples and sequences (`crate::sound_rom`).
+    #[allow(dead_code)] // played from audio step 2
+    pub sound: Option<Arc<crate::sound_rom::SoundRom>>,
 }
 
 /// Why there is no [`GameDisc`], for the on-screen notice.
@@ -93,6 +96,10 @@ pub(crate) fn load(path: PathBuf) -> Result<GameDisc, String> {
             .into()
     };
     let npc_names = second_bank("npc_name_str_table.bin");
+    let sound = crate::sound_rom::SoundRom::read(&mut disc, &rom, &catalog).map(Arc::new);
+    if sound.is_none() {
+        warn!("the disc's sound data could not be read");
+    }
     Ok(GameDisc {
         path,
         rom,
@@ -106,6 +113,7 @@ pub(crate) fn load(path: PathBuf) -> Result<GameDisc, String> {
         player_room_walls: second_bank("player_room_wall.bin"),
         npc_room_layouts: second_bank("fgnpcdata.bin"),
         text,
+        sound,
     })
 }
 

@@ -42,6 +42,7 @@ mod save;
 mod shop;
 mod shop_display;
 mod skeleton;
+mod sound_rom;
 mod states;
 mod talk;
 mod town;
