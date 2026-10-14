@@ -124,6 +124,12 @@ impl ins_ai::Field for BugField<'_> {
             None => Some(0),
         }
     }
+    fn attribute(&self, x: f32, z: f32) -> Option<u8> {
+        self.town
+            .ground
+            .as_ref()?
+            .attribute_at(x / GAME_UNITS, z / GAME_UNITS)
+    }
     fn blocked(&self, from: [f32; 3], to: [f32; 3]) -> bool {
         self.ground_y(to[0], to[2]) > from[1]
     }
@@ -691,9 +697,9 @@ fn rehome_fish(
     }
 }
 
-/// Butterflies behave as `ac_ins_chou` (`rustimal_logic::ins_ai`): circle
-/// a unit, wander unit to unit, land on white pansies, flee. Other bugs
-/// still hop toward a target, pause, then pick a new one.
+/// Butterflies, cicadas and dragonflies behave as their `ac_ins_*` files
+/// (`rustimal_logic::ins_ai`). Other bugs still hop toward a target,
+/// pause, then pick a new one.
 #[allow(clippy::too_many_arguments)]
 fn update_bugs(
     mut commands: Commands,
@@ -730,9 +736,12 @@ fn update_bugs(
         .collect::<Vec<_>>();
     for (e, pos) in all {
         let before = last.insert(e, pos).unwrap_or(pos);
+        // A jump of a unit or more in one frame is a warp, not a step.
+        let step = (pos - before).xz().length();
+        let step = if step >= 1.0 { 0.0 } else { step };
         movers.push(ins_ai::Mover {
             pos: to_game(pos),
-            moved: (pos - before).xz().length() * GAME_UNITS / ticks_now,
+            moved: step * GAME_UNITS / ticks_now,
         });
     }
     let net = swing.0.take().map(|p| [p.x * GAME_UNITS, p.z * GAME_UNITS]);
@@ -741,12 +750,11 @@ fn update_bugs(
         items: items.as_deref(),
     };
     for (entity, mut bug, mut transform) in &mut query {
-        if (bug.insect as u8) <= ins_ai::PURPLE_BUTTERFLY {
+        if ins_ai::Insect::supported(bug.insect as u8) {
             let mut rand = |n: f32| rng.range_f32(0.0, n);
             if bug.ai.is_none() {
                 let at = to_game(transform.translation);
-                match ins_ai::Insect::butterfly(bug.insect as u8, [at[0], at[2]], &field, &mut rand)
-                {
+                match ins_ai::Insect::new(bug.insect as u8, [at[0], at[2]], &field, &mut rand) {
                     Some(ai) => bug.ai = Some(ai),
                     None => {
                         commands.entity(entity).despawn();
@@ -761,6 +769,9 @@ fn update_bugs(
                 movers: &movers,
                 net_stop: net,
                 scoop: None,
+                tree_shaken: None,
+                axe_hit: None,
+                raining: false,
             };
             let mut gone = false;
             while bug.ticks >= 1.0 {

@@ -337,6 +337,13 @@ fn animate_critters(
             frame.1 = k;
             set_parts(&mut part_q, parts, &frames[k]);
         }
+        if let Some(ai) = &b.ai {
+            // aINS_actor_draw_sub: RotateX(pitch) then RotateY(heading)
+            // (a cicada stood up on its trunk).
+            let r = |a: i16| a as f32 * std::f32::consts::PI / 32768.0;
+            t.rotation = Quat::from_rotation_x(r(ai.pitch)) * Quat::from_rotation_y(r(ai.facing));
+            continue;
+        }
         let to = b.target - t.translation;
         if to.xz().length_squared() > 1e-4 {
             t.rotation = Quat::from_rotation_y(to.x.atan2(to.z));

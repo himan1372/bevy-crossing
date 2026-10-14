@@ -95,7 +95,7 @@ pub(crate) fn cos_s(a: i16) -> f32 {
     (a as f32 * std::f32::consts::PI / 32768.0).cos()
 }
 
-fn deg(d: f32) -> i16 {
+pub(crate) fn deg(d: f32) -> i16 {
     (d * 65536.0 / 360.0) as i32 as i16
 }
 

@@ -2,7 +2,11 @@
 //! (patience from nearby movement, position move) and the families of
 //! `ac_ins_*.c`. Game units, one step per 60 Hz tick.
 //!
-//! Families so far: butterflies (`ac_ins_chou.c`).
+//! Families so far: butterflies (`ac_ins_chou.c`), cicadas
+//! (`ac_ins_semi.c`), dragonflies (`ac_ins_tonbo.c`).
+
+mod semi;
+mod tonbo;
 
 use crate::gyo_ai::{angle_to, chase_angle, chase_f, cos_s, sin_s};
 
@@ -40,6 +44,13 @@ pub trait Field {
     fn item(&self, u: [i32; 4]) -> Option<u16>;
     /// A wall between two points at this height (BG front hit).
     fn blocked(&self, from: [f32; 3], to: [f32; 3]) -> bool;
+    /// Collision attribute under a point.
+    fn attribute(&self, x: f32, z: f32) -> Option<u8>;
+    /// Top of the column on a unit, if one stands there
+    /// (`mCoBG_Wpos2BgUtCenterHeight_AddColumn`).
+    fn column_top(&self, _u: [i32; 4]) -> Option<f32> {
+        None
+    }
 }
 
 /// Something that moves near insects (player, villagers): position and
@@ -61,6 +72,11 @@ pub struct World<'a> {
     pub net_stop: Option<[f32; 2]>,
     /// Where a shovel dug (`mPlib_Check_DigScoop`).
     pub scoop: Option<[f32; 2]>,
+    /// A tree being shaken (`mPlib_Check_tree_shaken`).
+    pub tree_shaken: Option<[f32; 2]>,
+    /// A unit an axe hit this tick (`mPlib_Check_VibUnit_OneFrame`).
+    pub axe_hit: Option<[f32; 2]>,
+    pub raining: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -71,6 +87,15 @@ pub enum Action {
     Landing,
     Hover,
     Rest,
+    /// Cicada on its tree; dragonfly turning before it darts again.
+    Wait,
+    /// The banded dragonfly's endless patrol.
+    Patrol,
+    TouchWater,
+    TouchWaterUp,
+    HoverOnWater,
+    FlyToRest,
+    RestOnSpot,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -117,6 +142,23 @@ pub struct Insect {
     timer: f32,
     alpha_time: f32,
     wall_front: bool,
+    /// `shape_info.rotation`: which way it faces, and its pitch (a
+    /// cicada is stood up on the trunk).
+    pub facing: i16,
+    pub pitch: i16,
+    /// Flying off and fading (`life_time` 0, `alpha_time` counting).
+    fading: bool,
+    on_ground: bool,
+    home: [f32; 3],
+    /// Dragonflies: cruise height, rest height, acre centre, stop kind,
+    /// wall hits in a row, water dips, the 100-tick phase.
+    height: f32,
+    rest_y: f32,
+    centre_bk: [f32; 2],
+    stop: u8,
+    hits: u32,
+    dips: u8,
+    phase100: u32,
 }
 
 impl Insect {
@@ -137,11 +179,41 @@ impl Insect {
             }
         }
         let y = field.ground_y(pos[0], pos[1]) + 30.0;
-        let mut ins = Insect {
+        let mut ins = Insect::blank(kind, [pos[0], y, pos[1]], u);
+        ins.setup(Action::Fly, None, field, rand);
+        Some(ins)
+    }
+
+    /// Families with a behaviour here.
+    pub fn supported(kind: u8) -> bool {
+        kind <= PURPLE_BUTTERFLY || semi::is_cicada(kind) || tonbo::is_dragonfly(kind)
+    }
+
+    /// A placed insect of any supported family; `None` when it can't live
+    /// there (or isn't supported).
+    pub fn new(
+        kind: u8,
+        pos: [f32; 2],
+        field: &impl Field,
+        rand: &mut impl FnMut(f32) -> f32,
+    ) -> Option<Self> {
+        if kind <= PURPLE_BUTTERFLY {
+            Self::butterfly(kind, pos, field, rand)
+        } else if semi::is_cicada(kind) {
+            Self::cicada(kind, pos, field)
+        } else if tonbo::is_dragonfly(kind) {
+            Self::dragonfly(kind, pos, field, rand)
+        } else {
+            None
+        }
+    }
+
+    fn blank(kind: u8, pos: [f32; 3], u: [i32; 4]) -> Self {
+        Insect {
             kind,
-            pos: [pos[0], y, pos[1]],
+            pos,
             angle: 0,
-            action: Action::Fly,
+            action: Action::Wait,
             patience: 0.0,
             alpha: 255,
             speed: 0.0,
@@ -155,7 +227,7 @@ impl Insect {
             swerve: 0.0,
             acre: [u[0], u[1]],
             unit: [u[2], u[3]],
-            centre: pos,
+            centre: [pos[0], pos[2]],
             corner: 0,
             latch: false,
             wall_cool: 0.0,
@@ -164,9 +236,26 @@ impl Insect {
             timer: 0.0,
             alpha_time: 0.0,
             wall_front: false,
-        };
-        ins.setup(Action::Fly, None, field, rand);
-        Some(ins)
+            facing: 0,
+            pitch: 0,
+            fading: false,
+            on_ground: false,
+            home: pos,
+            height: 0.0,
+            rest_y: 0.0,
+            centre_bk: [0.0; 2],
+            stop: 0,
+            hits: 0,
+            dips: 0,
+            phase100: 0,
+        }
+    }
+
+    /// Fly off fading, as every family's let-escape and avoid start
+    /// (`life_time = 0`, `alpha_time = 80`).
+    fn start_fading(&mut self) {
+        self.fading = true;
+        self.alpha_time = 80.0;
     }
 
     /// Wing frame (`(int)_1E0`).
@@ -183,8 +272,16 @@ impl Insect {
     ) -> Event {
         self.position_move(field);
         self.calc_patience(world);
-        if self.action == Action::LetEscape && self.fade() {
+        if self.fading && self.fade() {
             return Event::Gone;
+        }
+        if semi::is_cicada(self.kind) {
+            self.cicada_step(world, rand);
+            return Event::None;
+        }
+        if tonbo::is_dragonfly(self.kind) {
+            self.dragonfly_step(world, field, rand);
+            return Event::None;
         }
         self.check_block_edge(world, field, rand);
         match self.action {
@@ -193,7 +290,9 @@ impl Insect {
             Action::Fly => self.fly(world, field, rand),
             Action::Landing => self.landing(world, field, rand),
             Action::Hover | Action::Rest => self.hover(world, field, rand),
+            _ => {}
         }
+        self.facing = self.angle;
         Event::None
     }
 
@@ -201,6 +300,10 @@ impl Insect {
     /// wall check.
     fn position_move(&mut self, field: &impl Field) {
         chase_f(&mut self.speed, self.target_speed, self.speed_step * 0.5);
+        let butterfly = self.kind <= PURPLE_BUTTERFLY;
+        if !butterfly {
+            chase_f(&mut self.vy, self.max_vy, self.gravity * 0.5);
+        }
         let to = [
             self.pos[0] + self.speed * sin_s(self.angle) * 0.5,
             self.pos[1] + self.vy * 0.5,
@@ -211,6 +314,15 @@ impl Insect {
             self.pos[1] = to[1];
         } else {
             self.pos = to;
+        }
+        // BG check with ground (dragonflies; a flying-off cicada too).
+        self.on_ground = false;
+        if !butterfly && !(semi::is_cicada(self.kind) && self.action == Action::Wait) {
+            let g = field.ground_y(self.pos[0], self.pos[2]);
+            if self.pos[1] < g {
+                self.pos[1] = g;
+                self.on_ground = true;
+            }
         }
     }
 
@@ -266,7 +378,7 @@ impl Insect {
                 self.speed = 2.0;
             }
             Action::LetEscape => {
-                self.alpha_time = 80.0;
+                self.start_fading();
                 self.phase = 0;
                 self.speed = 1.5;
                 if let Some(w) = world {
@@ -301,6 +413,7 @@ impl Insect {
                 self.anim = 1.0;
                 self.timer = 0.5 * (30.0 + rand(60.0));
             }
+            _ => {}
         }
     }
 
@@ -588,12 +701,12 @@ fn npc_on(item: u16) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     /// Flat grass, acres of 16 units; unit (5, 5) of acre (0, 0) has a
     /// white pansy.
-    struct Flat;
+    pub(crate) struct Flat;
     impl Field for Flat {
         fn ground_y(&self, _: f32, _: f32) -> f32 {
             0.0
@@ -626,15 +739,21 @@ mod tests {
         fn blocked(&self, _: [f32; 3], _: [f32; 3]) -> bool {
             false
         }
+        fn attribute(&self, _: f32, _: f32) -> Option<u8> {
+            Some(0)
+        }
     }
 
-    fn world(movers: &[Mover]) -> World<'_> {
+    pub(crate) fn world(movers: &[Mover]) -> World<'_> {
         World {
             player: movers.first().map_or([1e6; 3], |m| m.pos),
             player_facing: 0,
             movers,
             net_stop: None,
             scoop: None,
+            tree_shaken: None,
+            axe_hit: None,
+            raining: false,
         }
     }
 
