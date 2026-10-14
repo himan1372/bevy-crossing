@@ -105,9 +105,9 @@ Each milestone ends with a Philip playtest.
 - [x] **render-perf** — done (claude, 2026-10-13): measured with vsync off (`BEVY_CROSSING_NO_VSYNC=1`), 1,704 meshes: release ~300 fps (3.3 ms), dev ~260 fps (3.8 ms) after optimising dependencies in dev (was 57 fps). Shared mesh/material handles already batch automatically; no instancing needed yet. Was: batching/instancing, 60 fps in a release build. [blocked: town-from-disc, world-objects-from-disc]
 
 ### M4 — UI, audio, feel
-- [ ] **ui-from-disc** — research: fonts, dialogue window and HUD textures from the disc. Fall back to our own open-licence UI when there's no disc.
-- [ ] **dialogue-polish** — letter-by-letter text, name plate, speaker voice blips.
-- [ ] **pause-menu** — Save / Settings / Quit (Settings holds the disc path). [blocked: app-states]
+- [x] **ui-from-disc** — research: fonts, dialogue window and HUD textures from the disc. Fall back to our own open-licence UI when there's no disc.
+- [~] **dialogue-polish** — letter-by-letter text, name plate, speaker voice blips. (Text and name plate done; voice blips wait on audio.)
+- [x] **pause-menu** — Save / Settings / Quit (Settings holds the disc path).
 - [ ] **title-screen** — back burner; the flow can follow rustimal-crossing's `title_demo.rs`.
 - [ ] **audio-from-disc** — research: the original's audio formats (sound banks, sequenced music) and how much `logic::audio` already covers. Then footsteps, UI sounds and music. Large; may be split later.
 
