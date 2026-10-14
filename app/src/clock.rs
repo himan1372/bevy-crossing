@@ -31,6 +31,8 @@ use crate::states::GameplaySet;
 
 /// Debug hours added through `time_delta` (wraps every 24 h).
 static DEBUG_HOUR_OFFSET: AtomicI32 = AtomicI32::new(0);
+/// Debug days added on top (`BEVY_CROSSING_DAY_OFFSET`), to try seasons.
+static DEBUG_DAY_OFFSET: AtomicI32 = AtomicI32::new(0);
 
 /// Day numbers count from this game day.
 const DAY_ZERO: RtcYmd = RtcYmd {
@@ -88,7 +90,11 @@ fn now_from(hard: i64, debug_hours: i32) -> Now {
 
 /// The current game time.
 pub fn now() -> Now {
-    now_from(hard_ticks(), DEBUG_HOUR_OFFSET.load(Ordering::Relaxed))
+    let days = DEBUG_DAY_OFFSET.load(Ordering::Relaxed);
+    now_from(
+        hard_ticks(),
+        DEBUG_HOUR_OFFSET.load(Ordering::Relaxed) + days * 24,
+    )
 }
 
 pub fn season_name(season: Season) -> &'static str {
@@ -176,6 +182,14 @@ impl Plugin for ClockPlugin {
             .and_then(|v| v.parse::<i32>().ok())
         {
             DEBUG_HOUR_OFFSET.store(hours.rem_euclid(24), Ordering::Relaxed);
+        }
+        // BEVY_CROSSING_DAY_OFFSET=N: N days ahead (another season's
+        // critters and colours).
+        if let Some(days) = std::env::var("BEVY_CROSSING_DAY_OFFSET")
+            .ok()
+            .and_then(|v| v.parse::<i32>().ok())
+        {
+            DEBUG_DAY_OFFSET.store(days, Ordering::Relaxed);
         }
         app.add_systems(Startup, setup_clock_ui).add_systems(
             Update,

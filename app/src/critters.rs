@@ -332,7 +332,7 @@ fn animate_critters(
             continue;
         };
         frame.0 += time.delta_secs() * BUG_FLAPS_PER_SEC;
-        let k = frame.0 as usize % 2;
+        let k = b.ai.as_ref().map_or(frame.0 as usize % 2, |ai| ai.frame());
         if k != frame.1 {
             frame.1 = k;
             set_parts(&mut part_q, parts, &frames[k]);

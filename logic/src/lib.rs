@@ -105,6 +105,8 @@ mod terrain_walls;
 pub use attr_walls::{forbid_vectors, MAKE_VECTOR_TABLE};
 pub use terrain_walls::{decode_height, search_slate_detail, search_wall_flag, wall_name};
 pub mod gyo_ai;
+pub mod ins_ai;
+pub mod ins_set;
 mod tool_resolvers;
 pub mod town_gen;
 mod uki;

@@ -87,11 +87,11 @@ pub struct Gyo {
     swork3: i16,
 }
 
-fn sin_s(a: i16) -> f32 {
+pub(crate) fn sin_s(a: i16) -> f32 {
     (a as f32 * std::f32::consts::PI / 32768.0).sin()
 }
 
-fn cos_s(a: i16) -> f32 {
+pub(crate) fn cos_s(a: i16) -> f32 {
     (a as f32 * std::f32::consts::PI / 32768.0).cos()
 }
 
@@ -99,7 +99,7 @@ fn deg(d: f32) -> i16 {
     (d * 65536.0 / 360.0) as i32 as i16
 }
 
-fn angle_to(from: [f32; 2], to: [f32; 2]) -> i16 {
+pub(crate) fn angle_to(from: [f32; 2], to: [f32; 2]) -> i16 {
     let a = (to[0] - from[0]).atan2(to[1] - from[1]);
     (a * 32768.0 / std::f32::consts::PI) as i32 as i16
 }
@@ -109,7 +109,7 @@ fn dist(a: [f32; 2], b: [f32; 2]) -> f32 {
 }
 
 /// `chase_f`: step `v` toward `target`; true once there.
-fn chase_f(v: &mut f32, target: f32, step: f32) -> bool {
+pub(crate) fn chase_f(v: &mut f32, target: f32, step: f32) -> bool {
     if (*v - target).abs() <= step {
         *v = target;
         true
@@ -120,7 +120,7 @@ fn chase_f(v: &mut f32, target: f32, step: f32) -> bool {
 }
 
 /// `chase_angle`.
-fn chase_angle(a: &mut i16, target: i16, step: i16) {
+pub(crate) fn chase_angle(a: &mut i16, target: i16, step: i16) {
     let diff = target.wrapping_sub(*a);
     *a = if diff.unsigned_abs() <= step as u16 {
         target

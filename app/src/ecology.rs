@@ -18,9 +18,9 @@
 
 use bevy::prelude::*;
 use bevy::text::FontSize;
-use rustimal_logic::gyo_ai;
 use rustimal_logic::species::{self, FishArea, FishType, InsectArea, InsectType};
-use rustimal_logic::town_gen::{CellKind, ACRE_WIDTH};
+use rustimal_logic::town_gen::ACRE_WIDTH;
+use rustimal_logic::{gyo_ai, ins_ai};
 
 use crate::house::HouseState;
 use crate::input::{Action, Actions, InputFocus, InteractSet};
@@ -34,10 +34,6 @@ use crate::town::Town;
 /// game units up (`mCoBG_GetWaterHeight`) and fish 8 below it
 /// (`aGTT_Get_water_surface_position_y`), 12 of a unit's 40.
 const FISH_LIFT: f32 = 12.0 / 40.0;
-/// How many bugs roam the town.
-const BUG_TARGET: usize = 6;
-/// Seconds between critter top-up checks.
-const RESPAWN_SECS: f32 = 30.0;
 /// Rod cast: how far ahead we look for water (facing cone samples).
 const CAST_SAMPLES: [f32; 4] = [1.5, 2.5, 3.5, 4.5];
 /// Net reach.
@@ -79,6 +75,58 @@ pub(crate) struct Bug {
     grounded: bool,
     /// Height above the ground.
     lift: f32,
+    /// `ac_ins_*` behaviour (butterflies so far), made on its first tick.
+    pub(crate) ai: Option<ins_ai::Insect>,
+    /// 60 Hz ticks not yet run.
+    ticks: f32,
+}
+
+/// Where the last net swing came down (`mPlib_Check_StopNet`), for the
+/// bugs to notice once.
+#[derive(Resource, Default)]
+struct NetSwing(Option<Vec3>);
+
+/// The town as an insect sees it, in game units (scene x 40).
+struct BugField<'a> {
+    town: &'a Town,
+    items: Option<&'a crate::field_items::FieldItems>,
+}
+
+impl ins_ai::Field for BugField<'_> {
+    fn ground_y(&self, x: f32, z: f32) -> f32 {
+        self.town.ground_y(Vec3::new(x, 0.0, z) / GAME_UNITS) * GAME_UNITS
+    }
+    fn water_y(&self, x: f32, z: f32) -> Option<f32> {
+        let g = self.town.ground.as_ref()?;
+        let (sx, sz) = (x / GAME_UNITS, z / GAME_UNITS);
+        // fish_y is 8 under the surface.
+        g.is_fish_water(sx, sz)
+            .then(|| g.fish_y(sx, sz))
+            .flatten()
+            .map(|y| y * GAME_UNITS + 8.0)
+    }
+    fn unit_of(&self, x: f32, z: f32) -> Option<[i32; 4]> {
+        Town::cell_indices_of(Vec3::new(x, 0.0, z) / GAME_UNITS)
+            .map(|(a, b, c, d)| [a as i32, b as i32, c as i32, d as i32])
+    }
+    fn unit_center(&self, u: [i32; 4]) -> [f32; 2] {
+        let [a, b, c, d] = u.map(|v| v.max(0) as usize);
+        let p = Town::cell_to_world(a, b, c.min(15), d.min(15)) * GAME_UNITS;
+        [p.x, p.z]
+    }
+    fn item(&self, u: [i32; 4]) -> Option<u16> {
+        let c = self.unit_center(u);
+        match self.items {
+            Some(items) => items
+                .at(Vec3::new(c[0], 0.0, c[1]) / GAME_UNITS)
+                .map(|(_, _, item)| item)
+                .filter(|&item| item != 0xFFFF),
+            None => Some(0),
+        }
+    }
+    fn blocked(&self, from: [f32; 3], to: [f32; 3]) -> bool {
+        self.ground_y(to[0], to[2]) > from[1]
+    }
 }
 
 /// A cast bobber waiting for a bite.
@@ -120,10 +168,6 @@ impl EcoRng {
     }
 }
 
-/// Repeating top-up timer for fish/bug respawns.
-#[derive(Resource)]
-struct RespawnTimer(Timer);
-
 /// Countdown for the catch notification text.
 #[derive(Resource, Default)]
 struct CatchNotifyTimer(f32);
@@ -162,55 +206,7 @@ fn weighted_pick<T: Copy>(entries: &[(T, u8)], rng: &mut EcoRng) -> Option<T> {
     None
 }
 
-/// Pick a bug species + renderable habitat from the seasonal table.
-fn pick_bug(rng: &mut EcoRng) -> (InsectType, InsectArea) {
-    let (m, _, h) = today_mdh();
-    let entries: Vec<(InsectType, u8)> = species::insect_seasonal_table(m, h)
-        .iter()
-        .filter(|e| {
-            matches!(
-                e.area,
-                InsectArea::OnTree | InsectArea::OnGround | InsectArea::Flying
-            )
-        })
-        .map(|e| (e.insect, e.weight))
-        .collect();
-    let insect = weighted_pick(&entries, rng).unwrap_or(InsectType::CommonButterfly);
-    // Recover the habitat for the chosen insect (first matching entry).
-    let area = species::insect_seasonal_table(m, h)
-        .iter()
-        .find(|e| e.insect == insect)
-        .map(|e| e.area)
-        .unwrap_or(InsectArea::OnGround);
-    let area = match area {
-        InsectArea::OnTree | InsectArea::OnGround | InsectArea::Flying => area,
-        _ => InsectArea::OnGround,
-    };
-    (insect, area)
-}
-
 // ---- spawning ----
-
-/// World positions of every tree in the town (excluding trees on water).
-fn tree_spots(town: &Town) -> Vec<Vec3> {
-    let mut spots = Vec::new();
-    for (acre_idx, acre) in town.plan.acres.iter().enumerate() {
-        let ax = acre_idx % ACRE_WIDTH;
-        let az = acre_idx / ACRE_WIDTH;
-        for cz in 0..16 {
-            for cx in 0..16 {
-                if acre.cells[cz * 16 + cx] != CellKind::Tree as u8 {
-                    continue;
-                }
-                if town.river_tiles.contains(&(ax, az, cx, cz)) {
-                    continue;
-                }
-                spots.push(Town::cell_to_world(ax, az, cx, cz));
-            }
-        }
-    }
-    spots
-}
 
 /// One fish shadow at `pos` (the critters module dresses it).
 fn spawn_one_fish(
@@ -371,84 +367,127 @@ fn place_fish(
     println!("A {species:?} in acre ({ax}, {az})");
 }
 
-fn spawn_bugs(
+fn spawn_one_bug(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
     town: &Town,
     rng: &mut EcoRng,
-    count: usize,
+    (insect, area): (InsectType, InsectArea),
+    at: Vec3,
 ) {
-    let trees = tree_spots(town);
-    if trees.is_empty() {
-        return;
-    }
-    let mesh = meshes.add(Sphere::new(0.16));
-    for _ in 0..count {
-        let (insect, area) = pick_bug(rng);
-        let tree = trees[rng.range_usize(trees.len())];
-        let shade = rng.range_f32(-0.03, 0.05);
-        let mat = materials.add(Color::srgb(0.2 + shade, 0.14 + shade, 0.08));
-        let (mut pos, grounded, lift) = match area {
-            InsectArea::OnTree => (tree, false, 1.6),
-            InsectArea::Flying => {
-                let p = find_walkable_near(town, rng, tree, 6.0).unwrap_or(tree);
-                (p, false, 1.3)
-            }
-            _ => {
-                let p = find_walkable_near(town, rng, tree, 4.0).unwrap_or(tree);
-                (p, true, 0.05)
-            }
-        };
-        pos.y = town.ground_y(pos) + lift;
-        commands.spawn((
-            Bug {
-                insect,
-                target: pos,
-                home: pos,
-                pause: rng.range_f32(0.5, 2.5),
-                speed: rng.range_f32(0.8, 1.6),
-                grounded,
-                lift,
-            },
-            Mesh3d(mesh.clone()),
-            MeshMaterial3d(mat),
-            Transform::from_translation(pos),
-        ));
-    }
+    let (grounded, lift) = match area {
+        InsectArea::OnTree => (false, 1.6),
+        InsectArea::Flying
+        | InsectArea::FlyingNearWater
+        | InsectArea::FlyingNearFlowersOrAround => (false, 1.3),
+        InsectArea::OnFlower | InsectArea::RainingOnFlower => (false, 0.5),
+        InsectArea::OnWater => (false, 0.05),
+        _ => (true, 0.05),
+    };
+    let pos = at.with_y(town.ground_y(at) + lift);
+    let shade = rng.range_f32(-0.03, 0.05);
+    commands.spawn((
+        Bug {
+            insect,
+            target: pos,
+            home: pos,
+            pause: rng.range_f32(0.5, 2.5),
+            speed: rng.range_f32(0.8, 1.6),
+            grounded,
+            lift,
+            ai: None,
+            ticks: 0.0,
+        },
+        Mesh3d(meshes.add(Sphere::new(0.16))),
+        MeshMaterial3d(materials.add(Color::srgb(0.2 + shade, 0.14 + shade, 0.08))),
+        Transform::from_translation(pos),
+    ));
 }
 
-/// Try a few random offsets around `center`; return the first walkable one.
-fn find_walkable_near(town: &Town, rng: &mut EcoRng, center: Vec3, radius: f32) -> Option<Vec3> {
-    for _ in 0..8 {
-        let angle = rng.range_f32(0.0, std::f32::consts::TAU);
-        let r = rng.range_f32(1.0, radius);
-        let p = Vec3::new(center.x + angle.cos() * r, 0.0, center.z + angle.sin() * r);
-        if town.is_walkable(p) {
-            return Some(p);
-        }
-    }
-    None
-}
-
-/// Startup: RNG resource + initial critters (runs after town generation).
-fn spawn_initial_critters(
+/// `aSOI_insect_set`: when the player comes into an acre with no insect,
+/// the season's table decides what hatches there and on which units
+/// (`rustimal_logic::ins_set`). Insects more than an acre away go.
+#[allow(clippy::too_many_arguments)]
+fn place_bugs(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     town: Res<Town>,
+    items: Option<Res<crate::field_items::FieldItems>>,
+    player: Query<&Transform, With<Player>>,
+    bugs: Query<(Entity, &Transform), With<Bug>>,
+    mut rng: ResMut<EcoRng>,
+    mut last: Local<Option<(usize, usize)>>,
 ) {
-    let mut rng = EcoRng(0xC0FFEE1234567890);
-    spawn_bugs(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &town,
-        &mut rng,
-        BUG_TARGET,
+    let (Some(ground), Some(items), Ok(p)) = (&town.ground, items, player.single()) else {
+        return;
+    };
+    let Some((ax, az, _, _)) = Town::cell_indices_of(p.translation) else {
+        return;
+    };
+    if *last == Some((ax, az)) {
+        return;
+    }
+    *last = Some((ax, az));
+    let acre_of = |t: &Transform| Town::cell_indices_of(t.translation).map(|(x, z, ..)| (x, z));
+    for (e, t) in &bugs {
+        if acre_of(t).is_none_or(|(x, z)| x.abs_diff(ax) > 1 || z.abs_diff(az) > 1) {
+            commands.entity(e).despawn();
+        }
+    }
+    if bugs.iter().any(|(_, t)| acre_of(t) == Some((ax, az))) {
+        return;
+    }
+    let Some(acre_items) = items.acres.get(az * ACRE_WIDTH + ax) else {
+        return;
+    };
+    let attrs: [u8; 256] = std::array::from_fn(|ut| ground.unit_attribute(ax + 1, az + 1, ut));
+    let has = |f: &dyn Fn(u8) -> bool| attrs.iter().any(|&a| f(a));
+    let acre = rustimal_logic::ins_set::Acre {
+        items: acre_items,
+        attrs: &attrs,
+        pool: has(&|a| a == 12),
+        waterfall: has(&|a| a == 13),
+        river: has(&|a| (14..=21).contains(&a)),
+        marine: has(&|a| a == 24),
+        offing: false,
+        rain: false,
+        snow: false,
+        field_rank: 6,
+    };
+    let (m, _, h) = today_mdh();
+    let table: Vec<_> = species::insect_seasonal_table(m, h)
+        .iter()
+        .map(|e| (e.insect, e.area, e.weight as f32))
+        .collect();
+    let Some(hatch) = acre.decide(&table, &mut |n| rng.range_f32(0.0, n)) else {
+        return;
+    };
+    for &ut in &hatch.units {
+        let at = Town::cell_to_world(ax, az, ut % 16, ut / 16);
+        spawn_one_bug(
+            &mut commands,
+            &mut meshes,
+            &mut materials,
+            &town,
+            &mut rng,
+            (hatch.insect, hatch.area),
+            at,
+        );
+    }
+    println!(
+        "{} {:?} ({:?}) in acre ({ax}, {az})",
+        hatch.units.len(),
+        hatch.insect,
+        hatch.area
     );
-    commands.insert_resource(rng);
-    println!("Ecology spawned: {BUG_TARGET} bugs");
+}
+
+/// Startup: RNG resource + initial critters (runs after town generation).
+fn spawn_initial_critters(mut commands: Commands) {
+    // Fish and bugs come and go per acre (`place_fish`, `place_bugs`).
+    commands.insert_resource(EcoRng(0xC0FFEE1234567890));
 }
 
 // ---- UI ----
@@ -652,14 +691,95 @@ fn rehome_fish(
     }
 }
 
-/// Bugs hop toward a target, pause, then pick a new one.
+/// Butterflies behave as `ac_ins_chou` (`rustimal_logic::ins_ai`): circle
+/// a unit, wander unit to unit, land on white pansies, flee. Other bugs
+/// still hop toward a target, pause, then pick a new one.
+#[allow(clippy::too_many_arguments)]
 fn update_bugs(
+    mut commands: Commands,
     time: Res<Time>,
     town: Res<Town>,
-    mut query: Query<(&mut Bug, &mut Transform)>,
+    items: Option<Res<crate::field_items::FieldItems>>,
+    player: Query<(&Transform, &Facing), (With<Player>, Without<Bug>)>,
+    villagers: Query<
+        (Entity, &Transform),
+        (With<crate::npc::Villager>, Without<Bug>, Without<Player>),
+    >,
+    mut last: Local<std::collections::HashMap<Entity, Vec3>>,
+    mut swing: ResMut<NetSwing>,
+    mut query: Query<
+        (Entity, &mut Bug, &mut Transform),
+        (Without<Player>, Without<crate::npc::Villager>),
+    >,
     mut rng: ResMut<EcoRng>,
 ) {
-    for (mut bug, mut transform) in query.iter_mut() {
+    let to_game = |p: Vec3| [p.x * GAME_UNITS, p.y * GAME_UNITS, p.z * GAME_UNITS];
+    // Movers and how far they went per 60 Hz tick (stress).
+    let ticks_now = (time.delta_secs() * 60.0).max(1e-3);
+    let mut movers = Vec::new();
+    let mut facing = 0i16;
+    let mut player_pos = [1e6; 3];
+    let all = player
+        .iter()
+        .map(|(t, f)| {
+            facing = (f.dir.x.atan2(f.dir.z) * 32768.0 / std::f32::consts::PI) as i32 as i16;
+            player_pos = to_game(t.translation);
+            (Entity::PLACEHOLDER, t.translation)
+        })
+        .chain(villagers.iter().map(|(e, t)| (e, t.translation)))
+        .collect::<Vec<_>>();
+    for (e, pos) in all {
+        let before = last.insert(e, pos).unwrap_or(pos);
+        movers.push(ins_ai::Mover {
+            pos: to_game(pos),
+            moved: (pos - before).xz().length() * GAME_UNITS / ticks_now,
+        });
+    }
+    let net = swing.0.take().map(|p| [p.x * GAME_UNITS, p.z * GAME_UNITS]);
+    let field = BugField {
+        town: &town,
+        items: items.as_deref(),
+    };
+    for (entity, mut bug, mut transform) in &mut query {
+        if (bug.insect as u8) <= ins_ai::PURPLE_BUTTERFLY {
+            let mut rand = |n: f32| rng.range_f32(0.0, n);
+            if bug.ai.is_none() {
+                let at = to_game(transform.translation);
+                match ins_ai::Insect::butterfly(bug.insect as u8, [at[0], at[2]], &field, &mut rand)
+                {
+                    Some(ai) => bug.ai = Some(ai),
+                    None => {
+                        commands.entity(entity).despawn();
+                        continue;
+                    }
+                }
+            }
+            bug.ticks += time.delta_secs() * 60.0;
+            let world = ins_ai::World {
+                player: player_pos,
+                player_facing: facing,
+                movers: &movers,
+                net_stop: net,
+                scoop: None,
+            };
+            let mut gone = false;
+            while bug.ticks >= 1.0 {
+                bug.ticks -= 1.0;
+                let Some(ai) = bug.ai.as_mut() else { break };
+                gone |= ai.step(&world, &field, &mut rand) == ins_ai::Event::Gone;
+            }
+            if gone {
+                commands.entity(entity).despawn();
+                continue;
+            }
+            if let Some(ai) = &bug.ai {
+                let p = Vec3::from(ai.pos) / GAME_UNITS;
+                let (s, c) = (ai.angle as f32 * std::f32::consts::PI / 32768.0).sin_cos();
+                bug.target = p + Vec3::new(s, 0.0, c);
+                transform.translation = p;
+            }
+            continue;
+        }
         if bug.pause > 0.0 {
             bug.pause -= time.delta().as_secs_f32();
             continue;
@@ -726,7 +846,10 @@ fn tool_interact(
     bug_query: Query<(Entity, &Bug, &Transform)>,
     bobber_query: Query<(Entity, &Bobber)>,
     fish_query: Query<&Fish>,
-    mut landed: bevy::ecs::message::MessageWriter<crate::critters::FishCaught>,
+    (mut swing, mut landed): (
+        ResMut<NetSwing>,
+        bevy::ecs::message::MessageWriter<crate::critters::FishCaught>,
+    ),
     mut inventory: ResMut<PlayerInventory>,
     mut notify_timer: ResMut<CatchNotifyTimer>,
     mut notify_query: Query<&mut Text, With<CatchNotifyText>>,
@@ -816,6 +939,7 @@ fn tool_interact(
             println!("Cast!");
         }
         EquippedTool::Net => {
+            swing.0 = Some(player_pos + facing.dir * NET_RANGE * 0.7);
             let mut best: Option<(Entity, f32)> = None;
             for (entity, _bug, bug_transform) in bug_query.iter() {
                 let to_bug = bug_transform.translation - player_pos;
@@ -877,49 +1001,13 @@ fn update_bobber(
     }
 }
 
-/// Every 30s, top fish/bugs back up to their target counts.
-#[allow(clippy::too_many_arguments)]
-fn respawn_critters(
-    time: Res<Time>,
-    mut timer: ResMut<RespawnTimer>,
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    town: Res<Town>,
-    mut rng: ResMut<EcoRng>,
-    bug_query: Query<&Bug>,
-) {
-    timer.0.tick(time.delta());
-    if !timer.0.just_finished() {
-        return;
-    }
-    // Fish come and go per acre (`place_fish`).
-    let bug_count = bug_query.iter().len();
-    if bug_count < BUG_TARGET {
-        spawn_bugs(
-            &mut commands,
-            &mut meshes,
-            &mut materials,
-            &town,
-            &mut rng,
-            BUG_TARGET - bug_count,
-        );
-    }
-    if bug_count < BUG_TARGET {
-        println!("Respawned bugs ({bug_count})");
-    }
-}
-
 pub struct EcologyPlugin;
 
 impl Plugin for EcologyPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(EquippedTool::default())
             .insert_resource(CatchNotifyTimer::default())
-            .insert_resource(RespawnTimer(Timer::from_seconds(
-                RESPAWN_SECS,
-                TimerMode::Repeating,
-            )))
+            .init_resource::<NetSwing>()
             .add_systems(Startup, setup_ecology_ui)
             .add_systems(
                 Startup,
@@ -936,10 +1024,10 @@ impl Plugin for EcologyPlugin {
                 (
                     rehome_fish.run_if(resource_changed::<Town>),
                     place_fish,
+                    place_bugs,
                     update_fish,
                     update_bugs,
                     update_bobber,
-                    respawn_critters,
                     update_tool_hud,
                     tick_catch_notify,
                 )
