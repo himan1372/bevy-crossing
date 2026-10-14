@@ -714,7 +714,7 @@ fn update_bugs(
     mut last: Local<std::collections::HashMap<Entity, Vec3>>,
     mut swing: ResMut<NetSwing>,
     mut query: Query<
-        (Entity, &mut Bug, &mut Transform),
+        (Entity, &mut Bug, &mut Transform, &mut Visibility),
         (Without<Player>, Without<crate::npc::Villager>),
     >,
     mut rng: ResMut<EcoRng>,
@@ -749,7 +749,7 @@ fn update_bugs(
         town: &town,
         items: items.as_deref(),
     };
-    for (entity, mut bug, mut transform) in &mut query {
+    for (entity, mut bug, mut transform, mut vis) in &mut query {
         if ins_ai::Insect::supported(bug.insect as u8) {
             let mut rand = |n: f32| rng.range_f32(0.0, n);
             if bug.ai.is_none() {
@@ -773,6 +773,7 @@ fn update_bugs(
                 axe_hit: None,
                 raining: false,
                 busy: false,
+                rock_struck: None,
             };
             let mut gone = false;
             while bug.ticks >= 1.0 {
@@ -792,8 +793,15 @@ fn update_bugs(
             if let Some(ai) = &bug.ai {
                 let p = Vec3::from(ai.pos) / GAME_UNITS;
                 let (s, c) = (ai.angle as f32 * std::f32::consts::PI / 32768.0).sin_cos();
-                bug.target = p + Vec3::new(s, 0.0, c);
+                // A pill bug under its rock isn't drawn.
+                let want = if ai.hidden() {
+                    Visibility::Hidden
+                } else {
+                    Visibility::Inherited
+                };
+                vis.set_if_neq(want);
                 transform.translation = p;
+                bug.target = p + Vec3::new(s, 0.0, c);
             }
             continue;
         }

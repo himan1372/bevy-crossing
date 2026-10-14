@@ -6,12 +6,14 @@
 //! (`ac_ins_semi.c`), tree beetles (`ac_ins_kabuto.c`),
 //! grasshoppers and crickets (`ac_ins_batta.c`), mosquitoes
 //! (`ac_ins_ka.c`), pondskaters (`ac_ins_amenbo.c`), ladybugs, the mantis
-//! and the snail (`ac_ins_tentou.c`), fireflies (`ac_ins_hotaru.c`),
+//! and the snail (`ac_ins_tentou.c`), fireflies (`ac_ins_hotaru.c`), pill
+//! bugs (`ac_ins_dango.c`),
 //! dragonflies
 //! (`ac_ins_tonbo.c`).
 
 mod amenbo;
 mod batta;
+mod dango;
 mod hotaru;
 mod ka;
 mod kabuto;
@@ -90,6 +92,8 @@ pub struct World<'a> {
     pub raining: bool,
     /// A cutscene or chore is on (`demo_clip`): mosquitoes leave.
     pub busy: bool,
+    /// A rock an axe or shovel just bounced off (`aINS_PL_ACT_REFLECT_*`).
+    pub rock_struck: Option<[f32; 2]>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -215,6 +219,7 @@ impl Insect {
             || kind == amenbo::POND_SKATER
             || tentou::is_tentou(kind)
             || kind == hotaru::FIREFLY
+            || kind == dango::PILL_BUG
     }
 
     /// A placed insect of any supported family; `None` when it can't live
@@ -229,6 +234,8 @@ impl Insect {
             Self::butterfly(kind, pos, field, rand)
         } else if semi::is_cicada(kind) || kabuto::is_beetle(kind) {
             Self::on_trunk(kind, pos, field)
+        } else if kind == dango::PILL_BUG {
+            Self::pill_bug(pos, field)
         } else if kind == hotaru::FIREFLY {
             Self::firefly(pos, field, rand)
         } else if tentou::is_tentou(kind) {
@@ -318,6 +325,13 @@ impl Insect {
         if semi::is_cicada(self.kind) {
             self.cicada_step(world, rand);
             return Event::None;
+        }
+        if self.kind == dango::PILL_BUG {
+            return if self.pill_bug_step(world, field, rand) {
+                Event::Gone
+            } else {
+                Event::None
+            };
         }
         if self.kind == hotaru::FIREFLY {
             self.firefly_step(world, field, rand);
@@ -825,6 +839,7 @@ pub(crate) mod tests {
             axe_hit: None,
             raining: false,
             busy: false,
+            rock_struck: None,
         }
     }
 
