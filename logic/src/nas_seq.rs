@@ -20,9 +20,14 @@ pub const GROUPS: usize = 5;
 /// `AUDIO_TATUMS_PER_BEAT`, `updates_per_frame`, output rate.
 const TATUMS: i32 = 48;
 const UPDATES_PER_FRAME: f32 = 4.0;
-pub const SAMPLE_RATE: u32 = 48000;
-/// Samples per update: 48000 / 60 / 4.
-pub const SAMPLES_PER_UPDATE: usize = 200;
+/// The engine's spec says 48 kHz and 200 samples an update, but the
+/// GameCube's mixer runs at 32028.5 Hz and takes one 4-update frame per
+/// 560 samples (`JAC_FRAMESAMPLES`): 140 real samples an update, 228.8
+/// updates a second. Rendering at that rate keeps tempo and pitch right.
+pub const SAMPLE_RATE: u32 = 32028;
+pub const SAMPLES_PER_UPDATE: usize = 140;
+/// The spec's samples per update (48000 / 60 / 4), which pitch assumes.
+const SPEC_SAMPLES_PER_UPDATE: f32 = 200.0;
 
 /// `AUDIO_MUTE_FLAG_*`.
 const MUTE_STOP_SAMPLES: u8 = 1 << 3;
@@ -436,7 +441,7 @@ impl Engine {
         let max_tempo =
             ((60.0 * 1000.0 * TATUMS as f32 * UPDATES_PER_FRAME) / 48.0 / deviation / 1.04613)
                 as i32;
-        let tick_factor = 60.0 * UPDATES_PER_FRAME / SAMPLE_RATE as f32 / max_tempo as f32;
+        let tick_factor = 60.0 * UPDATES_PER_FRAME / 48000.0 / max_tempo as f32;
         let inv_scaled = 1.0 / 256.0 / UPDATES_PER_FRAME;
         let rel = |v: f32| inv_scaled * 256.0 / v;
         let mut decay_table = [0.0f32; 256];
@@ -461,7 +466,9 @@ impl Engine {
             voices: vec![Voice::default(); 24],
             max_tempo,
             tick_factor,
-            resample: 33476.156 / SAMPLE_RATE as f32,
+            // resample_rate (33476.156 / 48000), spread over the 140 real
+            // samples an update.
+            resample: 33476.156 / 48000.0 * SPEC_SAMPLES_PER_UPDATE / SAMPLES_PER_UPDATE as f32,
             decay_table,
             seed: 0x1234_5678,
             random: 0x3039,

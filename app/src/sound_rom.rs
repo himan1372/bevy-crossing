@@ -401,6 +401,20 @@ mod tests {
             }
         }
         println!("wrote bank 0's instruments to {}", out.display());
+        // The tempo commands (0xDD) at the start of a few songs' scripts.
+        for id in [86usize, 95] {
+            let q = s.sequence(id).unwrap();
+            let tempos: Vec<u8> = q
+                .windows(2)
+                .take(64)
+                .filter(|w| w[0] == 0xDD)
+                .map(|w| w[1])
+                .collect();
+            println!(
+                "seq {id}: first bytes {:02x?}, tempo commands {tempos:?}",
+                &q[..24.min(q.len())]
+            );
+        }
         // Render a few sequences through the player.
         let t = tables(&rom, &catalog).expect("engine tables");
         let data = Arc::new(DiscSound::new(Arc::new(s)));
