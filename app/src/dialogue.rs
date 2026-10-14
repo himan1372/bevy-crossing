@@ -36,6 +36,15 @@ pub struct DialogueState {
     trade: Option<TradeDeal>,
 }
 
+impl DialogueState {
+    /// The page shown in the box, while it's up.
+    pub fn page(&self) -> Option<&str> {
+        self.active
+            .then(|| self.lines.get(self.index).map(String::as_str))
+            .flatten()
+    }
+}
+
 /// A villager offering to swap one of their goods for something you carry
 /// (`request_selector`: the wanted item is picked uniformly among eligible
 /// carried items, the offer comes from `build_trade_offer`).
@@ -47,7 +56,7 @@ struct TradeDeal {
 
 /// Marker for the dialogue box node.
 #[derive(Component)]
-struct DialogueBox;
+pub(crate) struct DialogueBox;
 
 /// Marker for the dialogue text.
 #[derive(Component)]

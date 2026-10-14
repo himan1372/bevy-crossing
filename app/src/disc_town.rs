@@ -1281,6 +1281,23 @@ pub(crate) fn sink_meshes(
     palette: Option<u32>,
     blend: bool,
     segs: &Segments,
+    assets: (
+        &mut Assets<Mesh>,
+        &mut Assets<N64Material>,
+        &mut Assets<Image>,
+    ),
+) -> Vec<(Handle<Mesh>, Handle<N64Material>)> {
+    sink_meshes_scaled(disc, sink, palette, blend, segs, OBJECT_SCALE, assets)
+}
+
+/// As [`sink_meshes`], with model units scaled by `scale`.
+pub(crate) fn sink_meshes_scaled(
+    disc: &GameDisc,
+    sink: &crate::disc_gfx::TriangleSink,
+    palette: Option<u32>,
+    blend: bool,
+    segs: &Segments,
+    scale: f32,
     (meshes, materials, images): (
         &mut Assets<Mesh>,
         &mut Assets<N64Material>,
@@ -1300,10 +1317,7 @@ pub(crate) fn sink_meshes(
                 env: default(),
                 blend,
             };
-            (
-                meshes.add(part_mesh(part, OBJECT_SCALE)),
-                materials.add(material),
-            )
+            (meshes.add(part_mesh(part, scale)), materials.add(material))
         })
         .collect()
 }

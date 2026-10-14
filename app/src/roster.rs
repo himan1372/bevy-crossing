@@ -92,7 +92,7 @@ const GROW_MOVE_IN: i8 = 1;
 const GROW_PERCENT: f32 = 70.0;
 
 /// `mNpc_GetLooks2Sex`: normal, peppy and snooty villagers are female.
-fn looks_female(looks: u8) -> bool {
+pub(crate) fn looks_female(looks: u8) -> bool {
     matches!(looks, 0 | 1 | 5)
 }
 

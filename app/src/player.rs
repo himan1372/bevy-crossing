@@ -126,7 +126,14 @@ fn camera_eye_offset() -> Vec3 {
 pub fn camera_follow(
     time: Res<Time>,
     player_query: Query<&Transform, With<Player>>,
-    mut camera_query: Query<&mut Transform, (With<Camera>, Without<Player>)>,
+    mut camera_query: Query<
+        &mut Transform,
+        (
+            With<Camera>,
+            Without<Player>,
+            Without<crate::msg_window::OverlayCamera>,
+        ),
+    >,
     mut centre: Local<Option<Vec3>>,
 ) {
     let Ok(player_transform) = player_query.single() else {

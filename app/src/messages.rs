@@ -131,6 +131,23 @@ fn char_of(c: u8) -> Option<char> {
     })
 }
 
+/// The AC charset code that draws `ch` (`char_of` backwards; `?` for
+/// characters the font doesn't have).
+pub fn ac_code(ch: char) -> u8 {
+    static TABLE: std::sync::OnceLock<std::collections::HashMap<char, u8>> =
+        std::sync::OnceLock::new();
+    let table = TABLE.get_or_init(|| {
+        let mut t = std::collections::HashMap::new();
+        for c in (0..=255u8).rev() {
+            if let Some(ch) = char_of(c) {
+                t.insert(ch, c);
+            }
+        }
+        t
+    });
+    table.get(&ch).copied().unwrap_or(b'?')
+}
+
 /// Plain text of a string-bank entry (names, catchphrases): no codes.
 pub fn plain(bytes: &[u8]) -> String {
     bytes

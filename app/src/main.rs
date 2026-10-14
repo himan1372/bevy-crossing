@@ -29,6 +29,7 @@ mod mail;
 mod mailbox;
 mod messages;
 mod model_view;
+mod msg_window;
 mod n64_material;
 mod npc;
 mod player;
@@ -106,6 +107,7 @@ fn main() {
         .add_plugins(critters::CrittersPlugin)
         .add_plugins(gyroid::GyroidPlugin)
         .add_plugins(mailbox::MailboxPlugin)
+        .add_plugins(msg_window::MsgWindowPlugin)
         .add_plugins(QuestPlugin)
         .add_plugins(PocketsPlugin)
         .add_plugins(ClockPlugin)
