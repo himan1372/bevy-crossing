@@ -113,7 +113,7 @@ impl Insect {
                 self.timer -= 1.0;
                 if self.timer <= 0.0 {
                     if self.aim == 0 {
-                        self.scale = [1.0, 1.0];
+                        self.scale = [1.0; 3];
                         self.mino_setup(Action::Climb, Some(world), rand);
                         return false;
                     }

@@ -66,11 +66,12 @@ impl Insect {
         self.facing = self.angle;
     }
 
-    /// Its x and y scale against the usual 0.01: a gliding pondskater
-    /// stretches (`0.01 + s`, `0.01 - s`), a hanging bagworm squashes.
-    pub fn scale_xy(&self) -> [f32; 2] {
+    /// Its scale against the usual 0.01: a gliding pondskater stretches
+    /// (`0.01 + s`, `0.01 - s`), a hanging bagworm squashes, a mole
+    /// cricket's body pulses.
+    pub fn scale_xyz(&self) -> [f32; 3] {
         if self.kind == POND_SKATER && self.action == Action::Fly {
-            [1.0 + self.rest_y * 100.0, 1.0 - self.rest_y * 100.0]
+            [1.0 + self.rest_y * 100.0, 1.0 - self.rest_y * 100.0, 1.0]
         } else {
             self.scale
         }

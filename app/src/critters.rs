@@ -344,9 +344,8 @@ fn animate_critters(
             t.rotation = Quat::from_rotation_x(r(ai.pitch))
                 * Quat::from_rotation_y(r(ai.facing))
                 * Quat::from_rotation_z(r(ai.roll));
-            // aIAB_move: a pondskater stretches as it glides (0.01 +- s).
-            let [sx, sy] = ai.scale_xy();
-            t.scale = Vec3::new(sx, sy, 1.0);
+            // Pondskater stretch, bagworm squash, mole cricket pulse.
+            t.scale = Vec3::from(ai.scale_xyz());
             continue;
         }
         let to = b.target - t.translation;

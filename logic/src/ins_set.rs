@@ -70,7 +70,7 @@ pub fn is_water(attr: u8) -> bool {
 }
 
 /// `mCoBG_CheckHole_OrgAttr`.
-fn is_hole(attr: u8) -> bool {
+pub(crate) fn is_hole(attr: u8) -> bool {
     matches!(attr, HOLE | 0..=2 | 4..=6 | 22 | 25 | 26 | 36 | 43..=46 | 59..=62)
 }
 

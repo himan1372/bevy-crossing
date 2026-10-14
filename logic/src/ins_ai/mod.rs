@@ -2,13 +2,14 @@
 //! (patience from nearby movement, position move) and the families of
 //! `ac_ins_*.c`. Game units, one step per 60 Hz tick.
 //!
-//! Families so far: butterflies (`ac_ins_chou.c`), cicadas
+//! Families: butterflies (`ac_ins_chou.c`), cicadas
 //! (`ac_ins_semi.c`), tree beetles (`ac_ins_kabuto.c`),
 //! grasshoppers and crickets (`ac_ins_batta.c`), mosquitoes
 //! (`ac_ins_ka.c`), pondskaters (`ac_ins_amenbo.c`), ladybugs, the mantis
 //! and the snail (`ac_ins_tentou.c`), fireflies (`ac_ins_hotaru.c`), pill
 //! bugs (`ac_ins_dango.c`), cockroaches (`ac_ins_goki.c`),
-//! bagworms and spiders (`ac_ins_mino.c`),
+//! bagworms and spiders (`ac_ins_mino.c`), mole crickets (`ac_ins_kera.c`),
+//! the Wisp's spirits (`ac_ins_hitodama.c`),
 //! dragonflies
 //! (`ac_ins_tonbo.c`).
 
@@ -16,9 +17,11 @@ mod amenbo;
 mod batta;
 mod dango;
 mod goki;
+mod hitodama;
 mod hotaru;
 mod ka;
 mod kabuto;
+mod kera;
 mod mino;
 mod semi;
 mod tentou;
@@ -97,6 +100,9 @@ pub struct World<'a> {
     pub busy: bool,
     /// A rock an axe or shovel just bounced off (`aINS_PL_ACT_REFLECT_*`).
     pub rock_struck: Option<[f32; 2]>,
+    /// The Wisp's ghost event is on (`mEv_EVENT_GHOST` running): spirits
+    /// stay.
+    pub wisp_night: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -196,8 +202,8 @@ pub struct Insect {
     /// `shape_info.rotation.z` (a hanging bagworm's twist) and its phase.
     pub roll: i16,
     twist: i16,
-    /// x and y scale against the usual (a bagworm's squash).
-    scale: [f32; 2],
+    /// Scale against the usual (`scale_xyz`).
+    scale: [f32; 3],
 }
 
 impl Insect {
@@ -238,6 +244,8 @@ impl Insect {
             || kind == dango::PILL_BUG
             || kind == goki::COCKROACH
             || mino::is_mino(kind)
+            || kind == kera::MOLE_CRICKET
+            || kind == hitodama::SPIRIT
     }
 
     /// A placed insect of any supported family; `None` when it can't live
@@ -252,6 +260,10 @@ impl Insect {
             Self::butterfly(kind, pos, field, rand)
         } else if semi::is_cicada(kind) || kabuto::is_beetle(kind) {
             Self::on_trunk(kind, pos, field)
+        } else if kind == hitodama::SPIRIT {
+            Self::spirit(pos, field, rand)
+        } else if kind == kera::MOLE_CRICKET {
+            Self::mole_cricket(pos, field)
         } else if mino::is_mino(kind) {
             Self::hanger(kind, pos, field)
         } else if kind == goki::COCKROACH {
@@ -319,7 +331,7 @@ impl Insect {
             aim: 0,
             roll: 0,
             twist: 0,
-            scale: [1.0, 1.0],
+            scale: [1.0; 3],
         }
     }
 
@@ -350,6 +362,17 @@ impl Insect {
         if semi::is_cicada(self.kind) {
             self.cicada_step(world, rand);
             return Event::None;
+        }
+        if self.kind == hitodama::SPIRIT {
+            self.spirit_step(world, rand);
+            return Event::None;
+        }
+        if self.kind == kera::MOLE_CRICKET {
+            return if self.mole_step(world, field, rand) {
+                Event::Gone
+            } else {
+                Event::None
+            };
         }
         if mino::is_mino(self.kind) {
             return if self.hanger_step(world, field, rand) {
@@ -421,7 +444,7 @@ impl Insect {
         }
         chase_f(&mut self.speed, self.target_speed, self.speed_step * 0.5);
         let butterfly = self.kind <= PURPLE_BUTTERFLY;
-        if !butterfly && !matches!(self.kind, hotaru::FIREFLY | ka::MOSQUITO | 40) {
+        if !butterfly && !matches!(self.kind, hotaru::FIREFLY | ka::MOSQUITO | hitodama::SPIRIT) {
             chase_f(&mut self.vy, self.max_vy, self.gravity * 0.5);
         }
         let to = [
@@ -880,6 +903,7 @@ pub(crate) mod tests {
             raining: false,
             busy: false,
             rock_struck: None,
+            wisp_night: false,
         }
     }
 

@@ -774,6 +774,7 @@ fn update_bugs(
                 raining: false,
                 busy: false,
                 rock_struck: None,
+                wisp_night: false,
             };
             let mut gone = false;
             while bug.ticks >= 1.0 {
