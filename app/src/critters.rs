@@ -338,13 +338,15 @@ fn animate_critters(
             set_parts(&mut part_q, parts, &frames[k]);
         }
         if let Some(ai) = &b.ai {
-            // aINS_actor_draw_sub: RotateX(pitch) then RotateY(heading)
-            // (a cicada stood up on its trunk).
+            // aINS_actor_draw_sub: RotateX(pitch), RotateY(heading), RotateZ
+            // (a cicada stood up on its trunk, a bagworm twisting).
             let r = |a: i16| a as f32 * std::f32::consts::PI / 32768.0;
-            t.rotation = Quat::from_rotation_x(r(ai.pitch)) * Quat::from_rotation_y(r(ai.facing));
+            t.rotation = Quat::from_rotation_x(r(ai.pitch))
+                * Quat::from_rotation_y(r(ai.facing))
+                * Quat::from_rotation_z(r(ai.roll));
             // aIAB_move: a pondskater stretches as it glides (0.01 +- s).
-            let s = ai.squash() * 100.0;
-            t.scale = Vec3::new(1.0 + s, 1.0 - s, 1.0);
+            let [sx, sy] = ai.scale_xy();
+            t.scale = Vec3::new(sx, sy, 1.0);
             continue;
         }
         let to = b.target - t.translation;

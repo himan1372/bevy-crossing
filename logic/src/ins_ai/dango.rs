@@ -27,9 +27,9 @@ impl Insect {
         Some(ins)
     }
 
-    /// Under its rock, not drawn.
+    /// Under its rock (or up in its tree), not drawn.
     pub fn hidden(&self) -> bool {
-        self.kind == PILL_BUG && self.action == Action::Wait
+        (self.kind == PILL_BUG && self.action == Action::Wait) || self.action == Action::Hide
     }
 
     /// `aIDG_actor_move`; true when it drowned.

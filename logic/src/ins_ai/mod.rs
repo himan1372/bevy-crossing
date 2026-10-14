@@ -7,16 +7,19 @@
 //! grasshoppers and crickets (`ac_ins_batta.c`), mosquitoes
 //! (`ac_ins_ka.c`), pondskaters (`ac_ins_amenbo.c`), ladybugs, the mantis
 //! and the snail (`ac_ins_tentou.c`), fireflies (`ac_ins_hotaru.c`), pill
-//! bugs (`ac_ins_dango.c`),
+//! bugs (`ac_ins_dango.c`), cockroaches (`ac_ins_goki.c`),
+//! bagworms and spiders (`ac_ins_mino.c`),
 //! dragonflies
 //! (`ac_ins_tonbo.c`).
 
 mod amenbo;
 mod batta;
 mod dango;
+mod goki;
 mod hotaru;
 mod ka;
 mod kabuto;
+mod mino;
 mod semi;
 mod tentou;
 mod tonbo;
@@ -113,6 +116,14 @@ pub enum Action {
     HoverOnWater,
     FlyToRest,
     RestOnSpot,
+    /// Bagworms and spiders: up in the tree, coming down, bouncing to a
+    /// stop, hanging, climbing back, falling from a felled tree.
+    Hide,
+    Appear,
+    AppearStop,
+    Hang,
+    Climb,
+    Fall,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -182,6 +193,11 @@ pub struct Insect {
     floor: f32,
     /// A heading being eased toward (fireflies).
     aim: i16,
+    /// `shape_info.rotation.z` (a hanging bagworm's twist) and its phase.
+    pub roll: i16,
+    twist: i16,
+    /// x and y scale against the usual (a bagworm's squash).
+    scale: [f32; 2],
 }
 
 impl Insect {
@@ -220,6 +236,8 @@ impl Insect {
             || tentou::is_tentou(kind)
             || kind == hotaru::FIREFLY
             || kind == dango::PILL_BUG
+            || kind == goki::COCKROACH
+            || mino::is_mino(kind)
     }
 
     /// A placed insect of any supported family; `None` when it can't live
@@ -234,6 +252,10 @@ impl Insect {
             Self::butterfly(kind, pos, field, rand)
         } else if semi::is_cicada(kind) || kabuto::is_beetle(kind) {
             Self::on_trunk(kind, pos, field)
+        } else if mino::is_mino(kind) {
+            Self::hanger(kind, pos, field)
+        } else if kind == goki::COCKROACH {
+            Self::cockroach(pos, field)
         } else if kind == dango::PILL_BUG {
             Self::pill_bug(pos, field)
         } else if kind == hotaru::FIREFLY {
@@ -295,6 +317,9 @@ impl Insect {
             phase100: 0,
             floor: 0.0,
             aim: 0,
+            roll: 0,
+            twist: 0,
+            scale: [1.0, 1.0],
         }
     }
 
@@ -324,6 +349,17 @@ impl Insect {
         }
         if semi::is_cicada(self.kind) {
             self.cicada_step(world, rand);
+            return Event::None;
+        }
+        if mino::is_mino(self.kind) {
+            return if self.hanger_step(world, field, rand) {
+                Event::Gone
+            } else {
+                Event::None
+            };
+        }
+        if self.kind == goki::COCKROACH {
+            self.roach_step(world, field, rand);
             return Event::None;
         }
         if self.kind == dango::PILL_BUG {
@@ -379,6 +415,10 @@ impl Insect {
     /// `aINS_position_move` (butterflies, fireflies, mosquitoes and the
     /// spirit take no gravity) with the BG wall and floor check.
     fn position_move(&mut self, field: &impl Field) {
+        if mino::is_mino(self.kind) && self.on_thread() {
+            self.thread_move();
+            return;
+        }
         chase_f(&mut self.speed, self.target_speed, self.speed_step * 0.5);
         let butterfly = self.kind <= PURPLE_BUTTERFLY;
         if !butterfly && !matches!(self.kind, hotaru::FIREFLY | ka::MOSQUITO | 40) {
