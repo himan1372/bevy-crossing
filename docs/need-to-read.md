@@ -69,6 +69,9 @@ with the consumer system named. File paths are locations on a GAFE01
 - ✅ **Ground segments** — seasonal via `mTM_get_termIdx` +
   `mFM_SetFieldPal`/`mFM_SetFGPal`.
 - ✅ **`npc_house_list`** — villager house placements.
+- ✅ **Field items & mailboxes** — town item grid + native fruit trees +
+  beach shells (`app/src/field_items.rs`); mailboxes as `obj_s/w_post`
+  posed per layout (`app/src/mailbox.rs`).
 
 ## Player & villagers (M3)
 
@@ -147,7 +150,8 @@ disc files — except where noted.
   runtime (e.g. segment 12 = ocean wave list), not stored on disc; needs
   logic port. `disc_gfx.rs` skips `G_DL` into nonzero segments.
   Medium-hard.
-- ⏳ **TEV second tile (TEXEL1), fog, blender modes, noise, LOD** —
+- ✅ **Fog** — applied only to parts whose list keeps `G_FOG` with a `G_BL_CLR_FOG` blender (emu64), over `GX_FOG_PERSP_LIN` eye depths (board 2026-10-13).
+- ⏳ **TEV second tile (TEXEL1), blender modes, noise, LOD** —
   medium difficulty. Known gaps in `completed/tev-materials.md`.
 - ⏳ **Palettes set by game code** — palettes are computed at runtime, not
   stored; needs the palette-selection logic ported or tables extracted.
@@ -157,7 +161,8 @@ disc files — except where noted.
 ## Critters & skeletons
 
 - ✅ **Critter models** — gyoei shadow model, `aINS_displayList` bug
-  models (`app/src/critters.rs`).
+  models (`app/src/critters.rs`); gyroids animate (`cKF_ba_r_hnw_move`,
+  `app/src/gyroid.rs`).
 - ✅ **Skeletons & animation** — `cKF_Skeleton_R_c` /
   `cKF_Animation_R_c` with Hermite `cKF_KeyCalc`
   (`app/src/skeleton.rs`).
@@ -185,6 +190,9 @@ disc files — except where noted.
   compiling. Baked-in rule: never commit a real image or anything
   extracted from one; `extract`/`dol` write outside the repo. 13/13 tests
   on synthetic images.
+- ✅ **`.claude/skills/iso-reader/`** (cosmo) — earlier ISO 9660 reader
+  (`SKILL.md` + `scripts/iso_tool.py`) for Windows/Linux; predates
+  `gc-iso-reader`, same no-real-image rule.
 
 ## Open backlog links (disc-reading relevance)
 
