@@ -299,7 +299,10 @@ follow the front wall and include body clearance. Philip accepts the revised
 180-degree door approach ("looks good"). Evidence and limits are tracked in
 backlog/house-board-collision.md. **ground-light-flicker** adds targeted decal depth
 bias to coplanar window-light patches; Philip reports "that looked good".
-Evidence/scope: backlog/ground-light-flicker.md. Mailbox flicker is next.
+Evidence/scope: backlog/ground-light-flicker.md. **mailbox-flicker** restores
+source back-face culling for summer/winter body and lid surfaces; thin waving
+flags stay double-sided. All four mailboxes reviewed in both seasons in a
+Temp-only town. Philip acceptance pending; see backlog/mailbox-flicker.md.
 
 #### Special-building comparison fixes (2026-10-15)
 

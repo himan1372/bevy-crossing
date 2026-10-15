@@ -44,6 +44,8 @@ pub const FLAG_FOG: u32 = 64;
 pub const FLAG_OPAQUE: u32 = 128;
 /// Coplanar building ground light, drawn as a translucent decal.
 pub const FLAG_GROUND_DECAL: u32 = 256;
+/// Mailbox shell/lid have separate opposing inside and outside faces.
+pub const FLAG_CULL_BACK: u32 = 512;
 
 /// Mux selectors for one cycle: colour a b c d, alpha a b c d.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -174,12 +176,14 @@ pub struct N64Material {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct N64MaterialKey {
     ground_decal: bool,
+    cull_back: bool,
 }
 
 impl From<&N64Material> for N64MaterialKey {
     fn from(material: &N64Material) -> Self {
         Self {
             ground_decal: material.combiner.flags & FLAG_GROUND_DECAL != 0,
+            cull_back: material.combiner.flags & FLAG_CULL_BACK != 0,
         }
     }
 }
@@ -189,15 +193,18 @@ impl Material for N64Material {
         SHADER.into()
     }
 
-    /// Draw both faces: N64 models don't keep a consistent winding, so back
-    /// faces would otherwise drop whole walls.
+    /// Keep the existing double-sided policy except for explicitly marked
+    /// source-backed culling, such as the mailbox's opposing shell faces.
     fn specialize(
         _pipeline: &MaterialPipeline,
         descriptor: &mut RenderPipelineDescriptor,
         _layout: &MeshVertexBufferLayoutRef,
         key: MaterialPipelineKey<Self>,
     ) -> Result<(), SpecializedMeshPipelineError> {
-        descriptor.primitive.cull_mode = None;
+        descriptor.primitive.cull_mode = key
+            .bind_group_data
+            .cull_back
+            .then_some(bevy::render::render_resource::Face::Back);
         if key.bind_group_data.ground_decal {
             if let Some(depth) = descriptor.depth_stencil.as_mut() {
                 // Bevy uses reverse Z (GreaterEqual): positive bias brings

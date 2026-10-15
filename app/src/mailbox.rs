@@ -173,14 +173,26 @@ fn load(
     let type0 = cat.get("post_flag_saki_model_type0")?.offset;
     let type1 = cat.get("post_flag_saki_model_type1")?.offset;
     let mut build = |sink: &TriangleSink, segs: &Segments| {
-        crate::disc_town::sink_meshes(
+        let model = crate::disc_town::sink_meshes(
             disc,
             sink,
             palette,
             false,
             segs,
             (&mut *meshes, &mut *materials, &mut *images),
-        )
+        );
+        // obj_{s,w}_post_main/front_model explicitly use G_CULL_BACK;
+        // their lit outside/inside faces occupy the same positions with
+        // opposite winding. Drawing both makes them fight for depth.
+        // The unlit flag lists deliberately omit culling (thin sheets).
+        for (_, handle) in &model {
+            if let Some(mut material) = materials.get_mut(handle) {
+                if material.combiner.flags & crate::n64_material::FLAG_LIT != 0 {
+                    material.combiner.flags |= crate::n64_material::FLAG_CULL_BACK;
+                }
+            }
+        }
+        model
     };
 
     // Still tip: flag2_TA in segment 8 (ANIME_1).
