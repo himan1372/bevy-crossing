@@ -297,7 +297,9 @@ footprints and the real door position; both units of each board are blocked,
 including save/load field edits. Revised home bounds exclude the yard fence/step,
 follow the front wall and include body clearance. Philip accepts the revised
 180-degree door approach ("looks good"). Evidence and limits are tracked in
-backlog/house-board-collision.md. Ground-light flicker is the next reported issue.
+backlog/house-board-collision.md. **ground-light-flicker** adds targeted decal depth
+bias to coplanar window-light patches; Philip reports "that looked good".
+Evidence/scope: backlog/ground-light-flicker.md. Mailbox flicker is next.
 
 #### Special-building comparison fixes (2026-10-15)
 

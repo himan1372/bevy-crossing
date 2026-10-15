@@ -42,6 +42,8 @@ pub const FLAG_BLEND: u32 = 32;
 pub const FLAG_FOG: u32 = 64;
 /// Explicitly opaque draw pass: retain pixels even with zero combiner alpha.
 pub const FLAG_OPAQUE: u32 = 128;
+/// Coplanar building ground light, drawn as a translucent decal.
+pub const FLAG_GROUND_DECAL: u32 = 256;
 
 /// Mux selectors for one cycle: colour a b c d, alpha a b c d.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -155,6 +157,7 @@ impl Default for EnvUniform {
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
+#[bind_group_data(N64MaterialKey)]
 pub struct N64Material {
     #[uniform(0)]
     pub combiner: CombinerUniform,
@@ -168,6 +171,19 @@ pub struct N64Material {
     pub blend: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct N64MaterialKey {
+    ground_decal: bool,
+}
+
+impl From<&N64Material> for N64MaterialKey {
+    fn from(material: &N64Material) -> Self {
+        Self {
+            ground_decal: material.combiner.flags & FLAG_GROUND_DECAL != 0,
+        }
+    }
+}
+
 impl Material for N64Material {
     fn fragment_shader() -> ShaderRef {
         SHADER.into()
@@ -179,9 +195,19 @@ impl Material for N64Material {
         _pipeline: &MaterialPipeline,
         descriptor: &mut RenderPipelineDescriptor,
         _layout: &MeshVertexBufferLayoutRef,
-        _key: MaterialPipelineKey<Self>,
+        key: MaterialPipelineKey<Self>,
     ) -> Result<(), SpecializedMeshPipelineError> {
         descriptor.primitive.cull_mode = None;
+        if key.bind_group_data.ground_decal {
+            if let Some(depth) = descriptor.depth_stencil.as_mut() {
+                // Bevy uses reverse Z (GreaterEqual): positive bias brings
+                // the coplanar decal toward the camera. Keep depth testing
+                // so buildings/characters still occlude the light patch.
+                depth.bias.constant = 2;
+                depth.bias.slope_scale = 1.0;
+                depth.depth_write_enabled = Some(false);
+            }
+        }
         Ok(())
     }
 

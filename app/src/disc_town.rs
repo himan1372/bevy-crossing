@@ -1731,6 +1731,14 @@ fn build_windows(
         materials,
         images,
     );
+    // These lists use XLU_DECAL2 and lie on y=0 in the retail mesh.
+    // Give only ground light patches decal depth handling; ordinary
+    // translucent geometry and the opaque window backing are separate.
+    for (_, handle) in &glow {
+        if let Some(mut material) = materials.get_mut(handle) {
+            material.combiner.flags |= crate::n64_material::FLAG_GROUND_DECAL;
+        }
+    }
     lights.glow.extend(glow.iter().map(|(_, m)| m.clone()));
     model.extend(glow);
     model
