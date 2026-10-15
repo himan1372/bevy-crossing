@@ -280,6 +280,17 @@ commits/pushes for future work; see Git history/upstream for publication state.
    Philip's final route in backlog/audio-acceptance.md. No user save/settings
    overwritten; configured town tune and fidelity/gameplay gaps remain open.
 
+#### Villager-home transparency fix (2026-10-15)
+
+Philip's three new screenshots exposed missing opaque window backing. Scope is
+**all five regular villager home styles, both summer and winter variants**;
+roof colors are not the concern. **villager-house-glass** marks opaque panels in
+the shared window builder so zero combiner alpha cannot discard them. Body/frame
+cutouts and blended glow retain their existing paths. All ten variants were
+visually inspected in daytime and at night in a disposable Temp town; original
+save untouched. See backlog/villager-house-glass.md for source/evidence and
+Philip's pending acceptance. This does not close full render-look or M4.
+
 #### Special-building comparison fixes (2026-10-15)
 
 Philip prioritized his plat-test-pics side-by-sides over the proposed net action.

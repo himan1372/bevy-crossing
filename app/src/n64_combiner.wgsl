@@ -22,6 +22,7 @@ const FLAG_NO_COMBINER: u32 = 8u;
 const FLAG_NO_SHADE: u32 = 16u;
 const FLAG_BLEND: u32 = 32u;
 const FLAG_FOG: u32 = 64u;
+const FLAG_OPAQUE: u32 = 128u;
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> cc: Combiner;
 @group(#{MATERIAL_BIND_GROUP}) @binding(1) var tex: texture_2d<f32>;
@@ -176,7 +177,7 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         }
         return vec4(display_to_linear(clamp(out.rgb, vec3(0.0), vec3(1.0))), out.a);
     }
-    if out.a < 0.5 {
+    if (cc.flags & FLAG_OPAQUE) == 0u && out.a < 0.5 {
         discard;
     }
     return vec4(display_to_linear(clamp(out.rgb, vec3(0.0), vec3(1.0))), 1.0);

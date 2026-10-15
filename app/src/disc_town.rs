@@ -1642,6 +1642,15 @@ fn build_windows(
         images,
     );
     lights.glass.extend(model.iter().map(|(_, m)| m.clone()));
+    // aHUS's glass lists (all five styles, summer and winter) output
+    // constant-zero alpha under G_RM_AA_ZB_OPA_SURF2. These are opaque
+    // backing panels behind the cutout window frames, not holes. Honor
+    // this draw pass explicitly; other actor setups still use cutouts.
+    for (_, handle) in &model {
+        if let Some(mut material) = materials.get_mut(handle) {
+            material.combiner.flags |= crate::n64_material::FLAG_OPAQUE;
+        }
+    }
     let glow = part_lists(
         &disc.catalog,
         prefix,

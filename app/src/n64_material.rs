@@ -8,7 +8,8 @@
 //! environment colours.
 //!
 //! Not yet modelled: TEXEL1 (second tile; uses TEXEL0), noise, LOD
-//! fraction, chroma key, fog and the blender (alpha is a 0.5 cutoff).
+//! fraction, chroma key and the full blender. Cutouts use a 0.5 cutoff;
+//! explicitly opaque panels ignore combiner alpha, as emu64 does.
 
 use bevy::asset::{embedded_asset, RenderAssetUsages};
 use bevy::image::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor};
@@ -39,6 +40,8 @@ pub const FLAG_NO_SHADE: u32 = 16;
 pub const FLAG_BLEND: u32 = 32;
 /// The part is fogged (see `PartKey::fog`).
 pub const FLAG_FOG: u32 = 64;
+/// Explicitly opaque draw pass: retain pixels even with zero combiner alpha.
+pub const FLAG_OPAQUE: u32 = 128;
 
 /// Mux selectors for one cycle: colour a b c d, alpha a b c d.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -160,8 +163,8 @@ pub struct N64Material {
     #[texture(1)]
     #[sampler(2)]
     pub texture: Option<Handle<Image>>,
-    /// Translucent (`*_modelT`, XLU) geometry is alpha-blended; the rest
-    /// uses a 0.5 alpha cutoff.
+    /// Translucent (`*_modelT`, XLU) geometry is alpha-blended. Other
+    /// parts retain the existing cutout policy unless marked explicitly opaque.
     pub blend: bool,
 }
 
@@ -185,6 +188,8 @@ impl Material for N64Material {
     fn alpha_mode(&self) -> AlphaMode {
         if self.blend {
             AlphaMode::Blend
+        } else if self.combiner.flags & FLAG_OPAQUE != 0 {
+            AlphaMode::Opaque
         } else {
             AlphaMode::Mask(0.5)
         }
