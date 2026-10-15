@@ -263,6 +263,10 @@ pub struct RetailLayout {
     pub rocks: HashMap<(usize, usize, usize, usize), u8>,
     /// The four player houses (`HOUSE0..3` items) by house number.
     pub player_homes: [Option<(usize, usize, usize, usize)>; 4],
+    /// Footprints and doors measured from the same posed model we draw.
+    pub player_home_bodies: [Option<PlayerHomeBody>; 4],
+    /// Occupied board units, including the non-drawing second half.
+    pub board_cells: HashSet<(usize, usize, usize, usize)>,
     /// Shop, post office, police box, museum and tailor, as placed.
     pub buildings: Vec<RetailBuilding>,
     /// Each playable acre's field items (`mActor_name_t`, row by row),
@@ -272,6 +276,49 @@ pub struct RetailLayout {
     pub mailboxes: [Option<(usize, usize, usize, usize)>; 4],
     /// The four houses' gyroids (`ACTOR_PROP_HANIWA0..3`).
     pub gyroids: [Option<(usize, usize, usize, usize)>; 4],
+}
+
+#[derive(Clone, Debug)]
+pub struct PlayerHomeBody {
+    pub centre: Vec3,
+    pub half: Vec2,
+    pub yaw: f32,
+    pub door: Vec3,
+}
+
+fn player_home_bodies(
+    disc: &GameDisc,
+    homes: &[Option<(usize, usize, usize, usize)>; 4],
+) -> [Option<PlayerHomeBody>; 4] {
+    // Same size-one model and idle cKF pose as spawn_player_homes. The
+    // actor origin is not the centre of the visible house's footprint.
+    let prefix = "obj_s_myhome1";
+    let lists = part_lists(&disc.catalog, prefix, &["t1", "t2", "t3", "door"]);
+    let mut sink = run_display_lists(&disc.rom, &lists);
+    pose_parts(disc, &lists, &mut sink);
+    let points: Vec<Vec2> = sink
+        .parts
+        .iter()
+        .flat_map(|p| &p.vertices)
+        .map(|v| Vec2::new(v.pos[0], v.pos[2]) * OBJECT_SCALE)
+        .collect();
+    let door = posed_centroid(disc, prefix, "door");
+    std::array::from_fn(|house| {
+        let cell = homes[house]?;
+        if points.is_empty() {
+            return None;
+        }
+        let (yaw, lo, hi) = tightest_box(&points);
+        let mid = (lo + hi) / 2.0;
+        let (origin, model_yaw, _) = player_home_placement(house, cell);
+        let rotation = Quat::from_rotation_y(model_yaw);
+        Some(PlayerHomeBody {
+            centre: origin + Quat::from_rotation_y(model_yaw + yaw) * Vec3::new(mid.x, 0.0, mid.y),
+            half: (hi - lo) / 2.0,
+            yaw: model_yaw + yaw,
+            door: (origin + rotation * (door? * OBJECT_SCALE)).with_y(0.0),
+        })
+    })
 }
 
 /// A public building from the layout, placed like its actor does.
@@ -858,12 +905,16 @@ pub fn build_retail_town(
             }
         }
     }
+    let player_home_bodies = player_home_bodies(disc, &player_homes);
+    let board_cells = crate::field_items::board_cells(&field_items);
     (
         RetailLayout {
             field,
             combos,
             rocks,
             player_homes,
+            player_home_bodies,
+            board_cells,
             buildings,
             mailboxes,
             gyroids,

@@ -77,3 +77,8 @@ style should be solid dark panes in daylight instead of showing ground/trees,
 and should still illuminate at night. Check side windows while walking around.
 Tree outlines and existing window-frame gaps should retain their proper cutouts.
 Roof color matching and full render-look/M4 completion remain outside this task.
+
+
+2026-10-15: Philip reports "looks fine for now." Record provisional acceptance of
+this transparency fix; full render-look and M4 remain open. Next reported defect
+is missing player-home/bulletin/map-board collision (house-board-collision).

@@ -133,3 +133,5 @@
 {"action":"release","task":"special-building-look","agent":"codex","timestamp":"2026-10-15T19:42:06Z"}
 {"action":"claim","task":"villager-house-glass","agent":"codex","timestamp":"2026-10-15T20:00:12Z"}
 {"action":"release","task":"villager-house-glass","agent":"codex","timestamp":"2026-10-15T20:10:38Z"}
+{"action":"claim","task":"house-board-collision","agent":"codex","timestamp":"2026-10-15T20:29:03Z"}
+{"action":"release","task":"house-board-collision","agent":"codex","timestamp":"2026-10-15T20:37:24Z"}

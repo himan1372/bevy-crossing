@@ -11,7 +11,7 @@
 //! (plus `rnd_data` when the part asks), scaled 0.01. Trees and rocks are
 //! drawn by `disc_town`; here a fruit tree only adds its fruit.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use bevy::prelude::*;
 use disc::{RomSource, Target};
@@ -34,6 +34,35 @@ const TYPE_LEAF: usize = 78;
 const PART_ENTRY: u32 = 8;
 /// Game units per unit.
 const UNIT: f32 = 40.0;
+
+/// m_name_table.c::obj_hight_table_item0_nogrow raises both units of
+/// bulletin (0007/000B), map (000C/000D) and music (000E/000F) boards.
+/// The second unit deliberately has no display list, but is still solid.
+pub(crate) fn board_cells(acres: &[[u16; 256]]) -> HashSet<(usize, usize, usize, usize)> {
+    acres
+        .iter()
+        .enumerate()
+        .flat_map(|(a, acre)| {
+            acre.iter().enumerate().filter_map(move |(c, &item)| {
+                matches!(item, 0x0007 | 0x000B..=0x000F).then_some((
+                    a % ACRE_WIDTH,
+                    a / ACRE_WIDTH,
+                    c % 16,
+                    c / 16,
+                ))
+            })
+        })
+        .collect()
+}
+
+/// Include save/load edits to the field grid in collision before movement.
+fn sync_board_collision(items: Res<FieldItems>, mut town: ResMut<Town>) {
+    if items.is_changed() {
+        if let Some(retail) = &mut town.retail {
+            retail.board_cells = board_cells(&items.acres);
+        }
+    }
+}
 
 /// `rnd_data_x` / `rnd_data_z` (`bg_item_common.c_inc`): the scatter of
 /// parts with flag 2 (shells), by `[ut_x & 3][ut_z & 3]`.
@@ -433,6 +462,12 @@ pub struct FieldItemsPlugin;
 impl Plugin for FieldItemsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<DrawnItems>()
+            .add_systems(
+                Update,
+                sync_board_collision
+                    .before(crate::player::player_movement)
+                    .run_if(in_state(AppState::InGame).and_then(resource_exists::<FieldItems>)),
+            )
             .add_systems(
                 OnEnter(AppState::InGame),
                 setup_field_items

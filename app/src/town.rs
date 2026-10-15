@@ -131,7 +131,9 @@ impl Town {
     /// the drawn box is 3x3 — without this you could walk into the front of
     /// a house and end up past its door.
     pub fn can_stand(&self, world_pos: Vec3) -> bool {
-        self.is_walkable(world_pos) && !self.in_house_box(world_pos)
+        self.is_walkable(world_pos)
+            && !self.in_house_box(world_pos)
+            && !self.in_retail_obstacle(world_pos)
     }
 
     /// Ground height at a world position: the disc terrain when loaded,
@@ -153,20 +155,19 @@ impl Town {
                 return false;
             }
         }
-        if self.in_player_home(to) && !self.in_player_home(from) {
+        if self.in_retail_obstacle(to) && !self.in_retail_obstacle(from) {
             return false;
         }
-        if self.in_house_box(from) {
+        if self.in_house_box(from) || self.in_retail_obstacle(from) {
             self.is_walkable(to)
         } else {
             self.can_stand(to)
         }
     }
 
-    /// Inside one of the retail player houses' bodies or mailboxes (they
-    /// block like the game's structure actors; the reserved cells around
-    /// them don't).
-    fn in_player_home(&self, p: Vec3) -> bool {
+    /// Public buildings, posed player-home bodies, board units and house
+    /// accessories block movement; the reserved cells around them don't.
+    fn in_retail_obstacle(&self, p: Vec3) -> bool {
         let Some(retail) = &self.retail else {
             return false;
         };
@@ -175,13 +176,11 @@ impl Town {
             d.x.abs() < b.half.x && d.z.abs() < b.half.y
         });
         in_building
-            || retail.player_homes.iter().enumerate().any(|(house, cell)| {
-                cell.is_some_and(|cell| {
-                    let (c, ..) = crate::disc_town::player_home_placement(house, cell);
-                    let half = crate::disc_town::PLAYER_HOUSE_HALF * CELL_SIZE;
-                    (p.x - c.x).abs() < half && (p.z - c.z).abs() < half
-                })
+            || retail.player_home_bodies.iter().flatten().any(|body| {
+                let d = Quat::from_rotation_y(-body.yaw) * (p - body.centre);
+                d.x.abs() < body.half.x && d.z.abs() < body.half.y
             })
+            || Self::cell_indices_of(p).is_some_and(|cell| retail.board_cells.contains(&cell))
             // Each house's mailbox and gyroid fill their units.
             || retail
                 .mailboxes

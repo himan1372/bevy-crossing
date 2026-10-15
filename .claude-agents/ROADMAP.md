@@ -289,7 +289,13 @@ the shared window builder so zero combiner alpha cannot discard them. Body/frame
 cutouts and blended glow retain their existing paths. All ten variants were
 visually inspected in daytime and at night in a disposable Temp town; original
 save untouched. See backlog/villager-house-glass.md for source/evidence and
-Philip's pending acceptance. This does not close full render-look or M4.
+Philip's provisional acceptance: "looks fine for now." This does not close full render-look or M4.
+
+**house-board-collision** follows Philip's report that player homes, the bulletin
+board and map boards lack collision. All four player homes now use posed-model
+footprints and the real door position; both units of each board are blocked,
+including save/load field edits. Implementation checks and acceptance are tracked
+in backlog/house-board-collision.md.
 
 #### Special-building comparison fixes (2026-10-15)
 

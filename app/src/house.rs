@@ -158,11 +158,14 @@ const DOOR_HALF_W: f32 = 0.6;
 pub(crate) fn find_player_house(town: Res<Town>, mut commands: Commands) {
     let mut door = None;
     // Retail town: the player's house is HOUSE0, placed as the game does.
-    if let Some(cell) = town.retail.as_ref().and_then(|r| r.player_homes[0]) {
-        let (centre, _, yaw) = crate::disc_town::player_home_placement(0, cell);
-        let out = Quat::from_rotation_y(yaw)
-            * Vec3::new(0.0, 0.0, crate::disc_town::PLAYER_HOUSE_HALF + DOOR_OUT);
-        door = Some((centre + out, yaw));
+    if let Some((cell, body)) = town
+        .retail
+        .as_ref()
+        .and_then(|r| Some((r.player_homes[0]?, r.player_home_bodies[0].as_ref()?)))
+    {
+        let (_, _, yaw) = crate::disc_town::player_home_placement(0, cell);
+        let out = Quat::from_rotation_y(yaw) * Vec3::Z * DOOR_OUT;
+        door = Some((body.door + out, yaw));
     }
     'acres: for az in 0..ACRE_DEPTH {
         if door.is_some() {
