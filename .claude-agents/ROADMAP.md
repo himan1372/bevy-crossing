@@ -294,8 +294,10 @@ Philip's provisional acceptance: "looks fine for now." This does not close full 
 **house-board-collision** follows Philip's report that player homes, the bulletin
 board and map boards lack collision. All four player homes now use posed-model
 footprints and the real door position; both units of each board are blocked,
-including save/load field edits. Implementation checks and acceptance are tracked
-in backlog/house-board-collision.md.
+including save/load field edits. Revised home bounds exclude the yard fence/step,
+follow the front wall and include body clearance. Philip accepts the revised
+180-degree door approach ("looks good"). Evidence and limits are tracked in
+backlog/house-board-collision.md. Ground-light flicker is the next reported issue.
 
 #### Special-building comparison fixes (2026-10-15)
 

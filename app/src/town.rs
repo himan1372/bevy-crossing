@@ -8,6 +8,9 @@ pub const ACRE_SIZE: f32 = 16.0;
 pub const CELL_SIZE: f32 = 1.0;
 /// Width/depth of a house box, centred on its House cell.
 pub const HOUSE_SIZE: f32 = 3.0;
+/// Match the player capsule/interior radius at retail home walls, so a
+/// character's body cannot overlap the door when its centre reaches it.
+const HOME_WALL_CLEARANCE: f32 = 0.4;
 
 /// River edge bits, mirroring town_gen's private NORTH/EAST/SOUTH/WEST.
 const EDGE_N: u8 = 1;
@@ -178,7 +181,10 @@ impl Town {
         in_building
             || retail.player_home_bodies.iter().flatten().any(|body| {
                 let d = Quat::from_rotation_y(-body.yaw) * (p - body.centre);
-                d.x.abs() < body.half.x && d.z.abs() < body.half.y
+                let outside = (Vec2::new(d.x.abs(), d.z.abs()) - body.half).max(Vec2::ZERO);
+                // Circle against the wall box: rounded corners preserve
+                // clearance without squaring off the open door approach.
+                outside.length_squared() < HOME_WALL_CLEARANCE.powi(2)
             })
             || Self::cell_indices_of(p).is_some_and(|cell| retail.board_cells.contains(&cell))
             // Each house's mailbox and gyroid fill their units.

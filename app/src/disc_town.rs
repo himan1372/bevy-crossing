@@ -290,10 +290,11 @@ fn player_home_bodies(
     disc: &GameDisc,
     homes: &[Option<(usize, usize, usize, usize)>; 4],
 ) -> [Option<PlayerHomeBody>; 4] {
-    // Same size-one model and idle cKF pose as spawn_player_homes. The
-    // actor origin is not the centre of the visible house's footprint.
+    // Same size-one model and idle cKF pose as spawn_player_homes.
+    // t3 includes the surrounding yard fence and doorstep: including it
+    // in one bounding box makes the open approach to the door solid.
     let prefix = "obj_s_myhome1";
-    let lists = part_lists(&disc.catalog, prefix, &["t1", "t2", "t3", "door"]);
+    let lists = part_lists(&disc.catalog, prefix, &["t1", "t2", "door"]);
     let mut sink = run_display_lists(&disc.rom, &lists);
     pose_parts(disc, &lists, &mut sink);
     let points: Vec<Vec2> = sink
@@ -308,15 +309,27 @@ fn player_home_bodies(
         if points.is_empty() {
             return None;
         }
-        let (yaw, lo, hi) = tightest_box(&points);
+        let door = door? * OBJECT_SCALE;
+        let (origin, model_yaw, door_yaw) = player_home_placement(house, cell);
+        // Align the box to the front wall, rather than the yard axes.
+        // Nothing in front of the actual door plane should block any
+        // approach from its front half-circle (including along the step).
+        let yaw = door_yaw - model_yaw;
+        let back = Vec2::from_angle(yaw);
+        let (mut lo, mut hi) = (Vec2::splat(f32::MAX), Vec2::splat(f32::MIN));
+        for &point in &points {
+            let p = back.rotate(point);
+            lo = lo.min(p);
+            hi = hi.max(p);
+        }
+        hi.y = back.rotate(Vec2::new(door.x, door.z)).y;
         let mid = (lo + hi) / 2.0;
-        let (origin, model_yaw, _) = player_home_placement(house, cell);
         let rotation = Quat::from_rotation_y(model_yaw);
         Some(PlayerHomeBody {
             centre: origin + Quat::from_rotation_y(model_yaw + yaw) * Vec3::new(mid.x, 0.0, mid.y),
             half: (hi - lo) / 2.0,
             yaw: model_yaw + yaw,
-            door: (origin + rotation * (door? * OBJECT_SCALE)).with_y(0.0),
+            door: (origin + rotation * door).with_y(0.0),
         })
     })
 }

@@ -1,6 +1,6 @@
 # Player home and board collision
 
-Status: implemented; Philip playtest acceptance pending.
+Status: implemented; Philip accepts other collision and revised house approach ("looks good").
 
 Philip reports player homes, bulletin board and map boards lack collision.
 
@@ -10,7 +10,7 @@ Philip reports player homes, bulletin board and map boards lack collision.
 - [x] Live FieldItems changes synchronize before player movement, including restored save edits. `can_stand` now includes retail obstacles so NPC placement/navigation targets also avoid them. Player and NPC steps share Town::can_step.
 - [x] Existing escape behavior permits movement out from embedded loaded positions. No-disc placeholder path remains independent of retail footprints.
 - [x] Workspace cargo check, clippy --all-targets -- -D warnings, fmt and capture/default build passed. No automated tests or disc probes added/run.
-- [ ] Philip playtest acceptance.
+- [x] Philip playtest acceptance: initial board/other collision accepted; revised house boundary "looks good".
 
 Implementation files: app/src/town.rs, disc_town.rs, field_items.rs, house.rs.
 
@@ -29,3 +29,10 @@ Unrelated .gitignore/savegame.json preserved.
 ## Philip acceptance route
 
 Walk into each player home from front, back and sides; walk around the corners and use E to enter/exit your home. Walk into both sides of the bulletin and both map boards, then around their ends. Confirm collision feels appropriate and doors/path remain usable. No-disc runtime and save/load collision refresh were reviewed in code, not separately exercised in this preview. Full render-look/M4 remain open.
+
+
+## Door approach correction
+
+Philip's Screenshot 2026-10-15 174830.png showed the first footprint blocked open ground in front of the door. Earlier E interaction evidence did not establish physical approach. Root cause: t3 includes yard fence and doorstep; whole-model bounds enclosed that open area. Revised footprint excludes t3, follows the front-wall orientation and ends at the sampled door plane. Movement applies 0.4 body clearance with rounded corners so the character does not stand inside the door (Philip's additional requirement).
+
+Final disposable preview: approached each of four homes at five directions (-90,-45,0,45,90 degrees relative to the outward door normal). All 20 reached within 0.441-0.504 units of the door, in front of the wall; no body intrusion. First no-clearance pass superseded. Workspace check/clippy/fmt/capture/default build passed; no tests added/run. Philip then said "looks good" and requested ground-light flicker next. Save hash unchanged. This acceptance does not close full render-look or M4.
