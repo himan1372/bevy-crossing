@@ -126,7 +126,7 @@ Each milestone ends with a Philip playtest.
 | Environmental audio | River/shore source positions read from disc metadata; localized waterfall fallback and state-driven insect loops, four spatial level slots, distance/pan, menu attenuation and indoor/scene-exit cleanup | Philip confirms playback; cleanup/stress acceptance, waterfall actor positions, pond/frog coverage, broader insect events and weather/wind remain follow-ups |
 | Effect lifetime and position | Live engine now reuses TrgSeManager: free slots, oldest/priority replacement, singleton suppression and MONO 14. Completion observed on audio updates using request port 1 and busy port 5, with half-second unstarted-request cleanup | Implemented; overlap listening pending. Available world effects now use shared listener pan/distance; full camera/actor smoothing remains |
 | Voice fidelity beyond ordinary speech | Non-ASCII becomes silence; scale fixed at 32, mood not fed from dialogue; melody/special-NPC paths incomplete | Missing/partial |
-| Mixer fidelity | Source-based CPU reverb, indoor step sends, world-effect pan/falloff, peak meters/protection implemented; linear resampling/shared voice pool remain | Listening pending; fixed-point DSP, filters, Haas, surround and reserve lists remain |
+| Mixer fidelity | Source-based CPU reverb, indoor step sends, world-effect pan/falloff, peak meters/protection implemented; linear resampling/shared voice pool remain | Philip reports successful playtest; fixed-point DSP, filters, Haas, surround and reserve lists remain |
 
 Audit sources: current `app/src/sound.rs`, `sound_rom.rs`, `footsteps.rs`,
 `msg_window.rs`, sound-call search across app systems, `logic/src/audio.rs`,
@@ -219,7 +219,7 @@ commits/pushes for future work; see Git history/upstream for publication state.
    spatial/reverb fidelity remain named follow-ups. No tests/probes were run.
    See audio-world-ambience.md for implementation and resume instructions.
 
-6. **audio-mix-and-fidelity — initial mixer/spatial work implemented; listening pending.**
+6. **audio-mix-and-fidelity — initial mixer/spatial work playtested successfully by Philip.**
    Implement scene/room reverb and general spatial gain/pan; compare music,
    voice and effects levels and guard against clipping. Audit filtered
    resampling and voice allocation against the original using shared source
@@ -283,13 +283,12 @@ new-game flow, more disc formats/regions.
 - [ ] **windows-release** — a release build zip (no disc content in it) and plain-English steps: install, then point the game at your own disc image.
 
 ### Suggested order
-Philip confirms ambience playback works (2026-10-15). Initial mix/fidelity
-implementation (step 6) is ready for listening: town/house/shop step tails,
-dialogue/music/ambience balance, stereo world actions and dense overlap.
-Use backlog/audio-mix-and-fidelity.md for the focused checklist and diagnostics.
-Action/trigger stress and ambience cleanup/coverage checks remain pending.
-After any listening fixes, proceed to voice edge cases (step 7) and combined
-audio acceptance (step 8); hardware DSP/resampling/reserve-list gaps remain
+Philip reports the mix/spatial playtest went well (2026-10-15), following
+ambience playback confirmation. Next coding task: voice edge cases (step 7):
+supported non-ASCII charset, applicable message size/mood and deferred/melody
+paths, then combined audio acceptance (step 8), including save/load,
+pause/restart, missing-disc fallback and remaining overlap/cleanup cases.
+Hardware DSP/resampling/reserve-list gaps remain
 explicit, not silently completed. Resolve render-look and record deferred scope
 before M5: playtest-script → bug-bash → windows-release.
 M0–M2 are complete except the explicitly deferred rename; do not restart them.

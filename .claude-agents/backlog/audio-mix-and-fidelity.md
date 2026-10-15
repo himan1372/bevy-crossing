@@ -1,6 +1,6 @@
 # audio-mix-and-fidelity — M4 mixer and spatial effects
 
-Implemented 2026-10-15 by codex; Philip's listening acceptance remains pending.
+Implemented 2026-10-15 by codex; Philip reports the playtest went well.
 Request: room reverb, sound balance, remaining positional effects/clipping.
 
 - [x] Audit original room/scene reverb, sends, gains, resampling and allocation.
@@ -8,7 +8,8 @@ Request: room reverb, sound balance, remaining positional effects/clipping.
 - [x] Route available world effects through shared listener, range, gain and pan.
 - [x] Add pre/post-output peak visibility and linked stereo peak protection.
 - [x] Final compile/lint/format/build passed; no tests/probes added/run.
-- [ ] Philip: room/town transitions, balance, near/far/offscreen sources, dense overlap and tails.
+- [x] Philip reports successful playtest of the mix/spatial changes (2026-10-15).
+- [ ] Combined acceptance: confirm individual stress/cleanup cases and remaining hardware gaps; the general report does not establish exhaustive coverage.
 
 ## Implementation
 
@@ -108,4 +109,4 @@ No actionable finding was accepted without source/code review.
 
 Keep unrelated .gitignore/savegame.json changes excluded from commits.
 Commit/push authorized. Voice edge cases (roadmap 7) and combined acceptance (8)
-follow the listening check; M4 audio remains open.
+are next following Philip's successful playtest; M4 audio remains open.

@@ -23,7 +23,7 @@ hardware fidelity, voice edge cases and combined acceptance still need work. The
 - [x] audio-scene-music: implemented quiet player house, tier/closing shop themes and current-hour town restoration plus conversation/menu gain ramps. Compile/clippy/fmt/build passed; Philip reports it works perfectly. Weather masks verified/reused but live weather waits for simulation.
 - [ ] audio-action-coverage: source matrix and available hooks implemented for doors, rod/net/tools, quest choices/handoffs and nearby surface-aware NPC contacts. Listening pending. Reel-fight loop, full catch fanfare/animation timing and retail door visuals await gameplay support.
 - [ ] audio-world-ambience: implemented runtime river/shore metadata, localized waterfall fallback, supported AI insect loops, stable four-voice level slots, distance/pan and indoor/exit cleanup. Philip confirms playback works; cleanup/stress acceptance, pond/frogs, additional insect events and weather remain follow-ups.
-- [ ] audio-mix-and-fidelity: CPU source-based reverb and indoor step sends, positional world actions/NPC pan, peak meters and linked stereo protection implemented. Accepted gains preserved; listening pending. Filtered resampling/reserve-list allocator audit documented; hardware gaps remain. See audio-mix-and-fidelity.md.
+- [ ] audio-mix-and-fidelity: CPU source-based reverb and indoor step sends, positional world actions/NPC pan, peak meters and linked stereo protection implemented. Accepted gains preserved; Philip reports successful playtest (2026-10-15). Filtered resampling/reserve-list allocator audit documented; hardware gaps remain. See audio-mix-and-fidelity.md.
 - [ ] audio-voice-edge-cases: charset, message size/mood, deferred/melody paths and applicable special speakers.
 - [ ] audio-acceptance: combined retail listening, overlap/decay checks, pause/load/scene transitions and missing-disc fallback before M4 audio closes. Full ordering and acceptance criteria: ../ROADMAP.md.
 
@@ -49,4 +49,5 @@ mailbox lid timing remain pending rather than inferred accepted.
 2026-10-15: Philip confirms ambience playback works. Requested mix/fidelity
 (step 6) now has initial reverb/spatial/protection implementation and a focused
 listening checklist. This does not close ambience coverage, trigger stress or
-hardware fidelity. Next: listening fixes, voice edge cases (7), combined acceptance (8).
+hardware fidelity. Philip subsequently reports the mix/spatial playtest went well.
+Next: voice edge cases (7), then combined acceptance (8).
