@@ -23,7 +23,7 @@ use rustimal_logic::random_field::{
 use rustimal_logic::town_gen::{CellKind, Feature, TownAcre, TownPlan, ACRE_DEPTH, ACRE_WIDTH};
 
 use crate::disc_gfx::{decode_texture, run_display_lists, run_ground_lists, Segments, LIST_TAG};
-use crate::environment::BuildingLights;
+use crate::environment::{BuildingLights, WindowLights};
 use crate::game_disc::GameDisc;
 use crate::ground_map::{GroundMap, Unit};
 use crate::n64_material::{part_mesh, texture_image, CombinerUniform, N64Material};
@@ -312,16 +312,16 @@ const BUILDINGS: [BuildingSpec; 5] = [
         prefix: "shop1",
         parts: &["front", "side", "roof", "door"],
         light: "light",
-        palette: 12,
+        palette: 37, // aSTR_PAL_SHOP1 (25 NPC-house + 12 player-house palettes)
         shift: (-20.0, 20.0),
     },
     // ac_post_office.c: x -20, z +20.
     BuildingSpec {
         item: 0x5808,
         prefix: "yubinkyoku",
-        parts: &["t1", "t2", "t3_1", "door", "neon"],
+        parts: &["t1", "t2", "t3_1", "t3", "door", "neon"], // t3_1 summer, t3 winter
         light: "light",
-        palette: 16,
+        palette: 41, // aSTR_PAL_POST_OFFICE
         shift: (-20.0, 20.0),
     },
     // ac_police_box.c: no shift.
@@ -330,7 +330,7 @@ const BUILDINGS: [BuildingSpec; 5] = [
         prefix: "kouban",
         parts: &["t1", "t2", "t3", "neon"],
         light: "light",
-        palette: 34,
+        palette: 59, // aSTR_PAL_POLICE_BOX
         shift: (0.0, 0.0),
     },
     // ac_museum.c: no shift.
@@ -339,7 +339,7 @@ const BUILDINGS: [BuildingSpec; 5] = [
         prefix: "museum",
         parts: &["t1", "t2", "t3T"],
         light: "lightT",
-        palette: 66,
+        palette: 91, // aSTR_PAL_MUSEUM
         shift: (0.0, 0.0),
     },
     // ac_needlework_shop.c: x -20, z +20.
@@ -348,7 +348,7 @@ const BUILDINGS: [BuildingSpec; 5] = [
         prefix: "tailor",
         parts: &["1", "2", "3", "door"],
         light: "light",
-        palette: 68,
+        palette: 93, // aSTR_PAL_TAILOR
         shift: (-20.0, 20.0),
     },
 ];
@@ -471,10 +471,28 @@ fn spawn_buildings(
         let spec = &BUILDINGS[b.spec];
         let prefix = format!("obj_{season}_{}", spec.prefix);
         let palette = structure_palette(disc, spec.palette, winter);
-        let lists = part_lists(&disc.catalog, &prefix, spec.parts);
+        let mut lists = part_lists(&disc.catalog, &prefix, spec.parts);
+        let door_pose = (spec.prefix == "shop1")
+            .then(|| cranny_door_pose(disc, &prefix))
+            .flatten();
+        if let Some((list, _, _)) = &door_pose {
+            lists.retain(|l| l != list);
+        }
         let mut model = build_model(disc, &lists, palette, meshes, materials, images);
+        let window_lights = match spec.prefix {
+            "tailor" => &mut lights.tailor,
+            "shop1" => &mut lights.cranny,
+            _ => &mut lights.normal,
+        };
         model.extend(build_windows(
-            disc, &prefix, spec.light, palette, meshes, materials, images, lights,
+            disc,
+            &prefix,
+            spec.light,
+            palette,
+            meshes,
+            materials,
+            images,
+            window_lights,
         ));
         let ground_y = town.ground_y(b.origin);
         let origin = b.origin;
@@ -494,6 +512,94 @@ fn spawn_buildings(
                 ChildOf(root),
             ));
         }
+        if let Some((list, skeleton, animation)) = door_pose {
+            // Keep the door in joint-local space; its entity supplies the
+            // sampled cKF matrix instead of baking the closed pose forever.
+            let sink = run_display_lists(&disc.rom, &[list]);
+            let door = CrannyDoor {
+                joint: skeleton
+                    .joints
+                    .iter()
+                    .position(|j| j.model == Some(list))
+                    .unwrap_or(0),
+                skeleton,
+                animation,
+                frame: if cranny_open() { 16.0 } else { 1.0 },
+            };
+            let door_root = commands
+                .spawn((
+                    Name::new("Cranny door"),
+                    door.transform(),
+                    Visibility::default(),
+                    ChildOf(root),
+                    door,
+                ))
+                .id();
+            for (mesh, material) in sink_meshes(
+                disc,
+                &sink,
+                palette,
+                false,
+                &Segments::default(),
+                (meshes, materials, images),
+            ) {
+                commands.spawn((Mesh3d(mesh), MeshMaterial3d(material), ChildOf(door_root)));
+            }
+        }
+    }
+}
+
+fn cranny_open() -> bool {
+    rustimal_logic::shop::ShopTier::Zakka.normally_open(crate::clock::now().hour)
+}
+
+/// aSHOP_setup_action: closed frame 1, open frame 16, speed 0.5 per 60 Hz tick.
+#[derive(Component)]
+struct CrannyDoor {
+    skeleton: crate::skeleton::Skeleton,
+    animation: crate::skeleton::Animation,
+    joint: usize,
+    frame: f32,
+}
+
+impl CrannyDoor {
+    fn transform(&self) -> Transform {
+        let world = self
+            .skeleton
+            .world_matrices(Some(&self.animation), self.frame);
+        let mut transform = Transform::from_matrix(world[self.joint]);
+        transform.translation *= OBJECT_SCALE;
+        transform
+    }
+}
+
+fn cranny_door_pose(
+    disc: &GameDisc,
+    prefix: &str,
+) -> Option<(u32, crate::skeleton::Skeleton, crate::skeleton::Animation)> {
+    let list = disc.catalog.get(&format!("{prefix}_door_model"))?.offset;
+    let skeleton = crate::skeleton::Skeleton::read(
+        &disc.rom,
+        disc.catalog.get(&format!("cKF_bs_r_{prefix}"))?.offset,
+    )?;
+    skeleton.joints.iter().position(|j| j.model == Some(list))?;
+    let animation = crate::skeleton::Animation::read(
+        &disc.rom,
+        disc.catalog.get(&format!("cKF_ba_r_{prefix}"))?.offset,
+        skeleton.joints.len(),
+    )?;
+    Some((list, skeleton, animation))
+}
+
+fn update_cranny_door(time: Res<Time>, mut doors: Query<(&mut CrannyDoor, &mut Transform)>) {
+    let target = if cranny_open() { 16.0 } else { 1.0 };
+    for (mut door, mut transform) in &mut doors {
+        if door.frame == target {
+            continue;
+        }
+        let step = 0.5 * 60.0 * time.delta_secs();
+        door.frame += (target - door.frame).clamp(-step, step);
+        *transform = door.transform();
     }
 }
 
@@ -1521,7 +1627,7 @@ fn build_windows(
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<N64Material>,
     images: &mut Assets<Image>,
-    lights: &mut BuildingLights,
+    lights: &mut WindowLights,
 ) -> Vec<(Handle<Mesh>, Handle<N64Material>)> {
     let glass = part_lists(&disc.catalog, prefix, &[glass_part]);
     let mut model = build_model_with_prim(
@@ -1705,7 +1811,14 @@ fn spawn_disc_objects(
             };
             if obj.kind == CellKind::House && !model.is_empty() {
                 model.extend(build_windows(
-                    disc, &prefix, "light", pal, meshes, materials, images, lights,
+                    disc,
+                    &prefix,
+                    "light",
+                    pal,
+                    meshes,
+                    materials,
+                    images,
+                    &mut lights.normal,
                 ));
             }
             let yaw = if obj.kind == CellKind::House {
@@ -1811,7 +1924,14 @@ fn spawn_player_homes(
         (meshes, materials, images),
     );
     model.extend(build_windows(
-        disc, &prefix, "light", palette, meshes, materials, images, lights,
+        disc,
+        &prefix,
+        "light",
+        palette,
+        meshes,
+        materials,
+        images,
+        &mut lights.normal,
     ));
     for (house, cell) in retail.player_homes.iter().enumerate() {
         let Some(cell) = *cell else { continue };
@@ -1873,7 +1993,10 @@ impl Plugin for DiscTownPlugin {
             OnEnter(AppState::InGame),
             build_disc_town.run_if(resource_exists::<GameDisc>.and_then(resource_exists::<Town>)),
         )
-        .add_systems(Update, follow_ground.run_if(in_state(AppState::InGame)));
+        .add_systems(
+            Update,
+            (follow_ground, update_cranny_door).run_if(in_state(AppState::InGame)),
+        );
     }
 }
 

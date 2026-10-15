@@ -280,6 +280,17 @@ commits/pushes for future work; see Git history/upstream for publication state.
    Philip's final route in backlog/audio-acceptance.md. No user save/settings
    overwritten; configured town tune and fidelity/gameplay gaps remain open.
 
+#### Special-building comparison fixes (2026-10-15)
+
+Philip prioritized his plat-test-pics side-by-sides over the proposed net action.
+**special-building-look** is implemented: corrected all five special-building
+palette indices, missing winter post-office t3 part, Cranny's sampled open/closed
+door pose, and business-dependent Able Sisters/Cranny window lights.
+Source/disc checks and in-game day/04:40 screenshots support the change;
+Philip's retail comparison acceptance is still pending. See
+backlog/special-building-look.md for evidence, source references and limits.
+No global camera/season/lighting sign-off or M4 completion is implied.
+
 #### Model action follow-up (2026-10-15)
 
 Model-research/report.md and index.html corroborate the existing runtime

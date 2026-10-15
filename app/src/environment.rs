@@ -180,18 +180,20 @@ pub fn lights_on(hour: u8) -> bool {
     !(5..18).contains(&hour)
 }
 
-/// Window materials whose colour follows the lights.
+/// Window materials grouped by the actor's light policy.
 #[derive(Resource, Default)]
 pub struct BuildingLights {
-    /// `light` parts: window glass, tinted (0,0,0) off to (255,255,150) on
-    /// (primitive colour for houses, environment colour for the shop).
+    pub normal: WindowLights,
+    pub tailor: WindowLights,
+    pub cranny: WindowLights,
+}
+
+/// Glass and ground glow driven by one actor light level.
+#[derive(Default)]
+pub struct WindowLights {
     pub glass: Vec<Handle<N64Material>>,
-    /// `window*` parts: the light the windows cast on the ground at night
-    /// (drawn in the shadow list), alpha = texel x LOD fraction (0 off,
-    /// 120 on).
     pub glow: Vec<Handle<N64Material>>,
-    /// 0 = off, 1 = on, eased like `chase_f(..., 0.019532442)` per frame.
-    level: f32,
+    level: Option<f32>,
 }
 
 /// `chase_f` step per 60 Hz frame for the light level.
@@ -261,37 +263,44 @@ fn update_building_lights(
     time: Res<Time>,
     lights: Option<ResMut<BuildingLights>>,
     mut materials: ResMut<Assets<N64Material>>,
+    shop: Option<Res<State<crate::shop::ShopLocation>>>,
 ) {
     let Some(mut lights) = lights else { return };
-    let target = if lights_on(clock::now().hour) {
-        1.0
-    } else {
-        0.0
-    };
-    if lights.level == target && !lights.is_changed() {
-        return;
-    }
+    let hour = clock::now().hour;
+    let night = lights_on(hour);
     let step = LIGHT_CHASE_PER_FRAME * time.delta_secs() * 60.0;
-    let level = lights.level;
-    lights.level = if target > level {
-        (level + step).min(target)
-    } else {
-        (level - step).max(target)
-    };
-    let p = lights.level;
-    let glass = Vec4::new(p, p, p * 150.0 / 255.0, 1.0);
-    for handle in &lights.glass {
-        if let Some(mut m) = materials.get_mut(handle) {
-            // Houses tint the glass with the primitive colour, the shop and
-            // other buildings with the environment colour (`aSHOP` draw):
-            // each list reads only its own, so set both.
-            m.combiner.prim = glass;
-            m.combiner.env = glass.with_w(0.0);
+    // aNW_check_opend / aNW_ctrl_light: closed 02:00–07:00 even at night.
+    let tailor_on = night && !(2..7).contains(&hour);
+    let cranny_on = night
+        && (rustimal_logic::shop::ShopTier::Zakka.normally_open(hour)
+            || shop.is_some_and(|s| *s.get() == crate::shop::ShopLocation::Inside));
+    lights.normal.update(night, step, &mut materials);
+    lights.tailor.update(tailor_on, step, &mut materials);
+    lights.cranny.update(cranny_on, step, &mut materials);
+}
+
+impl WindowLights {
+    fn update(&mut self, on: bool, step: f32, materials: &mut Assets<N64Material>) {
+        let target = if on { 1.0 } else { 0.0 };
+        if self.level == Some(target) {
+            return;
         }
-    }
-    for handle in &lights.glow {
-        if let Some(mut m) = materials.get_mut(handle) {
-            m.combiner.extra.x = p * GLOW_LOD_ON;
+        // Retail constructors initialize directly at the current light level.
+        let previous = self.level.unwrap_or(target);
+        let p = previous + (target - previous).clamp(-step, step);
+        self.level = Some(p);
+        let glass = Vec4::new(p, p, p * 150.0 / 255.0, 1.0);
+        for handle in &self.glass {
+            if let Some(mut m) = materials.get_mut(handle) {
+                // Each list reads its own primitive/environment input.
+                m.combiner.prim = glass;
+                m.combiner.env = glass.with_w(0.0);
+            }
+        }
+        for handle in &self.glow {
+            if let Some(mut m) = materials.get_mut(handle) {
+                m.combiner.extra.x = p * GLOW_LOD_ON;
+            }
         }
     }
 }

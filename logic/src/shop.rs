@@ -99,6 +99,17 @@ impl ShopTier {
     pub fn tier_idx(self) -> u8 {
         self as u8
     }
+
+    /// Normal business hours (`mSP_GetShopOpenTime` / `mSP_GetShopCloseTime`).
+    /// Lottery days, events, remodeling and forced chore hours need their
+    /// own gameplay state; this is the ordinary-day policy only.
+    pub fn normally_open(self, hour: u8) -> bool {
+        let (open, close) = match self {
+            Self::Combini => (7, 23),
+            _ => (9, 22),
+        };
+        (open..close).contains(&hour)
+    }
 }
 
 /// Days in month (non-leap; retail uses lbRTC_GetDaysByMonth).

@@ -129,3 +129,5 @@
 {"action":"release","task":"audio-acceptance","agent":"codex","timestamp":"2026-10-15T18:58:23Z"}
 {"action":"claim","task":"model-actions-net-swing","agent":"codex","timestamp":"2026-10-15T19:19:21Z"}
 {"action":"release","task":"model-actions-net-swing","agent":"codex","timestamp":"2026-10-15T19:20:50Z"}
+{"action":"claim","task":"special-building-look","agent":"codex","timestamp":"2026-10-15T19:26:40Z"}
+{"action":"release","task":"special-building-look","agent":"codex","timestamp":"2026-10-15T19:42:06Z"}
