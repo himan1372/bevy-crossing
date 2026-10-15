@@ -4,6 +4,10 @@
 Automated pass complete; final combined listening/fallback UI check pending.
 M4 audio remains open until that result and remaining scope are accepted.
 
+2026-10-15 latest Philip report: “there is absolutely zero audio overlap.”
+Recorded verbatim; no inference that every final-route save/load/restart,
+pause or fallback UI check passed. Other acceptance and scope remain as below.
+
 - [x] Audit overlap, rooms/menus/pause, load/reentry and disc fallback.
 - [x] Fix concrete lifecycle defects and add regression coverage.
 - [x] Workspace check/clippy/fmt/tests/build and available disc audio probes.

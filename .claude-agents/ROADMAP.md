@@ -280,6 +280,22 @@ commits/pushes for future work; see Git history/upstream for publication state.
    Philip's final route in backlog/audio-acceptance.md. No user save/settings
    overwritten; configured town tune and fidelity/gameplay gaps remain open.
 
+#### Model action follow-up (2026-10-15)
+
+Model-research/report.md and index.html corroborate the existing runtime
+display-list/cKF pipeline; no new fundamental rendering defect was established.
+Next bounded model task: **model-actions-net-swing**, a held normal net with one
+complete empty swing, procedural tool-joint adjustment and stop/recovery.
+See backlog/model-actions-net-swing.md for source references, relevant files,
+acceptance and research-access limits. Planning only; no action implementation
+or visual acceptance is implied. Main M3 loading work remains complete;
+render-look sign-off stays open. Rod/capture families follow this attachment
+and action-clock slice.
+
+Philip's latest audio report: “there is absolutely zero audio overlap.”
+Preserve that wording; it does not establish that every F9/save/load/restart
+or missing-disc fallback check passed. Combined acceptance remains open.
+
 #### Other work before slice sign-off
 
 - **render-look** remains open: camera, palette/colour, fog and time-of-day
