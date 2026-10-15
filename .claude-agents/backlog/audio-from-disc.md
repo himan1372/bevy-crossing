@@ -45,3 +45,7 @@ Research (claude, 2026-10-13): all audio is in audiorom.img (8.3 MB: banks, VADP
 on for now; pockets and letters accepted. Scene music implemented next (see
 ROADMAP step 3 / audio-scene-music.md); general trigger stress and physical
 mailbox lid timing remain pending rather than inferred accepted.
+
+2026-10-15: Philip confirms ambience playback works. Next: audio-mix-and-fidelity
+(step 6), starting with room/scene reverb and balance. This confirmation does
+not close outstanding ambience coverage or trigger stress checks.

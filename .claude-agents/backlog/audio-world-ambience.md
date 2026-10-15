@@ -52,3 +52,8 @@ insects then move away/catch one, pause/resume and check no doubled or stuck loo
 
 Workspace check and all-target clippy passed. No tests or disc probes added/run.
 Formatting and workspace build passed. Listening remains pending.
+
+2026-10-15: Philip reports playback works. Record this as playback confirmation,
+not proof of every lifetime/stress case above. Next planned stage: mix/fidelity,
+starting with room/scene reverb and music/voice/effect balance. Remaining source
+placement, pond/frog/weather and insect coverage gaps stay listed.

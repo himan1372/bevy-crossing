@@ -201,7 +201,7 @@ commits/pushes for future work; see Git history/upstream for publication state.
    remains gameplay-dependent. See audio-action-coverage.md source matrix.
    Done when each existing action is covered or explicitly silent per source.
 
-5. **audio-world-ambience — stopping point; listening pending.**
+5. **audio-world-ambience — playback confirmed by Philip; follow-ups remain.**
    Integrate the translated level-sound/emitter management for the current town:
    river/sea/waterfall and applicable nearby insect sources. Match source
    lifetimes, distance/pan and indoor muting; connect wind/rain only when the
@@ -271,7 +271,8 @@ new-game flow, more disc formats/regions.
 - [ ] **windows-release** — a release build zip (no disc content in it) and plain-English steps: install, then point the game at your own disc image.
 
 ### Suggested order
-Stopping point requested by Philip: ambience is built and awaiting listening.
+Philip confirms ambience playback works (2026-10-15). Next coding stage is
+mix/fidelity (step 6), starting with scene/room reverb and sound balance.
 Resume with river -> waterfall -> shore, near/far insects, entering/leaving
 interiors, menus and pause; check no duplicated/stuck loops. Action and trigger
 stress checks remain pending. Scene music, letters and pockets are accepted.
