@@ -1,6 +1,6 @@
 # audio-voice-edge-cases — M4 step 7
 
-Implemented by codex 2026-10-15; listening acceptance pending.
+Implemented by codex 2026-10-15; Philip accepts current villager voice playback.
 Philip authorized continuation after successful mixer playtest (a1f6295).
 
 - [x] Audit charset, size/mood, deferred syllables/melody and applicable speakers.
@@ -8,7 +8,10 @@ Philip authorized continuation after successful mixer playtest (a1f6295).
 - [x] Document unavailable speaking interactions and port timing adaptations.
 - [x] Final compile/lint/format/build passed; no tests/probes added/run.
 - [x] Philip accepts ordinary voices, emotion/size changes and pause/page behavior.
-- [ ] Philip: accented letters and melody notes (not encountered during playtest).
+- [x] Philip accepts accented speech and confirms both music-note examples produce sound.
+- [ ] Configured town tune and full melody identity: no town melody exists yet;
+  Philip heard a beep and other note sounds. Playback acceptance does not verify
+  a composed town tune or exact retail melody identity.
 - [ ] Combined audio acceptance (step 8).
 
 ## Changes
@@ -113,11 +116,13 @@ Mixer resampling, reserve lists and hardware DSP remain in mix/fidelity notes.
 cargo clippy --workspace --all-targets -- -D warnings, cargo fmt --all --check,
 cargo build --workspace and git diff --check passed.
 No tests or probes added/run under the standing instruction; generated audio
-and exact interleaving still require listening acceptance.
+was subsequently playtested by Philip. Exact interleaving and configured
+melody identity remain unverified.
 
 Commit/push authorized. Exclude unrelated .gitignore/savegame.json changes.
-After feedback, proceed to combined audio acceptance; M4 audio remains open.
+Next: combined audio acceptance; M4 audio remains open.
 
 2026-10-15 F8 follow-up: examples added at Philip's request. Workspace check,
 all-target clippy, formatting, build and diff whitespace passed. No automated
-tests or disc probes run. Accents and both melody paths await Philip's listening.
+tests or disc probes run. Philip subsequently accepted accented text and
+confirmed both music-note examples make sound. No configured town tune yet.
