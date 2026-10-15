@@ -159,6 +159,9 @@ fn start_sound(
     commands.spawn((Name::new("sound engine"), AudioPlayer::<NasStream>(handle)));
     commands.insert_resource(sound);
     commands.insert_resource(Bgm::default());
+    if std::env::var_os("BEVY_CROSSING_AUDIO_DIAGNOSTICS").is_some_and(|v| v == "1") {
+        commands.insert_resource(AudioDiagnostics::default());
+    }
     info!("sound engine started");
 }
 
@@ -189,7 +192,20 @@ pub mod se_id {
     pub const ROD_AIR: u16 = 0x445;
 }
 
-static SE_QUEUE: Mutex<Vec<(u16, f32)>> = Mutex::new(Vec::new());
+#[derive(Clone, Copy)]
+enum EffectOrigin {
+    Center,
+    World { position: Vec3, attenuate: bool },
+}
+
+struct EffectRequest {
+    id: u16,
+    volume: f32,
+    reverb: u8,
+    origin: EffectOrigin,
+}
+
+static SE_QUEUE: Mutex<Vec<EffectRequest>> = Mutex::new(Vec::new());
 /// Typed characters to voice: (speaker's spec, a, b, c phonemes).
 static VOICE_QUEUE: Mutex<Vec<(u8, u8, u8, u8)>> = Mutex::new(Vec::new());
 
@@ -301,21 +317,79 @@ pub fn cursor_changed<T: PartialEq>(before: T, after: T) {
 
 /// A trigger with the optional volume from Na_PlyWalkSe/Room.
 pub fn se_volume(id: u16, volume: f32) {
-    if let Ok(mut q) = SE_QUEUE.lock() {
-        q.push((id, volume.clamp(0.0, 1.0)));
+    enqueue_effect(id, volume, 0, EffectOrigin::Center);
+}
+
+/// Positional actor/tool effect using the same listener as town ambience.
+pub(crate) fn se_at(id: u16, position: Vec3) {
+    enqueue_effect(
+        id,
+        1.0,
+        0,
+        EffectOrigin::World {
+            position,
+            attenuate: true,
+        },
+    );
+}
+
+/// Footsteps retain their accepted player/NPC gains. NPC volume already
+/// includes its own source distance rule, so only pan is added here.
+pub(crate) fn footstep(id: u16, volume: f32, position: Option<Vec3>, indoors: bool) {
+    let origin = position.map_or(EffectOrigin::Center, |position| EffectOrigin::World {
+        position,
+        attenuate: false,
+    });
+    enqueue_effect(id, volume, if indoors { 5 } else { 0 }, origin);
+}
+
+fn enqueue_effect(id: u16, volume: f32, reverb: u8, origin: EffectOrigin) {
+    if volume.is_finite() {
+        if let Ok(mut queue) = SE_QUEUE.lock() {
+            queue.push(EffectRequest {
+                id,
+                volume: volume.clamp(0.0, 1.0),
+                reverb,
+                origin,
+            });
+        }
     }
 }
 
-/// Submit queued effects atomically; the audio thread owns completion tracking.
-fn play_effects(sound: Option<Res<Sound>>) {
-    let ids: Vec<(u16, f32)> = SE_QUEUE
+/// Submit after transforms/foot contacts; UI remains centered.
+fn play_effects(
+    sound: Option<Res<Sound>>,
+    player: Query<&GlobalTransform, With<crate::player::Player>>,
+) {
+    let ids: Vec<_> = SE_QUEUE
         .lock()
         .map(|mut q| std::mem::take(&mut *q))
         .unwrap_or_default();
     let Some(sound) = sound else { return };
     if let Ok(mut engine) = sound.engine.lock() {
-        for (id, volume) in ids {
-            engine.trigger_effect(id, volume);
+        let microphone = player
+            .single()
+            .ok()
+            .map(|p| rustimal_logic::ambience::microphone((p.translation() * 40.0).to_array()));
+        for request in ids {
+            let (volume, pan) = match request.origin {
+                EffectOrigin::Center => (request.volume, 64),
+                EffectOrigin::World {
+                    position,
+                    attenuate,
+                } => {
+                    let Some(microphone) = microphone else {
+                        continue;
+                    };
+                    let Some((gain, pan)) =
+                        rustimal_logic::ambience::spatial((position * 40.0).to_array(), microphone)
+                    else {
+                        continue;
+                    };
+                    (request.volume * if attenuate { gain } else { 1.0 }, pan)
+                }
+            };
+            engine.trigger_effect_spatial(request.id, volume, pan, request.reverb);
         }
     };
 }
@@ -476,6 +550,35 @@ fn update_music(
     }
 }
 
+/// Opt-in logging; no audio-thread I/O or extra engine locks by default.
+#[derive(Resource, Default)]
+struct AudioDiagnostics {
+    seconds: f32,
+}
+
+fn report_mix(
+    time: Res<Time<Real>>,
+    diagnostics: Option<ResMut<AudioDiagnostics>>,
+    sound: Option<Res<Sound>>,
+) {
+    let (Some(mut diagnostics), Some(sound)) = (diagnostics, sound) else {
+        return;
+    };
+    diagnostics.seconds += time.delta_secs();
+    if diagnostics.seconds < 5.0 {
+        return;
+    }
+    diagnostics.seconds %= 5.0;
+    if let Ok(engine) = sound.engine.lock() {
+        let stats = engine.mix_stats();
+        info!(
+            "audio: peaks effects/music/voice/ambience={:?}, mix={:.3}, output={:.3}, min gain={:.3}, limited frames={}, nonfinite={}, active voices={}/24 (peaks/counters cumulative)",
+            stats.bus_peaks, stats.peak, stats.output_peak, stats.minimum_gain,
+            stats.limited_frames, stats.nonfinite_samples, stats.active_voices,
+        );
+    };
+}
+
 pub struct SoundPlugin;
 
 impl Plugin for SoundPlugin {
@@ -487,14 +590,20 @@ impl Plugin for SoundPlugin {
             )
             .add_systems(
                 Update,
-                (advance_door_sound, play_effects, play_voices)
+                (advance_door_sound, play_voices)
                     .chain()
                     .after(crate::input::InteractSet::Doors)
                     .run_if(in_state(AppState::InGame)),
             )
             .add_systems(
                 PostUpdate,
-                (update_music, crate::ambience::update_ambience)
+                (
+                    update_music,
+                    play_effects,
+                    crate::ambience::update_ambience,
+                    report_mix,
+                )
+                    .after(crate::footsteps::play_footsteps)
                     .after(bevy::transform::TransformSystems::Propagate)
                     .run_if(in_state(AppState::InGame)),
             )

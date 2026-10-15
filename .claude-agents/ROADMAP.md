@@ -110,7 +110,7 @@ Each milestone ends with a Philip playtest.
 - [x] **dialogue-polish** — typing, pauses, name plate and normal villager Animalese. Philip's F8 comparison sounds good without hiccups. Remaining voice modes/edge cases are tracked below.
 - [x] **pause-menu** — Save / Settings / Quit; Settings currently edits the disc path.
 - [ ] **title-screen** — remains on the back burner per Philip; loading currently enters InGame directly. Keep this deferral visible when assessing M4.
-- [~] **audio-from-disc** — working foundation and several accepted features; scene music, effect management, action coverage, ambience and fidelity remain. See the audit and ordered plan below and `backlog/audio-from-disc.md`.
+- [~] **audio-from-disc** — working foundation and several accepted features; scene music/effect management/action/ambience and initial mixer work implemented; listening, coverage and fidelity follow-ups remain. See the audit and ordered plan below and `backlog/audio-from-disc.md`.
 
 #### Audio audit (2026-10-14)
 
@@ -123,10 +123,10 @@ Each milestone ends with a Philip playtest.
 | UI/mailbox/shop sounds | Pockets and letter sounds accepted. Mailbox opens with inventory ZOOMUP and closes with inventory NA_SE_31. Earlier register probe preserves MONO tail | Philip accepts letters and asked to move on; actor lid timing and general overlap validation remain outstanding |
 | Existing gameplay actions | Source matrix and hooks for doors, rod cast/retrieve, net capture, tools, pickups, quest choices/handoffs and nearby NPC steps | Implemented; listening pending. Full reel-fight, fanfare and animation timing await gameplay support |
 | Music by location and interaction | Quiet player houses, tier/closing shop themes, current-hour town restoration, 70% talk/50% menus with pause-safe fades | Philip reports it works perfectly; accepted. Weather/events/furniture and retail scene wipes remain follow-ups |
-| Environmental audio | River/shore source positions read from disc metadata; localized waterfall fallback and state-driven insect loops, four spatial level slots, distance/pan, menu attenuation and indoor/scene-exit cleanup | Implemented; listening pending. Waterfall actor positions, pond/frog coverage, broader insect events and weather/wind remain follow-ups |
-| Effect lifetime and position | Live engine now reuses TrgSeManager: free slots, oldest/priority replacement, singleton suppression and MONO 14. Completion observed on audio updates using request port 1 and busy port 5, with half-second unstarted-request cleanup | Implemented; overlap listening pending. General emitter pan/distance remains missing |
+| Environmental audio | River/shore source positions read from disc metadata; localized waterfall fallback and state-driven insect loops, four spatial level slots, distance/pan, menu attenuation and indoor/scene-exit cleanup | Philip confirms playback; cleanup/stress acceptance, waterfall actor positions, pond/frog coverage, broader insect events and weather/wind remain follow-ups |
+| Effect lifetime and position | Live engine now reuses TrgSeManager: free slots, oldest/priority replacement, singleton suppression and MONO 14. Completion observed on audio updates using request port 1 and busy port 5, with half-second unstarted-request cleanup | Implemented; overlap listening pending. Available world effects now use shared listener pan/distance; full camera/actor smoothing remains |
 | Voice fidelity beyond ordinary speech | Non-ASCII becomes silence; scale fixed at 32, mood not fed from dialogue; melody/special-NPC paths incomplete | Missing/partial |
-| Mixer fidelity | Linear resampling/shared voice pool; reverb, filters, Haas and surround not implemented | Known limitations; not a complete audio-engine port |
+| Mixer fidelity | Source-based CPU reverb, indoor step sends, world-effect pan/falloff, peak meters/protection implemented; linear resampling/shared voice pool remain | Listening pending; fixed-point DSP, filters, Haas, surround and reserve lists remain |
 
 Audit sources: current `app/src/sound.rs`, `sound_rom.rs`, `footsteps.rs`,
 `msg_window.rs`, sound-call search across app systems, `logic/src/audio.rs`,
@@ -219,13 +219,25 @@ commits/pushes for future work; see Git history/upstream for publication state.
    spatial/reverb fidelity remain named follow-ups. No tests/probes were run.
    See audio-world-ambience.md for implementation and resume instructions.
 
-6. **audio-mix-and-fidelity.**
+6. **audio-mix-and-fidelity — initial mixer/spatial work implemented; listening pending.**
    Implement scene/room reverb and general spatial gain/pan; compare music,
    voice and effects levels and guard against clipping. Audit filtered
    resampling and voice allocation against the original using shared source
    and controlled listening clips. Fix audible mismatches. Record any remaining
    hardware-specific filter/Haas/surround gaps explicitly; do not claim a full
    jaudio_NES port while those remain.
+   Implemented 2026-10-15: source NA_HALL_DELAY topology/preset in a float CPU
+   wet bus, note/release-tail sends, subtrack reverb routing and normal indoor
+   step send 5. Original ordinary room policy is retained; no blanket UI/voice
+   echo or invented room-size presets. Added shared-listener world effects
+   (bobber, net, pickup, mailbox flag), NPC step pan, linked stereo peak
+   protection and opt-in cumulative four-bus/mix diagnostics.
+   Accepted sequence/voice/footstep gains and scene ducks remain the baseline.
+   Original filtered aResample and reserve-list allocation were audited;
+   current linear interpolation/shared pool remain explicit gaps alongside
+   fixed-point/filter/Haas/surround and special unplayable scene echo.
+   See backlog/audio-mix-and-fidelity.md for sources and listening checklist.
+   No tests/probes added or run; compile/lint/format/build gate recorded there.
 
 7. **audio-voice-edge-cases.**
    Retain the accepted normal voices. Map supported non-ASCII characters through
@@ -271,13 +283,15 @@ new-game flow, more disc formats/regions.
 - [ ] **windows-release** — a release build zip (no disc content in it) and plain-English steps: install, then point the game at your own disc image.
 
 ### Suggested order
-Philip confirms ambience playback works (2026-10-15). Next coding stage is
-mix/fidelity (step 6), starting with scene/room reverb and sound balance.
-Resume with river -> waterfall -> shore, near/far insects, entering/leaving
-interiors, menus and pause; check no duplicated/stuck loops. Action and trigger
-stress checks remain pending. Scene music, letters and pockets are accepted.
-After feedback, remaining ambience gaps or mix/fidelity (step 6) follow. Resolve render-look and explicitly
-record deferred scope before M5: playtest-script → bug-bash → windows-release.
+Philip confirms ambience playback works (2026-10-15). Initial mix/fidelity
+implementation (step 6) is ready for listening: town/house/shop step tails,
+dialogue/music/ambience balance, stereo world actions and dense overlap.
+Use backlog/audio-mix-and-fidelity.md for the focused checklist and diagnostics.
+Action/trigger stress and ambience cleanup/coverage checks remain pending.
+After any listening fixes, proceed to voice edge cases (step 7) and combined
+audio acceptance (step 8); hardware DSP/resampling/reserve-list gaps remain
+explicit, not silently completed. Resolve render-look and record deferred scope
+before M5: playtest-script → bug-bash → windows-release.
 M0–M2 are complete except the explicitly deferred rename; do not restart them.
 
 ## Done (pre-board, with Philip)

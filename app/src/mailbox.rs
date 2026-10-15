@@ -355,7 +355,6 @@ fn animate_flags(
     models: Res<MailboxModels>,
     mail: Res<crate::mail::Mailbox>,
     mut flags: Query<(&GlobalTransform, &mut MailboxFlag)>,
-    player: Query<&GlobalTransform, With<crate::player::Player>>,
     mut transforms: Query<&mut Transform>,
     mut parts: Query<(&mut Mesh3d, &mut MeshMaterial3d<N64Material>)>,
     mut first: Local<bool>,
@@ -392,11 +391,8 @@ fn animate_flags(
                 Flag::Down => Some(crate::sound::se_id::MAILBOX_FLAG_DOWN),
                 Flag::UpWait => None,
             };
-            if let (Some(id), Ok(player)) = (id, player.single()) {
-                let distance = (position.translation() - player.translation()).length();
-                if distance < 16.0 {
-                    crate::sound::se_volume(id, 1.0 - distance / 16.0);
-                }
+            if let Some(id) = id {
+                crate::sound::se_at(id, position.translation());
             }
         }
         if f.frame >= anim.end {

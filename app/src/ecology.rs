@@ -874,7 +874,7 @@ fn tool_interact(
     player_query: Query<(&Transform, &Facing), With<Player>>,
     town: Res<Town>,
     bug_query: Query<(Entity, &Bug, &Transform)>,
-    bobber_query: Query<(Entity, &Bobber)>,
+    bobber_query: Query<(Entity, &Bobber, &Transform)>,
     fish_query: Query<&Fish>,
     (mut swing, mut landed): (
         ResMut<NetSwing>,
@@ -907,9 +907,12 @@ fn tool_interact(
         EquippedTool::Rod => {
             // Reel in if a bobber is already out: a biting fish is caught;
             // otherwise whatever was nibbling lets go.
-            if let Ok((bobber, b)) = bobber_query.single() {
+            if let Ok((bobber, b, bobber_transform)) = bobber_query.single() {
                 crate::sound::se(crate::sound::se_id::ROD_BACK);
-                crate::sound::se(crate::sound::se_id::BOBBER_OUT);
+                crate::sound::se_at(
+                    crate::sound::se_id::BOBBER_OUT,
+                    bobber_transform.translation,
+                );
                 commands.entity(bobber).despawn();
                 let caught = b.hooked.filter(|_| b.biting);
                 match caught.and_then(|f| fish_query.get(f).ok().map(|fish| (f, fish))) {
@@ -963,7 +966,7 @@ fn tool_interact(
             };
             crate::sound::se(crate::sound::se_id::ROD_CAST);
             // This simplified bobber spawns directly on the water.
-            crate::sound::se(crate::sound::se_id::BOBBER_LAND);
+            crate::sound::se_at(crate::sound::se_id::BOBBER_LAND, cp);
             commands.spawn((
                 Bobber {
                     timer: 0.0,
@@ -977,7 +980,10 @@ fn tool_interact(
             println!("Cast!");
         }
         EquippedTool::Net => {
-            crate::sound::se(crate::sound::se_id::TOOL_FURI);
+            crate::sound::se_at(
+                crate::sound::se_id::TOOL_FURI,
+                player_pos + facing.dir * NET_RANGE * 0.7,
+            );
             swing.0 = Some(player_pos + facing.dir * NET_RANGE * 0.7);
             let mut best: Option<(Entity, f32)> = None;
             for (entity, _bug, bug_transform) in bug_query.iter() {
@@ -995,7 +1001,7 @@ fn tool_interact(
             }
             match best {
                 Some((entity, _)) => {
-                    let Ok((_, bug, _)) = bug_query.get(entity) else {
+                    let Ok((_, bug, bug_transform)) = bug_query.get(entity) else {
                         return;
                     };
                     let item = items::bug(bug.insect);
@@ -1011,7 +1017,7 @@ fn tool_interact(
                     }
                     commands.entity(entity).despawn();
                     // AMI_HIT is an obstacle impact; insect capture is TOOL_GET.
-                    crate::sound::se(crate::sound::se_id::NET_CATCH);
+                    crate::sound::se_at(crate::sound::se_id::NET_CATCH, bug_transform.translation);
                     show_catch_notify(
                         &format!("Caught a {name}!"),
                         &mut notify_timer,

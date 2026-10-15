@@ -2,13 +2,13 @@
 //! Zelda 64 "Nas" engine): groups (sequence players) run scripts that
 //! start subtracks (channels), which start notes (layers), which play
 //! samples on voices with an ADSR envelope, vibrato and pitch sweeps; a
-//! mixer renders the voices to 48 kHz stereo.
+//! mixer renders the voices at the GameCube output rate.
 //!
 //! Ported from `track.c` (scripts), `effect.c` (control, modulation,
 //! envelopes) and `channel.c` (voices). Simplified, for now: voices are
 //! taken from one shared pool (the engine keeps per-group reserves),
-//! resampling is linear (the RSP uses a filter), and there is no reverb,
-//! filters, Haas or surround.
+//! resampling is linear (the RSP uses a filter); the wet bus is a float CPU
+//! approximation without the hardware's filters, Haas or surround.
 
 use std::sync::Arc;
 
@@ -257,6 +257,7 @@ struct Sub {
     note_priority: u8,
     priority2: u8,
     reverb: u8,
+    reverb_index: u8,
     velocity_variance: u8,
     gate_variance: u8,
     port: [i8; 8],
@@ -348,6 +349,7 @@ struct Params {
     pitch: f32,
     velocity: f32,
     pan: u8,
+    reverb: u8,
 }
 
 /// A voice (`channel`).
@@ -370,6 +372,9 @@ struct Voice {
     step: f64,
     target: [f32; 2],
     volume: [f32; 2],
+    wet: f32,
+    wet_target: f32,
+    bus: usize,
 }
 
 /// The engine.
@@ -393,6 +398,8 @@ pub struct Engine {
     levels: crate::audio::LevSeManager,
     ambience: [Option<crate::ambience::Level>; crate::ambience::VOICES],
     level_cooldown: [u8; crate::ambience::VOICES],
+    mixer: crate::audio_mix::Mixer,
+    mix_frames: Vec<crate::audio_mix::Frame>,
 }
 
 fn sub_fresh(index: usize) -> Sub {
@@ -428,6 +435,7 @@ fn sub_fresh(index: usize) -> Sub {
         note_priority: 3,
         priority2: 1,
         reverb: 0,
+        reverb_index: 0,
         velocity_variance: 0,
         gate_variance: 0,
         port: [-1; 8],
@@ -481,6 +489,8 @@ impl Engine {
             levels: crate::audio::LevSeManager::new(),
             ambience: [None; crate::ambience::VOICES],
             level_cooldown: [0; crate::ambience::VOICES],
+            mixer: crate::audio_mix::Mixer::default(),
+            mix_frames: vec![crate::audio_mix::Frame::default(); SAMPLES_PER_UPDATE],
             t: tables,
         };
         for _ in 0..=GROUPS {
@@ -606,14 +616,30 @@ impl Engine {
     /// The caller shares the engine lock with the renderer, so allocation,
     /// parameter updates and request submission are atomic.
     pub fn trigger_effect(&mut self, id: u16, volume: f32) -> crate::audio::TrgStartResult {
+        self.trigger_effect_spatial(id, volume, 64, 0)
+    }
+
+    /// Original trigger parameters; UI callers keep the centered wrapper.
+    pub fn trigger_effect_spatial(
+        &mut self,
+        id: u16,
+        volume: f32,
+        pan: u8,
+        reverb: u8,
+    ) -> crate::audio::TrgStartResult {
         let mut ring = crate::audio::CommandRing::new();
         let result = self
             .triggers
-            .start(&mut ring, id, volume, 1.0, 1.0, 64, 0, 0.0);
+            .start(&mut ring, id, volume, 1.0, 1.0, pan, reverb, 0.0);
         for command in ring.drain() {
             self.process(&command);
         }
         result
+    }
+
+    /// Cumulative pre/post-protection peaks and current voice load.
+    pub fn mix_stats(&self) -> crate::audio_mix::MixStats {
+        self.mixer.stats
     }
 
     /// Replace desired ambient emitters atomically. Never resubmit a loop
@@ -1633,7 +1659,8 @@ impl Engine {
                         gr.seq[at + 1] = v[1];
                     }
                 }
-                0xD0 | 0xD1 | 0xBB | 0xB0 | 0xB1 | 0xB3 | 0xE5 | 0xE6 | 0xA4 => {}
+                0xD0 | 0xD1 | 0xBB | 0xB0 | 0xB1 | 0xB3 | 0xE6 | 0xA4 => {}
+                0xE5 => sub.reverb_index = a8,
                 0xD2 => sub.adsr.sustain = a8,
                 0xE4 => {
                     if m.value != -1 && m.depth < 4 {
@@ -1657,6 +1684,7 @@ impl Engine {
                     sub.new_pan = d[4];
                     sub.pan_weight = d[5];
                     sub.reverb = d[6];
+                    sub.reverb_index = d[7];
                     sub.changes |= CHANGE_PAN;
                 }
                 0xE8 => {
@@ -1667,7 +1695,7 @@ impl Engine {
                     sub.new_pan = Self::read_u8(seq, &mut m);
                     sub.pan_weight = Self::read_u8(seq, &mut m);
                     sub.reverb = Self::read_u8(seq, &mut m);
-                    Self::read_u8(seq, &mut m);
+                    sub.reverb_index = Self::read_u8(seq, &mut m);
                     sub.changes |= CHANGE_PAN;
                 }
                 0xEC => {
@@ -2651,6 +2679,13 @@ impl Engine {
         let Some(v) = n.voice else { return };
         let (pitch, velocity, pan) = (n.note_frequency, n.note_velocity, n.note_pan);
         let (g, s) = n.sub;
+        let reverb = if self.groups[g].subs[s].reverb_index != 0 {
+            0 // NA_SPEC_CONFIG has exactly one active reverb.
+        } else if n.flags & USE_SUB_REVERB != 0 {
+            self.groups[g].subs[s].reverb
+        } else {
+            n.reverb
+        };
         let decay_idx = n.adsr.decay;
         let voice = &mut self.voices[v];
         if voice.wanted == Some(i) {
@@ -2672,6 +2707,7 @@ impl Engine {
                 pitch,
                 velocity,
                 pan,
+                reverb,
             };
             let sub = &self.groups[g].subs[s];
             if self.groups[g].muted && sub.mute_flags & MUTE_STOP_SAMPLES != 0 {
@@ -2781,6 +2817,13 @@ impl Engine {
             0.0
         };
         voice.volume = [0.0; 2];
+        voice.wet = 0.0;
+        voice.bus = match g {
+            1 | 3 => 1,
+            4 => 2,
+            0 if (8..12).contains(&s) => 3,
+            _ => 0,
+        };
     }
 
     fn stop_voice(&mut self, v: usize) {
@@ -2852,20 +2895,32 @@ impl Engine {
             }
             self.voices[v].vib = vib;
             let voice = &self.voices[v];
-            let (mut pitch, mut velocity, pan) = match (
+            let (mut pitch, mut velocity, pan, reverb) = match (
                 voice.status,
                 voice.current.and_then(|i| self.layers[i].as_ref()),
             ) {
                 (0, Some(n)) => {
                     let (g, s) = n.sub;
                     let sub = &self.groups[g].subs[s];
-                    if self.groups[g].muted && sub.mute_flags & MUTE_STOP_SAMPLES != 0 {
-                        (0.0, 0.0, n.note_pan)
+                    let reverb = if sub.reverb_index != 0 {
+                        0
+                    } else if n.flags & USE_SUB_REVERB != 0 {
+                        sub.reverb
                     } else {
-                        (n.note_frequency, n.note_velocity, n.note_pan)
+                        n.reverb
+                    };
+                    if self.groups[g].muted && sub.mute_flags & MUTE_STOP_SAMPLES != 0 {
+                        (0.0, 0.0, n.note_pan, reverb)
+                    } else {
+                        (n.note_frequency, n.note_velocity, n.note_pan, reverb)
                     }
                 }
-                _ => (voice.params.pitch, voice.params.velocity, voice.params.pan),
+                _ => (
+                    voice.params.pitch,
+                    voice.params.velocity,
+                    voice.params.pan,
+                    voice.params.reverb,
+                ),
             };
             pitch *= voice.vib_scale.max(0.0) * voice.sweep_scale.max(0.0) * self.resample;
             velocity = (velocity * scale).clamp(0.0, 1.0);
@@ -2874,6 +2929,7 @@ impl Engine {
             let voice = &mut self.voices[v];
             voice.step = pitch.clamp(0.0, 3.99996) as f64;
             voice.target = [velocity * l, velocity * r];
+            voice.wet_target = (reverb & 0x7f) as f32 / 128.0;
         }
     }
 
@@ -2881,6 +2937,10 @@ impl Engine {
 
     fn mix(&mut self, out: &mut [f32]) {
         let n = out.len() / 2;
+        self.mix_frames
+            .resize(n, crate::audio_mix::Frame::default());
+        self.mix_frames.fill(crate::audio_mix::Frame::default());
+        self.mixer.stats.active_voices = 0;
         for voice in self.voices.iter_mut() {
             let Some(t) = voice.sample.clone() else {
                 continue;
@@ -2889,6 +2949,7 @@ impl Engine {
                 voice.volume = [0.0; 2];
                 continue;
             }
+            self.mixer.stats.active_voices += 1;
             let pcm = &t.pcm;
             let end = (pcm.loop_end as usize).min(pcm.data.len());
             if end == 0 {
@@ -2923,12 +2984,18 @@ impl Engine {
                 };
                 let b = pcm.data[next.min(pcm.data.len() - 1)] as f32;
                 let x = (a + (b - a) * frac) / 32768.0;
-                out[2 * k] += x * vl;
-                out[2 * k + 1] += x * vr;
+                let wet = voice.wet + (voice.wet_target - voice.wet) * f;
+                let frame = &mut self.mix_frames[k];
+                frame.dry[voice.bus][0] += x * vl;
+                frame.dry[voice.bus][1] += x * vr;
+                frame.wet[0] += x * vl * wet;
+                frame.wet[1] += x * vr * wet;
                 voice.pos += voice.step;
             }
             voice.volume = to;
+            voice.wet = voice.wet_target;
         }
+        self.mixer.render(&self.mix_frames, out);
     }
 }
 

@@ -214,7 +214,7 @@ pub fn interact(
         return;
     }
     field.acres[acre][cell] = rustimal_logic::field_items::EMPTY_NO;
-    crate::sound::se(crate::sound::se_id::ITEM_GET);
+    crate::sound::se_at(crate::sound::se_id::ITEM_GET, player_pos);
     println!(
         "Picked up {} ({}/15 pockets)",
         items::name(item),

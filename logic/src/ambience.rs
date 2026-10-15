@@ -5,6 +5,29 @@
 pub const VOICES: usize = 4;
 pub const RANGE: f32 = 540.0;
 
+/// Shared fixed-camera microphone, in original game units.
+pub fn microphone(player: [f32; 3]) -> [f32; 3] {
+    [player[0], player[1] + 240.0, player[2] + 77.0]
+}
+
+/// Na_OngenPos range, distance2vol and angle2pan for one world source.
+pub fn spatial(position: [f32; 3], microphone: [f32; 3]) -> Option<(f32, u8)> {
+    let distance = position
+        .iter()
+        .zip(microphone)
+        .map(|(p, m)| (p - m).powi(2))
+        .sum::<f32>()
+        .sqrt();
+    if !distance.is_finite() || distance >= RANGE {
+        return None;
+    }
+    let angle = crate::gyo_ai::angle_to([microphone[0], microphone[2]], [position[0], position[2]]);
+    Some((
+        crate::audio::distance2vol(distance),
+        crate::audio::angle2pan(angle as u16, 1),
+    ))
+}
+
 /// mRF_block_info entries carrying mRF_BLOCKKIND_MARINE (m_random_field.c).
 pub fn marine_block_type(kind: u8) -> bool {
     matches!(kind, 63 | 64 | 80..=82 | 85 | 94..=104)

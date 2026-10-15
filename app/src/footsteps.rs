@@ -22,7 +22,7 @@ pub(crate) struct IndoorFloor {
     pub index: usize,
 }
 
-fn play_footsteps(
+pub(crate) fn play_footsteps(
     mut contacts: MessageReader<Footstep>,
     focus: Res<InputFocus>,
     town: Res<Town>,
@@ -78,7 +78,12 @@ fn play_footsteps(
         } else {
             footsteps::volume(step.running, floor.is_some())
         };
-        crate::sound::se_volume(id, volume);
+        crate::sound::footstep(
+            id,
+            volume,
+            step.npc.then_some(step.position),
+            floor.is_some(),
+        );
     }
 }
 
@@ -88,7 +93,9 @@ impl Plugin for FootstepPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<Footstep>().add_systems(
             PostUpdate,
-            play_footsteps.run_if(in_state(PauseState::Running)),
+            play_footsteps
+                .after(bevy::transform::TransformSystems::Propagate)
+                .run_if(in_state(PauseState::Running)),
         );
     }
 }

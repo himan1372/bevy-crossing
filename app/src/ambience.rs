@@ -95,7 +95,7 @@ pub(crate) fn update_ambience(
     }
     // Fixed outdoor camera's source microphone convention (m_camera2):
     // player + (0, 240, 77) game units; independent of player facing.
-    let microphone = (position * 40.0 + Vec3::new(0.0, 240.0, 77.0)).to_array();
+    let microphone = rustimal_logic::ambience::microphone((position * 40.0).to_array());
     let quiet = matches!(
         *focus,
         InputFocus::Paused | InputFocus::Pockets | InputFocus::Mail

@@ -32,6 +32,7 @@ mod aram;
 mod attr_walls;
 mod attribute_action;
 mod audio;
+pub mod audio_mix;
 mod bee_ant;
 pub mod behavior;
 mod bg_check;
