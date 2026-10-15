@@ -239,7 +239,7 @@ commits/pushes for future work; see Git history/upstream for publication state.
    See backlog/audio-mix-and-fidelity.md for sources and listening checklist.
    No tests/probes added or run; compile/lint/format/build gate recorded there.
 
-7. **audio-voice-edge-cases — current villager paths implemented; listening pending.**
+7. **audio-voice-edge-cases — current villager paths implemented; accents/melodies awaiting listening.**
    Retain the accepted normal voices. Map supported non-ASCII characters through
    the game's charset, wire message size/mood where the dialogue carries them,
    and audit deferred syllables and melody requests against C. Give special
@@ -257,6 +257,9 @@ commits/pushes for future work; see Git history/upstream for publication state.
    No new special-NPC conversation or click/silent settings are implied.
    See backlog/audio-voice-edge-cases.md for sources, gaps and listening steps.
    Compile/lint/format/build status is recorded there; no tests/probes added/run.
+   Philip accepts ordinary voices, emotion/size and pause/page behavior. Accents
+   and music notes were absent in his playtest; requested F8 pages now expose
+   accented words, default-color melody and colored resident melody directly.
 
 8. **audio-acceptance** (P).
    Run one combined checklist across music/scene changes, overlapping effects,

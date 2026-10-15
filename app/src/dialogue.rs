@@ -631,7 +631,7 @@ fn update_hud(inventory: Res<PlayerInventory>, mut text_query: Query<&mut Text, 
     }
 }
 
-/// F8: compare one identical line using each resident's real voice spec.
+/// F8: compare normal speech, accents and melody notes with each resident.
 /// Includes residents indoors so their schedules cannot hide a voice type.
 fn debug_voice(
     mut actions: ResMut<Actions>,
@@ -652,16 +652,27 @@ fn debug_voice(
     }
     let (entity, v) = residents[*next % residents.len()];
     *next = (*next + 1) % residents.len();
+    // Default-colored notes select voice 0; a colored note retains this
+    // resident's voice_type (mFontSentence_animal_voice_se).
+    let mut resident_melody = String::from("My melody: ");
+    resident_melody.push(crate::messages::markup::COLOR_CHARS);
+    resident_melody.extend([75, 95, 155, 1].map(crate::messages::markup::arg));
+    resident_melody.push('♪');
     *dialogue = DialogueState {
         active: true,
         speaker: Some(entity),
-        lines: vec!["Hello there! How are you doing today?".to_string()],
+        lines: vec![
+            "Hello there! How are you doing today?".to_string(),
+            "Café, déjà vu!\nSeñor, où êtes-vous?".to_string(),
+            "A little melody: ♪".to_string(),
+            resident_melody,
+        ],
         ..default()
     };
     let spec = rustimal_logic::na_voice::villager_spec(v.looks);
     let sequence = rustimal_logic::na_voice::voice_sequence(spec);
     info!(
-        "Voice comparison: {} ({}, looks {}), spec {}, sequence {:?}. E closes; F8 selects the next resident.",
+        "Voice comparison: {} ({}, looks {}), spec {}, sequence {:?}. E advances through normal/accent/default-melody/resident-melody pages, then closes; F8 selects the next resident.",
         v.name, v.personality.english_name(), v.looks, spec, sequence
     );
     for mut visibility in &mut boxes {

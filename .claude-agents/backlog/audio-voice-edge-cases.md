@@ -7,7 +7,9 @@ Philip authorized continuation after successful mixer playtest (a1f6295).
 - [x] Implement current villager message controls and melody requests.
 - [x] Document unavailable speaking interactions and port timing adaptations.
 - [x] Final compile/lint/format/build passed; no tests/probes added/run.
-- [ ] Philip listening acceptance; then combined audio acceptance (step 8).
+- [x] Philip accepts ordinary voices, emotion/size changes and pause/page behavior.
+- [ ] Philip: accented letters and melody notes (not encountered during playtest).
+- [ ] Combined audio acceptance (step 8).
 
 ## Changes
 
@@ -89,7 +91,9 @@ Mixer resampling, reserve lists and hardware DSP remain in mix/fidelity notes.
 
 ## Listening checklist
 
-1. Restart; use existing F8 resident comparison, E to close, F8 for next.
+1. Restart; F8 opens four pages per resident: normal speech, accented text,
+   a default-color music note and a colored resident music note. E advances
+   each page and closes after the fourth; F8 selects the next resident.
    Ordinary voices should remain recognizable and switch without hiccups.
 2. During normal disc conversations, listen to accented names/words, questions,
    exclamations, emotion changes and large/small text as they occur.
@@ -98,8 +102,10 @@ Mixer resampling, reserve lists and hardware DSP remain in mix/fidelity notes.
    Rapidly changing pages/speakers should not leave a delayed syllable behind.
 4. Hold Run to speed reveal; check pauses, newlines, close/reopen and switching
    among all three normal voice sequences. Listen for abrupt tails/restarts.
-5. F8 is an existing ordinary-line comparison, not exhaustive coverage of every
-   rare control. No new diagnostic scenes, automated tests or disc probes added.
+5. Philip requested these F8 examples after accepting everything in the prior
+   listening list except accents/music notes, which did not appear in play.
+   Verify accents are visible and spoken; each music-note page should sound.
+   No automated tests or disc probes added/run for this F8-only change.
 
 ## Validation / handoff
 
@@ -111,3 +117,7 @@ and exact interleaving still require listening acceptance.
 
 Commit/push authorized. Exclude unrelated .gitignore/savegame.json changes.
 After feedback, proceed to combined audio acceptance; M4 audio remains open.
+
+2026-10-15 F8 follow-up: examples added at Philip's request. Workspace check,
+all-target clippy, formatting, build and diff whitespace passed. No automated
+tests or disc probes run. Accents and both melody paths await Philip's listening.
