@@ -689,17 +689,25 @@ fn play(
     speed: f32,
     ticks: f32,
     transforms: &mut Query<&mut Transform>,
-) {
+) -> u32 {
     if motion != rig.playing && rig.animations[motion as usize].is_some() {
         rig.playing = motion;
         rig.frame = 1.0;
     }
     let Some(anim) = rig.animations[rig.playing as usize].clone() else {
-        return;
+        return 0;
     };
     // Repeat between frame 1 and the last (`cKF_FrameControl_repeat_proc`);
     // a greeting plays once and holds its last frame (stop mode).
     let last = anim.frames.max(2) as f32;
+    let contacts = if matches!(
+        rig.playing,
+        Motion::Walk | Motion::Run | Motion::WalkJoy | Motion::WalkAnger
+    ) {
+        rustimal_logic::footsteps::contacts(rig.frame, speed * ticks, last)
+    } else {
+        0
+    };
     rig.frame += speed * ticks;
     if rig.playing.once() {
         rig.frame = rig.frame.min(last);
@@ -714,6 +722,7 @@ fn play(
             *t = local;
         }
     }
+    contacts
 }
 
 /// World units per second above which a villager walks / runs (between
@@ -723,6 +732,7 @@ const VILLAGER_RUN_MIN: f32 = 2.5;
 
 /// Plays each rig's animation: the player's from its locomotion (turning
 /// the model to its facing), villagers' from how fast they move.
+#[allow(clippy::too_many_arguments)] // Keep foot contacts tied to the same pose and movement snapshot.
 fn animate_characters(
     time: Res<Time>,
     players: Query<(&Locomotion, &Facing), With<Player>>,
@@ -730,6 +740,8 @@ fn animate_characters(
     npcs: Query<(), With<NpcModel>>,
     mut rigs: Query<(Entity, &ChildOf, &mut CharacterRig)>,
     mut transforms: Query<&mut Transform>,
+    focus: Res<crate::input::InputFocus>,
+    mut footsteps: MessageWriter<crate::footsteps::Footstep>,
 ) {
     let dt = time.delta_secs();
     let ticks = dt * 60.0;
@@ -746,7 +758,28 @@ fn animate_characters(
             } else {
                 loco.anim_speed()
             };
-            play(&mut rig, motion, speed, ticks, &mut transforms);
+            let position = transforms.get(owner).ok().map(|t| t.translation);
+            let moved = position
+                .zip(rig.last_pos)
+                .map_or(0.0, |(p, previous)| (p - previous).with_y(0.0).length());
+            rig.last_pos = position;
+            let contacts = play(&mut rig, motion, speed, ticks, &mut transforms);
+            // Collision, menus and warps must not turn a stale locomotion
+            // state into audible steps. Contact timing still follows the rig.
+            let moving = dt > 0.0
+                && moved > 0.0001
+                && moved <= crate::locomotion::FULL_TILT_SPEED * dt * 1.5;
+            if focus.is_world() && moving && dt <= 0.1 {
+                if let Some(position) = position {
+                    for _ in 0..contacts {
+                        footsteps.write(crate::footsteps::Footstep {
+                            position,
+                            running: motion == Motion::Run,
+                            npc: false,
+                        });
+                    }
+                }
+            }
         } else if npcs.contains(owner) {
             play(&mut rig, Motion::Wait, WAIT_SPEED, ticks, &mut transforms);
         } else if let Ok((g, villager, talk)) = villagers.get(owner) {
@@ -768,13 +801,24 @@ fn animate_characters(
                 Some(t) if t.happy => Feel::Joy,
                 _ => Feel::Normal,
             };
-            play(
+            let contacts = play(
                 &mut rig,
                 motion.with_feel(feel),
                 WAIT_SPEED,
                 ticks,
                 &mut transforms,
             );
+            // npc_1_walk1/run1/walk_ki1/walk_do1 all contact at frames 1/9.
+            // Real displacement rejects stale walk poses, collisions and warps.
+            if focus.is_world() && dt > 0.0 && dt <= 0.1 && moved > 0.0001 && moved <= 12.0 * dt {
+                for _ in 0..contacts {
+                    footsteps.write(crate::footsteps::Footstep {
+                        position: pos,
+                        running: motion == Motion::Run,
+                        npc: true,
+                    });
+                }
+            }
         }
     }
 }
@@ -789,7 +833,7 @@ impl Plugin for CharacterPlugin {
                 spawn_player_model,
                 spawn_villager_models,
                 spawn_npc_models,
-                animate_characters,
+                animate_characters.after(crate::locomotion::MovementSet),
             )
                 .chain(),
         );

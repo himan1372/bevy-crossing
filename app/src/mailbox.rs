@@ -354,7 +354,8 @@ fn animate_flags(
     time: Res<Time>,
     models: Res<MailboxModels>,
     mail: Res<crate::mail::Mailbox>,
-    mut flags: Query<&mut MailboxFlag>,
+    mut flags: Query<(&GlobalTransform, &mut MailboxFlag)>,
+    player: Query<&GlobalTransform, With<crate::player::Player>>,
     mut transforms: Query<&mut Transform>,
     mut parts: Query<(&mut Mesh3d, &mut MeshMaterial3d<N64Material>)>,
     mut first: Local<bool>,
@@ -363,7 +364,7 @@ fn animate_flags(
     // Only the player's house (0) gets letters here; unread ones stand in
     // for the mail the retail mailbox holds.
     let has_mail = mail.letters.iter().any(|l| !l.read);
-    for mut f in &mut flags {
+    for (position, mut f) in &mut flags {
         let mail_here = f.house == 0 && has_mail;
         let want = match (mail_here, f.flag) {
             (false, _) => Flag::Down,
@@ -382,7 +383,22 @@ fn animate_flags(
             Flag::UpWait => &models.wait,
             Flag::Down => &models.down,
         };
+        let previous_frame = f.frame;
         f.frame += FLAG_SPEED * ticks;
+        // aMBX_setup_flag_se: one sound crossing frame 15, not per frame.
+        if previous_frame < 15.0 && f.frame >= 15.0 {
+            let id = match f.flag {
+                Flag::Up => Some(crate::sound::se_id::MAILBOX_FLAG_UP),
+                Flag::Down => Some(crate::sound::se_id::MAILBOX_FLAG_DOWN),
+                Flag::UpWait => None,
+            };
+            if let (Some(id), Ok(player)) = (id, player.single()) {
+                let distance = (position.translation() - player.translation()).length();
+                if distance < 16.0 {
+                    crate::sound::se_volume(id, 1.0 - distance / 16.0);
+                }
+            }
+        }
         if f.frame >= anim.end {
             match f.flag {
                 Flag::UpWait => {

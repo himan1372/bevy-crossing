@@ -51,7 +51,10 @@ pub(crate) fn toggle_pause(
     if !actions.consume(Action::Pause) {
         return;
     }
-    crate::sound::se(crate::sound::se_id::MENU_PAUSE);
+    crate::sound::se(match state.get() {
+        PauseState::Running => crate::sound::se_id::MENU_PAUSE,
+        PauseState::Paused => crate::sound::se_id::MENU_EXIT,
+    });
     next.set(match state.get() {
         PauseState::Running => PauseState::Paused,
         PauseState::Paused => PauseState::Running,

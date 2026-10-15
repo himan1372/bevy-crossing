@@ -96,24 +96,174 @@ Each milestone ends with a Philip playtest.
 - [x] **gx-backend-bevy** — done (claude: `app/src/disc_gfx.rs`, `disc/src/gx_texture.rs`, `GxBackend::set_state` hook in logic; gaps listed in completed/gx-backend-bevy.md). Was: — implement `logic::graphics::gx_backend` for Bevy: run display lists through `logic::graphics::interpreter`, turn the decoded vertices into Bevy `Mesh`es and the converted textures (`logic::graphics::texture`) into `Image`s, and cache them per asset. [blocked: disc-loader-app]
 - [x] **model-viewer** — done (claude; Philip OK'd 2026-10-12): `--view <model> [--pal <palette>[:i]]`, orbit/zoom, [ ] palettes, V vertex colours. Was: — debug scene (F-key or `--view <asset>`) that loads one asset by name (a tree, then a building) and orbits the camera around it. This is the first proof for Philip that disc rendering works. [blocked: gx-backend-bevy]
 - [x] **tev-materials** — done (claude: `app/src/n64_material.rs` + `n64_combiner.wgsl`; gaps in completed/tev-materials.md). Was: — turn the GameCube's colour-combiner settings (TEV, `logic::graphics::combine`) into Bevy materials. Start with texture × vertex colour, then add the modes the town actually uses, then alpha test/blend and fog. [blocked: gx-backend-bevy]
-- [x] **town-from-disc** — done (claude; river mouth confirmed fixed by Philip 2026-10-13): retail generator, disc acre templates with seasonal textures, collision from the templates. Leftovers in backlog/town-from-disc.md: month->palette table from the game calendar, retire town_gen. Was: — draw the town ground, cliffs, river and beach from the original acre/field models for the generated town (`logic::field_gen` / `town_gen`), replacing the per-cell boxes. Collision stays on `logic::collision`. [blocked: tev-materials]
+- [x] **town-from-disc** — done (claude; river mouth confirmed fixed by Philip 2026-10-13): retail generator, disc acre templates with seasonal textures, collision from the templates. Calendar palettes are complete (completed/town-from-disc.md); remaining migration is backlog/retire-town-gen.md. Was: — draw the town ground, cliffs, river and beach from the original acre/field models for the generated town (`logic::field_gen` / `town_gen`), replacing the per-cell boxes. Collision stays on `logic::collision`. [blocked: tev-materials]
 - [x] **world-objects-from-disc** — done (claude): trees, rocks, houses, player houses, public buildings, mailboxes (ac_mailbox) and field items (bg_item tables: fruit, shells, fences, notice board, flowers) from the disc. Was: trees, rocks, flowers, houses, shop and mailbox from the disc. [blocked: tev-materials]
 - [x] **skeletal-animation** — done (claude, `app/src/skeleton.rs`: cKF skeletons as Bevy skinned meshes, cKF_KeyCalc Hermite port). Was: research first: how the original stores character skeletons and animations (cKF-style keyframes in the decomp; `logic/` has no translation yet). Then decode them and drive Bevy transforms. May need more decomp code translated first. [blocked: gx-backend-bevy]
 - [x] **player-from-disc** — done (claude, `app/src/character.rs`: cKF_bs_r_boy_1 with wait/walk/run, face and shirt from forest_1st.arc). Was: player model with idle / walk / run animations matched to the speed from `logic::player_move`. [blocked: skeletal-animation]
 - [x] **villagers-from-disc** — done (claude: npc_draw_data_tbl models, shared npc animations, blinking/talking, greeting). Was: villager models and animations per species/villager. [blocked: skeletal-animation]
-- [ ] **render-look** — camera angle and follow, and lighting (no curved horizon: that is Wild World, not GameCube), matched to the original. Compare against Philip playing his own copy of the real game, not ripped screenshots kept in the repo. [blocked: town-from-disc]
+- [~] **render-look** — camera/follow, calendar palettes, colour-space/fog corrections and clock-driven lighting are implemented. Combined comparison against Philip's retail game still needs sign-off; town-from-disc dependency is complete. No curved horizon (that is Wild World, not GameCube).
 - [x] **render-perf** — done (claude, 2026-10-13): measured with vsync off (`BEVY_CROSSING_NO_VSYNC=1`), 1,704 meshes: release ~300 fps (3.3 ms), dev ~260 fps (3.8 ms) after optimising dependencies in dev (was 57 fps). Shared mesh/material handles already batch automatically; no instancing needed yet. Was: batching/instancing, 60 fps in a release build. [blocked: town-from-disc, world-objects-from-disc]
 
-### M4 — UI, audio, feel
-- [x] **ui-from-disc** — research: fonts, dialogue window and HUD textures from the disc. Fall back to our own open-licence UI when there's no disc.
-- [~] **dialogue-polish** — letter-by-letter text, name plate, and Animalese voices implemented (`logic::na_voice`, `app/src/msg_window.rs`, `app/src/sound.rs`). Philip confirmed villagers make Animalese sounds on 2026-10-14. Philip has only heard one voice type so far; F8 now cycles the same spoken line across residents for comparison (see backlog/villager-voice-types.md). Disc probing produces different, non-silent output for all three retail voice sequences. Final listening comparison and task gate remain.
-- [x] **pause-menu** — Save / Settings / Quit (Settings holds the disc path).
-- [ ] **title-screen** — back burner; the flow can follow rustimal-crossing's `title_demo.rs`.
-- [~] **audio-from-disc** — disc banks/sample decoding (`logic::nas_bank`), sequence player (`logic::nas_seq`), Bevy streaming, hourly town BGM, and Animalese voices (`logic::na_voice`) implemented. Philip confirmed hourly music works and villagers make Animalese sounds on 2026-10-14. Remaining: complete/verify gameplay sound effects (footsteps, UI, mailbox, etc.), check voice/music fidelity against retail, and finish the task gate/playtest. No reverb yet; indoor music and special voice modes remain follow-ups (see backlog/audio-from-disc.md).
+### M4 — UI, audio, feel — OPEN
+
+- [x] **ui-from-disc** — completed scope: disc font, dialogue/name plate and choice windows with a no-disc fallback. Pockets, pause, shop and mail panels still use the port's own UI; this does not mean every HUD/menu has been recreated from the disc.
+- [x] **dialogue-polish** — typing, pauses, name plate and normal villager Animalese. Philip's F8 comparison sounds good without hiccups. Remaining voice modes/edge cases are tracked below.
+- [x] **pause-menu** — Save / Settings / Quit; Settings currently edits the disc path.
+- [ ] **title-screen** — remains on the back burner per Philip; loading currently enters InGame directly. Keep this deferral visible when assessing M4.
+- [~] **audio-from-disc** — working foundation and several accepted features; scene music, effect management, action coverage, ambience and fidelity remain. See the audit and ordered plan below and `backlog/audio-from-disc.md`.
+
+#### Audio audit (2026-10-14)
+
+| Area | Evidence/current behavior | Status |
+|---|---|---|
+| Disc loading and playback | `sound_rom.rs`, `nas_bank.rs`, `nas_seq.rs`: runtime banks/samples/sequences, streamed to Bevy | Implemented; foundation tested |
+| Hourly outdoor music | `sound::update_music` selects hour+1 in town, restores the current hour after interiors; clear-weather mask retained | Earlier playback accepted; new scene transitions await listening. Weather-driven masks await simulation |
+| Ordinary villager voices | Speaker personality selects one of three retail sequences; typed phoneme playback | Philip confirms F8 voices sound good |
+| Player footsteps | Actual foot contacts, collision/menu silence, outdoor surfaces and indoor floor table | Philip confirms sounds and silence against walls/in menus |
+| UI/mailbox/shop sounds | Pockets and letter sounds accepted. Mailbox opens with inventory ZOOMUP and closes with inventory NA_SE_31. Earlier register probe preserves MONO tail | Philip accepts letters and asked to move on; actor lid timing and general overlap validation remain outstanding |
+| Existing gameplay actions | Source matrix and hooks for doors, rod cast/retrieve, net capture, tools, pickups, quest choices/handoffs and nearby NPC steps | Implemented; listening pending. Full reel-fight, fanfare and animation timing await gameplay support |
+| Music by location and interaction | Quiet player houses, tier/closing shop themes, current-hour town restoration, 70% talk/50% menus with pause-safe fades | Philip reports it works perfectly; accepted. Weather/events/furniture and retail scene wipes remain follow-ups |
+| Environmental audio | River/shore source positions read from disc metadata; localized waterfall fallback and state-driven insect loops, four spatial level slots, distance/pan, menu attenuation and indoor/scene-exit cleanup | Implemented; listening pending. Waterfall actor positions, pond/frog coverage, broader insect events and weather/wind remain follow-ups |
+| Effect lifetime and position | Live engine now reuses TrgSeManager: free slots, oldest/priority replacement, singleton suppression and MONO 14. Completion observed on audio updates using request port 1 and busy port 5, with half-second unstarted-request cleanup | Implemented; overlap listening pending. General emitter pan/distance remains missing |
+| Voice fidelity beyond ordinary speech | Non-ASCII becomes silence; scale fixed at 32, mood not fed from dialogue; melody/special-NPC paths incomplete | Missing/partial |
+| Mixer fidelity | Linear resampling/shared voice pool; reverb, filters, Haas and surround not implemented | Known limitations; not a complete audio-engine port |
+
+Audit sources: current `app/src/sound.rs`, `sound_rom.rs`, `footsteps.rs`,
+`msg_window.rs`, sound-call search across app systems, `logic/src/audio.rs`,
+`nas_seq.rs`, `na_voice.rs`, completed UI task, and local original
+`game64.c_inc`, `m_bgm.c`, `m_player_sound.c_inc`, `m_tag_ovl.c` and
+`ac_mailbox_move.c_inc`. Existing translated helpers are starting points;
+verify their command formats against the current sequence engine before integration.
+
+Previous local validation: 609 workspace tests passed, 21 ignored; clippy/fmt
+and build passed, plus three explicitly run real-disc probes. These are code
+checks, not proof of retail sound identity. Reused probe buffers were corrected
+to clear before the additive mixer update; earlier RMS values were inflated.
+Audio batch after base voice commit `599590c` includes footsteps, UI fixes,
+trigger lifecycle, scene music, action cues and ambience. Philip authorized
+commits/pushes for future work; see Git history/upstream for publication state.
+
+#### Remaining M4 audio plan — execute in this order
+
+1. **ui-mailbox-sounds: close the reported defects** (P).
+   Recheck pocket/menu exit, mailbox panel open/close and a single purchase.
+   Trace each rejected sound to the exact original action; do not pick from
+   enum names alone. Preserve accepted cursor/pocket-open sounds.
+   Done when Philip accepts the corrections and effects finish without repeats.
+   This listening check can happen while step 2 is implemented.
+
+2. **audio-trigger-lifecycle — implemented locally; listening validation pending.**
+   Replace blind slot rotation with free/busy completion, priority and singleton
+   rules; retain MONO subtrack 14. Adapt existing `logic::audio` trigger helpers
+   through safe Rust APIs after checking opcode compatibility.
+   Implemented: corrected trigger command opcodes, atomic submission under the
+   engine lock, audio-thread completion, pending-start grace and reset on effect
+   sequence stop/restart. Pockets are accepted; mailbox close now follows the
+   actual inventory-in-mailbox-mode call path. Physical lid animation/audio
+   timing remains deferred rather than attaching lid sounds to menu actions.
+   Done when rapid cursor inputs, footsteps and overlapping longer effects do
+   not restart/truncate one another incorrectly; duration, completion and
+   return-to-silence checks pass. See `backlog/audio-trigger-lifecycle.md`.
+
+3. **audio-scene-music — accepted by Philip.**
+   Port the relevant `m_bgm.c` room/field arbitration: select the original
+   shop/house policy, restore town music on exit, preserve hour changes and
+   fades, and apply the original menu/dialogue volume changes. Verify seasonal
+   masks already translated in `logic::audio`; weather-driven variants need a
+   real weather state, not a guessed condition.
+   Implemented: `logic/src/scene_music.rs` and `sound::update_music` own scene
+   arbitration. House stays quiet without a furniture player; shop uses tier
+   IDs 44/37/38/39 and closing IDs 79/80/81/82 (including the pre-closing
+   five-second quiet interval). Inventory/mail/pause use 50%, dialogue/shop
+   transactions/quests 70%; restoration and pause fades use real time.
+   Clear-weather masks remain live; translated snow/sakura/rain policy is
+   available but awaits actual weather state. Scene fades adapt to this
+   port's instant doors; retail's wipe and complete event arbitration remain
+   follow-ups. No new tests or disc probes were run for this continuation.
+   Done when town -> house -> town -> shop -> town, an hour rollover and
+   opening/closing conversations/menus all produce the intended music/mix.
+
+4. **audio-action-coverage — implemented available hooks; listening pending.**
+   Build an action -> original call site/ID/timing checklist for actions already
+   playable: doors, fishing cast/bite/hook/catch/putaway, net use/catches,
+   pick-up, quest accept/complete/reward and existing shop/mail flows. Add
+   missing hooks only where the original has a sound; do not invent a sound
+   for every action. Add NPC foot contacts with nearby, surface-correct audio.
+   Implemented: house 6/7/8/9 cues on entry/exit, sliding shop 44B/44C;
+   Cranny traversal stays silent because its business-hours door is already
+   open. Added rod cast/retrieve/landing/lift, tool change/putaway rustle,
+   corrected net capture to TOOL_GET (5D), quest choice/handoff feedback,
+   and nearby surface-aware NPC steps (normal/happy/angry/run contacts 1/9).
+   Door cue spacing is sourced, but visuals still teleport; sliding-door hold
+   timing is a stand-in until actor animation/proximity behavior exists.
+   Nibble/escape have no added beep. Sustained fish-pull 24 belongs to the
+   missing reel-fight state; complete catch fanfare/putaway animation timing
+   remains gameplay-dependent. See audio-action-coverage.md source matrix.
+   Done when each existing action is covered or explicitly silent per source.
+
+5. **audio-world-ambience — stopping point; listening pending.**
+   Integrate the translated level-sound/emitter management for the current town:
+   river/sea/waterfall and applicable nearby insect sources. Match source
+   lifetimes, distance/pan and indoor muting; connect wind/rain only when the
+   corresponding simulation exists. Stop emitters on room changes/despawn.
+   Done when entering/leaving audible range and town/interiors leaves no
+   global, duplicated or stuck loops.
+   Implemented: six runtime data_bgd records per acre feed river 0B/shore 1C;
+   marine classification and shore offset follow C. Waterfall 0C uses collision
+   footprint centres until standalone actors exist. Four stable nearest voices
+   use SE slots 8-11, masked level IDs, port-5 stop and a sequencer-update grace
+   before replacement; LevSeManager and original spatial curves are reused.
+   Calm cicadas/crickets and mosquito/available flight states report directly
+   from live AI. Indoors/scene exit clears loops, menus/pause halve gain.
+   Pond/frog ambience, additional insect event phases, weather/wind and complete
+   spatial/reverb fidelity remain named follow-ups. No tests/probes were run.
+   See audio-world-ambience.md for implementation and resume instructions.
+
+6. **audio-mix-and-fidelity.**
+   Implement scene/room reverb and general spatial gain/pan; compare music,
+   voice and effects levels and guard against clipping. Audit filtered
+   resampling and voice allocation against the original using shared source
+   and controlled listening clips. Fix audible mismatches. Record any remaining
+   hardware-specific filter/Haas/surround gaps explicitly; do not claim a full
+   jaudio_NES port while those remain.
+
+7. **audio-voice-edge-cases.**
+   Retain the accepted normal voices. Map supported non-ASCII characters through
+   the game's charset, wire message size/mood where the dialogue carries them,
+   and audit deferred syllables and melody requests against C. Give special
+   speakers their original spec when their speaking interaction exists.
+   Missing interactions (for example a new shopkeeper conversation) stay
+   separate gameplay work rather than being assumed implemented by audio.
+   Done when applicable cases have source-backed behavior and listening checks;
+   unavailable gameplay-dependent modes remain named follow-ups.
+
+8. **audio-acceptance** (P).
+   Run one combined checklist across music/scene changes, overlapping effects,
+   menus, voices, movement, ambience, save/load, pause/resume and restart.
+   Verify missing/wrong disc keeps the placeholder loop usable; run the Rust
+   gate and compare full sound identity/timing/tails with Philip's own retail
+   game. Document accepted gaps and resolve audible defects before closing
+   `audio-from-disc`. Only then schedule the M5 slice-wide playtest.
+
+#### Other work before slice sign-off
+
+- **render-look** remains open: camera, palette/colour, fog and time-of-day
+  lighting have implementations, but the combined retail comparison still
+  needs sign-off. No curved horizon.
+- **retire-town-gen** remains in the backlog: migrate remaining disc-mode
+  consumers to retail data while preserving the no-disc placeholder generator.
+- The completed disc UI work covers conversation/choices. Any full retail
+  pockets/mail/shop/HUD visual replacement needs its own explicit task.
+- **title-screen** stays deferred under the existing decision; audio completion
+  alone does not complete every M4 item. Keep the deferral in the release scope.
+- Critter follow-ups (weather, tree interactions, sting/Wisp reactions and
+  glow lights) are recorded in the completed critter task; do not silently count
+  these as finished or expand the current audio task to implement those systems.
 
 ### Later (after the slice)
-Tree shaking, furniture placement, day/night lighting, daily rollover, mail
-and shop polish, new-game flow, more disc formats/regions.
+Tree shaking, furniture placement, further lighting/weather work beyond the
+implemented clock-driven lights, daily rollover, mail and shop polish,
+new-game flow, more disc formats/regions.
 
 ### M5 — Slice hardening
 - [ ] **playtest-script** (P) — a step-by-step checklist for the full "done when" list; Philip runs it with his disc.
@@ -121,12 +271,22 @@ and shop polish, new-game flow, more disc formats/regions.
 - [ ] **windows-release** — a release build zip (no disc content in it) and plain-English steps: install, then point the game at your own disc image.
 
 ### Suggested order
-disc-setup decision → M2 disc tasks (disc-reader and yaz0 can run in
-parallel) → gx-backend-bevy → model-viewer playtest → the rest of M3, with
-M4 in parallel → M5.
+Stopping point requested by Philip: ambience is built and awaiting listening.
+Resume with river -> waterfall -> shore, near/far insects, entering/leaving
+interiors, menus and pause; check no duplicated/stuck loops. Action and trigger
+stress checks remain pending. Scene music, letters and pockets are accepted.
+After feedback, remaining ambience gaps or mix/fidelity (step 6) follow. Resolve render-look and explicitly
+record deferred scope before M5: playtest-script → bug-bash → windows-release.
+M0–M2 are complete except the explicitly deferred rename; do not restart them.
 
 ## Done (pre-board, with Philip)
 - Bevy 0.14 → 0.19 upgrade (branch bevy-0.19-upgrade, merged to main).
 - B0001 query-conflict fix (Without<> disambiguators in mail.rs / quest.rs).
 - Phases 0–3: plane, town render, villagers + dialogue, save/load.
 - Workbook bevy-upgrade-workbook.xlsx through finding #21.
+
+2026-10-14 continuation: mailbox close and trigger scheduler compile with workspace
+check, all-target clippy, formatting and build.
+Tests and disc probes were not rerun in this continuation. Qwen reviewed the small
+completion method locally; its suggestions were speculative (no actionable defect).
+Audio thread uses exclusive mutable access under the existing engine mutex.

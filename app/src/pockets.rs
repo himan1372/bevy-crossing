@@ -86,6 +86,11 @@ fn toggle_pockets(
         return;
     }
     ui.open = next;
+    crate::sound::se(if next {
+        crate::sound::se_id::MENU_PAUSE
+    } else {
+        crate::sound::se_id::MENU_EXIT
+    });
     if let Ok(mut vis) = panel.single_mut() {
         *vis = if next {
             Visibility::Visible

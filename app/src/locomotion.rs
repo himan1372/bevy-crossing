@@ -38,6 +38,10 @@ const RETAIL_FPS: f32 = 30.0;
 #[derive(Component, Default)]
 pub struct Locomotion(pub PlayerMovement);
 
+/// Collision-resolved movement runs before character animation and contacts.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MovementSet;
+
 /// Turns sharper than this are U-turns, and always spin the same way
 /// (positive). The "shortest way" can't be used for them: a keyboard asks
 /// for exactly 180°, and the eased turn always stops a hair short on the

@@ -463,6 +463,7 @@ fn house_enter(
         commands.insert_resource(CurrentRoom(origin, room));
         transform.translation = origin + Vec3::new(0.0, 1.0, room.spawn_z);
         facing.dir = Vec3::new(0.0, 0.0, -1.0);
+        crate::sound::door_sound(None, true);
         next_state.set(HouseState::Inside);
         println!("Entered a villager's house");
         return;
@@ -487,6 +488,7 @@ fn house_enter(
     commands.insert_resource(CurrentRoom(INTERIOR_ORIGIN, *bounds));
     transform.translation = INTERIOR_ORIGIN + Vec3::new(0.0, 1.0, bounds.spawn_z);
     facing.dir = Vec3::new(0.0, 0.0, -1.0);
+    crate::sound::door_sound(None, true);
     next_state.set(HouseState::Inside);
     println!("Entered house");
 }
@@ -526,6 +528,7 @@ fn house_exit(
     }
     transform.translation = return_pos.map(|r| r.0).unwrap_or(Vec3::new(0.0, 1.0, 5.0));
     facing.dir = Vec3::new(0.0, 0.0, 1.0);
+    crate::sound::door_sound(None, false);
     next_state.set(HouseState::Town);
     println!("Left house");
 }
@@ -615,7 +618,11 @@ impl Plugin for HousePlugin {
             )
             .add_systems(
                 Update,
-                (interior_movement, update_house_hud).in_set(GameplaySet),
+                (
+                    interior_movement.in_set(locomotion::MovementSet),
+                    update_house_hud,
+                )
+                    .in_set(GameplaySet),
             );
     }
 }

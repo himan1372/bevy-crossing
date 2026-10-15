@@ -389,6 +389,10 @@ pub struct Engine {
     /// `thread_cmd_group_mask`: which subtracks an all-subtracks command
     /// reaches.
     group_mask: [u16; GROUPS],
+    triggers: crate::audio::TrgSeManager,
+    levels: crate::audio::LevSeManager,
+    ambience: [Option<crate::ambience::Level>; crate::ambience::VOICES],
+    level_cooldown: [u8; crate::ambience::VOICES],
 }
 
 fn sub_fresh(index: usize) -> Sub {
@@ -473,6 +477,10 @@ impl Engine {
             seed: 0x1234_5678,
             random: 0x3039,
             group_mask: [0xFFFF; GROUPS],
+            triggers: crate::audio::TrgSeManager::new(),
+            levels: crate::audio::LevSeManager::new(),
+            ambience: [None; crate::ambience::VOICES],
+            level_cooldown: [0; crate::ambience::VOICES],
             t: tables,
         };
         for _ in 0..=GROUPS {
@@ -581,6 +589,99 @@ impl Engine {
             .and_then(|s| s.port.get_mut(port))
         {
             *p = value;
+        }
+    }
+
+    /// Safe completion-port access; uninitialized/missing ports read -1.
+    pub fn sub_port(&self, g: usize, s: usize, port: usize) -> i8 {
+        self.groups
+            .get(g)
+            .and_then(|g| g.subs.get(s))
+            .and_then(|s| s.port.get(port))
+            .copied()
+            .unwrap_or(-1)
+    }
+
+    /// Submit a game effect through retail trigger allocation and MONO routing.
+    /// The caller shares the engine lock with the renderer, so allocation,
+    /// parameter updates and request submission are atomic.
+    pub fn trigger_effect(&mut self, id: u16, volume: f32) -> crate::audio::TrgStartResult {
+        let mut ring = crate::audio::CommandRing::new();
+        let result = self
+            .triggers
+            .start(&mut ring, id, volume, 1.0, 1.0, 64, 0, 0.0);
+        for command in ring.drain() {
+            self.process(&command);
+        }
+        result
+    }
+
+    /// Replace desired ambient emitters atomically. Never resubmit a loop
+    /// just because its spatial parameters changed.
+    pub fn set_ambience(
+        &mut self,
+        levels: [Option<crate::ambience::Level>; crate::ambience::VOICES],
+    ) {
+        self.ambience = levels;
+    }
+
+    fn advance_levels(&mut self) {
+        use crate::audio::{AudioParam, AudioPort};
+        for i in 0..crate::ambience::VOICES {
+            let sub = 8 + i;
+            if !self.groups[0].enabled || !self.groups[0].subs[sub].enabled {
+                continue;
+            }
+            let wanted = self.ambience[i];
+            let id = wanted.map_or(0, |v| v.id);
+            let old = self.levels.current(i);
+            if old != 0 && old != id {
+                self.levels.stop(i, old);
+                self.set_sub_port(0, sub, 0, -1); // cancel an unconsumed start
+                                                  // Sou_LevStop
+                self.set_sub_port(0, sub, 5, -1);
+                // Allow a complete sequencer tick to consume STOP before
+                // submitting another request on this subtrack.
+                self.level_cooldown[i] = 4;
+            }
+            if self.level_cooldown[i] > 0 {
+                self.level_cooldown[i] -= 1;
+                self.sub_param(0, sub, 0x01, 0, 0, 0.0, 0);
+                continue;
+            }
+            let Some(level) = wanted else { continue };
+            // Sou_LevSet strips the high echo bit and writes port 0 only.
+            if self.levels.current(i) == 0 {
+                self.levels.start(i, id);
+                self.set_sub_port(0, sub, 0, (id & 0x7F) as i8);
+            }
+            for (opcode, param) in [
+                (0x01, AudioParam::F32(level.volume)),
+                (0x04, AudioParam::F32(1.0)),
+                (0x03, AudioParam::U8(level.pan)),
+                (0x05, AudioParam::U8(0)),
+            ] {
+                self.process(&AudioPort {
+                    opcode,
+                    arg0: 0,
+                    arg1: sub as u8,
+                    arg2: 0,
+                    param,
+                });
+            }
+        }
+    }
+
+    fn finish_triggers(&mut self) {
+        let pending = std::array::from_fn(|i| self.sub_port(0, i, 1) != -1);
+        let busy = std::array::from_fn(|i| self.sub_port(0, i, 5));
+        let grace = SAMPLE_RATE.div_ceil(2 * SAMPLES_PER_UPDATE as u32);
+        let expired = self.triggers.observe_completion(pending, busy, grace);
+        for (i, expired) in expired.into_iter().enumerate() {
+            if expired {
+                self.set_sub_port(0, i, 0, -1);
+                self.set_sub_port(0, i, 1, -1);
+            }
         }
     }
 
@@ -826,12 +927,14 @@ impl Engine {
             .seed
             .wrapping_mul(1_664_525)
             .wrapping_add(1_013_904_223);
+        self.advance_levels();
         for g in 0..=GROUPS {
             if self.groups[g].enabled {
                 self.group_seq(g);
                 self.main_ctrl(g);
             }
         }
+        self.finish_triggers();
         self.update_voices();
         self.mix(out);
     }
@@ -1251,6 +1354,12 @@ impl Engine {
     }
 
     fn release_group(&mut self, g: usize) {
+        if g == crate::audio::group::SE {
+            self.triggers = crate::audio::TrgSeManager::new();
+            self.levels = crate::audio::LevSeManager::new();
+            self.ambience = [None; crate::ambience::VOICES];
+            self.level_cooldown = [0; crate::ambience::VOICES];
+        }
         for s in 0..SUBTRACKS {
             self.release_sub(g, s);
         }

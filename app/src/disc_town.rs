@@ -575,12 +575,38 @@ pub fn build_retail_town(
     let field = make_random_field(&combos, &mut seeded_rng(plan.seed));
     let mut units = Vec::with_capacity(BLOCK_X_NUM * BLOCK_Z_NUM);
     let mut tiers = [0u8; BLOCK_X_NUM * BLOCK_Z_NUM];
+    let mut sound_sources = Vec::new();
     for (i, combi) in field.combi.iter().enumerate() {
         tiers[i] = combi.height;
         let entry = combos
             .get(combi.combi as usize)
             .and_then(|c| bg_lists.get(&c.bg_id));
         units.push(entry.map_or([Unit::default(); 256], |e| collision_units(&disc.rom, e)));
+        // mFM_bg_data_c: six {kind:i16, ut_x:u8, ut_z:u8} records
+        // immediately follow collision[16][16], at entry + 0x41C.
+        if let Some(raw) =
+            entry.and_then(|e| disc.rom.slice(RomSource::Rel, e.collision + 0x400, 6 * 4))
+        {
+            for (j, source) in raw.as_chunks::<4>().0.iter().enumerate() {
+                let id = match i16::from_be_bytes([source[0], source[1]]) {
+                    1 => 0x0B, // river
+                    2 => 0x1C, // surf
+                    _ => continue,
+                };
+                let block = [i % BLOCK_X_NUM, i / BLOCK_X_NUM];
+                let corner = GroundMap::block_corner(block[0], block[1]);
+                sound_sources.push(crate::ground_map::TerrainSound {
+                    key: (i * 6 + j) as u64,
+                    id,
+                    block,
+                    position: Vec3::new(
+                        corner.x + (f32::from(source[2]) + 0.5) * CELL_SIZE,
+                        0.0,
+                        corner.y + (f32::from(source[3]) + 0.5) * CELL_SIZE,
+                    ),
+                });
+            }
+        }
     }
     for (bz, row) in field.combi.chunks(BLOCK_X_NUM).enumerate() {
         let cells: Vec<String> = row
@@ -597,7 +623,47 @@ pub fn build_retail_town(
             .collect();
         debug!("field row {bz}: {}", cells.join(" "));
     }
-    let ground = GroundMap::new(units, tiers);
+    let mut ground = GroundMap::new(units, tiers);
+    for source in &mut sound_sources {
+        // ac_field_draw: height is sampled before the shore's +175 Z offset.
+        source.position.y = ground
+            .height(source.position.x, source.position.z)
+            .unwrap_or(0.0)
+            + 1.0;
+        if source.id == 0x1C {
+            source.position.z += 175.0 / 40.0;
+        }
+    }
+    // Waterfalls are standalone actors in retail. Until those actors are
+    // present, locate one emitter at the waterfall collision footprint's
+    // centre per acre, rather than inventing a global waterfall layer.
+    for bz in 0..BLOCK_Z_NUM {
+        for bx in 0..BLOCK_X_NUM {
+            let mut centre = Vec2::ZERO;
+            let mut count = 0;
+            for unit in 0..256 {
+                if ground.unit_attribute(bx, bz, unit) == 13 {
+                    centre += GroundMap::block_corner(bx, bz)
+                        + Vec2::new((unit % 16) as f32 + 0.5, (unit / 16) as f32 + 0.5) * CELL_SIZE;
+                    count += 1;
+                }
+            }
+            if count > 0 {
+                centre /= count as f32;
+                sound_sources.push(crate::ground_map::TerrainSound {
+                    key: 0x10000 + (bz * BLOCK_X_NUM + bx) as u64,
+                    id: 0x0C,
+                    block: [bx, bz],
+                    position: Vec3::new(
+                        centre.x,
+                        ground.height(centre.x, centre.y).unwrap_or(0.0) + 1.0,
+                        centre.y,
+                    ),
+                });
+            }
+        }
+    }
+    ground.sound_sources = sound_sources;
 
     // Objects for the playable acres (blocks 1..=5, 1..=6).
     let homes = [

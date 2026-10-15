@@ -526,17 +526,20 @@ fn dialogue_input(
     // E/Enter answers; Y / N answer directly.
     if let Some(choices) = dialogue.choices() {
         let n = choices.len();
+        let before = dialogue.choice;
         if actions.just_pressed(Action::MenuUp) || actions.just_pressed(Action::MoveUp) {
             dialogue.choice = (dialogue.choice + n - 1) % n;
         }
         if actions.just_pressed(Action::MenuDown) || actions.just_pressed(Action::MoveDown) {
             dialogue.choice = (dialogue.choice + 1) % n;
         }
+        crate::sound::cursor_changed(before, dialogue.choice);
         let pick = actions.just_pressed(Action::Confirm)
             || actions.just_pressed(Action::Advance)
             || actions.consume(Action::Interact);
         // The game's own question: go on down the chosen branch.
         if pick && dialogue.trade.is_none() {
+            crate::sound::se(crate::sound::se_id::CHOICE_CONFIRM);
             if let Some((ask, speaker, ctx)) = dialogue.ask.take() {
                 let next = ask.next.get(dialogue.choice).copied().flatten();
                 let branch = disc
@@ -571,6 +574,11 @@ fn dialogue_input(
         if !yes && !no {
             return;
         }
+        crate::sound::se(if no {
+            crate::sound::se_id::MENU_EXIT
+        } else {
+            crate::sound::se_id::CHOICE_CONFIRM
+        });
         if let Some(deal) = dialogue.trade.take() {
             let line = if yes && inventory.remove(deal.wanted) {
                 // Removing the wanted item freed a pocket for the offered one.

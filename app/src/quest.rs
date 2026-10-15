@@ -676,6 +676,9 @@ fn quest_talk_intercept(
             {
                 if give_reward(owed, &mut inventory) {
                     quest.owed = None;
+                    if matches!(owed, Reward::Item(_)) {
+                        crate::sound::se(crate::sound::se_id::POCKET_RUSTLE);
+                    }
                     notify(
                         &format!(
                             "{} gave you the reward they owed: {}!",
@@ -694,6 +697,7 @@ fn quest_talk_intercept(
             if offer.giver == villager.name {
                 claim.0 = Some(event.villager);
                 qui.open = true;
+                crate::sound::se(crate::sound::se_id::CHOICE_OPEN);
                 qui.mode = QuestUiMode::Offer;
                 show_panel(&offer_text(offer), &mut panel, &mut body);
                 println!("Quest offered by {}", offer.giver);
@@ -741,6 +745,12 @@ fn quest_ui_input(
     if !accepted && !declined {
         return;
     }
+    // These modal prompts use the existing dialogue choice feedback.
+    crate::sound::se(if accepted {
+        crate::sound::se_id::CHOICE_CONFIRM
+    } else {
+        crate::sound::se_id::MENU_EXIT
+    });
     let close =
         |ui: &mut ResMut<QuestUi>,
          claim: &mut ResMut<QuestClaim>,
@@ -767,6 +777,9 @@ fn quest_ui_input(
                     return;
                 }
                 if let Some(offer) = giver.0.take() {
+                    if is_delivery {
+                        crate::sound::se(crate::sound::se_id::POCKET_RUSTLE);
+                    }
                     quest.active = Some(ActiveQuest {
                         kind: offer.kind,
                         accepted_day: crate::clock::now().day_number,
@@ -798,6 +811,8 @@ fn quest_ui_input(
         QuestUiMode::TurnIn => {
             if accepted {
                 if let Some(active) = quest.active.take() {
+                    // Give/receive-putaway use GASAGOSO; no invented quest fanfare.
+                    crate::sound::se(crate::sound::se_id::POCKET_RUSTLE);
                     // Hand over what was asked for.
                     match &active.kind {
                         QuestKind::Delivery { .. } => {

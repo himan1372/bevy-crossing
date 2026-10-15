@@ -33,9 +33,9 @@
 //! `AudioPort` commands, exactly like retail's `Nap_*` calls.
 //!
 //! Preserved retail quirks (documented, not fixed):
-//! * `TRGPRIO` has 120 entries but is indexed by the full low byte of the
+//! * `TRGPRIO` has 128 entries but is indexed by the full low byte of the
 //!   sound ID with no bounds check — retail reads linker-adjacent memory
-//!   for indices 120+. This port returns `None` there (documented safety
+//!   for indices 128+. This port returns `None` there (documented safety
 //!   deviation; the exact bytes are unknowable from source).
 //! * The train-whistle volume curve (`distance2vol_kiteki`) contains a
 //!   dead `if (distance < 0)` branch that the linear formula then
@@ -454,12 +454,14 @@ pub enum TrgStartResult {
 
 pub struct TrgSeManager {
     pub slots: [TrgSe; slots::TRG_SE],
+    started: [bool; slots::TRG_SE],
 }
 
 impl TrgSeManager {
     pub fn new() -> TrgSeManager {
         TrgSeManager {
             slots: [TrgSe::default(); slots::TRG_SE],
+            started: [false; slots::TRG_SE],
         }
     }
 
@@ -480,42 +482,24 @@ impl TrgSeManager {
 
         // MONO path: dedicated subtrack 14, no slot allocation.
         if se.mono {
+            let s = se_subtrack::MONO as u8;
             ring.push(
-                0x10,
+                0x01,
                 group::SE as u8,
-                se_subtrack::MONO as u8,
+                s,
                 0,
-                AudioParam::F32(freq_scale),
+                AudioParam::F32(volume * opt_volume),
             );
-            ring.push(
-                0x11,
-                group::SE as u8,
-                se_subtrack::MONO as u8,
-                0,
-                AudioParam::U8(pan),
-            );
-            ring.push(
-                0x12,
-                group::SE as u8,
-                se_subtrack::MONO as u8,
-                0,
-                AudioParam::U8(reverb),
-            );
-            ring.push(
-                0x13,
-                group::SE as u8,
-                se_subtrack::MONO as u8,
-                0,
-                AudioParam::U8(se.idx_lo),
-            );
-            ring.push(
-                0x13,
-                group::SE as u8,
-                se_subtrack::MONO as u8,
-                1,
-                AudioParam::U8(se.idx_hi),
-            );
+            ring.push(0x04, group::SE as u8, s, 0, AudioParam::F32(freq_scale));
+            ring.push(0x03, group::SE as u8, s, 0, AudioParam::U8(pan));
+            ring.push(0x05, group::SE as u8, s, 0, AudioParam::U8(reverb));
+            ring.push(0x06, group::SE as u8, s, 0, AudioParam::U8(se.idx_lo));
+            ring.push(0x06, group::SE as u8, s, 1, AudioParam::U8(se.idx_hi));
             return TrgStartResult::Mono;
+        }
+        // Zero is the free-slot sentinel, not a playable trigger.
+        if id == 0 {
+            return TrgStartResult::PriorityRejected;
         }
 
         // Singleton: at most one instance of this ID.
@@ -533,7 +517,7 @@ impl TrgSeManager {
 
         // Otherwise the longest-lived slot, replaced only if the new
         // priority is >= the old one. Priority comes from TRGPRIO indexed
-        // by the low ID byte; retail does no bounds check (120-entry
+        // by the low ID byte; retail does no bounds check (128-entry
         // table), so an unknown index rejects here instead of reading
         // linker-adjacent memory.
         let mut oldest = 0usize;
@@ -568,6 +552,7 @@ impl TrgSeManager {
         se: &SeId,
         ring: &mut CommandRing,
     ) {
+        self.started[i] = false;
         let s = &mut self.slots[i];
         s.id = id;
         s.priority = trg_priority(se.idx_lo).unwrap_or(50);
@@ -591,33 +576,69 @@ impl TrgSeManager {
             }
             r
         };
-        // Subtrack ports: port 0 = index low, port 1 = bank/high.
-        ring.push(0x13, group::SE as u8, i as u8, 0, AudioParam::U8(se.idx_lo));
-        ring.push(0x13, group::SE as u8, i as u8, 1, AudioParam::U8(se.idx_hi));
+        Self::parameters(ring, i, s);
+        // Set parameters before submitting the request. Subtrack ports:
+        // port 0 = index low, port 1 = bank/high.
+        ring.push(0x06, group::SE as u8, i as u8, 0, AudioParam::U8(se.idx_lo));
+        ring.push(0x06, group::SE as u8, i as u8, 1, AudioParam::U8(se.idx_hi));
     }
 
-    /// `Sou_TrgMake`: every game frame, push each live slot's calculated
-    /// parameters into JAudio.
-    pub fn frame(&mut self, ring: &mut CommandRing) {
-        for (i, s) in self.slots.iter_mut().enumerate() {
+    fn parameters(ring: &mut CommandRing, i: usize, s: &TrgSe) {
+        let g = group::SE as u8;
+        let i = i as u8;
+        ring.push(0x01, g, i, 0, AudioParam::F32(s.volume * s.opt_volume));
+        ring.push(0x04, g, i, 0, AudioParam::F32(s.freq_scale));
+        ring.push(0x03, g, i, 0, AudioParam::U8(s.pan));
+        ring.push(0x05, g, i, 0, AudioParam::U8(s.reverb_volume));
+    }
+
+    /// Observe after a sequencer update, including while the game UI is paused.
+    /// Port 1 is cleared to -1 when the request is consumed; port 5 reports
+    /// playback. Ignore the previous sound's busy bit while a replacement is
+    /// pending. Polling on the audio thread avoids missing brief effects between
+    /// game frames. The timeout follows the PC port's half-second start grace.
+    /// Returns slots whose unstarted requests should be cleared on timeout.
+    pub fn observe_completion(
+        &mut self,
+        request_pending: [bool; slots::TRG_SE],
+        busy: [i8; slots::TRG_SE],
+        start_grace_updates: u32,
+    ) -> [bool; slots::TRG_SE] {
+        let mut expired = [false; slots::TRG_SE];
+        for i in 0..slots::TRG_SE {
+            let s = &mut self.slots[i];
             if s.id == 0 {
                 continue;
             }
-            s.frames = s.frames.wrapping_add(1);
-            ring.push(
-                0x10,
-                group::SE as u8,
-                i as u8,
-                0,
-                AudioParam::F32(s.volume * s.opt_volume),
-            );
-            ring.push(0x11, group::SE as u8, i as u8, 0, AudioParam::U8(s.pan));
+            s.frames = s.frames.saturating_add(1);
+            if !request_pending[i] && busy[i] > 0 {
+                self.started[i] = true;
+            }
+            let finished = !request_pending[i] && self.started[i] && busy[i] == 0;
+            let timed_out = !self.started[i] && busy[i] <= 0 && s.frames > start_grace_updates;
+            if finished || timed_out {
+                expired[i] = timed_out;
+                self.stop(i);
+            }
+        }
+        expired
+    }
+
+    /// `Sou_TrgMake`: refresh parameters for callers with a game-frame loop.
+    /// The live engine instead sets them atomically when submitting a trigger.
+    pub fn frame(&mut self, ring: &mut CommandRing) {
+        for (i, s) in self.slots.iter_mut().enumerate() {
+            if s.id != 0 {
+                s.frames = s.frames.saturating_add(1);
+                Self::parameters(ring, i, s);
+            }
         }
     }
 
     pub fn stop(&mut self, i: usize) {
         if i < slots::TRG_SE {
             self.slots[i] = TrgSe::default();
+            self.started[i] = false;
         }
     }
 }

@@ -375,6 +375,7 @@ fn mailbox_interact(
         return;
     }
     ui.open = true;
+    crate::sound::se(crate::sound::se_id::PANEL_OPEN);
     ui.selected = 0;
     ui.reading = None;
     ui.writing = false;
@@ -435,9 +436,11 @@ fn send_letter(
     ui.writing = false;
     ui.write_text.clear();
     if text.is_empty() {
+        crate::sound::se(crate::sound::se_id::MENU_EXIT);
         show_mail_notify("Blank letter discarded.", timer, notify_query);
         return;
     }
+    crate::sound::se(crate::sound::se_id::CHOICE_CONFIRM);
     let total = score_letter(&letter_body_bytes(&text), TrigramMode::Intended).total();
     let rank = LetterRank::of_score(total);
     mailbox.sent.push(Letter {
@@ -506,6 +509,7 @@ fn mail_ui_input(
                 letter.read = true;
             }
             ui.reading = None;
+            crate::sound::se(crate::sound::se_id::PAGE_OKURI);
         }
         return;
     }
@@ -532,20 +536,27 @@ fn mail_ui_input(
         if actions.just_pressed(Action::Cancel) {
             ui.writing = false;
             ui.write_text.clear();
+            crate::sound::se(crate::sound::se_id::MENU_EXIT);
             return;
         }
         if !names.is_empty() {
             if actions.just_pressed(Action::MenuUp) {
+                let before = ui.write_recipient;
                 ui.write_recipient = ui.write_recipient.saturating_sub(1);
+                crate::sound::cursor_changed(before, ui.write_recipient);
                 return;
             }
             if actions.just_pressed(Action::MenuDown) {
+                let before = ui.write_recipient;
                 ui.write_recipient = (ui.write_recipient + 1).min(names.len() - 1);
+                crate::sound::cursor_changed(before, ui.write_recipient);
                 return;
             }
         }
         if actions.just_pressed(Action::Back) {
-            ui.write_text.pop();
+            if ui.write_text.pop().is_some() {
+                crate::sound::se(crate::sound::se_id::CURSOR);
+            }
             return;
         }
         if actions.just_pressed(Action::Confirm) {
@@ -557,6 +568,9 @@ fn mail_ui_input(
     // --- List view ---
     if actions.just_pressed(Action::Cancel) {
         ui.open = false;
+        // ac_mailbox opens mSM_OVL_INVENTORY in mailbox mode; its exit
+        // is NA_SE_31, rather than the separate mailbox overlay's zoom-down.
+        crate::sound::se(crate::sound::se_id::MENU_EXIT);
         if let Ok(mut vis) = panel_query.single_mut() {
             *vis = Visibility::Hidden;
         }
@@ -567,19 +581,25 @@ fn mail_ui_input(
     // letter the player starts composing below.
     key_events.clear();
     if actions.just_pressed(Action::MenuUp) {
+        let before = ui.selected;
         ui.selected = ui.selected.saturating_sub(1);
+        crate::sound::cursor_changed(before, ui.selected);
         return;
     }
     if actions.just_pressed(Action::MenuDown) {
+        let before = ui.selected;
         ui.selected = (ui.selected + 1).min(mailbox.letters.len().saturating_sub(1));
+        crate::sound::cursor_changed(before, ui.selected);
         return;
     }
     if actions.just_pressed(Action::Confirm) && !mailbox.letters.is_empty() {
         ui.reading = Some(ui.selected.min(mailbox.letters.len() - 1));
+        crate::sound::se(crate::sound::se_id::PAGE_OKURI);
         return;
     }
     if actions.just_pressed(Action::Compose) {
         ui.writing = true;
+        crate::sound::se(crate::sound::se_id::CHOICE_OPEN);
         ui.write_recipient = 0;
         ui.write_text.clear();
     }

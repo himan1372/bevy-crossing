@@ -106,11 +106,17 @@ fn menu_input(
                 }
                 Key::Enter => {
                     let saved = write_disc_path(path);
+                    crate::sound::se(if saved.is_ok() {
+                        crate::sound::se_id::CHOICE_CONFIRM
+                    } else {
+                        crate::sound::se_id::MENU_EXIT
+                    });
                     println!("Disc path saved ({saved:?}); used from the next start");
                     menu.editing = None;
                     break;
                 }
                 Key::Escape => {
+                    crate::sound::se(crate::sound::se_id::MENU_EXIT);
                     menu.editing = None;
                     break;
                 }
@@ -122,15 +128,19 @@ fn menu_input(
     } else {
         keys.clear();
         let n = ITEMS.len();
+        let before = menu.selected;
         if actions.just_pressed(Action::MenuUp) || actions.just_pressed(Action::MoveUp) {
             menu.selected = (menu.selected + n - 1) % n;
         }
         if actions.just_pressed(Action::MenuDown) || actions.just_pressed(Action::MoveDown) {
             menu.selected = (menu.selected + 1) % n;
         }
+        crate::sound::cursor_changed(before, menu.selected);
         if actions.consume(Action::Cancel) {
+            crate::sound::se(crate::sound::se_id::MENU_EXIT);
             next.set(PauseState::Running);
         } else if actions.consume(Action::Confirm) || actions.consume(Action::Interact) {
+            crate::sound::se(crate::sound::se_id::CHOICE_CONFIRM);
             match menu.selected {
                 0 => {
                     save.0 = true;

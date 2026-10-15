@@ -166,7 +166,13 @@ pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_player)
-            .add_systems(Update, (player_movement, camera_follow).in_set(GameplaySet));
+        app.add_systems(Startup, spawn_player).add_systems(
+            Update,
+            (
+                player_movement.in_set(locomotion::MovementSet),
+                camera_follow,
+            )
+                .in_set(GameplaySet),
+        );
     }
 }

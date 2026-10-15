@@ -845,6 +845,7 @@ fn tool_select(
     if !focus.is_world() || *shop_loc != crate::shop::ShopLocation::Town {
         return;
     }
+    let before = *tool;
     if actions.just_pressed(Action::Tool1) {
         *tool = EquippedTool::Rod;
         println!("Equipped fishing rod");
@@ -854,6 +855,9 @@ fn tool_select(
     } else if actions.just_pressed(Action::Tool3) {
         *tool = EquippedTool::None;
         println!("Unequipped tool");
+    }
+    if *tool != before {
+        crate::sound::se(crate::sound::se_id::POCKET_RUSTLE);
     }
 }
 
@@ -904,6 +908,8 @@ fn tool_interact(
             // Reel in if a bobber is already out: a biting fish is caught;
             // otherwise whatever was nibbling lets go.
             if let Ok((bobber, b)) = bobber_query.single() {
+                crate::sound::se(crate::sound::se_id::ROD_BACK);
+                crate::sound::se(crate::sound::se_id::BOBBER_OUT);
                 commands.entity(bobber).despawn();
                 let caught = b.hooked.filter(|_| b.biting);
                 match caught.and_then(|f| fish_query.get(f).ok().map(|fish| (f, fish))) {
@@ -917,6 +923,7 @@ fn tool_interact(
                                 // Left hand: about hand height, in front.
                                 at: player_pos + facing.dir * 0.35 + Vec3::Y * 0.9,
                             });
+                            crate::sound::se(crate::sound::se_id::FISH_LIFT);
                             crate::sound::se(crate::sound::se_id::ITEM_GET);
                             show_catch_notify(
                                 &format!("Caught a {name}!"),
@@ -946,6 +953,7 @@ fn tool_interact(
                 }
             }
             let Some(cp) = cast_point else {
+                crate::sound::se(crate::sound::se_id::ROD_AIR);
                 show_catch_notify(
                     "No water in front of you.",
                     &mut notify_timer,
@@ -953,6 +961,9 @@ fn tool_interact(
                 );
                 return;
             };
+            crate::sound::se(crate::sound::se_id::ROD_CAST);
+            // This simplified bobber spawns directly on the water.
+            crate::sound::se(crate::sound::se_id::BOBBER_LAND);
             commands.spawn((
                 Bobber {
                     timer: 0.0,
@@ -999,7 +1010,8 @@ fn tool_interact(
                         return;
                     }
                     commands.entity(entity).despawn();
-                    crate::sound::se(crate::sound::se_id::AMI_HIT);
+                    // AMI_HIT is an obstacle impact; insect capture is TOOL_GET.
+                    crate::sound::se(crate::sound::se_id::NET_CATCH);
                     show_catch_notify(
                         &format!("Caught a {name}!"),
                         &mut notify_timer,

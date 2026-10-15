@@ -8,7 +8,7 @@ Audio-from-disc remains claimed by claude; this focused investigation is separat
 - [x] Trace speaker changes through dialogue, the voice queue and sequence playback. Fixed Reveal: its key now includes the speaker entity so identical text spoken by a different villager types/voices again. No fault forcing every villager onto one sequence was found.
 - [x] Provide a repeatable in-game comparison: F8 from world input cycles residents by personality, including those indoors, speaking the same line with their real speaker entity. Wait for typing, E closes, F8 selects the next. Name plate identifies the resident; console logs personality, spec and sequence.
 - [x] Record findings and checks below.
-- [ ] Philip: compare F8 voices across all six starter personalities and report which names sound alike. Final audible fidelity remains open.
+- [x] Philip playtested the F8 comparison and reports the voices sound good with no hiccups (2026-10-14).
 
 Findings (Codex, 2026-10-14):
 - Normal, peppy, snooty -> spec 4 / sequence 245.
@@ -24,4 +24,4 @@ Findings (Codex, 2026-10-14):
 Re-run the disc check with BEVY_CROSSING_ISO pointing at the player's image:
 cargo test -p bevy-crossing sound::tests::probe_villager_voice_types -- --ignored --nocapture
 
-cargo build -p bevy-crossing passed; the updated debug executable is ready. The new game UI has not been observed in a live run for this update. Philip's F8 listening check remains necessary. Codex released this task for the listening follow-up; it is not marked complete.
+cargo build -p bevy-crossing passed. Philip subsequently completed the F8 listening check on 2026-10-14: voices sound good with no hiccups. Voice comparison follow-up is resolved; M4 audio continues with player-footsteps.

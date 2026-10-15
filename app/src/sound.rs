@@ -6,16 +6,18 @@
 //!
 //! What plays so far: the effect player (sequence 242 on group 0, as
 //! `Na_InitAudio`) and the town's hourly music (`Sou_BgmStart` for music
-//! 1-24, fine weather's subtrack mutes) and trigger effects (`se`, as
+//! 1-24, fine weather's subtrack mutes), shop themes and trigger effects (`se`, as
 //! `Sou_TrgStart`). Villager Animalese follows the typed dialogue through
-//! `na_voice`; indoor music and special voice modes remain to do.
+//! `na_voice`; player houses are quiet without a furniture player. Special
+//! voice modes and weather simulation remain to do.
 
 use std::sync::{Arc, Mutex};
 
 use bevy::audio::{AddAudioSource, ChannelCount, Decodable, SampleRate, Source};
 use bevy::prelude::*;
 use rustimal_logic::nas_seq::{Engine, SAMPLES_PER_UPDATE, SAMPLE_RATE};
-use rustimal_logic::{audio_group, AudioParam, AudioPort, BGM_MUTE_TABLE_FINE};
+use rustimal_logic::scene_music as music_policy;
+use rustimal_logic::{audio_group, AudioParam, AudioPort};
 
 use crate::game_disc::GameDisc;
 use crate::sound_rom::{self, DiscSound};
@@ -37,6 +39,15 @@ pub struct Sound {
 }
 
 impl Sound {
+    pub(crate) fn ambience(
+        &self,
+        levels: [Option<rustimal_logic::ambience::Level>; rustimal_logic::ambience::VOICES],
+    ) {
+        if let Ok(mut engine) = self.engine.lock() {
+            engine.set_ambience(levels);
+        }
+    }
+
     /// Sends the game's audio commands to the engine.
     pub fn send(&self, cmds: &[AudioPort]) {
         if let Ok(mut e) = self.engine.lock() {
@@ -153,14 +164,32 @@ fn start_sound(
 
 /// `NA_SE_*` ids the game uses so far (`audio_defs.h`).
 pub mod se_id {
+    pub const CURSOR: u16 = 0x01;
+    // mTG_move_cancel: inventory/catalog exits use NA_SE_31.
+    pub const MENU_EXIT: u16 = 0x31;
+    pub const PANEL_OPEN: u16 = 0x8004;
+    pub const PANEL_CLOSE: u16 = 0x8005;
+    pub const CHOICE_OPEN: u16 = 0x0C;
+    pub const CHOICE_CONFIRM: u16 = 0x0D;
+    // Retail SE_REGISTER is MONO(NA_SE_REGISTER), using subtrack 14.
+    pub const REGISTER: u16 = 0x1050;
+    pub const MAILBOX_FLAG_UP: u16 = 0x433;
+    pub const MAILBOX_FLAG_DOWN: u16 = 0x434;
     pub const PAGE_OKURI: u16 = 0x0B;
     pub const MENU_PAUSE: u16 = 0x30;
     pub const ITEM_GET: u16 = 0x40;
     pub const TOOL_FURI: u16 = 0x5A;
-    pub const AMI_HIT: u16 = 0x5C;
+    pub const NET_CATCH: u16 = 0x5D;
+    pub const POCKET_RUSTLE: u16 = 0x69;
+    pub const ROD_CAST: u16 = 0x109;
+    pub const ROD_BACK: u16 = 0x10A;
+    pub const BOBBER_LAND: u16 = 0x10B;
+    pub const BOBBER_OUT: u16 = 0x10C;
+    pub const FISH_LIFT: u16 = 0x11A;
+    pub const ROD_AIR: u16 = 0x445;
 }
 
-static SE_QUEUE: Mutex<Vec<u16>> = Mutex::new(Vec::new());
+static SE_QUEUE: Mutex<Vec<(u16, f32)>> = Mutex::new(Vec::new());
 /// Typed characters to voice: (speaker's spec, a, b, c phonemes).
 static VOICE_QUEUE: Mutex<Vec<(u8, u8, u8, u8)>> = Mutex::new(Vec::new());
 
@@ -223,98 +252,228 @@ fn play_voice(
     }
 }
 
-/// Plays a trigger effect (`sAdo_SysTrgStart`), from anywhere.
-pub fn se(id: u16) {
-    if let Ok(mut q) = SE_QUEUE.lock() {
-        q.push(id);
+/// One player door traversal at a time; a new traversal cancels its old tail.
+static DOOR_REQUEST: Mutex<Option<(Option<rustimal_logic::shop::ShopTier>, bool)>> =
+    Mutex::new(None);
+
+pub fn door_sound(shop: Option<rustimal_logic::shop::ShopTier>, entering: bool) {
+    if let Ok(mut request) = DOOR_REQUEST.lock() {
+        *request = Some((shop, entering));
     }
 }
 
-/// `Sou_TrgStart`, simplified: effects take the six trigger subtracks in
-/// turn; each gets full volume, normal pitch and centre pan, then its id
-/// in ports 0 (low byte) and 1 (high nibble) for sequence 242 to play.
-fn play_effects(sound: Option<Res<Sound>>, mut slot: Local<u8>) {
-    let ids: Vec<u16> = SE_QUEUE
+#[derive(Default)]
+struct DoorPlayback {
+    cues: &'static [(u16, u16)],
+    ticks: f32,
+    next: usize,
+}
+
+fn advance_door_sound(time: Res<Time>, mut playback: Local<DoorPlayback>) {
+    let request = DOOR_REQUEST.lock().ok().and_then(|mut r| r.take());
+    if let Some((shop, entering)) = request {
+        *playback = DoorPlayback {
+            cues: rustimal_logic::action_audio::door_cues(shop, entering),
+            ..default()
+        };
+    }
+    playback.ticks += time.delta_secs() * 60.0;
+    while let Some(&(tick, id)) = playback.cues.get(playback.next) {
+        if f32::from(tick) > playback.ticks {
+            break;
+        }
+        se(id);
+        playback.next += 1;
+    }
+}
+
+/// Plays a trigger effect (`sAdo_SysTrgStart`), from anywhere.
+pub fn se(id: u16) {
+    se_volume(id, 1.0);
+}
+
+/// Cursor feedback only when navigation actually changes a selection.
+pub fn cursor_changed<T: PartialEq>(before: T, after: T) {
+    if before != after {
+        se(se_id::CURSOR);
+    }
+}
+
+/// A trigger with the optional volume from Na_PlyWalkSe/Room.
+pub fn se_volume(id: u16, volume: f32) {
+    if let Ok(mut q) = SE_QUEUE.lock() {
+        q.push((id, volume.clamp(0.0, 1.0)));
+    }
+}
+
+/// Submit queued effects atomically; the audio thread owns completion tracking.
+fn play_effects(sound: Option<Res<Sound>>) {
+    let ids: Vec<(u16, f32)> = SE_QUEUE
         .lock()
         .map(|mut q| std::mem::take(&mut *q))
         .unwrap_or_default();
     let Some(sound) = sound else { return };
-    for id in ids {
-        let s = *slot;
-        *slot = (s + 1) % 6;
-        sound.send(&[
-            cmd(0x01, SE_GROUP, s, 0, AudioParam::F32(1.0)),
-            cmd(0x04, SE_GROUP, s, 0, AudioParam::F32(1.0)),
-            cmd(0x03, SE_GROUP, s, 0, AudioParam::S8(64)),
-            cmd(
-                0x06,
-                SE_GROUP,
-                s,
-                0,
-                AudioParam::S8((id & 0xFF) as u8 as i8),
-            ),
-            cmd(
-                0x06,
-                SE_GROUP,
-                s,
-                1,
-                AudioParam::S8(((id >> 8) & 0xF) as i8),
-            ),
-        ]);
-    }
+    if let Ok(mut engine) = sound.engine.lock() {
+        for (id, volume) in ids {
+            engine.trigger_effect(id, volume);
+        }
+    };
 }
 
-/// `sou_now_bgm_num` and `sou_now_bgm_handle`.
+/// Raw slot path retained only for disc probes comparing the old allocator.
+#[cfg(test)]
+fn play_effect(sound: &Sound, s: u8, id: u16, volume: f32) {
+    // The dedicated mono script has different playback behavior from the
+    // six trigger scripts. Preserve MONO rather than only masking the ID.
+    let s = if id & 0x1000 != 0 { 14 } else { s };
+    sound.send(&[
+        cmd(0x01, SE_GROUP, s, 0, AudioParam::F32(volume)),
+        cmd(0x04, SE_GROUP, s, 0, AudioParam::F32(1.0)),
+        cmd(0x03, SE_GROUP, s, 0, AudioParam::S8(64)),
+        cmd(
+            0x06,
+            SE_GROUP,
+            s,
+            0,
+            AudioParam::S8((id & 0xFF) as u8 as i8),
+        ),
+        cmd(
+            0x06,
+            SE_GROUP,
+            s,
+            1,
+            AudioParam::S8(((id >> 8) & 0xF) as i8),
+        ),
+    ]);
+}
+
+/// Scene selection and game-layer gain, independent of sequence fades.
 #[derive(Resource)]
 struct Bgm {
-    playing: u8,
+    playing: Option<music_policy::Track>,
     handle: u8,
+    ducking: music_policy::Ducking,
+    volume: music_policy::VolumeRamp,
 }
 
 impl Default for Bgm {
     fn default() -> Self {
         Bgm {
-            playing: 0,
+            playing: None,
             handle: BGM1_GROUP,
+            ducking: music_policy::Ducking::default(),
+            volume: music_policy::VolumeRamp::default(),
         }
     }
 }
 
-/// The town's music for the hour (music id = hour + 1), switched as
-/// `Sou_BgmStart` does: the other group fades the old song out while the
-/// new one starts with fine weather's mutes.
-fn hourly_music(sound: Option<Res<Sound>>, bgm: Option<ResMut<Bgm>>) {
+/// Town/house/shop arbitration runs after gameplay and while paused.
+/// A single state decision owns both BGM groups, preventing hourly music
+/// from restarting outdoors' song while the player is inside.
+fn update_music(
+    sound: Option<Res<Sound>>,
+    bgm: Option<ResMut<Bgm>>,
+    house: Res<State<crate::house::HouseState>>,
+    shop: Res<State<crate::shop::ShopLocation>>,
+    shop_data: Res<crate::shop::ShopData>,
+    focus: Res<crate::input::InputFocus>,
+    time: Res<Time<Real>>,
+) {
     let (Some(sound), Some(mut bgm)) = (sound, bgm) else {
         return;
     };
-    let id = crate::clock::now().hour + 1;
-    if bgm.playing == id {
-        return;
+    use crate::input::InputFocus;
+    let ducking = music_policy::Ducking {
+        menu: matches!(
+            *focus,
+            InputFocus::Pockets | InputFocus::Mail | InputFocus::Paused
+        ),
+        // Shop transactions and quests currently use modal text panels.
+        talking: matches!(
+            *focus,
+            InputFocus::Dialogue | InputFocus::Shop | InputFocus::Quest
+        ),
+    };
+    if ducking != bgm.ducking {
+        let frames = ducking.transition_frames(bgm.ducking);
+        bgm.volume.retarget(ducking.volume(), frames);
+        bgm.ducking = ducking;
     }
-    let Some(&seq) = sound.seq_table.get(id as usize) else {
-        return;
-    };
-    let old = bgm.handle;
-    let new = if old == BGM0_GROUP {
-        BGM1_GROUP
+    let previous_volume = bgm.volume.current;
+    bgm.volume.advance(time.delta_secs());
+
+    let scene = if *shop.get() == crate::shop::ShopLocation::Inside {
+        music_policy::Scene::Shop(shop_data.shop.shop_level)
+    } else if *house.get() == crate::house::HouseState::Inside {
+        music_policy::Scene::PlayerHouse
     } else {
-        BGM0_GROUP
+        music_policy::Scene::Town
     };
-    let fade = if bgm.playing == 0 { 0 } else { 60 };
-    let mask = BGM_MUTE_TABLE_FINE[(id - 1) as usize];
-    sound.send(&[
-        cmd(0x83, old, 0, 0, AudioParam::S32(fade)),
-        cmd(0x83, new, 0, 0, AudioParam::S32(0)),
-        // Sou_BgmTenkiConv (fine): mute the hour's masked subtracks.
-        cmd(0x90, new, 0, 0, AudioParam::U16(0xFFFF)),
-        cmd(0x08, new, 0xFF, 0, AudioParam::S8(0)),
-        cmd(0x90, new, 0, 0, AudioParam::U16(mask)),
-        cmd(0x08, new, 0xFF, 0, AudioParam::S8(1)),
-        cmd(0x82, new, seq, 0, AudioParam::S32(0)),
-    ]);
-    info!("music {id} (sequence {seq}) on group {new}");
-    bgm.playing = id;
-    bgm.handle = new;
+    // Snow on the ground is not proof that it is snowing. Until weather
+    // simulation supplies Common(weather), retain the accepted clear mask.
+    let next = music_policy::select(
+        scene,
+        crate::clock::now().day_secs,
+        music_policy::FieldWeather::Fine,
+    );
+    let changed = next != bgm.playing;
+    let mut commands = Vec::new();
+    if changed {
+        if let Some(track) = next {
+            let Some(&seq) = sound.seq_table.get(track.id as usize) else {
+                return;
+            };
+            let old = bgm.handle;
+            let new = if old == BGM0_GROUP {
+                BGM1_GROUP
+            } else {
+                BGM0_GROUP
+            };
+            // Retain the accepted hourly transition length. Scene cleanup
+            // uses the original 0x168 duration; fade both songs to suit this
+            // port's immediate door transitions (retail has a scene wipe).
+            let fade = match (bgm.playing, scene) {
+                (None, _) => 0,
+                (Some(previous), music_policy::Scene::Town) if (1..=24).contains(&previous.id) => {
+                    60
+                }
+                _ => music_policy::SCENE_FADE_UPDATES,
+            };
+            commands.extend([
+                cmd(0x83, old, 0, 0, AudioParam::S32(fade)),
+                cmd(0x83, new, 0, 0, AudioParam::S32(0)),
+                cmd(0x90, new, 0, 0, AudioParam::U16(0xFFFF)),
+                cmd(0x08, new, 0xFF, 0, AudioParam::S8(0)),
+                cmd(0x90, new, 0, 0, AudioParam::U16(track.mute_mask)),
+                cmd(0x08, new, 0xFF, 0, AudioParam::S8(1)),
+                cmd(0x82, new, seq, 0, AudioParam::S32(fade)),
+            ]);
+            bgm.handle = new;
+            info!("music {} (sequence {seq}) on group {new}", track.id);
+        } else {
+            // Also stop a previous crossfade tail when entering a quiet room.
+            let fade = if matches!(scene, music_policy::Scene::Shop(_)) {
+                music_policy::SHOP_CLOSING_FADE_UPDATES
+            } else {
+                music_policy::SCENE_FADE_UPDATES
+            };
+            for group in [BGM0_GROUP, BGM1_GROUP] {
+                commands.push(cmd(0x83, group, 0, 0, AudioParam::S32(fade)));
+            }
+            info!("music quiet ({scene:?})");
+        }
+        bgm.playing = next;
+    }
+    if changed || previous_volume != bgm.volume.current {
+        // Starting a sequence resets group gain. Reapply the current duck
+        // after START_SEQ, to both handles including any outgoing tail.
+        for group in [BGM0_GROUP, BGM1_GROUP] {
+            commands.push(cmd(0x41, group, 0, 0, AudioParam::F32(bgm.volume.current)));
+        }
+    }
+    if !commands.is_empty() {
+        sound.send(&commands);
+    }
 }
 
 pub struct SoundPlugin;
@@ -328,14 +487,198 @@ impl Plugin for SoundPlugin {
             )
             .add_systems(
                 Update,
-                (hourly_music, play_effects, play_voices).run_if(in_state(AppState::InGame)),
-            );
+                (advance_door_sound, play_effects, play_voices)
+                    .chain()
+                    .after(crate::input::InteractSet::Doors)
+                    .run_if(in_state(AppState::InGame)),
+            )
+            .add_systems(
+                PostUpdate,
+                (update_music, crate::ambience::update_ambience)
+                    .after(bevy::transform::TransformSystems::Propagate)
+                    .run_if(in_state(AppState::InGame)),
+            )
+            .add_systems(OnExit(AppState::InGame), crate::ambience::stop_ambience);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Check a complete register one-shot, including ordinary-slot traffic.
+    #[test]
+    #[ignore = "requires BEVY_CROSSING_ISO"]
+    fn probe_register_tail() {
+        let path = std::env::var("BEVY_CROSSING_ISO").expect("set BEVY_CROSSING_ISO");
+        let mut disc = disc::Disc::open_path(std::path::Path::new(&path)).unwrap();
+        let rom = disc::RomImage::from_disc(&mut disc).unwrap();
+        let catalog = disc::AssetCatalog::builtin(&rom);
+        let data = Arc::new(DiscSound::new(Arc::new(
+            sound_rom::SoundRom::read(&mut disc, &rom, &catalog).unwrap(),
+        )));
+        let tables = sound_rom::tables(&rom, &catalog).unwrap();
+        let out = std::env::temp_dir().join("bevy-crossing-register");
+        std::fs::create_dir_all(&out).unwrap();
+        let mut durations = Vec::new();
+        for (name, id, traffic) in [
+            ("idle", 0xFFFF, false),
+            ("ordinary", 0x50, false),
+            ("ordinary_with_traffic", 0x50, true),
+            ("mono", se_id::REGISTER, false),
+            ("mono_with_traffic", se_id::REGISTER, true),
+        ] {
+            let sound = Sound {
+                engine: Arc::new(Mutex::new(Engine::new(data.clone(), tables.clone()))),
+                seq_table: Arc::from(Vec::new()),
+            };
+            sound.send(&[cmd(0x82, SE_GROUP, SE_SEQUENCE, 0, AudioParam::S32(0))]);
+            let mut buf = vec![0.0; SAMPLES_PER_UPDATE * 2];
+            for _ in 0..16 {
+                buf.fill(0.0);
+                sound.engine.lock().unwrap().update(&mut buf);
+            }
+            if id != 0xFFFF {
+                play_effect(&sound, 0, id, 1.0);
+            }
+            let mut pcm = Vec::new();
+            for update in 0..2400 {
+                if traffic && update >= 64 && update % 8 == 0 {
+                    // Exercise reuse of all six ordinary trigger slots;
+                    // zero volume isolates the register in the mixed output.
+                    play_effect(&sound, (update / 8 % 6) as u8, se_id::CURSOR, 0.0);
+                }
+                buf.fill(0.0);
+                sound.engine.lock().unwrap().update(&mut buf);
+                pcm.extend_from_slice(&buf);
+            }
+            let last = pcm
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .rposition(|p| p.iter().any(|s| s.abs() > 0.0001));
+            let duration = last.map_or(0.0, |i| i as f32 / SAMPLE_RATE as f32);
+            let rms = (pcm.iter().map(|s| s * s).sum::<f32>() / pcm.len() as f32).sqrt();
+            println!("{name}: duration {duration:.3}s, rms {rms:.4}");
+            if id != 0xFFFF {
+                assert!(duration > 0.05 && rms > 0.001, "{name} silent");
+            }
+            for (i, chunk) in pcm.chunks(SAMPLE_RATE as usize * 2).enumerate() {
+                let r = (chunk.iter().map(|x| x * x).sum::<f32>() / chunk.len() as f32).sqrt();
+                println!("  second {i}: rms {r:.5}");
+            }
+            std::fs::write(
+                out.join(format!("{name}.wav")),
+                sound_rom::wav_stereo(&pcm, SAMPLE_RATE),
+            )
+            .unwrap();
+            durations.push(duration);
+        }
+        assert!(
+            durations[4] >= durations[3] - 0.05,
+            "ordinary traffic cut off mono register"
+        );
+        assert!(
+            durations[2] < durations[1] * 0.9,
+            "probe must reproduce ordinary-slot interruption"
+        );
+        assert!(
+            durations[3] < 4.0,
+            "register must finish and return to silence"
+        );
+        println!("full register clips: {}", out.display());
+    }
+
+    /// Real sequence-242 gameplay/UI effects, with no disc bytes in fixtures.
+    #[test]
+    #[ignore = "requires BEVY_CROSSING_ISO"]
+    fn probe_gameplay_effects() {
+        use rustimal_logic::footsteps;
+        let path = std::env::var("BEVY_CROSSING_ISO").expect("set BEVY_CROSSING_ISO");
+        let mut disc = disc::Disc::open_path(std::path::Path::new(&path)).unwrap();
+        let rom = disc::RomImage::from_disc(&mut disc).unwrap();
+        let catalog = disc::AssetCatalog::builtin(&rom);
+        let data = Arc::new(DiscSound::new(Arc::new(
+            sound_rom::SoundRom::read(&mut disc, &rom, &catalog).unwrap(),
+        )));
+        let tables = sound_rom::tables(&rom, &catalog).unwrap();
+        let floor_asset = catalog.get("SE_FLOOR_DATA").unwrap();
+        let floors = rom
+            .slice(floor_asset.source, floor_asset.offset, floor_asset.size)
+            .unwrap();
+        let mut labels: Vec<_> = [0, 4, 7, 23, 9, 22, 11]
+            .into_iter()
+            .map(|a| footsteps::outdoor_label(a, false))
+            .collect();
+        labels.push(footsteps::outdoor_label(0, true));
+        labels.extend(
+            floors
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|v| footsteps::FLOOR_START + u16::from_be_bytes([v[0], v[1]])),
+        );
+        labels.extend([
+            se_id::CURSOR,
+            se_id::MENU_EXIT,
+            se_id::CHOICE_OPEN,
+            se_id::CHOICE_CONFIRM,
+            se_id::REGISTER,
+            se_id::MENU_PAUSE,
+            se_id::PAGE_OKURI,
+            se_id::PANEL_OPEN,
+            se_id::PANEL_CLOSE,
+            se_id::MAILBOX_FLAG_UP,
+            se_id::MAILBOX_FLAG_DOWN,
+        ]);
+        labels.sort_unstable();
+        labels.dedup();
+        let out = std::env::temp_dir().join("bevy-crossing-effects");
+        std::fs::create_dir_all(&out).unwrap();
+        for label in labels {
+            let sound = Sound {
+                engine: Arc::new(Mutex::new(Engine::new(data.clone(), tables.clone()))),
+                seq_table: Arc::from(Vec::new()),
+            };
+            sound.send(&[cmd(0x82, SE_GROUP, SE_SEQUENCE, 0, AudioParam::S32(0))]);
+            let mut buf = vec![0.0; SAMPLES_PER_UPDATE * 2];
+            for _ in 0..16 {
+                buf.fill(0.0);
+                sound.engine.lock().unwrap().update(&mut buf);
+            }
+            let mut pcm = Vec::new();
+            let mut variants = footsteps::FootstepVariants::default();
+            for i in 0..4 {
+                let footstep = label & 0x4000 != 0;
+                let id = if footstep {
+                    variants.select(label, false, if i == 0 { 0xFFFF } else { 0 })
+                } else {
+                    label
+                };
+                let volume = if footstep {
+                    footsteps::volume(false, false)
+                } else {
+                    1.0
+                };
+                play_effect(&sound, i, id, volume);
+                for _ in 0..80 {
+                    buf.fill(0.0);
+                    sound.engine.lock().unwrap().update(&mut buf);
+                    pcm.extend_from_slice(&buf);
+                }
+            }
+            let rms = (pcm.iter().map(|x| x * x).sum::<f32>() / pcm.len() as f32).sqrt();
+            println!("effect {label:#06x}: rms {rms:.5}");
+            assert!(rms > 0.0001, "silent effect {label:#06x}");
+            assert!(pcm.iter().all(|x| x.is_finite()));
+            std::fs::write(
+                out.join(format!("effect_{label:04x}.wav")),
+                sound_rom::wav_stereo(&pcm, SAMPLE_RATE),
+            )
+            .unwrap();
+        }
+        println!("listening clips: {}", out.display());
+    }
 
     /// Exercises the same command path as typed dialogue, including
     /// switching away from a voice and back. Disc-derived WAVs stay in temp.
@@ -376,12 +719,14 @@ mod tests {
                 // Normal typing: 30 characters per second.
                 for _ in 0..8 {
                     let mut buf = vec![0.0; SAMPLES_PER_UPDATE * 2];
+                    buf.fill(0.0);
                     sound.engine.lock().unwrap().update(&mut buf);
                     clip.extend(buf);
                 }
             }
             for _ in 0..120 {
                 let mut buf = vec![0.0; SAMPLES_PER_UPDATE * 2];
+                buf.fill(0.0);
                 sound.engine.lock().unwrap().update(&mut buf);
                 clip.extend(buf);
             }

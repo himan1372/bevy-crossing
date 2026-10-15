@@ -3,6 +3,7 @@
 
 use bevy::prelude::*;
 
+mod ambience;
 mod assets;
 mod character;
 mod clock;
@@ -14,6 +15,7 @@ mod ecology;
 mod environment;
 mod face;
 mod field_items;
+mod footsteps;
 mod furniture;
 mod game_disc;
 mod goods;
@@ -109,6 +111,7 @@ fn main() {
         .add_plugins(field_items::FieldItemsPlugin)
         .add_plugins(critters::CrittersPlugin)
         .add_plugins(sound::SoundPlugin)
+        .add_plugins(footsteps::FootstepPlugin)
         .add_plugins(gyroid::GyroidPlugin)
         .add_plugins(mailbox::MailboxPlugin)
         .add_plugins(pause_menu::PauseMenuPlugin)

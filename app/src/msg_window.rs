@@ -96,6 +96,7 @@ struct MsgAssets {
 /// The window currently drawn, and what for.
 #[derive(Resource, Default)]
 struct Shown {
+    choice_open: bool,
     key: Option<(String, Option<Entity>, Option<usize>, usize)>,
     root: Option<Entity>,
 }
@@ -426,6 +427,11 @@ fn draw_window(
     mut meshes: ResMut<Assets<Mesh>>,
     mut text_materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    let choice_open = reveal.done() && dialogue.choices().is_some();
+    if choice_open && !shown.choice_open {
+        crate::sound::se(crate::sound::se_id::CHOICE_OPEN);
+    }
+    shown.choice_open = choice_open;
     let key = dialogue.page().map(|p| {
         (
             p.to_string(),

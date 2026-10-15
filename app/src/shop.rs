@@ -683,6 +683,7 @@ fn shop_enter(
     mut commands: Commands,
     mut player_query: Query<(&mut Transform, &mut Facing), With<Player>>,
     room: Res<ShopRoom>,
+    shop: Res<ShopData>,
 ) {
     if *state != ShopLocation::Town {
         return;
@@ -709,6 +710,7 @@ fn shop_enter(
     commands.insert_resource(ShopReturnPos(transform.translation));
     transform.translation = SHOP_ORIGIN + Vec3::new(0.0, 1.0, room.door_z - 0.8);
     facing.dir = Vec3::new(0.0, 0.0, -1.0);
+    crate::sound::door_sound(Some(shop.shop.shop_level), true);
     next_state.set(ShopLocation::Inside);
     println!("Entered the shop");
 }
@@ -723,6 +725,7 @@ fn shop_exit(
     return_pos: Option<Res<ShopReturnPos>>,
     mut player_query: Query<(&mut Transform, &mut Facing), With<Player>>,
     room: Res<ShopRoom>,
+    shop: Res<ShopData>,
 ) {
     if *state != ShopLocation::Inside || !focus.is_world() {
         return;
@@ -747,6 +750,7 @@ fn shop_exit(
     }
     transform.translation = return_pos.map(|r| r.0).unwrap_or(Vec3::new(0.0, 1.0, 5.0));
     facing.dir = Vec3::new(0.0, 0.0, 1.0);
+    crate::sound::door_sound(Some(shop.shop.shop_level), false);
     next_state.set(ShopLocation::Town);
     println!("Left the shop");
 }
@@ -786,6 +790,7 @@ fn nook_interact(
     if let Ok(mut vis) = panel_query.single_mut() {
         *vis = Visibility::Visible;
     }
+    crate::sound::se(crate::sound::se_id::CHOICE_OPEN);
     println!("Shop menu opened");
 }
 
@@ -838,18 +843,23 @@ fn shop_menu_input(
         if let Ok(mut vis) = panel_query.single_mut() {
             *vis = Visibility::Hidden;
         }
+        crate::sound::se(crate::sound::se_id::PANEL_CLOSE);
         println!("Shop menu closed");
         return;
     }
     if actions.just_pressed(Action::Tab1) {
+        let before = (ui.mode, ui.selected);
         ui.mode = ShopMode::Buy;
         ui.selected = 0;
+        crate::sound::cursor_changed(before, (ui.mode, ui.selected));
         ui.message.clear();
         return;
     }
     if actions.just_pressed(Action::Tab2) {
+        let before = (ui.mode, ui.selected);
         ui.mode = ShopMode::Sell;
         ui.selected = 0;
+        crate::sound::cursor_changed(before, (ui.mode, ui.selected));
         ui.message.clear();
         return;
     }
@@ -862,11 +872,15 @@ fn shop_menu_input(
         return;
     }
     if actions.just_pressed(Action::MenuUp) {
+        let before = ui.selected;
         ui.selected = ui.selected.checked_sub(1).unwrap_or(list_len - 1);
+        crate::sound::cursor_changed(before, ui.selected);
         return;
     }
     if actions.just_pressed(Action::MenuDown) {
+        let before = ui.selected;
         ui.selected = (ui.selected + 1) % list_len;
+        crate::sound::cursor_changed(before, ui.selected);
         return;
     }
     if !actions.just_pressed(Action::Confirm) {
@@ -881,18 +895,22 @@ fn shop_menu_input(
             let item = shop.stock[index].clone();
             if inventory.bells < item.price {
                 ui.message = "Not enough bells!".to_string();
+                crate::sound::se(crate::sound::se_id::MENU_EXIT);
                 return;
             }
             let id = item.item;
             if id == 0 {
                 ui.message = format!("{} isn't for sale.", item.name);
+                crate::sound::se(crate::sound::se_id::MENU_EXIT);
                 return;
             }
             if !inventory.add(id) {
                 ui.message = "Your pockets are full!".to_string();
+                crate::sound::se(crate::sound::se_id::MENU_EXIT);
                 return;
             }
             inventory.bells -= item.price;
+            crate::sound::se(crate::sound::se_id::REGISTER);
             // Each piece on display sells once (`aSD_ReportGoodsSales`).
             shop.stock[index].sold = true;
             ui.selected = ui.selected.min(shop.for_sale().len().saturating_sub(1));
@@ -916,6 +934,7 @@ fn shop_menu_input(
             }
             let name = items::name(good);
             inventory.bells += unit;
+            crate::sound::se(crate::sound::se_id::REGISTER);
             // Half of Nook's payout counts toward the upgrade (mSP_PlusSales).
             shop.shop.record_sale(unit);
             let mut msg = format!("Sold {name} for {unit} bells!");
@@ -1102,7 +1121,12 @@ impl Plugin for ShopPlugin {
             .add_systems(Update, restock_daily)
             .add_systems(
                 Update,
-                (refresh_shop_ui, shop_interior_movement, update_shop_hud).in_set(GameplaySet),
+                (
+                    refresh_shop_ui,
+                    shop_interior_movement.in_set(locomotion::MovementSet),
+                    update_shop_hud,
+                )
+                    .in_set(GameplaySet),
             );
     }
 }

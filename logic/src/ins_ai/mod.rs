@@ -347,6 +347,37 @@ impl Insect {
         self.anim as usize % 2
     }
 
+    /// Outdoor sound report for currently translated behavior states:
+    /// ac_ins_semi/batta/ka and supported beetle/ladybug/skater flee states.
+    /// Silent families and unavailable behavior phases return None.
+    pub fn level_sound(&self, raining: bool) -> Option<u8> {
+        if self.alpha == 0 {
+            return None;
+        }
+        match self.kind {
+            4..=7
+                if self.action == Action::Wait
+                    && self.patience < 50.0
+                    && self.timer <= 0.0
+                    && !raining =>
+            {
+                Some([0x9B, 0x9A, 0x98, 0x97][(self.kind - 4) as usize])
+            }
+            15..=18 if self.action == Action::Wait && self.on_ground && self.patience < 20.0 => {
+                Some([159, 158, 160, 157][(self.kind - 15) as usize])
+            }
+            4..=7 | 24..=26 | 28 if matches!(self.action, Action::Avoid | Action::LetEscape) => {
+                Some(0x26)
+            }
+            19..=23 | 29..=31 | 34 if matches!(self.action, Action::Avoid | Action::LetEscape) => {
+                Some(0x25)
+            }
+            // Hover is the translated mosquito attack/sting state.
+            39 if self.action != Action::Hover => Some(0xCF),
+            _ => None,
+        }
+    }
+
     /// One 60 Hz tick (`aINS_actor_move` then `aICH_actor_move`).
     pub fn step(
         &mut self,

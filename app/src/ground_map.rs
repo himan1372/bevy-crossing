@@ -168,12 +168,22 @@ impl Unit {
     }
 }
 
+/// Runtime terrain sound metadata; no audio assets are stored here.
+#[derive(Clone, Copy)]
+pub(crate) struct TerrainSound {
+    pub key: u64,
+    pub id: u8,
+    pub block: [usize; 2],
+    pub position: Vec3,
+}
+
 /// The whole 7x10-acre town's collision units and tiers.
 #[derive(Clone)]
 pub struct GroundMap {
     /// 16x16 units per acre, acres row-major.
     units: Vec<Unit>,
     tiers: [u8; BLOCK_X_NUM * BLOCK_Z_NUM],
+    pub(crate) sound_sources: Vec<TerrainSound>,
 }
 
 impl GroundMap {
@@ -182,6 +192,7 @@ impl GroundMap {
         Self {
             units: units.into_iter().flatten().collect(),
             tiers,
+            sound_sources: Vec::new(),
         }
     }
 
@@ -228,6 +239,36 @@ impl GroundMap {
     /// Collision attribute of the unit under a scene position.
     pub fn attribute_at(&self, x: f32, z: f32) -> Option<u8> {
         self.locate(x, z).map(|(u, ..)| u.attribute)
+    }
+
+    /// Effective gameplay surface, using the translated retail resolver.
+    /// The shoreline uses a neutral wave phase until water animation exists.
+    pub fn sound_attribute_at(&self, x: f32, z: f32) -> Option<u8> {
+        use rustimal_logic::{wpos2attribute_step, Wpos2AttributeInputs};
+        let mut at = Vec2::new(x, z);
+        for _ in 0..8 {
+            let (unit, _, fx, fz) = self.locate(at.x, at.y)?;
+            let local = ((fx - 0.5) * UNIT, (fz - 0.5) * UNIT);
+            let area = rustimal_logic::get_unit_area(local.0, local.1);
+            let out = wpos2attribute_step(&Wpos2AttributeInputs {
+                raw_attr: unit.attribute,
+                area,
+                local_xz: local,
+                local_valid: true,
+                is_fg_field: true,
+                wave_cos: 0.0,
+            });
+            let Some(direction) = out.redirect else {
+                return Some(out.attr);
+            };
+            at += match direction {
+                0 => Vec2::new(0.0, -CELL_SIZE),
+                1 => Vec2::new(-CELL_SIZE, 0.0),
+                2 => Vec2::new(0.0, CELL_SIZE),
+                _ => Vec2::new(CELL_SIZE, 0.0),
+            };
+        }
+        None
     }
 
     /// Collision attribute of unit `ut` (row by row) of block (bx, bz).

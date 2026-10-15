@@ -189,6 +189,10 @@ fn spawn_shell(
     let room = commands
         .spawn((
             Name::new(name.to_string()),
+            crate::footsteps::IndoorFloor {
+                origin,
+                index: floor,
+            },
             Transform::from_translation(origin - centre).with_scale(Vec3::splat(ROOM_SCALE)),
             Visibility::default(),
         ))
