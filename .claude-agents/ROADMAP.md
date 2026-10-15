@@ -263,13 +263,22 @@ commits/pushes for future work; see Git history/upstream for publication state.
    request playback is accepted; a composed town tune/retail identity remains
    a follow-up rather than inferred complete.
 
-8. **audio-acceptance** (P).
+8. **audio-acceptance — automated pass complete; combined listening pending** (P).
    Run one combined checklist across music/scene changes, overlapping effects,
    menus, voices, movement, ambience, save/load, pause/resume and restart.
    Verify missing/wrong disc keeps the placeholder loop usable; run the Rust
    gate and compare full sound identity/timing/tails with Philip's own retail
    game. Document accepted gaps and resolve audible defects before closing
    `audio-from-disc`. Only then schedule the M5 slice-wide playtest.
+   2026-10-15: fixed stream/resource cleanup on game-state exit and pending
+   voice/door/footstep/effect cleanup on successful F9 load, preserving music.
+   Workspace check/clippy/fmt/build passed; 624 tests passed (22 ignored), plus
+   four explicit disc audio probes. Combined render peak 0.5172, no limiting or
+   nonfinite samples; MONO register retains 1.163 s under traffic. Synthetic
+   overload, delay decay, scene/menu gain, emitter stability and no-disc queue
+   checks pass. Actual device listening, load/restart and fallback UI remain
+   Philip's final route in backlog/audio-acceptance.md. No user save/settings
+   overwritten; configured town tune and fidelity/gameplay gaps remain open.
 
 #### Other work before slice sign-off
 
@@ -300,8 +309,11 @@ new-game flow, more disc formats/regions.
 Philip reports the mix/spatial playtest went well (2026-10-15), following
 ambience playback confirmation. Philip accepts the current voice edge cases (step 7), including accented
 speech and music-note request playback; no configured town tune exists yet.
-Next: combined audio acceptance (step 8), including save/load,
-pause/restart, missing-disc fallback and remaining overlap/cleanup cases.
+Combined audio acceptance (step 8) now has a passing automated gate and four
+disc audio probes, with lifecycle fixes rebuilt. Next: Philip's short combined
+listening route (backlog/audio-acceptance.md), including F9, pause/restart,
+room changes, overlap and missing-disc fallback UI. Review remaining scope
+before closing audio-from-disc.
 Hardware DSP/resampling/reserve-list gaps remain
 explicit, not silently completed. Resolve render-look and record deferred scope
 before M5: playtest-script → bug-bash → windows-release.

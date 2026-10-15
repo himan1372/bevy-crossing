@@ -30,6 +30,13 @@ const BGM1_GROUP: u8 = audio_group::BGM1 as u8;
 /// The effect player's sequence (`Na_InitAudio`).
 const SE_SEQUENCE: u8 = 242;
 
+#[derive(Component)]
+struct SoundStream;
+
+/// Successful quick-load clears transient sounds before submitting this frame.
+#[derive(Message)]
+pub(crate) struct ResetAudio;
+
 /// The running engine, shared with the audio thread.
 #[derive(Resource, Clone)]
 pub struct Sound {
@@ -156,7 +163,11 @@ fn start_sound(
     let handle = streams.add(NasStream {
         engine: sound.engine.clone(),
     });
-    commands.spawn((Name::new("sound engine"), AudioPlayer::<NasStream>(handle)));
+    commands.spawn((
+        SoundStream,
+        Name::new("sound engine"),
+        AudioPlayer::<NasStream>(handle),
+    ));
     commands.insert_resource(sound);
     commands.insert_resource(Bgm::default());
     if std::env::var_os("BEVY_CROSSING_AUDIO_DIAGNOSTICS").is_some_and(|v| v == "1") {
@@ -245,7 +256,7 @@ pub(crate) fn voice_end() {
     queue_voice(VoiceRequest::End);
 }
 
-#[derive(Default)]
+#[derive(Resource, Default)]
 struct VoicePlayback {
     voice: rustimal_logic::na_voice::Voice,
     voice_id: u16,
@@ -272,7 +283,7 @@ fn select_voice(sound: &Sound, voice: &mut rustimal_logic::na_voice::Voice, spec
 
 /// Na_GameFrame's deferred second syllable follows the port's 30 Hz game
 /// cadence. New text replaces pending lookahead; page/close cancels it.
-fn play_voices(time: Res<Time>, sound: Option<Res<Sound>>, mut playback: Local<VoicePlayback>) {
+fn play_voices(time: Res<Time>, sound: Option<Res<Sound>>, mut playback: ResMut<VoicePlayback>) {
     let queued = VOICE_QUEUE
         .lock()
         .map(|mut q| std::mem::take(&mut *q))
@@ -371,14 +382,14 @@ pub fn door_sound(shop: Option<rustimal_logic::shop::ShopTier>, entering: bool) 
     }
 }
 
-#[derive(Default)]
+#[derive(Resource, Default)]
 struct DoorPlayback {
     cues: &'static [(u16, u16)],
     ticks: f32,
     next: usize,
 }
 
-fn advance_door_sound(time: Res<Time>, mut playback: Local<DoorPlayback>) {
+fn advance_door_sound(time: Res<Time>, mut playback: ResMut<DoorPlayback>) {
     let request = DOOR_REQUEST.lock().ok().and_then(|mut r| r.take());
     if let Some((shop, entering)) = request {
         *playback = DoorPlayback {
@@ -672,21 +683,95 @@ fn report_mix(
     };
 }
 
+fn clear_requests() {
+    if let Ok(mut queue) = SE_QUEUE.lock() {
+        queue.clear();
+    }
+    if let Ok(mut queue) = VOICE_QUEUE.lock() {
+        queue.clear();
+    }
+    if let Ok(mut request) = DOOR_REQUEST.lock() {
+        *request = None;
+    }
+}
+
+/// One shared reset for loading and leaving play; music is arbitrated separately.
+fn reset_playback(
+    voice: &mut VoicePlayback,
+    door: &mut DoorPlayback,
+    footsteps: Option<ResMut<Messages<crate::footsteps::Footstep>>>,
+) {
+    *voice = VoicePlayback::default();
+    *door = DoorPlayback::default();
+    clear_requests();
+    if let Some(mut footsteps) = footsteps {
+        footsteps.clear();
+    }
+}
+
+fn reset_loaded_audio(
+    mut resets: MessageReader<ResetAudio>,
+    sound: Option<Res<Sound>>,
+    mut voice: ResMut<VoicePlayback>,
+    mut door: ResMut<DoorPlayback>,
+    footsteps: Option<ResMut<Messages<crate::footsteps::Footstep>>>,
+) {
+    if resets.read().count() == 0 {
+        return;
+    }
+    reset_playback(&mut voice, &mut door, footsteps);
+    if let Some(sound) = sound {
+        if let Ok(mut engine) = sound.engine.lock() {
+            engine.stop_sequence(audio_group::VOICE);
+            // Restart only SE: clears trigger/level slots and pending melodies.
+            // The next ambience update repopulates sources at the loaded position.
+            engine.start_sequence(audio_group::SE, SE_SEQUENCE as usize);
+        }
+    }
+}
+
+/// Despawning the owner drops its Bevy sink; old engines cannot keep streaming.
+fn stop_sound(
+    mut commands: Commands,
+    streams: Query<Entity, With<SoundStream>>,
+    sound: Option<Res<Sound>>,
+    mut voice: ResMut<VoicePlayback>,
+    mut door: ResMut<DoorPlayback>,
+    footsteps: Option<ResMut<Messages<crate::footsteps::Footstep>>>,
+    mut resets: ResMut<Messages<ResetAudio>>,
+) {
+    reset_playback(&mut voice, &mut door, footsteps);
+    resets.clear();
+    if let Some(sound) = sound {
+        sound.send(&[cmd(0xFE, 0, 0, 0, AudioParam::S32(0))]);
+    }
+    for entity in streams {
+        commands.entity(entity).despawn();
+    }
+    commands.remove_resource::<Sound>();
+    commands.remove_resource::<Bgm>();
+    commands.remove_resource::<AudioDiagnostics>();
+}
+
 pub struct SoundPlugin;
 
 impl Plugin for SoundPlugin {
     fn build(&self, app: &mut App) {
         app.add_audio_source::<NasStream>()
+            .add_message::<ResetAudio>()
+            .init_resource::<VoicePlayback>()
+            .init_resource::<DoorPlayback>()
             .add_systems(
                 OnEnter(AppState::InGame),
                 start_sound.run_if(resource_exists::<GameDisc>),
             )
             .add_systems(
                 Update,
-                (advance_door_sound, play_voices)
+                (reset_loaded_audio, advance_door_sound, play_voices)
                     .chain()
                     .after(crate::input::InteractSet::Doors)
                     .after(crate::msg_window::RevealSet)
+                    .after(crate::save::LoadSet)
                     .run_if(in_state(AppState::InGame)),
             )
             .add_systems(
@@ -701,7 +786,7 @@ impl Plugin for SoundPlugin {
                     .after(bevy::transform::TransformSystems::Propagate)
                     .run_if(in_state(AppState::InGame)),
             )
-            .add_systems(OnExit(AppState::InGame), crate::ambience::stop_ambience);
+            .add_systems(OnExit(AppState::InGame), stop_sound);
     }
 }
 
@@ -958,5 +1043,208 @@ mod tests {
                 "different voice types produced the same output"
             );
         }
+    }
+    // These checks share the legacy game-facing queues; serialize only them.
+    static QUEUE_CHECK: Mutex<()> = Mutex::new(());
+
+    fn lifecycle_app() -> App {
+        let mut app = App::new();
+        app.add_message::<ResetAudio>()
+            .add_message::<crate::footsteps::Footstep>()
+            .init_resource::<VoicePlayback>()
+            .init_resource::<DoorPlayback>();
+        app
+    }
+
+    #[test]
+    fn successful_load_reset_clears_pending_game_sounds_without_a_disc() {
+        let _guard = QUEUE_CHECK.lock().unwrap();
+        clear_requests();
+        let mut app = lifecycle_app();
+        app.add_systems(Update, reset_loaded_audio);
+        app.world_mut().resource_mut::<DoorPlayback>().cues =
+            rustimal_logic::action_audio::door_cues(None, true);
+        app.world_mut()
+            .resource_mut::<VoicePlayback>()
+            .voice
+            .spec_change(2);
+        se(se_id::CURSOR);
+        voice_begin(2, 7);
+        door_sound(None, true);
+        app.world_mut()
+            .resource_mut::<Messages<crate::footsteps::Footstep>>()
+            .write(crate::footsteps::Footstep {
+                position: Vec3::ZERO,
+                running: false,
+                npc: false,
+            });
+        app.world_mut()
+            .resource_mut::<Messages<ResetAudio>>()
+            .write(ResetAudio);
+        app.update();
+        assert!(SE_QUEUE.lock().unwrap().is_empty());
+        assert!(VOICE_QUEUE.lock().unwrap().is_empty());
+        assert!(DOOR_REQUEST.lock().unwrap().is_none());
+        assert!(app.world().resource::<DoorPlayback>().cues.is_empty());
+        assert_eq!(app.world().resource::<VoicePlayback>().voice.spec, 0);
+        assert!(app
+            .world()
+            .resource::<Messages<crate::footsteps::Footstep>>()
+            .is_empty());
+    }
+
+    #[test]
+    fn leaving_play_removes_all_stream_owners_and_audio_state() {
+        let _guard = QUEUE_CHECK.lock().unwrap();
+        clear_requests();
+        let mut app = lifecycle_app();
+        app.insert_resource(Bgm::default())
+            .insert_resource(AudioDiagnostics::default())
+            .add_systems(Update, stop_sound);
+        app.world_mut().spawn(SoundStream);
+        app.world_mut().spawn(SoundStream);
+        se(se_id::CURSOR);
+        app.update();
+        let mut query = app
+            .world_mut()
+            .query_filtered::<Entity, With<SoundStream>>();
+        assert_eq!(query.iter(app.world()).count(), 0);
+        assert!(!app.world().contains_resource::<Bgm>());
+        assert!(!app.world().contains_resource::<AudioDiagnostics>());
+        assert!(SE_QUEUE.lock().unwrap().is_empty());
+        // A second cleanup is safe; a restart has no leftover owner/cues.
+        app.update();
+    }
+
+    /// Offline combined render; no user save/settings writes or audio device.
+    #[test]
+    #[ignore = "requires BEVY_CROSSING_ISO"]
+    fn probe_combined_lifecycle() {
+        let _guard = QUEUE_CHECK.lock().unwrap();
+        clear_requests();
+        let path = std::env::var("BEVY_CROSSING_ISO").expect("set BEVY_CROSSING_ISO");
+        let disc = crate::game_disc::load(std::path::PathBuf::from(path)).unwrap();
+        let entry = disc.catalog.get("SEQ_TABLE").unwrap();
+        let seq_table: Arc<[u8]> = disc
+            .rom
+            .slice(entry.source, entry.offset, entry.size)
+            .unwrap()
+            .into();
+        let sound = Sound {
+            engine: Arc::new(Mutex::new(Engine::new(
+                Arc::new(DiscSound::new(disc.sound.clone().unwrap())),
+                sound_rom::tables(&disc.rom, &disc.catalog).unwrap(),
+            ))),
+            seq_table,
+        };
+        sound.send(&[
+            cmd(0x82, SE_GROUP, SE_SEQUENCE, 0, AudioParam::S32(0)),
+            cmd(0x82, BGM0_GROUP, sound.seq_table[12], 0, AudioParam::S32(0)),
+        ]);
+        let mut app = lifecycle_app();
+        app.insert_resource(sound.clone())
+            .add_systems(Update, reset_loaded_audio);
+        let mut voice = rustimal_logic::na_voice::Voice::default();
+        let mut seed = 0;
+        let mut buf = [0.0; SAMPLES_PER_UPDATE * 2];
+        for update in 0..1800 {
+            if update >= 24 && update % 16 == 0 {
+                sound
+                    .engine
+                    .lock()
+                    .unwrap()
+                    .trigger_effect(se_id::CURSOR, 1.0);
+                sound
+                    .engine
+                    .lock()
+                    .unwrap()
+                    .trigger_effect(rustimal_logic::footsteps::WOOD, 0.6);
+            }
+            if update == 64 {
+                sound
+                    .engine
+                    .lock()
+                    .unwrap()
+                    .trigger_effect(se_id::REGISTER, 1.0);
+            }
+            if update % 32 == 0 {
+                play_voice(&sound, &mut voice, &mut seed, (2, 0x5E, 0x5D, 0xFF));
+            }
+            if update == 500 {
+                app.world_mut()
+                    .resource_mut::<Messages<ResetAudio>>()
+                    .write(ResetAudio);
+                app.update();
+                assert!(sound.engine.lock().unwrap().playing(BGM0_GROUP as usize));
+                // The game-facing voice context was reset with the SE player.
+                voice = rustimal_logic::na_voice::Voice::default();
+            }
+            if update == 800 {
+                sound.ambience([
+                    Some(rustimal_logic::ambience::Level {
+                        key: 1,
+                        id: 0x0B,
+                        volume: 0.8,
+                        pan: 20,
+                    }),
+                    None,
+                    None,
+                    None,
+                ]);
+            }
+            if update == 1100 {
+                sound.ambience([None; 4]);
+            }
+            if update == 1200 {
+                sound.send(&[cmd(0x41, BGM0_GROUP, 0, 0, AudioParam::F32(0.5))]);
+            }
+            if update == 1300 {
+                sound.send(&[cmd(0x41, BGM0_GROUP, 0, 0, AudioParam::F32(1.0))]);
+            }
+            buf.fill(0.0);
+            sound.engine.lock().unwrap().update(&mut buf);
+            assert!(buf.iter().all(|s| s.is_finite() && s.abs() <= 0.98001));
+        }
+        let stats = sound.engine.lock().unwrap().mix_stats();
+        println!("combined mix: {stats:?}");
+        assert!(stats.peak > 0.01 && stats.active_voices <= 24);
+        assert_eq!(stats.nonfinite_samples, 0);
+        sound.send(&[cmd(0xFE, 0, 0, 0, AudioParam::S32(0))]);
+        for _ in 0..1200 {
+            buf.fill(0.0);
+            sound.engine.lock().unwrap().update(&mut buf);
+        }
+        assert!(
+            buf.iter().all(|s| s.abs() < 1.0e-6),
+            "stop drains notes and delay"
+        );
+        for group in [SE_GROUP, BGM0_GROUP, BGM1_GROUP, audio_group::VOICE as u8] {
+            assert!(!sound.engine.lock().unwrap().playing(group as usize));
+        }
+        clear_requests();
+    }
+    #[test]
+    fn no_disc_submissions_stay_silent_and_do_not_accumulate() {
+        let _guard = QUEUE_CHECK.lock().unwrap();
+        clear_requests();
+        let mut app = lifecycle_app();
+        app.init_resource::<Time>().add_systems(
+            Update,
+            (advance_door_sound, play_voices, play_effects).chain(),
+        );
+        se(se_id::CURSOR);
+        voice_begin(2, 0);
+        voice_character([0x5E, 0x5D, 0xFF], 32, false);
+        door_sound(None, true);
+        app.update();
+        app.update();
+        assert!(!app.world().contains_resource::<Sound>());
+        assert!(VOICE_QUEUE.lock().unwrap().is_empty());
+        assert!(SE_QUEUE.lock().unwrap().is_empty());
+        assert!(DOOR_REQUEST.lock().unwrap().is_none());
+        let mut query = app
+            .world_mut()
+            .query_filtered::<Entity, With<SoundStream>>();
+        assert_eq!(query.iter(app.world()).count(), 0);
     }
 }

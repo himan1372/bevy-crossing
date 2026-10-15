@@ -25,7 +25,7 @@ hardware fidelity, voice edge cases and combined acceptance still need work. The
 - [ ] audio-world-ambience: implemented runtime river/shore metadata, localized waterfall fallback, supported AI insect loops, stable four-voice level slots, distance/pan and indoor/exit cleanup. Philip confirms playback works; cleanup/stress acceptance, pond/frogs, additional insect events and weather remain follow-ups.
 - [ ] audio-mix-and-fidelity: CPU source-based reverb and indoor step sends, positional world actions/NPC pan, peak meters and linked stereo protection implemented. Accepted gains preserved; Philip reports successful playtest (2026-10-15). Filtered resampling/reserve-list allocator audit documented; hardware gaps remain. See audio-mix-and-fidelity.md.
 - [x] audio-voice-edge-cases (current villager scope): Philip accepts ordinary voices, emotion/size, pause/page behavior and F8 accented text; both music-note examples make sound. No configured town tune exists yet; composed melody identity and unsupported interactions/configuration remain follow-ups. Unavailable special-NPC conversations and full message/configuration timing remain explicit follow-ups. See audio-voice-edge-cases.md.
-- [ ] audio-acceptance: combined retail listening, overlap/decay checks, pause/load/scene transitions and missing-disc fallback before M4 audio closes. Full ordering and acceptance criteria: ../ROADMAP.md.
+- [ ] audio-acceptance: automated pass complete (624 tests plus four explicit disc audio probes); game-state stream cleanup and successful-load transient resets fixed. Combined device listening, F9/restart and fallback UI route pending. See audio-acceptance.md; M4 audio remains open.
 
 Voice translation evidence (Claude transcript supplied by Philip, 2026-10-14):
 tanboin_henkan, chouboin_henkan, connect_check and boin_shiin_check were
@@ -54,3 +54,9 @@ hardware fidelity. Philip subsequently reports the mix/spatial playtest went wel
 Voice edge cases (7) now accepted for current villager playback, including
 accents and music-note sounds. A configured town tune is still absent.
 Next: combined acceptance (8).
+
+2026-10-15 combined acceptance: workspace check/clippy/fmt/tests/build passed
+(624 passed, 22 ignored) plus four real-disc audio probes. Peak 0.5172 in combined
+render, no invalid samples/limiting, full MONO register tail under traffic.
+Fixed game-state stream cleanup and pending load cues; final listening route and
+explicit remaining scope are in audio-acceptance.md. User save/settings untouched.

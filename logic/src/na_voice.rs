@@ -918,4 +918,37 @@ mod tests {
         );
         assert!((v.slots[0].volume() - 0.65).abs() < 1e-6);
     }
+    #[test]
+    fn deferred_syllable_keeps_its_speaker_and_cancels_on_close() {
+        let mut voice = Voice::default();
+        voice.spec_change(2);
+        voice.speaker_id = 17;
+        voice.voice_se(0x5E, 0x5D, 0xFF, 32, &mut || 0x40);
+        voice.speaker_id = 99;
+        assert!(voice.game_frame(&mut || 0x40).is_empty());
+        assert!(voice
+            .game_frame(&mut || 0x40)
+            .iter()
+            .any(|o| matches!(o, VoiceOut::Start { .. })));
+        assert_eq!(voice.speaker_id, 17);
+        voice.voice_se(0x5E, 0x5D, 0xFF, 32, &mut || 0x40);
+        voice.end_message();
+        assert!(voice.game_frame(&mut || 0x40).is_empty());
+        assert!(voice.game_frame(&mut || 0x40).is_empty());
+    }
+
+    #[test]
+    fn punctuation_and_mood_update_live_slot_parameters() {
+        let mut voice = Voice::default();
+        voice.spec_change(2);
+        let out = voice.voice_se(0x82, 0xFF, 0xFF, 32, &mut || 0x40);
+        assert!(out.is_empty());
+        assert!((voice.slots[0].pitch() - 1.24).abs() < 1.0e-6);
+        voice.set_status(1);
+        voice.voice_se(0x5E, 0x5D, 0xFF, 32, &mut || 0x40);
+        assert!(voice.slots[0].volume() > 0.65);
+        voice.begin_message();
+        assert_eq!(voice.message_status, 0);
+        assert!(voice.game_frame(&mut || 0x40).is_empty());
+    }
 }

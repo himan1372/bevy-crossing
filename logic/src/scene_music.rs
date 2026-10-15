@@ -136,3 +136,51 @@ impl VolumeRamp {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn returning_from_a_quiet_house_uses_the_current_town_hour() {
+        assert_eq!(
+            select(Scene::Town, 3 * 3600, FieldWeather::Fine)
+                .unwrap()
+                .id,
+            4
+        );
+        assert!(select(Scene::PlayerHouse, 3 * 3600, FieldWeather::Fine).is_none());
+        assert_eq!(
+            select(Scene::Town, 23 * 3600, FieldWeather::Fine)
+                .unwrap()
+                .id,
+            24
+        );
+    }
+
+    #[test]
+    fn menu_priority_and_real_time_ramps_restore_levels() {
+        let menu = Ducking {
+            menu: true,
+            talking: true,
+        };
+        let talk = Ducking {
+            menu: false,
+            talking: true,
+        };
+        assert_eq!(menu.volume(), 0.5);
+        assert_eq!(talk.volume(), 0.7);
+        assert_eq!(menu.transition_frames(talk), 2);
+        let mut ramp = VolumeRamp::default();
+        ramp.retarget(menu.volume(), 2);
+        // Real time continues while the virtual game clock is paused.
+        ramp.advance(0.25);
+        assert_eq!(ramp.current, 0.5);
+        ramp.retarget(talk.volume(), 2);
+        ramp.advance(0.25);
+        assert_eq!(ramp.current, 0.7);
+        ramp.retarget(1.0, 30);
+        ramp.advance(1.0);
+        assert_eq!(ramp.current, 1.0);
+    }
+}

@@ -826,4 +826,51 @@ mod tests {
             ..MsgContext::default()
         }
     }
+    #[test]
+    fn accented_letters_round_trip_to_the_original_voice_codes() {
+        for (ch, code) in [
+            ('é', 0x7C),
+            ('ñ', 0x87),
+            ('ù', 0x8E),
+            ('ê', 0x7D),
+            ('à', 0x1F),
+            ('Œ', 0x18),
+        ] {
+            assert_eq!(char_of(code), Some(ch));
+            assert_eq!(ac_code_opt(ch), Some(code));
+        }
+        assert_eq!(
+            rustimal_logic::na_voice::phoneme_of(ac_code('é')),
+            rustimal_logic::na_voice::phoneme_of(b'e')
+        );
+        assert_eq!(ac_code_opt('🤖'), None);
+        assert_eq!(ac_code('🤖'), b'?');
+        assert_eq!(ac_code('♪'), 0x2F);
+        assert_eq!(ac_code('/'), 0xAE);
+    }
+
+    #[test]
+    fn expression_markers_stay_out_of_plain_text() {
+        let text: String = [
+            markup::STATUS,
+            markup::arg(3),
+            markup::LINE_SCALE,
+            markup::arg(64),
+            markup::CHAR_SCALE,
+            markup::arg(16),
+            'é',
+            'x',
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(markup::strip(&text), "éx");
+        assert_eq!(
+            markup::parse(&text)[..3],
+            [
+                markup::Item::Status(3),
+                markup::Item::LineScale(64),
+                markup::Item::CharScale(16)
+            ]
+        );
+    }
 }

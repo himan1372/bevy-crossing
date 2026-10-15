@@ -490,7 +490,11 @@ fn quick_save(
 /// and ground items (despawn all, respawn everything not marked picked).
 fn quick_load(
     // One tuple param: these systems are at Bevy's 16-parameter limit.
-    (actions, focus): (Res<Actions>, Res<InputFocus>),
+    (actions, focus, mut audio_reset): (
+        Res<Actions>,
+        Res<InputFocus>,
+        MessageWriter<crate::sound::ResetAudio>,
+    ),
     mut player_query: Query<&mut Transform, With<Player>>,
     field: Option<ResMut<FieldItems>>,
     mut inventory: ResMut<PlayerInventory>,
@@ -533,6 +537,7 @@ fn quick_load(
         field.restore(save.field_items.as_deref().unwrap_or_default());
     }
 
+    audio_reset.write(crate::sound::ResetAudio);
     println!("Loaded save (seed {})", save.town_seed);
     show_notification("Loaded!", &mut timer, notify_query);
 }
@@ -541,6 +546,9 @@ fn quick_load(
 fn tick_playtime(time: Res<Time>, mut playtime: ResMut<Playtime>) {
     playtime.secs += time.delta().as_secs_f32() as f64;
 }
+
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct LoadSet;
 
 pub struct SavePlugin;
 
@@ -560,7 +568,13 @@ impl Plugin for SavePlugin {
             )
             .add_systems(
                 Update,
-                (tick_playtime, quick_save, quick_load, tick_notification).in_set(GameplaySet),
+                (
+                    tick_playtime,
+                    quick_save,
+                    quick_load.in_set(LoadSet),
+                    tick_notification,
+                )
+                    .in_set(GameplaySet),
             );
     }
 }

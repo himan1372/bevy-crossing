@@ -106,9 +106,3 @@ pub(crate) fn update_ambience(
             .update(sources.iter().copied(), microphone, quiet),
     );
 }
-
-pub(crate) fn stop_ambience(sound: Option<Res<Sound>>) {
-    if let Some(sound) = sound {
-        sound.ambience([None; rustimal_logic::ambience::VOICES]);
-    }
-}

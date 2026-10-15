@@ -126,3 +126,42 @@ impl Mixer {
         self.active
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retained_emitters_keep_slots_quiet_gain_and_clear_on_loss() {
+        let mut mixer = Mixer::default();
+        let sources = [1, 2, 3, 4, 5].map(|key| Source {
+            key,
+            id: 0x0B,
+            position: [key as f32 * 10.0, 0.0, 0.0],
+        });
+        let active = mixer.update(sources, [0.0; 3], false);
+        assert_eq!(active.iter().flatten().count(), 4);
+        assert!(!active.iter().flatten().any(|v| v.key == 5));
+        let quiet = mixer.update(sources, [0.0; 3], true);
+        for (a, q) in active.into_iter().zip(quiet) {
+            assert_eq!(a.unwrap().key, q.unwrap().key);
+            assert!((a.unwrap().volume * 0.5 - q.unwrap().volume).abs() < 1.0e-6);
+        }
+        let reordered = mixer.update(sources.into_iter().rev(), [0.0; 3], false);
+        for (a, b) in active.into_iter().zip(reordered) {
+            assert_eq!(a.unwrap().key, b.unwrap().key);
+        }
+        assert_eq!(mixer.update([], [0.0; 3], false), [None; VOICES]);
+        assert_eq!(mixer.clear(), [None; VOICES]);
+    }
+
+    #[test]
+    fn spatial_sources_pan_and_stop_outside_range() {
+        let left = spatial([-100.0, 0.0, 0.0], [0.0; 3]).unwrap();
+        let right = spatial([100.0, 0.0, 0.0], [0.0; 3]).unwrap();
+        assert_eq!(left.0, right.0);
+        assert_ne!(left.1, right.1);
+        assert!(spatial([RANGE, 0.0, 0.0], [0.0; 3]).is_none());
+        assert!(spatial([f32::NAN, 0.0, 0.0], [0.0; 3]).is_none());
+    }
+}
