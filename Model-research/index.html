@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
+  <link rel="icon" href="data:," />
+  <title>ACGC Models Research</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap');
+    :root {
+      color-scheme: light dark;
+      --paper:#f4f1e8; --ink:#18211d; --muted:#53605a; --line:#c8cabe;
+      --panel:#fffdf7; --deep:#153c30; --deep-ink:#f6f2e8; --mint:#bde8cf;
+      --orange:#d96431; --yellow:#f0cb64; --blue:#326d84; --soft:#e6e2d7;
+      --code:#eae6db; --shadow:0 14px 36px rgba(30,45,37,.10);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper:#101713; --ink:#eff4ec; --muted:#aebbb3; --line:#39453e;
+        --panel:#18221d; --deep:#bde8cf; --deep-ink:#102018; --mint:#295c47;
+        --orange:#f18858; --yellow:#dfbf61; --blue:#73b6cd; --soft:#222d27;
+        --code:#212c26; --shadow:0 16px 38px rgba(0,0,0,.24);
+      }
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:auto}
+    body{margin:0;background:var(--paper);color:var(--ink);font-family:"Source Sans 3",sans-serif;line-height:1.55}
+    a{color:inherit;text-decoration-thickness:1px;text-underline-offset:3px}
+    a:hover{color:var(--orange)}
+    code,.mono{font-family:"IBM Plex Mono",monospace;font-size:.9em}
+    .shell{max-width:1180px;margin:auto;padding:clamp(20px,4vw,56px)}
+    .hero{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(260px,.6fr);gap:clamp(28px,6vw,76px);padding:clamp(34px,6vw,82px) 0 54px;border-bottom:1px solid var(--line)}
+    .kicker{font-family:"IBM Plex Mono",monospace;color:var(--orange);font-size:.78rem;font-weight:600;letter-spacing:.08em;margin:0 0 16px}
+    h1{font-size:clamp(2.55rem,6vw,5.4rem);line-height:.95;letter-spacing:-.045em;margin:0 0 24px;max-width:850px;font-weight:700}
+    .lead{font-size:clamp(1.16rem,2vw,1.42rem);line-height:1.45;max-width:740px;margin:0;color:var(--muted)}
+    .verdict{background:var(--deep);color:var(--deep-ink);padding:28px;border-radius:5px;align-self:end;box-shadow:var(--shadow)}
+    .verdict strong{display:block;font-size:1.15rem;margin-bottom:11px}.verdict p{margin:0}.verdict code{color:inherit}
+    .jump{display:flex;gap:8px;flex-wrap:wrap;padding:18px 0 0}
+    .jump a{text-decoration:none;border:1px solid var(--line);padding:7px 11px;border-radius:999px;font-family:"IBM Plex Mono",monospace;font-size:.76rem;background:var(--panel)}
+    .summary{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);margin:44px 0 72px}
+    .fact{background:var(--panel);padding:26px}.fact .num{display:block;font-size:2.3rem;line-height:1;font-weight:700;color:var(--deep);margin-bottom:8px}.fact p{margin:0;color:var(--muted)}
+    section{scroll-margin-top:20px;margin:0 0 82px}
+    .section-head{display:grid;grid-template-columns:100px 1fr;gap:20px;border-top:3px solid var(--ink);padding-top:18px;margin-bottom:32px}
+    .index{font-family:"IBM Plex Mono",monospace;color:var(--orange);font-weight:600}.section-head h2{font-size:clamp(1.85rem,3.5vw,3rem);line-height:1.03;letter-spacing:-.025em;margin:0}.section-head p{grid-column:2;margin:8px 0 0;color:var(--muted);max-width:760px;font-size:1.05rem}
+    .pipeline{display:grid;grid-template-columns:repeat(4,1fr);align-items:stretch;margin:28px 0 42px}
+    .pipe{position:relative;background:var(--panel);border:1px solid var(--line);padding:22px 20px;min-height:145px}
+    .pipe:not(:last-child)::after{content:"→";position:absolute;z-index:2;right:-15px;top:50%;transform:translateY(-50%);width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--orange);color:white;font-weight:700}
+    .pipe small{font-family:"IBM Plex Mono",monospace;color:var(--muted)}.pipe strong{display:block;font-size:1.18rem;margin:9px 0 5px}.pipe p{margin:0;color:var(--muted);font-size:.92rem}
+    .families{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+    .family{border-top:5px solid var(--deep);background:var(--panel);padding:24px 22px}.family:nth-child(2){border-color:var(--orange)}.family:nth-child(3){border-color:var(--blue)}
+    .family h3{font-size:1.35rem;margin:0 0 10px}.family p{color:var(--muted);margin:0 0 15px}.family ul{margin:0;padding-left:18px}.family li+li{margin-top:6px}
+    .callout{margin:30px 0;padding:23px 25px;background:var(--soft);border-radius:4px;display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:start}.callout .mark{font:600 1.5rem "IBM Plex Mono",monospace;color:var(--orange)}.callout p{margin:0}.callout strong{display:block;margin-bottom:4px}
+    .opcode-wrap{overflow:hidden;border:1px solid var(--line);background:var(--panel)}
+    .opcode{display:grid;grid-template-columns:180px 90px 1fr;padding:12px 16px;border-bottom:1px solid var(--line);align-items:baseline}.opcode:last-child{border:0}.opcode.head{font-family:"IBM Plex Mono",monospace;font-size:.74rem;font-weight:600;color:var(--muted);background:var(--soft)}
+    .answer-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px}.answer{padding:27px;background:var(--panel);border:1px solid var(--line)}.answer h3{margin:0 0 11px;font-size:1.35rem}.answer p{margin:0;color:var(--muted)}
+    .disc-layout{border:1px solid var(--line);background:var(--panel)}
+    .disc-row{display:grid;grid-template-columns:minmax(170px,1fr) 150px 130px minmax(220px,1.5fr);gap:14px;padding:12px 16px;border-bottom:1px solid var(--line);align-items:center}.disc-row:last-child{border:0}.disc-row.head{font-family:"IBM Plex Mono",monospace;font-size:.72rem;font-weight:600;color:var(--muted);background:var(--soft)}.disc-row code{font-weight:600}.tag{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:.7rem;padding:3px 6px;background:var(--code);border-radius:3px;width:max-content}.model-home{background:var(--mint);color:var(--ink)}
+    .disc-note{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:22px}.disc-note>div{padding:22px;border:1px solid var(--line)}.disc-note strong{display:block;margin-bottom:6px}.disc-note p{margin:0;color:var(--muted)}
+    .unused{columns:2;column-gap:34px;padding:0;list-style:none}.unused li{break-inside:avoid;border-top:1px solid var(--line);padding:13px 0}.unused code{color:var(--orange);font-weight:600}
+    details{border-top:1px solid var(--line);padding:14px 0}details:last-child{border-bottom:1px solid var(--line)}summary{cursor:pointer;font-weight:700;list-style:none;display:flex;justify-content:space-between;gap:20px}summary::after{content:"+";font:500 1.2rem "IBM Plex Mono",monospace;color:var(--orange)}details[open] summary::after{content:"−"}details p{margin:12px 0 4px;color:var(--muted);max-width:900px}
+    .sources{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.source{padding:16px 18px;border:1px solid var(--line);background:var(--panel);text-decoration:none;display:flex;gap:13px}.source b{font-family:"IBM Plex Mono",monospace;color:var(--orange)}.source span{font-weight:600}.source:hover{border-color:var(--orange)}
+    footer{border-top:1px solid var(--line);padding:25px 0 12px;color:var(--muted);font-size:.9rem;display:flex;justify-content:space-between;gap:20px}
+    @media(max-width:780px){
+      .shell{padding:20px}.hero{grid-template-columns:1fr;padding-top:34px}.summary{grid-template-columns:1fr}.pipeline{grid-template-columns:1fr}.pipe:not(:last-child)::after{right:50%;top:auto;bottom:-16px;transform:translateX(50%) rotate(90deg)}.families,.answer-grid,.disc-note,.sources{grid-template-columns:1fr}.section-head{grid-template-columns:52px 1fr}.disc-layout{border:0;background:transparent}.disc-row.head{display:none}.disc-row{grid-template-columns:1fr 1fr;gap:7px;margin-bottom:10px;border:1px solid var(--line);background:var(--panel);padding:15px}.disc-row span:last-child{grid-column:1/-1;color:var(--muted)}.unused{columns:1}.opcode{grid-template-columns:1fr 70px}.opcode span:last-child{grid-column:1/-1;color:var(--muted);margin-top:4px}.opcode.head span:last-child{display:none}footer{display:block}footer span{display:block;margin-top:6px}}
+  </style>
+</head>
+<body>
+<main class="shell">
+  <header class="hero">
+    <div>
+      <p class="kicker">TECHNICAL FINDING · USA REV 0 (GAFE01)</p>
+      <h1>The “models” are code-linked display lists.</h1>
+      <p class="lead">Animal Crossing on GameCube carries its Nintendo 64 rendering architecture forward. Geometry is stored as <code>Vtx</code> arrays and <code>Gfx</code> command lists, then translated to GameCube GX at runtime—not loaded as BMD files.</p>
+      <nav class="jump" aria-label="Jump to section">
+        <a href="#format">Format</a><a href="#selection">Selection</a><a href="#disc">Disc map</a><a href="#unused">Unused assets</a><a href="#unknowns">Open questions</a>
+      </nav>
+    </div>
+    <aside class="verdict">
+      <strong>Direct answer</strong>
+      <p>The version you see is chosen by the actor profile and object-bank tables. Numbered insect models are animation frames, not LODs. The model bytes live inside <code>main.dol</code> and the Yaz0-compressed <code>foresta.rel.szs</code>.</p>
+    </aside>
+  </header>
+
+  <div class="summary" aria-label="Key counts">
+    <div class="fact"><span class="num">246</span><p>actor profile entries; one null slot at profile 185</p></div>
+    <div class="fact"><span class="num">700+</span><p>object-bank identifiers used to resolve game assets</p></div>
+    <div class="fact"><span class="num">0</span><p>subdirectories in the USA Rev 0 disc FST</p></div>
+  </div>
+
+  <section id="format">
+    <div class="section-head"><span class="index">01</span><h2>What format is a model?</h2><p>A model is not a standalone file with a header or revision field. It is a collection of compiled arrays linked into the executable or REL.</p></div>
+    <div class="pipeline" aria-label="Rendering pipeline">
+      <div class="pipe"><small>ASSET DATA</small><strong><code>Vtx</code> + <code>Gfx</code></strong><p>Mixed-width vertices, CI textures, palettes, display-list commands.</p></div>
+      <div class="pipe"><small>INTERPRETER</small><strong>emu64</strong><p>Reads Fast3D-derived commands and custom Dolphin extensions.</p></div>
+      <div class="pipe"><small>GAMECUBE API</small><strong>GX</strong><p>Receives translated geometry, texture, combiner, and matrix state.</p></div>
+      <div class="pipe"><small>OUTPUT</small><strong>Rendered scene</strong><p>The selected actor or object model appears in-game.</p></div>
+    </div>
+
+    <div class="families">
+      <article class="family"><h3>Furniture & props</h3><p>Usually a single static display list, with no skeleton.</p><ul><li><code>*_v</code> vertex arrays</li><li><code>*_model</code> / <code>*_gfx</code> commands</li><li><code>*_pal</code> and <code>*_tex</code> image data</li></ul></article>
+      <article class="family"><h3>Fish & insects</h3><p>Multiple body-part display lists; numbered insect suffixes are wing-animation frames.</p><ul><li>Shared vertex pools</li><li>Opaque or translucent lists</li><li>No distance-based LOD found</li></ul></article>
+      <article class="family"><h3>Villagers</h3><p>Per-species cKF skeletons assemble roughly ten body-part display lists with per-bone matrices.</p><ul><li>72 species model files in the decomp</li><li>8 eye and 6 mouth variants</li><li>Clothing/face textures supplied per instance</li></ul></article>
+    </div>
+
+    <div class="callout"><span class="mark">×</span><p><strong>Not BMD. Not “cMP.” Not “SRL.”</strong>No examined source attests <code>cMP</code> or <code>SRL</code> as an Animal Crossing GameCube model format. <code>.srl</code> is commonly a Nintendo DS ROM extension; “PG Model” in community image names means Population Growing, not a format.</p></div>
+
+    <div class="opcode-wrap" aria-label="Custom display-list opcodes">
+      <div class="opcode head"><span>OPCODE</span><span>VALUE</span><span>PURPOSE</span></div>
+      <div class="opcode"><code>G_TRIN</code><code>0x09</code><span>Custom triangle command</span></div>
+      <div class="opcode"><code>G_TRIN_INDEPEND</code><code>0x0A</code><span>Triangle with independent vertices</span></div>
+      <div class="opcode"><code>G_SETTEXEDGEALPHA</code><code>0xCE</code><span>Texture-edge alpha</span></div>
+      <div class="opcode"><code>G_SETCOMBINE_NOTEV</code><code>0xCF</code><span>Combiner, non-TEV path</span></div>
+      <div class="opcode"><code>G_SETCOMBINE_TEV</code><code>0xD0</code><span>Combiner, TEV path</span></div>
+      <div class="opcode"><code>G_SETTILE_DOLPHIN</code><code>0xD2</code><span>Dolphin-extended tile setup</span></div>
+    </div>
+  </section>
+
+  <section id="selection">
+    <div class="section-head"><span class="index">02</span><h2>Which version reaches the screen?</h2><p>Runtime selection is identity-driven, not distance-driven. The engine resolves an actor profile and object bank, then binds skeleton, part lists, and instance textures where needed.</p></div>
+    <div class="answer-grid">
+      <article class="answer"><h3>No LOD system found</h3><p>Searches of actor and draw code found frustum culling—<code>ACTOR_STATE_NO_DRAW_WHILE_CULLED</code>—but no distance-based model swap. “1” and “2” on insect parts denote wing-flap frames.</p></article>
+      <article class="answer"><h3>Selection tables do the work</h3><p><code>actor_dlftbls</code> has 246 profile entries. <code>m_actor.h</code> defines 700+ object banks. Villagers additionally resolve species, cKF skeleton, body-part lists, and eye/mouth/clothing texture indices.</p></article>
+      <article class="answer"><h3>Actors are not streamed from disc</h3><p>The actor table’s <code>rom_start</code> and <code>rom_end</code> fields are marked unused in Animal Crossing. The game’s working content is RAM-resident after boot.</p></article>
+      <article class="answer"><h3>“Duplicate” needs care</h3><p>No confirmed second copy of the same model was found. A shared DUMMY model serves many item IDs. Much of the decompressed REL is unreachable through known asset tables, but that span includes code and other data—not proven duplicate models.</p></article>
+    </div>
+  </section>
+
+  <section id="disc">
+    <div class="section-head"><span class="index">03</span><h2>Where on the disc?</h2><p>The USA Rev 0 FST has one root and ten files. There is no <code>/actor</code>, <code>/object</code>, or <code>/demo</code> directory to scan; those are decomp source paths.</p></div>
+    <div class="disc-layout" aria-label="GAFE01 disc file table">
+      <div class="disc-row head"><span>FILE</span><span>OFFSET</span><span>SIZE</span><span>ROLE</span></div>
+      <div class="disc-row model-home"><code>main.dol</code><span>disc header</span><span>918,720 B</span><span>Boot executable; linked model data</span></div>
+      <div class="disc-row model-home"><code>foresta.rel.szs</code><span>0x00F27B34</span><span>6,137,393 B</span><span><span class="tag">Yaz0</span> → 15,640,056-byte REL; linked model data</span></div>
+      <div class="disc-row"><code>audiorom.img</code><span>0x000FE588</span><span>8,300,384 B</span><span>jaudio sound bank</span></div>
+      <div class="disc-row"><code>foresta.map</code><span>0x00A87D3C</span><span>4,849,144 B</span><span>Linker map text</span></div>
+      <div class="disc-row"><code>forest_2nd.arc</code><span>0x015D2508</span><span>4,132,608 B</span><span><span class="tag">RARC</span> ARAM graphics archive; not model arrays</span></div>
+      <div class="disc-row"><code>famicom.arc</code><span>0x008E8CFC</span><span>1,699,904 B</span><span><span class="tag">RARC</span> NES ROMs</span></div>
+      <div class="disc-row"><code>forest_1st.arc</code><span>0x01502168</span><span>852,896 B</span><span><span class="tag">RARC</span> ARAM graphics archive; not model arrays</span></div>
+      <div class="disc-row"><code>static.map</code><span>0x019C4D68</span><span>552,879 B</span><span>Linker map text</span></div>
+      <div class="disc-row"><code>opening.bnr</code><span>0x019C3408</span><span>6,496 B</span><span><span class="tag">BNR1</span> GameCube banner</span></div>
+      <div class="disc-row"><code>COPYDATE</code><span>0x008E8CE8</span><span>19 B</span><span>Build date string</span></div>
+      <div class="disc-row"><code>static.str</code><span>0x01A4BD18</span><span>56 B</span><span>Build path string</span></div>
+    </div>
+    <div class="disc-note">
+      <div><strong>Extraction implication</strong><p>Start from DOL/REL offsets, not filenames. The PC ports generate per-asset tables of absolute offsets plus swap classes: <code>NONE</code>, <code>U16</code>, <code>U32</code>, and <code>VTX</code>.</p></div>
+      <div><strong>Endianness implication</strong><p><code>Vtx</code> records mix 16-bit positions with 8-bit colors and need a dedicated swap routine. CI palettes are N64-endian and converted when loaded.</p></div>
+    </div>
+  </section>
+
+  <section id="unused">
+    <div class="section-head"><span class="index">04</span><h2>Models that ship but stay hidden</h2><p>These are unused or normally unreachable cases identified by community documentation and cross-checked against decomp filenames where possible.</p></div>
+    <ul class="unused">
+      <li><code>xsq</code> — unused squirrel; present as <code>xsq_1.c</code>, spawnable only through memory editing.</li>
+      <li><strong>Debug Gyroid</strong> — test-map assistant with corrupted textures and no animations.</li>
+      <li><code>ac_mbg</code>, <code>ac_airplane</code>, <code>ac_mural</code> — test actors, debug-map or unnamed-item only.</li>
+      <li><strong>Eight fossil bases</strong> — <code>ac_din_*_dummy.c</code> unobtainable furniture.</li>
+      <li><strong>DUMMY-shared items</strong> — multiple item IDs resolve to one shared placeholder model.</li>
+      <li><code>ac_hayakawa_famicom</code> — duplicate “Legend of Zelda” item; crashes on interaction.</li>
+      <li><strong>SMB / Zelda NES items</strong> — functional but unobtainable; ROMs are inside <code>famicom.arc</code>.</li>
+      <li><strong>Eight clothing items</strong> — unobtainable by the player, but villagers wear them at events.</li>
+    </ul>
+  </section>
+
+  <section id="unknowns">
+    <div class="section-head"><span class="index">05</span><h2>What remains unverified</h2><p>The evidence is strong on the rendering pipeline and USA Rev 0 layout. These edges should stay marked as open rather than filled with guesses.</p></div>
+    <details open><summary>Could “cMP” come from a specific tool or post?</summary><p>No examined source uses that name for GameCube model data. A concrete origin is needed to trace the terminology.</p></details>
+    <details><summary>What is inside the two forest ARCs?</summary><p>The files are confirmed RARC graphics archives DMA’d into ARAM, but this research did not enumerate their internal filenames.</p></details>
+    <details><summary>Is there absolutely no LOD anywhere?</summary><p>No LOD system was found in the decomp code examined; the evidence shows culling instead. This remains an absence-of-evidence claim, not a mathematical proof.</p></details>
+    <details><summary>Where is the reported whale model?</summary><p>A community video references it, but its binary or decomp location was not verified.</p></details>
+    <details><summary>Do other regions match exactly?</summary><p>No. These disc-layout findings are for USA Rev 0 (GAFE01). Known content changes exist across Doubutsu no Mori, DnM+, Animal Crossing, and DnM e+.</p></details>
+  </section>
+
+  <section id="sources">
+    <div class="section-head"><span class="index">06</span><h2>Sources</h2><p>Research completed October 15, 2026. Links below go to the underlying project documentation, source trees, and unused-content reference.</p></div>
+    <div class="sources">
+      <a class="source" href="https://github.com/gabeconway/opencrossing-dreamcast/blob/HEAD/tools/dcasset/README.md" target="_blank" rel="noreferrer"><b>01</b><span>dcasset README — FST, offsets, REL analysis</span></a>
+      <a class="source" href="https://github.com/gabeconway/opencrossing-dreamcast/blob/HEAD/kb/platform-api-dvd-aram.md" target="_blank" rel="noreferrer"><b>02</b><span>OpenCrossing KB — DVD/ARAM and swap classes</span></a>
+      <a class="source" href="https://github.com/ACreTeam/ac-decomp" target="_blank" rel="noreferrer"><b>03</b><span>ac-decomp — opcodes, actor tables, model sources</span></a>
+      <a class="source" href="https://github.com/ACreTeam/ac-decomp/blob/master/tools/arc_tool.py" target="_blank" rel="noreferrer"><b>04</b><span>arc_tool.py — RARC tooling</span></a>
+      <a class="source" href="https://github.com/ACreTeam/ac-decomp/blob/master/src/data/npc/model/mdl/cat_1.c" target="_blank" rel="noreferrer"><b>05</b><span>cat_1.c — villager body-part display lists</span></a>
+      <a class="source" href="https://github.com/ACreTeam/ac-decomp/tree/master/src/data/npc/model/mdl" target="_blank" rel="noreferrer"><b>06</b><span>NPC model directory — 72 species</span></a>
+      <a class="source" href="https://github.com/liquidazir/animal-crossing-vr/blob/HEAD/pc/DOCUMENTATION.md" target="_blank" rel="noreferrer"><b>07</b><span>animal-crossing-vr — emu64 rendering pipeline</span></a>
+      <a class="source" href="https://nookipedia.com/wiki/Prerelease_and_unused_content_in_Animal_Crossing" target="_blank" rel="noreferrer"><b>08</b><span>Nookipedia — prerelease and unused content</span></a>
+      <a class="source" href="https://github.com/ACreTeam/ac-decomp/tree/master/src/data/model" target="_blank" rel="noreferrer"><b>09</b><span>Creature model sources — fish and insect layouts</span></a>
+    </div>
+  </section>
+
+  <footer><span>Scope: Animal Crossing GameCube, USA Rev 0 (GAFE01)</span><span>Confidence: high on format and disc location; medium on unused-content completeness</span></footer>
+</main>
+</body>
+</html>
