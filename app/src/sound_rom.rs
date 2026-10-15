@@ -28,6 +28,8 @@ pub struct SoundRom {
     /// `AudiomapHeaderStart`: the banks each sequence uses.
     pub map: Vec<u8>,
     rom: Vec<u8>,
+    /// Runtime DOL metadata for sequence-248 melody fragments.
+    melodies: Vec<(u32, u32)>,
 }
 
 impl SoundRom {
@@ -53,6 +55,25 @@ impl SoundRom {
             ],
             map: rom.slice(RomSource::Dol, map.offset, map.size)?.to_vec(),
             rom: disc.read_file("audiorom.img").ok()?,
+            melodies: {
+                let words = |name: &str| {
+                    catalog
+                        .get(name)
+                        .and_then(|a| rom.slice(a.source, a.offset, a.size))
+                        .map(|b| {
+                            b.as_chunks::<4>()
+                                .0
+                                .iter()
+                                .map(|w| u32::from_be_bytes(*w))
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default()
+                };
+                words("melody_seq_offset")
+                    .into_iter()
+                    .zip(words("melody_seq_size"))
+                    .collect()
+            },
         })
     }
 
@@ -236,6 +257,14 @@ impl DiscSound {
 }
 
 impl SoundData for DiscSound {
+    fn melody(&self, voice: usize) -> Option<Vec<u8>> {
+        let &(offset, size) = self.rom.melodies.get(voice)?;
+        let sequence = self.rom.sequence(248)?;
+        let start = offset as usize;
+        let end = start.checked_add(size as usize)?;
+        sequence.get(start..end).map(<[u8]>::to_vec)
+    }
+
     fn sequence(&self, id: usize) -> Option<Vec<u8>> {
         self.rom.sequence(id).map(<[u8]>::to_vec)
     }

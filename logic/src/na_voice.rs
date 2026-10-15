@@ -7,8 +7,8 @@
 //!
 //! `tanboin_henkan`, `chouboin_henkan`, `connect_check` and
 //! `boin_shiin_check` were generated from the C and checked against it
-//! on every input. Not done: the melody voice (`Na_MelodyVoice`) and
-//! special NPCs' specs (they use 2).
+//! on every input. Melody requests route to the disc's sequence-248 fragments;
+//! special NPC specs require their corresponding speaking interactions.
 
 /// `voice_array` (`mMsg_sound_voice_get`): phoneme per message character.
 #[rustfmt::skip]
@@ -543,6 +543,8 @@ pub enum VoiceOut {
     Start { slot: u8, phoneme: u8 },
     /// `Na_SysTrgStart(NA_SE_BEBE)`.
     Bebe,
+    /// Na_MelodyVoice uses the current speaker's disc voice_type.
+    Melody,
 }
 
 /// A voice slot's `_08`, `_0C`, `_14`, `_18` (`Sou_VoiceMake`: volume
@@ -602,6 +604,8 @@ pub fn phoneme_of(code: u8) -> u8 {
 pub struct Voice {
     pub spec: u8,
     pub voice_seq: u8,
+    /// Current Na_VoiceSe voice argument, including the font's melody override.
+    pub speaker_id: u16,
     /// `sou_message_status` (`Na_MessageStatus`): the speaker's mood.
     pub message_status: u8,
     pub slots: [VoiceSlot; 2],
@@ -614,9 +618,46 @@ pub struct Voice {
     effect_counter: u8,
     effect: u8,
     sad_toggle: bool,
+    pending: Option<(u8, u8, u16)>,
+    called: bool,
 }
 
 impl Voice {
+    /// A new message cancels lookahead from the previous page/speaker.
+    pub fn begin_message(&mut self) {
+        self.pending = None;
+        self.called = false;
+        self.last_num = 0;
+        self.last_num2 = 0;
+        self.set_status(0);
+    }
+
+    pub fn end_message(&mut self) {
+        self.pending = None;
+        self.called = false;
+    }
+
+    /// Na_MessageStatus resets the wobble counters, even for the same status.
+    pub fn set_status(&mut self, status: u8) {
+        self.message_status = status;
+        self.effect = 0;
+        self.effect_counter = 0;
+    }
+
+    /// Sou_SpecialRoutine10: wait a game frame after a typed request, then
+    /// emit its pending second syllable if another character has not replaced it.
+    pub fn game_frame(&mut self, rand: &mut impl FnMut() -> u8) -> Vec<VoiceOut> {
+        if self.called {
+            self.called = false;
+            Vec::new()
+        } else if let Some((a, scale, speaker_id)) = self.pending.take() {
+            self.speaker_id = speaker_id;
+            self.voice_inner(a, 0, 0, scale, true, rand)
+        } else {
+            Vec::new()
+        }
+    }
+
     /// `Na_SpecChange`: a new speaker's voice. Returns the sequence to
     /// start on the voice group when it changes.
     pub fn spec_change(&mut self, spec: u8) -> Option<u8> {
@@ -640,70 +681,99 @@ impl Voice {
         scale: u8,
         rand: &mut impl FnMut() -> u8,
     ) -> Vec<VoiceOut> {
+        self.voice_inner(a, b, c, scale, false, rand)
+    }
+
+    fn voice_inner(
+        &mut self,
+        a: u8,
+        b: u8,
+        c: u8,
+        scale: u8,
+        deferred: bool,
+        rand: &mut impl FnMut() -> u8,
+    ) -> Vec<VoiceOut> {
+        self.called = true;
         let mut out = Vec::new();
         let (mut a, mut b) = (a, b);
         let mut i = 0u8;
-        self.num_org = a;
-        self.num2_org = b;
-        self.num3_org = c;
-        if a == 0x85 && b == 0xFF && c == 0xFF {
-            return out;
-        }
-        let mut r28 = 0;
-        if a == 0x61
-            && b > 0x77
-            && boin_shiin_check(self.last_num) == 0
-            && boin_shiin_check(self.last_num2) == 1
-        {
-            a = b;
-            r28 = 4;
-        }
-        if b == 0x61
-            && c > 0x77
-            && boin_shiin_check(self.last_num2) == 0
-            && boin_shiin_check(a) == 1
-        {
-            b = 0;
-            r28 = 4;
-        }
-        if r28 != 4 {
-            a = connect_check(a, b, c);
-            r28 = if a == self.num_org { 1 } else { 2 };
-            if b == 0xFF || (0x80..=0x86).contains(&b) {
-                r28 = 3;
-                if self.last_num2 == 0xFF || (0x80..=0x86).contains(&self.last_num2) {
-                    r28 = 1;
+        if deferred {
+            if a == 0xFF {
+                return out;
+            }
+            a = if a == 0x61
+                && self.num3_org > 0x77
+                && boin_shiin_check(self.last_num2) == 0
+                && boin_shiin_check(self.num_org) == 1
+            {
+                0
+            } else {
+                tanboin_henkan(a, self.num3_org)
+            };
+        } else {
+            self.num_org = a;
+            self.num2_org = b;
+            self.num3_org = c;
+            if a == 0x85 && b == 0xFF && c == 0xFF {
+                return out;
+            }
+            let mut r28 = 0;
+            if a == 0x61
+                && b > 0x77
+                && boin_shiin_check(self.last_num) == 0
+                && boin_shiin_check(self.last_num2) == 1
+            {
+                a = b;
+                r28 = 4;
+            }
+            if b == 0x61
+                && c > 0x77
+                && boin_shiin_check(self.last_num2) == 0
+                && boin_shiin_check(a) == 1
+            {
+                b = 0;
+                r28 = 4;
+            }
+            if r28 != 4 {
+                a = connect_check(a, b, c);
+                r28 = if a == self.num_org { 1 } else { 2 };
+                if b == 0xFF || (0x80..=0x86).contains(&b) {
+                    r28 = 3;
+                    if self.last_num2 == 0xFF || (0x80..=0x86).contains(&self.last_num2) {
+                        r28 = 1;
+                    }
                 }
             }
-        }
-        match r28 {
-            1 | 4 => {
-                a = if boin_shiin_check(a) == 0 && boin_shiin_check(b) == 1 && c == 0x61 {
-                    chouboin_henkan(a, b)
-                } else {
-                    tanboin_henkan(a, b)
-                };
-            }
-            3 if a <= 0x77 => {
-                let x = connect_check(self.last_num2, self.num_org, self.num2_org);
-                if (0x53..=0x76).contains(&x) {
-                    a = tanboin_henkan(x, self.num_org);
-                } else {
-                    a = x;
+            match r28 {
+                1 | 4 => {
+                    a = if boin_shiin_check(a) == 0 && boin_shiin_check(b) == 1 && c == 0x61 {
+                        chouboin_henkan(a, b)
+                    } else {
+                        tanboin_henkan(a, b)
+                    };
+                    self.pending = (b != 0).then_some((b, scale, self.speaker_id));
                 }
+                3 if a <= 0x77 => {
+                    let x = connect_check(self.last_num2, self.num_org, self.num2_org);
+                    if (0x53..=0x76).contains(&x) {
+                        a = tanboin_henkan(x, self.num_org);
+                    } else {
+                        a = x;
+                    }
+                }
+                _ => {}
             }
-            _ => {}
         }
-        if self.num_org == self.last_num2 && self.num_org == self.last_num {
+        if (deferred || self.num_org == self.last_num) && self.num_org == self.last_num2 {
             i = 1;
         }
         self.last_num = self.num_org;
         self.last_num2 = self.num2_org;
-        let r29 = self.num_org;
         if a == 0x80 {
-            // Na_MelodyVoice: not done.
+            out.push(VoiceOut::Melody);
             return out;
         }
+        let r29 = a;
         let slot = if self.toggle { 1 } else { 0 };
         self.toggle = !self.toggle;
         let (v08, v14) = match self.spec {

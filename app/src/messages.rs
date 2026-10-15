@@ -52,11 +52,15 @@ const NEW_LINE: u8 = 0xCD;
 /// [`markup::COLOR_CHARS`] r g b n (the next n characters, from
 /// `mFont_CONT_CODE_SET_COLOR_CHAR`), [`markup::LINE_COLOR`] r g b (the
 /// line, `mFont_CONT_CODE_COLOR`) and [`markup::PAUSE`] t (t ticks,
-/// `mFont_CONT_CODE_CURSOR_SET_TIME`). [`markup::strip`] removes them.
+/// `mFont_CONT_CODE_CURSOR_SET_TIME`), plus voice status and character/line
+/// scale controls. [`markup::strip`] removes all control markers.
 pub mod markup {
     pub const COLOR_CHARS: char = '\u{E000}';
     pub const LINE_COLOR: char = '\u{E001}';
     pub const PAUSE: char = '\u{E002}';
+    pub const STATUS: char = '\u{E003}';
+    pub const CHAR_SCALE: char = '\u{E004}';
+    pub const LINE_SCALE: char = '\u{E005}';
     /// Argument characters: `ARG + byte`.
     const ARG: u32 = 0xE100;
 
@@ -75,6 +79,9 @@ pub mod markup {
         NewLine,
         /// The cursor waits this many 60 Hz ticks.
         Pause(u32),
+        Status(u8),
+        CharScale(u8),
+        LineScale(u8),
     }
 
     /// The page as characters with their colours, line breaks and pauses.
@@ -92,6 +99,9 @@ pub mod markup {
                 }
                 LINE_COLOR => line = Some(rgb()),
                 PAUSE => out.push(Item::Pause(chars.next().map_or(0, value) as u32 * 2)),
+                STATUS => out.push(Item::Status(chars.next().map_or(0, value))),
+                CHAR_SCALE => out.push(Item::CharScale(chars.next().map_or(32, value))),
+                LINE_SCALE => out.push(Item::LineScale(chars.next().map_or(32, value))),
                 '\n' => {
                     line = None;
                     out.push(Item::NewLine);
@@ -117,7 +127,7 @@ pub mod markup {
             .filter_map(|i| match i {
                 Item::Char(c, _) => Some(c),
                 Item::NewLine => Some('\n'),
-                Item::Pause(_) => None,
+                Item::Pause(_) | Item::Status(_) | Item::CharScale(_) | Item::LineScale(_) => None,
             })
             .collect()
     }
@@ -134,6 +144,11 @@ mod code {
     pub const CURSOR_SET_TIME: u8 = 3;
     pub const COLOR: u8 = 5;
     pub const SET_COLOR_CHAR: u8 = 80;
+    pub const CONTENTS_NORMAL: u8 = 75;
+    pub const CONTENTS_SLEEPY: u8 = 79;
+    pub const CONTENTS_GLOOMY: u8 = 97;
+    pub const SET_CHAR_SCALE: u8 = 84;
+    pub const SET_LINE_SCALE: u8 = 90;
     pub const NEXT_F: u8 = 14;
     pub const NEXT_0: u8 = 15;
     pub const NEXT_3: u8 = 18;
@@ -165,8 +180,8 @@ mod code {
     pub const SELECT_6: u8 = 122;
 }
 
-/// Characters below 0x20 and the symbols placed among ASCII
-/// (`CHAR_*` in `m_font.h`); everything else not listed is plain ASCII.
+/// Latin letters and symbols from CHAR_* in m_font.h, including accented
+/// letters occupying positions otherwise associated with ASCII punctuation.
 fn char_of(c: u8) -> Option<char> {
     const LOW: [char; 31] = [
         '¡', '¿', 'Ä', 'À', 'Á', 'Â', 'Ã', 'Å', 'Ç', 'È', 'É', 'Ê', 'Ë', 'Ì', 'Í', 'Î', 'Ï', 'Ð',
@@ -174,6 +189,46 @@ fn char_of(c: u8) -> Option<char> {
     ];
     Some(match c {
         0..=30 => LOW[c as usize],
+        0x1F => 'à',
+        0x23 => 'á',
+        0x24 => 'â',
+        0x5B => 'ã',
+        0x5D => 'ä',
+        0x5E => 'å',
+        0x7B => 'è',
+        0x7C => 'é',
+        0x7D => 'ê',
+        0x7E => 'ë',
+        0x81 => 'ì',
+        0x82 => 'í',
+        0x83 => 'î',
+        0x84 => 'ï',
+        0x87 => 'ñ',
+        0x88 => 'ò',
+        0x89 => 'ó',
+        0x8A => 'ô',
+        0x8B => 'õ',
+        0x8C => 'ö',
+        0x8D => 'œ',
+        0x8E => 'ù',
+        0x8F => 'ú',
+        0x91 => 'û',
+        0x92 => 'ü',
+        0x93 => 'ý',
+        0x94 => 'ÿ',
+        0x97 => '¦',
+        0x98 => '§',
+        0x99 => 'ª',
+        0x9A => 'º',
+        0x9B => '‖',
+        0x9C => 'µ',
+        0x9D => '³',
+        0x9E => '²',
+        0x9F => '¹',
+        0xA0 => '¯',
+        0xA1 => '¬',
+        0xA2 => 'Æ',
+        0xA3 => 'æ',
         0x2A => '~',
         0x2B => '♥',
         0x2F => '♪',
@@ -216,6 +271,11 @@ fn char_of(c: u8) -> Option<char> {
 /// The AC charset code that draws `ch` (`char_of` backwards; `?` for
 /// characters the font doesn't have).
 pub fn ac_code(ch: char) -> u8 {
+    ac_code_opt(ch).unwrap_or(b'?')
+}
+
+/// Voice lookup keeps unsupported Unicode silent instead of voicing '?'.
+pub fn ac_code_opt(ch: char) -> Option<u8> {
     static TABLE: std::sync::OnceLock<std::collections::HashMap<char, u8>> =
         std::sync::OnceLock::new();
     let table = TABLE.get_or_init(|| {
@@ -227,7 +287,7 @@ pub fn ac_code(ch: char) -> u8 {
         }
         t
     });
-    table.get(&ch).copied().unwrap_or(b'?')
+    table.get(&ch).copied()
 }
 
 #[cfg(test)]
@@ -419,6 +479,7 @@ impl GameText {
         let mut labels: Option<Vec<String>> = None;
         let mut branches: [Option<usize>; 6] = [None; 6];
         let mut capital = false;
+        let mut status = 0;
         let mut i = 0;
         let u16_at = |i: usize| -> u16 {
             u16::from_be_bytes([
@@ -444,7 +505,32 @@ impl GameText {
                     };
                     match k {
                         code::LAST => break,
-                        code::CONTINUE | code::CLEAR => pages.push(String::new()),
+                        code::CONTINUE | code::CLEAR => {
+                            let mut page = String::new();
+                            if status != 0 {
+                                page.extend([markup::STATUS, markup::arg(status)]);
+                            }
+                            pages.push(page);
+                        }
+                        code::CONTENTS_NORMAL..=code::CONTENTS_SLEEPY | code::CONTENTS_GLOOMY => {
+                            status = if k == code::CONTENTS_GLOOMY {
+                                5
+                            } else {
+                                k - code::CONTENTS_NORMAL
+                            };
+                            page.extend([markup::STATUS, markup::arg(status)]);
+                        }
+                        code::SET_CHAR_SCALE | code::SET_LINE_SCALE => {
+                            let marker = if k == code::SET_CHAR_SCALE {
+                                markup::CHAR_SCALE
+                            } else {
+                                markup::LINE_SCALE
+                            };
+                            page.extend([
+                                marker,
+                                markup::arg(text.get(i + 2).copied().unwrap_or(32)),
+                            ]);
+                        }
                         code::NEXT_F => {
                             next = Some(u16_at(i + 2))
                                 .filter(|&n| n != 0xFFFF)

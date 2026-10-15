@@ -286,14 +286,25 @@ fn choice_layout(answers: &[&str], widths: &[u8; 256]) -> (Vec2, Vec2, Vec2) {
 fn text_mesh(text: &str, origin: Vec2, widths: &[u8; 256], color: [u8; 4], limit: usize) -> Mesh {
     let (mut pos, mut uv, mut idx, mut col) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     let mut cursor = origin;
+    let (mut line_scale, mut char_scale) = (1.0, 1.0);
     for item in markup::parse(text).into_iter().take(limit) {
         let (ch, rgb) = match item {
             Item::Char(ch, rgb) => (ch, rgb),
             Item::NewLine => {
                 cursor = Vec2::new(origin.x, cursor.y + CELL.y);
+                line_scale = 1.0;
+                char_scale = 1.0;
                 continue;
             }
-            Item::Pause(_) => continue,
+            Item::CharScale(scale) => {
+                char_scale = f32::from(scale) / 32.0;
+                continue;
+            }
+            Item::LineScale(scale) => {
+                line_scale = f32::from(scale) / 32.0;
+                continue;
+            }
+            Item::Pause(_) | Item::Status(_) => continue,
         };
         let [r, g, b] = rgb.unwrap_or([color[0], color[1], color[2]]);
         let tint = Color::srgba_u8(r, g, b, color[3])
@@ -301,16 +312,18 @@ fn text_mesh(text: &str, origin: Vec2, widths: &[u8; 256], color: [u8; 4], limit
             .to_f32_array();
         let c = crate::messages::ac_code(ch);
         let w = widths[c as usize] as f32;
+        let scale = line_scale * char_scale;
+        char_scale = 1.0;
         let cell = Vec2::new((c % 16) as f32 * CELL.x, (c / 16) as f32 * CELL.y);
         let base = pos.len() as u32;
         for (dx, dy) in [(0.0, 0.0), (w, 0.0), (w, CELL.y), (0.0, CELL.y)] {
-            let p = screen(cursor + Vec2::new(dx, dy));
+            let p = screen(cursor + Vec2::new(dx, dy) * scale);
             pos.push([p.x, p.y, 0.0]);
             uv.push([(cell.x + dx) / 192.0, (cell.y + dy) / 256.0]);
             col.push(tint);
         }
         idx.extend([base, base + 2, base + 1, base, base + 3, base + 2]);
-        cursor.x += w;
+        cursor.x += w * scale;
     }
     Mesh::new(
         PrimitiveTopology::TriangleList,
@@ -323,10 +336,25 @@ fn text_mesh(text: &str, origin: Vec2, widths: &[u8; 256], color: [u8; 4], limit
 }
 
 fn text_width(text: &str, widths: &[u8; 256]) -> f32 {
-    markup::strip(text)
-        .chars()
-        .map(|c| widths[crate::messages::ac_code(c) as usize] as f32)
-        .sum()
+    let (mut line, mut next, mut width, mut maximum) = (1.0, 1.0, 0.0_f32, 0.0_f32);
+    for item in markup::parse(text) {
+        match item {
+            Item::Char(c, _) => {
+                width += widths[crate::messages::ac_code(c) as usize] as f32 * line * next;
+                next = 1.0;
+            }
+            Item::CharScale(v) => next = f32::from(v) / 32.0,
+            Item::LineScale(v) => line = f32::from(v) / 32.0,
+            Item::NewLine => {
+                maximum = maximum.max(width);
+                width = 0.0;
+                line = 1.0;
+                next = 1.0;
+            }
+            Item::Pause(_) | Item::Status(_) => {}
+        }
+    }
+    maximum.max(width)
 }
 
 /// The page the window shows: the plain box's "Name: " dropped, since the
@@ -348,6 +376,8 @@ struct Reveal {
     total: usize,
     /// `cursor_timer`, in 60 Hz ticks.
     timer: f32,
+    line_scale: u8,
+    char_scale: u8,
 }
 
 impl Reveal {
@@ -362,10 +392,14 @@ fn advance_reveal(
     time: Res<Time>,
     actions: Res<Actions>,
     villagers: Query<&Villager>,
+    disc: Option<Res<GameDisc>>,
     mut dialogue: ResMut<DialogueState>,
     mut reveal: ResMut<Reveal>,
 ) {
     let Some(page) = dialogue.page() else {
+        if reveal.speaker.is_some() {
+            crate::sound::voice_end();
+        }
         *reveal = Reveal::default();
         dialogue.revealing = false;
         return;
@@ -374,10 +408,33 @@ fn advance_reveal(
     let page = window_page(page, speaker).to_string();
     if reveal.page.as_deref() != Some(page.as_str()) || reveal.speaker != dialogue.speaker {
         let items = markup::parse(&page);
+        if reveal.speaker.is_some() {
+            crate::sound::voice_end();
+        }
+        if let Some(speaker) = speaker {
+            // aNPC_draw_data_c::voice_type (0x62), not the roster index.
+            let voice_id = speaker
+                .npc_index
+                .and_then(|index| {
+                    let disc = disc.as_ref()?;
+                    let table = disc.catalog.get("npc_draw_data_tbl")?;
+                    let bytes = disc.rom.slice(table.source, table.offset, table.size)?;
+                    let offset = (index as usize).checked_mul(0x6C)?.checked_add(0x62)?;
+                    let data: [u8; 2] = bytes.get(offset..offset + 2)?.try_into().ok()?;
+                    Some(u16::from_be_bytes(data))
+                })
+                .unwrap_or(0);
+            crate::sound::voice_begin(
+                rustimal_logic::na_voice::villager_spec(speaker.looks),
+                voice_id,
+            );
+        }
         *reveal = Reveal {
             total: items.len(),
             page: Some(page.clone()),
             speaker: dialogue.speaker,
+            line_scale: 32,
+            char_scale: 32,
             ..default()
         };
     }
@@ -388,29 +445,56 @@ fn advance_reveal(
     };
     reveal.timer -= time.delta_secs() * 60.0 * fast;
     let items = markup::parse(&page);
-    let spec = speaker.map(|v| rustimal_logic::na_voice::villager_spec(v.looks));
-    // Phonemes of a character and the two after it (mMsg_sound_voice_get2:
-    // a line break is 0x84; English text is ASCII message codes; past the
-    // end, 0xFF).
+    // Control boundaries terminate phoneme lookahead. Supported Unicode
+    // returns through the same charset mapping used to draw the disc font.
     let phoneme = |i: usize| match items.get(i) {
-        Some(Item::Char(ch, _)) if ch.is_ascii() => rustimal_logic::na_voice::phoneme_of(*ch as u8),
-        Some(Item::Char(..)) => 0x85,
+        Some(Item::Char(ch, _)) => {
+            crate::messages::ac_code_opt(*ch).map_or(0x85, rustimal_logic::na_voice::phoneme_of)
+        }
         Some(Item::NewLine) => 0x84,
         _ => 0xFF,
     };
+    let was_done = reveal.done();
     while reveal.timer <= 0.0 && !reveal.done() {
         match items[reveal.shown] {
-            Item::Char(..) => {
+            Item::Char(_, rgb) => {
                 reveal.timer += 2.0;
-                if let Some(spec) = spec {
+                if speaker.is_some() {
                     let i = reveal.shown;
-                    crate::sound::voice(spec, [phoneme(i), phoneme(i + 1), phoneme(i + 2)]);
+                    let scale = (f32::from(reveal.line_scale) * f32::from(reveal.char_scale) / 32.0
+                        + 0.5)
+                        .clamp(0.0, 255.0) as u8;
+                    crate::sound::voice_character(
+                        [phoneme(i), phoneme(i + 1), phoneme(i + 2)],
+                        scale,
+                        phoneme(i) == 0x80
+                            && scale == 32
+                            && rgb.unwrap_or([TEXT_COLOR[0], TEXT_COLOR[1], TEXT_COLOR[2]])
+                                == [50, 60, 50],
+                    );
                 }
+                reveal.char_scale = 32;
             }
             Item::Pause(t) => reveal.timer += t as f32,
-            Item::NewLine => {}
+            Item::NewLine => {
+                reveal.line_scale = 32;
+                reveal.char_scale = 32;
+                if speaker.is_some() {
+                    crate::sound::voice_character([0x84, 0xFF, 0xFF], 32, false);
+                }
+            }
+            Item::Status(status) => {
+                if speaker.is_some() {
+                    crate::sound::voice_status(status);
+                }
+            }
+            Item::CharScale(scale) => reveal.char_scale = scale,
+            Item::LineScale(scale) => reveal.line_scale = scale,
         }
         reveal.shown += 1;
+    }
+    if !was_done && reveal.done() && speaker.is_some() {
+        crate::sound::voice_end();
     }
     dialogue.revealing = !reveal.done();
 }
@@ -583,6 +667,9 @@ fn draw_window(
     }
 }
 
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct RevealSet;
+
 pub struct MsgWindowPlugin;
 
 impl Plugin for MsgWindowPlugin {
@@ -595,7 +682,7 @@ impl Plugin for MsgWindowPlugin {
             )
             .add_systems(
                 Update,
-                (advance_reveal, draw_window)
+                (advance_reveal.in_set(RevealSet), draw_window)
                     .chain()
                     .run_if(resource_exists::<MsgAssets>),
             );

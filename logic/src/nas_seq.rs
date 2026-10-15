@@ -100,6 +100,10 @@ pub struct Bank {
 /// What the engine reads from the disc.
 pub trait SoundData: Send + Sync {
     fn sequence(&self, id: usize) -> Option<Vec<u8>>;
+    /// Sequence-248 fragment selected by the runtime DOL melody tables.
+    fn melody(&self, _voice: usize) -> Option<Vec<u8>> {
+        None
+    }
     fn bank(&self, id: usize) -> Option<Arc<Bank>>;
     /// `AudiomapHeaderStart` bytes: per sequence a byte offset (u16
     /// big-endian at `seq * 2`) to a count and that many bank ids.
@@ -263,6 +267,8 @@ struct Sub {
     port: [i8; 8],
     dyn_tbl: usize,
     dynamic_value: u16,
+    /// Safe owned equivalent of the melody's 16-byte SFX-state pointer.
+    sfx_state: Option<[u8; 16]>,
     sample_start: u16,
     index: usize,
 }
@@ -377,6 +383,13 @@ struct Voice {
     bus: usize,
 }
 
+struct PendingMelody {
+    voice: u16,
+    data: Vec<u8>,
+    destination: usize,
+    updates: u8,
+}
+
 /// The engine.
 pub struct Engine {
     data: Arc<dyn SoundData>,
@@ -400,6 +413,7 @@ pub struct Engine {
     level_cooldown: [u8; crate::ambience::VOICES],
     mixer: crate::audio_mix::Mixer,
     mix_frames: Vec<crate::audio_mix::Frame>,
+    voice_melody: Option<PendingMelody>,
 }
 
 fn sub_fresh(index: usize) -> Sub {
@@ -441,6 +455,7 @@ fn sub_fresh(index: usize) -> Sub {
         port: [-1; 8],
         dyn_tbl: 0,
         dynamic_value: 0,
+        sfx_state: None,
         sample_start: 0,
         index,
     }
@@ -491,6 +506,7 @@ impl Engine {
             level_cooldown: [0; crate::ambience::VOICES],
             mixer: crate::audio_mix::Mixer::default(),
             mix_frames: vec![crate::audio_mix::Frame::default(); SAMPLES_PER_UPDATE],
+            voice_melody: None,
             t: tables,
         };
         for _ in 0..=GROUPS {
@@ -555,7 +571,7 @@ impl Engine {
         } else {
             map.get(at + count).copied().unwrap_or(0xFF)
         };
-        let Some(seq) = self.data.sequence(id) else {
+        let Some(mut seq) = self.data.sequence(id) else {
             return false;
         };
         let mut fresh = self.group_fresh();
@@ -564,6 +580,15 @@ impl Engine {
         // start (the hourly mute masks) holds.
         for (new, old) in fresh.subs.iter_mut().zip(&self.groups[g].subs) {
             new.muted = old.muted;
+        }
+        // Na_MelodyStart uses three 0x600-byte work areas in the SE player.
+        if g == 0 && id == 242 {
+            if let Some(bytes) = seq.get(4..6) {
+                let base = u16::from_be_bytes([bytes[0], bytes[1]]) as usize;
+                if base >= 6 && base + 0x1200 <= 0x10000 {
+                    seq.resize(seq.len().max(base + 0x1200), 0);
+                }
+            }
         }
         fresh.seq = seq;
         fresh.seq_id = id;
@@ -635,6 +660,73 @@ impl Engine {
             self.process(&command);
         }
         result
+    }
+
+    /// Na_MelodyVoice/Na_MelodyStart. Prepare data on the caller thread;
+    /// wait for the old subtrack-6 request to be consumed before patching.
+    pub fn voice_melody(&mut self, voice: u16) -> bool {
+        if voice == 0xFA || !self.groups[0].enabled {
+            return false;
+        }
+        let Some(mut data) = self.data.melody(voice as usize) else {
+            return false;
+        };
+        if !(42..=0x600).contains(&data.len()) {
+            return false;
+        }
+        let Some(bytes) = self.groups[0].seq.get(4..6) else {
+            return false;
+        };
+        let destination = u16::from_be_bytes([bytes[0], bytes[1]]) as usize;
+        if destination < 6 || destination + data.len() > self.groups[0].seq.len() {
+            return false;
+        }
+        // First four bytes are the fragment header, then 19 BE addresses.
+        for word in data[4..42].as_chunks_mut::<2>().0 {
+            // Retail relocates all 19 words with u16 wrap, including unused
+            // table entries. The destination buffer itself is bounds checked.
+            *word = u16::from_be_bytes(*word)
+                .wrapping_add(destination as u16)
+                .to_be_bytes();
+        }
+        self.set_sub_port(0, 6, 0, 1);
+        self.voice_melody = Some(PendingMelody {
+            voice,
+            data,
+            destination,
+            updates: 0,
+        });
+        true
+    }
+
+    fn advance_voice_melody(&mut self) {
+        let Some(pending) = self.voice_melody.as_mut() else {
+            return;
+        };
+        pending.updates = pending.updates.saturating_add(1);
+        if pending.updates >= 120 || !self.groups[0].enabled {
+            self.voice_melody = None;
+            return;
+        }
+        // Four updates approximate the original Nap_WaitVsync handoff.
+        if pending.updates < 4 || self.groups[0].subs[6].port[0] != -1 {
+            return;
+        }
+        let Some(pending) = self.voice_melody.take() else {
+            return;
+        };
+        let group = &mut self.groups[0];
+        group.seq[pending.destination..pending.destination + pending.data.len()]
+            .copy_from_slice(&pending.data);
+        let sub = &mut group.subs[6];
+        // Na_MelodyVoice: first note 13 followed by fifteen rests (14).
+        let mut melody = [14; 16];
+        melody[0] = 13;
+        sub.sfx_state = Some(melody);
+        sub.port[2] = pending.voice as u8 as i8;
+        sub.port[0] = 0;
+        sub.volume_scale = 1.3;
+        sub.changes |= CHANGE_VOLUME;
     }
 
     /// Cumulative pre/post-protection peaks and current voice load.
@@ -953,6 +1045,7 @@ impl Engine {
             .seed
             .wrapping_mul(1_664_525)
             .wrapping_add(1_013_904_223);
+        self.advance_voice_melody();
         self.advance_levels();
         for g in 0..=GROUPS {
             if self.groups[g].enabled {
@@ -1380,6 +1473,9 @@ impl Engine {
     }
 
     fn release_group(&mut self, g: usize) {
+        if g == 0 {
+            self.voice_melody = None;
+        }
         if g == crate::audio::group::SE {
             self.triggers = crate::audio::TrgSeManager::new();
             self.levels = crate::audio::LevSeManager::new();
@@ -1747,7 +1843,24 @@ impl Engine {
                 }
                 0xBD => sub.sample_start = args[0],
                 0xBE => {}
-                0xA0..=0xA3 => {}
+                0xA0..=0xA3 => {
+                    let index = if matches!(cmd, 0xA0 | 0xA2) {
+                        args[0]
+                    } else {
+                        sub.dynamic_value
+                    } as usize;
+                    if let Some(value) = sub
+                        .sfx_state
+                        .as_mut()
+                        .and_then(|state| state.get_mut(index))
+                    {
+                        if matches!(cmd, 0xA0 | 0xA1) {
+                            m.value = *value as i8;
+                        } else {
+                            *value = m.value as u8;
+                        }
+                    }
+                }
                 0xA5 => m.value = m.value.wrapping_add(sub.index as i8),
                 0xA6 => {
                     let at = args[1] as usize + sub.index;

@@ -24,7 +24,7 @@ hardware fidelity, voice edge cases and combined acceptance still need work. The
 - [ ] audio-action-coverage: source matrix and available hooks implemented for doors, rod/net/tools, quest choices/handoffs and nearby surface-aware NPC contacts. Listening pending. Reel-fight loop, full catch fanfare/animation timing and retail door visuals await gameplay support.
 - [ ] audio-world-ambience: implemented runtime river/shore metadata, localized waterfall fallback, supported AI insect loops, stable four-voice level slots, distance/pan and indoor/exit cleanup. Philip confirms playback works; cleanup/stress acceptance, pond/frogs, additional insect events and weather remain follow-ups.
 - [ ] audio-mix-and-fidelity: CPU source-based reverb and indoor step sends, positional world actions/NPC pan, peak meters and linked stereo protection implemented. Accepted gains preserved; Philip reports successful playtest (2026-10-15). Filtered resampling/reserve-list allocator audit documented; hardware gaps remain. See audio-mix-and-fidelity.md.
-- [ ] audio-voice-edge-cases: charset, message size/mood, deferred/melody paths and applicable special speakers.
+- [ ] audio-voice-edge-cases: supported Latin charset, message size/mood, matching text scale, deferred syllables and disc-backed resident melody requests implemented; listening pending. Unavailable special-NPC conversations and full message/configuration timing remain explicit follow-ups. See audio-voice-edge-cases.md.
 - [ ] audio-acceptance: combined retail listening, overlap/decay checks, pause/load/scene transitions and missing-disc fallback before M4 audio closes. Full ordering and acceptance criteria: ../ROADMAP.md.
 
 Voice translation evidence (Claude transcript supplied by Philip, 2026-10-14):
@@ -34,9 +34,10 @@ reports an exhaustive comparison matching all 590,080 reference cases.
 This records Claude's result; the comparison was not rerun for this notes update.
 
 Known limitations / follow-ups: simplified voice stealing, linear resampling,
-fixed-point/filter/Haas/surround DSP, reserve-list allocation, Na_MelodyVoice,
-special NPC voice specs, and handling
-non-ASCII dialogue characters (currently mapped to silence in msg_window).
+fixed-point/filter/Haas/surround DSP, reserve-list allocation, special NPC
+speaking interactions/spec changes, click/silent configuration and full cursor
+buffering/timing. Supported Latin glyphs and resident melody requests are now
+implemented; arbitrary Unicode remains unsupported.
 The normal villager voice path is implemented; these do not block its playback.
 
 Research (claude, 2026-10-13): all audio is in audiorom.img (8.3 MB: banks, VADPCM samples, sequences), played by jaudio_NES (~37k lines C in src/static/jaudio_NES). logic::audio has only the Na_* game layer. Options given to Philip: A) SE samples only (bank reader + VADPCM decode, no music), B) full engine port (very large). Initially parked for budget while Philip chose pause-menu first; subsequently resumed with the bank decoder, sequence player, streaming playback and Animalese work above.
@@ -50,4 +51,5 @@ mailbox lid timing remain pending rather than inferred accepted.
 (step 6) now has initial reverb/spatial/protection implementation and a focused
 listening checklist. This does not close ambience coverage, trigger stress or
 hardware fidelity. Philip subsequently reports the mix/spatial playtest went well.
-Next: voice edge cases (7), then combined acceptance (8).
+Voice edge cases (7) now implemented for current villager paths; listening
+pending, then combined acceptance (8).

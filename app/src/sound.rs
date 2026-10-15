@@ -206,66 +206,159 @@ struct EffectRequest {
 }
 
 static SE_QUEUE: Mutex<Vec<EffectRequest>> = Mutex::new(Vec::new());
-/// Typed characters to voice: (speaker's spec, a, b, c phonemes).
-static VOICE_QUEUE: Mutex<Vec<(u8, u8, u8, u8)>> = Mutex::new(Vec::new());
+/// Commands from the reveal system, consumed after it in the same frame.
+enum VoiceRequest {
+    Begin {
+        spec: u8,
+        voice_id: u16,
+    },
+    Character {
+        phonemes: [u8; 3],
+        scale: u8,
+        default_melody: bool,
+    },
+    Status(u8),
+    End,
+}
+static VOICE_QUEUE: Mutex<Vec<VoiceRequest>> = Mutex::new(Vec::new());
 
-/// Voices one typed character (`sAdo_VoiceSe` from the message window):
-/// the phonemes of the character and the two after it.
-pub fn voice(spec: u8, [a, b, c]: [u8; 3]) {
-    if let Ok(mut q) = VOICE_QUEUE.lock() {
-        q.push((spec, a, b, c));
+fn queue_voice(request: VoiceRequest) {
+    if let Ok(mut queue) = VOICE_QUEUE.lock() {
+        queue.push(request);
     }
 }
 
-/// `Na_SpecChange` + `Na_VoiceSe` + `Sou_VoiceMake` for queued characters.
-fn play_voices(
-    sound: Option<Res<Sound>>,
-    mut voice: Local<rustimal_logic::na_voice::Voice>,
-    mut seed: Local<u32>,
-) {
-    let queued: Vec<_> = VOICE_QUEUE
+pub(crate) fn voice_begin(spec: u8, voice_id: u16) {
+    queue_voice(VoiceRequest::Begin { spec, voice_id });
+}
+pub(crate) fn voice_character(phonemes: [u8; 3], scale: u8, default_melody: bool) {
+    queue_voice(VoiceRequest::Character {
+        phonemes,
+        scale,
+        default_melody,
+    });
+}
+pub(crate) fn voice_status(status: u8) {
+    queue_voice(VoiceRequest::Status(status));
+}
+pub(crate) fn voice_end() {
+    queue_voice(VoiceRequest::End);
+}
+
+#[derive(Default)]
+struct VoicePlayback {
+    voice: rustimal_logic::na_voice::Voice,
+    voice_id: u16,
+    seed: u32,
+    frames: f32,
+}
+
+fn voice_random(seed: &mut u32) -> impl FnMut() -> u8 + '_ {
+    move || {
+        *seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12345);
+        (*seed >> 16) as u8
+    }
+}
+
+fn select_voice(sound: &Sound, voice: &mut rustimal_logic::na_voice::Voice, spec: u8) {
+    if let Some(seq) = voice.spec_change(spec) {
+        let group = audio_group::VOICE as u8;
+        sound.send(&[
+            cmd(0x83, group, 0, 0, AudioParam::S32(0)),
+            cmd(0x82, group, seq, 0, AudioParam::S32(0)),
+        ]);
+    }
+}
+
+/// Na_GameFrame's deferred second syllable follows the port's 30 Hz game
+/// cadence. New text replaces pending lookahead; page/close cancels it.
+fn play_voices(time: Res<Time>, sound: Option<Res<Sound>>, mut playback: Local<VoicePlayback>) {
+    let queued = VOICE_QUEUE
         .lock()
         .map(|mut q| std::mem::take(&mut *q))
         .unwrap_or_default();
     let Some(sound) = sound else { return };
+    let VoicePlayback {
+        voice,
+        voice_id,
+        seed,
+        frames,
+    } = &mut *playback;
     for request in queued {
-        play_voice(&sound, &mut voice, &mut seed, request);
+        match request {
+            VoiceRequest::Begin { spec, voice_id: id } => {
+                voice.begin_message();
+                *voice_id = id;
+                *frames = 0.0;
+                select_voice(&sound, voice, spec);
+            }
+            VoiceRequest::Character {
+                phonemes: [a, b, c],
+                scale,
+                default_melody,
+            } => {
+                voice.speaker_id = if default_melody { 0 } else { *voice_id };
+                let out = voice.voice_se(a, b, c, scale, &mut voice_random(seed));
+                apply_voice(&sound, voice, voice.speaker_id, out);
+            }
+            VoiceRequest::Status(status) => voice.set_status(status),
+            VoiceRequest::End => voice.end_message(),
+        }
+    }
+    *frames += time.delta_secs() * 30.0;
+    while *frames >= 1.0 {
+        *frames -= 1.0;
+        let out = voice.game_frame(&mut voice_random(seed));
+        if !out.is_empty() {
+            apply_voice(&sound, voice, voice.speaker_id, out);
+        }
     }
 }
 
-/// Shared by live typing and the disc-backed voice comparison probe.
+fn apply_voice(
+    sound: &Sound,
+    voice: &rustimal_logic::na_voice::Voice,
+    voice_id: u16,
+    outputs: Vec<rustimal_logic::na_voice::VoiceOut>,
+) {
+    use rustimal_logic::na_voice::VoiceOut;
+    let group = audio_group::VOICE as u8;
+    let mut commands = Vec::with_capacity(8);
+    // Sou_VoiceMake updates both live slots, including punctuation changes.
+    for (i, slot) in voice.slots.iter().enumerate() {
+        commands.extend([
+            cmd(0x01, group, i as u8, 0, AudioParam::F32(slot.volume())),
+            cmd(0x04, group, i as u8, 0, AudioParam::F32(slot.pitch())),
+            cmd(0x03, group, i as u8, 0, AudioParam::S8(64)),
+        ]);
+    }
+    for out in outputs {
+        match out {
+            VoiceOut::Bebe => se(rustimal_logic::na_voice::SE_BEBE),
+            VoiceOut::Melody => {
+                if let Ok(mut engine) = sound.engine.lock() {
+                    engine.voice_melody(voice_id);
+                }
+            }
+            VoiceOut::Start { slot, phoneme } => {
+                commands.push(cmd(0x06, group, slot, 0, AudioParam::S8(phoneme as i8)))
+            }
+        }
+    }
+    sound.send(&commands);
+}
+
+/// Original normal-size path retained for existing disc comparison probes.
+#[cfg(test)]
 fn play_voice(
     sound: &Sound,
     voice: &mut rustimal_logic::na_voice::Voice,
     seed: &mut u32,
     (spec, a, b, c): (u8, u8, u8, u8),
 ) {
-    use rustimal_logic::na_voice::VoiceOut;
-    let voice_group = audio_group::VOICE as u8;
-    if let Some(seq) = voice.spec_change(spec) {
-        sound.send(&[
-            cmd(0x83, voice_group, 0, 0, AudioParam::S32(0)),
-            cmd(0x82, voice_group, seq, 0, AudioParam::S32(0)),
-        ]);
-    }
-    let mut rand = || {
-        *seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12345);
-        (*seed >> 16) as u8
-    };
-    for out in voice.voice_se(a, b, c, 32, &mut rand) {
-        match out {
-            VoiceOut::Bebe => se(rustimal_logic::na_voice::SE_BEBE),
-            VoiceOut::Start { slot, phoneme } => {
-                let v = voice.slots[slot as usize];
-                sound.send(&[
-                    cmd(0x01, voice_group, slot, 0, AudioParam::F32(v.volume())),
-                    cmd(0x04, voice_group, slot, 0, AudioParam::F32(v.pitch())),
-                    cmd(0x03, voice_group, slot, 0, AudioParam::S8(64)),
-                    cmd(0x06, voice_group, slot, 0, AudioParam::S8(phoneme as i8)),
-                ]);
-            }
-        }
-    }
+    select_voice(sound, voice, spec);
+    let out = voice.voice_se(a, b, c, 32, &mut voice_random(seed));
+    apply_voice(sound, voice, 0, out);
 }
 
 /// One player door traversal at a time; a new traversal cancels its old tail.
@@ -593,6 +686,7 @@ impl Plugin for SoundPlugin {
                 (advance_door_sound, play_voices)
                     .chain()
                     .after(crate::input::InteractSet::Doors)
+                    .after(crate::msg_window::RevealSet)
                     .run_if(in_state(AppState::InGame)),
             )
             .add_systems(

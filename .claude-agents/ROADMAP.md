@@ -125,7 +125,7 @@ Each milestone ends with a Philip playtest.
 | Music by location and interaction | Quiet player houses, tier/closing shop themes, current-hour town restoration, 70% talk/50% menus with pause-safe fades | Philip reports it works perfectly; accepted. Weather/events/furniture and retail scene wipes remain follow-ups |
 | Environmental audio | River/shore source positions read from disc metadata; localized waterfall fallback and state-driven insect loops, four spatial level slots, distance/pan, menu attenuation and indoor/scene-exit cleanup | Philip confirms playback; cleanup/stress acceptance, waterfall actor positions, pond/frog coverage, broader insect events and weather/wind remain follow-ups |
 | Effect lifetime and position | Live engine now reuses TrgSeManager: free slots, oldest/priority replacement, singleton suppression and MONO 14. Completion observed on audio updates using request port 1 and busy port 5, with half-second unstarted-request cleanup | Implemented; overlap listening pending. Available world effects now use shared listener pan/distance; full camera/actor smoothing remains |
-| Voice fidelity beyond ordinary speech | Non-ASCII becomes silence; scale fixed at 32, mood not fed from dialogue; melody/special-NPC paths incomplete | Missing/partial |
+| Voice fidelity beyond ordinary speech | Supported Latin charset, message size/mood, deferred syllables and disc-backed resident melody requests implemented | Listening pending; unavailable special-speaker interactions, click/silent configuration and full message timing remain |
 | Mixer fidelity | Source-based CPU reverb, indoor step sends, world-effect pan/falloff, peak meters/protection implemented; linear resampling/shared voice pool remain | Philip reports successful playtest; fixed-point DSP, filters, Haas, surround and reserve lists remain |
 
 Audit sources: current `app/src/sound.rs`, `sound_rom.rs`, `footsteps.rs`,
@@ -239,7 +239,7 @@ commits/pushes for future work; see Git history/upstream for publication state.
    See backlog/audio-mix-and-fidelity.md for sources and listening checklist.
    No tests/probes added or run; compile/lint/format/build gate recorded there.
 
-7. **audio-voice-edge-cases.**
+7. **audio-voice-edge-cases — current villager paths implemented; listening pending.**
    Retain the accepted normal voices. Map supported non-ASCII characters through
    the game's charset, wire message size/mood where the dialogue carries them,
    and audit deferred syllables and melody requests against C. Give special
@@ -248,6 +248,15 @@ commits/pushes for future work; see Git history/upstream for publication state.
    separate gameplay work rather than being assumed implemented by audio.
    Done when applicable cases have source-backed behavior and listening checks;
    unavailable gameplay-dependent modes remain named follow-ups.
+   Implemented 2026-10-15: font charset round-trip for supported Latin text,
+   retained message mood/character/line size controls, matching glyph scaling,
+   deferred f=2 syllables, punctuation slot updates and resident melody requests.
+   Melody uses runtime DOL metadata/sequence 248, actual draw-record voice_type,
+   original SE slot 6 and safely owned SFX-state macros. Page/close cancels old
+   pending syllables. Game-frame and melody handoff timing adapt to this port.
+   No new special-NPC conversation or click/silent settings are implied.
+   See backlog/audio-voice-edge-cases.md for sources, gaps and listening steps.
+   Compile/lint/format/build status is recorded there; no tests/probes added/run.
 
 8. **audio-acceptance** (P).
    Run one combined checklist across music/scene changes, overlapping effects,
@@ -284,9 +293,9 @@ new-game flow, more disc formats/regions.
 
 ### Suggested order
 Philip reports the mix/spatial playtest went well (2026-10-15), following
-ambience playback confirmation. Next coding task: voice edge cases (step 7):
-supported non-ASCII charset, applicable message size/mood and deferred/melody
-paths, then combined audio acceptance (step 8), including save/load,
+ambience playback confirmation. Voice edge cases (step 7) now have current villager charset/size/mood,
+deferred syllable and melody implementation ready for listening. Resolve any
+feedback, then proceed to combined audio acceptance (step 8), including save/load,
 pause/restart, missing-disc fallback and remaining overlap/cleanup cases.
 Hardware DSP/resampling/reserve-list gaps remain
 explicit, not silently completed. Resolve render-look and record deferred scope
