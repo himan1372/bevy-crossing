@@ -107,6 +107,18 @@ Each milestone ends with a Philip playtest.
 ### M4 — UI, audio, feel — OPEN
 
 - [x] **ui-from-disc** — completed scope: disc font, dialogue/name plate and choice windows with a no-disc fallback. Pockets, pause, shop and mail panels still use the port's own UI; this does not mean every HUD/menu has been recreated from the disc.
+- [ ] **net-render-fidelity** — Philip reports the held net does not look retail. Audit source asset selection, textures/materials, mesh skinning, scale and pose against retail; correct the demonstrated mismatch before net visual sign-off. See backlog/net-render-fidelity.md.
+- [ ] **retail-pockets-ui** — first UI task: source-backed pocket layout, item icons, selection and action windows using runtime disc assets. Preserve the existing 15-slot inventory behavior. See backlog/retail-pockets-ui.md.
+- [ ] **retail-mail-ui** — retail letter list, stationery, reading and available letter actions, reusing the pockets/window primitives. See backlog/retail-mail-ui.md.
+- [ ] **retail-shop-ui** — retail buying/selling and item-selection presentation over existing shop logic. See backlog/retail-shop-ui.md.
+- [ ] **retail-pause-ui** — compare the original pause/save flow and implement its applicable presentation; retain accessible port Settings and Quit controls. See backlog/retail-pause-ui.md.
+- [ ] **retail-hud-ui** — source-backed clock/date, bells and context prompts; replace the current development-style overlay where retail has an equivalent. See backlog/retail-hud-ui.md.
+
+UI order: pockets → mail → shop → pause/save → HUD. These are planned,
+unimplemented visual tasks; each requires source tracing, runtime disc loading,
+a usable no-disc fallback and Philip's comparison acceptance. This order does
+not move title-screen or rename out of their deferred status.
+
 - [x] **dialogue-polish** — typing, pauses, name plate and normal villager Animalese. Philip's F8 comparison sounds good without hiccups. Remaining voice modes/edge cases are tracked below.
 - [x] **pause-menu** — Save / Settings / Quit; Settings currently edits the disc path.
 - [ ] **title-screen** — remains on the back burner per Philip; loading currently enters InGame directly. Keep this deferral visible when assessing M4.
@@ -339,6 +351,9 @@ their distance/facing selection, now delayed after frame6; retail capture,
 obstacle/pull, ready/creep and golden-tool work remain explicit follow-ups.
 Main M3 loading work remains complete; render-look sign-off stays open.
 Rod/capture families follow acceptance of this attachment/action-clock slice.
+Philip's 2026-10-16 feedback: a net is visible, but he doubts its retail look.
+Track the unresolved comparison/correction as **net-render-fidelity**; the
+disc asset name alone does not establish correct rendering or acceptance.
 
 Philip's latest audio report: “there is absolutely zero audio overlap.”
 Preserve that wording; it does not establish that every F9/save/load/restart
@@ -351,8 +366,9 @@ or missing-disc fallback check passed. Combined acceptance remains open.
   needs sign-off. No curved horizon.
 - **retire-town-gen** remains in the backlog: migrate remaining disc-mode
   consumers to retail data while preserving the no-disc placeholder generator.
-- The completed disc UI work covers conversation/choices. Any full retail
-  pockets/mail/shop/HUD visual replacement needs its own explicit task.
+- The completed disc UI work covers conversation/choices. Remaining retail
+  pockets/mail/shop/pause/HUD visuals are explicit open M4 tasks above,
+  starting with **retail-pockets-ui**.
 - **title-screen** stays deferred under the existing decision; audio completion
   alone does not complete every M4 item. Keep the deferral in the release scope.
 - Critter follow-ups (weather, tree interactions, sting/Wisp reactions and

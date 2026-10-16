@@ -140,3 +140,8 @@ build and final default build pass. No tests added or run. Real save hash
 unchanged; settings untouched. Philip's visual/action acceptance remains open.
 Claim released at handoff; task stays in backlog for acceptance. M4 stays open;
 title/rename remain deferred.
+
+2026-10-16 Philip feedback: a net is visible, but he doubts it looks like
+the retail version. This is unresolved visual feedback, not acceptance.
+Follow-up: net-render-fidelity.md; source asset identity does not prove
+correct texture/material/mesh/transform/pose rendering.
