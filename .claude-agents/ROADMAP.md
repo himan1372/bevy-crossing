@@ -410,3 +410,11 @@ check, all-target clippy, formatting and build.
 Tests and disc probes were not rerun in this continuation. Qwen reviewed the small
 completion method locally; its suggestions were speculative (no actionable defect).
 Audio thread uses exclusive mutable access under the existing engine mutex.
+
+## Migration: rustimal-crossing → bevy-crossing
+
+- [ ] **migrate-rustimal-modules** (backlog) — Port 194 Rust modules from
+  rustimal-crossing into `logic/`. 113 are new, 81 need merging (diverged).
+  Pilot `furniture.rs` done 2026-10-16 by muse. See backlog/migrate-rustimal-modules.md.
+  Philip's directive: the rustimal modules were built to end up here.
+
