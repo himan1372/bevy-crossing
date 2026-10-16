@@ -38,6 +38,10 @@ pub struct DialogueState {
     pub choice: usize,
     /// The talk window is still typing the page out: E waits.
     pub revealing: bool,
+    /// Actor controllers own these choices and commit their own transactions.
+    pub(crate) external_name: Option<&'static str>,
+    pub(crate) external_result: Option<usize>,
+    external_choices: Option<Vec<String>>,
     /// A question the last page asks (the game's own message): its
     /// answers and branches, with the speaker's name and the message
     /// context to render the chosen branch.
@@ -52,6 +56,30 @@ pub struct DialogueState {
 const TRADE_CHOICES: [&str; 2] = ["Let's trade!", "No thanks."];
 
 impl DialogueState {
+    pub(crate) fn choices_for_actor(&self) -> Option<&Vec<String>> {
+        self.external_choices.as_ref()
+    }
+
+    pub(crate) fn set_actor_choices(&mut self, choices: Vec<String>) {
+        self.external_choices = Some(choices);
+    }
+
+    pub(crate) fn begin_external(
+        &mut self,
+        speaker: Entity,
+        pages: Vec<String>,
+        choices: Option<Vec<String>>,
+    ) {
+        *self = Self {
+            active: true,
+            speaker: Some(speaker),
+            lines: pages,
+            external_name: Some("Tom Nook"),
+            external_choices: choices,
+            ..default()
+        };
+    }
+
     /// The answers on offer, while the last page waits on one.
     pub fn choices(&self) -> Option<Vec<String>> {
         if !self.active || self.index + 1 < self.lines.len() {
@@ -59,6 +87,9 @@ impl DialogueState {
         }
         if self.trade.is_some() {
             return Some(TRADE_CHOICES.iter().map(|s| s.to_string()).collect());
+        }
+        if self.external_name.is_some() {
+            return self.external_choices.clone();
         }
         self.ask.as_ref().map(|(c, ..)| c.labels.clone())
     }
@@ -400,6 +431,7 @@ fn disc_message_context(
         // item is the only thing we fill in, so offer it everywhere.
         free: vec![item.clone(); 20],
         items: vec![item; 5],
+        item_articles: Vec::new(),
         year: chrono::Datelike::year(&chrono::Local::now()) as u16,
         month: now.month,
         weekday: now.weekday,
@@ -520,6 +552,43 @@ fn dialogue_input(
     (disc, mut rng): (Option<Res<crate::game_disc::GameDisc>>, ResMut<TalkRng>),
 ) {
     if !dialogue.active || dialogue.revealing {
+        return;
+    }
+    if dialogue.external_name.is_some() {
+        if let Some(choices) = dialogue.choices() {
+            let before = dialogue.choice;
+            let n = choices.len();
+            if actions.consume(Action::MoveUp) || actions.consume(Action::MenuUp) {
+                dialogue.choice = (dialogue.choice + n - 1) % n;
+            }
+            if actions.consume(Action::MoveDown) || actions.consume(Action::MenuDown) {
+                dialogue.choice = (dialogue.choice + 1) % n;
+            }
+            crate::sound::cursor_changed(before, dialogue.choice);
+            let cancel = actions.consume(Action::Cancel) || actions.consume(Action::Back);
+            if cancel
+                || actions.consume(Action::Confirm)
+                || actions.consume(Action::Advance)
+                || actions.consume(Action::Interact)
+            {
+                dialogue.external_result = Some(if cancel { n - 1 } else { dialogue.choice });
+                dialogue.active = false;
+                crate::sound::se(crate::sound::se_id::CHOICE_CONFIRM);
+            }
+        } else if actions.consume(Action::Advance)
+            || actions.consume(Action::Confirm)
+            || actions.consume(Action::Interact)
+        {
+            dialogue.index += 1;
+            if dialogue.index >= dialogue.lines.len() {
+                dialogue.external_result = Some(usize::MAX);
+                dialogue.active = false;
+            }
+            crate::sound::se(crate::sound::se_id::PAGE_OKURI);
+        }
+        if let Ok(mut text) = text_query.single_mut() {
+            text.0 = dialogue.shown_text();
+        }
         return;
     }
     // A trade offer on the last line waits on its choice: up/down picks,

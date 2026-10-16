@@ -21,6 +21,9 @@ pub struct PocketsUi {
     pub menu: Option<usize>,
     pub grabbed: Option<usize>,
     pub mail_slot: Option<usize>,
+    /// Inventory mode 0x5: return a slot to Nook, never transact here.
+    pub(crate) selling: bool,
+    pub(crate) sell_slot: Option<usize>,
 }
 
 #[derive(Component)]
@@ -157,6 +160,22 @@ pub(crate) fn item_actions(item: u16, condition: u32) -> Vec<&'static str> {
     }
 }
 
+impl PocketsUi {
+    pub(crate) fn actions(&self, item: u16, condition: u32) -> Vec<&'static str> {
+        if self.selling {
+            if condition == 0 && crate::items::sell_price(item).is_some() {
+                vec!["Sell", "Quit"]
+            } else {
+                // Present/quest handling and zero-value disposal have their
+                // own source flows; don't offer an unsupported transaction.
+                vec!["Quit"]
+            }
+        } else {
+            item_actions(item, condition)
+        }
+    }
+}
+
 fn pockets_input(
     mut actions: ResMut<Actions>,
     focus: Res<InputFocus>,
@@ -202,14 +221,20 @@ fn pockets_input(
     }
     if dx != 0 || dy != 0 {
         if let Some(choice) = ui.menu {
-            let n = item_actions(
-                inventory.pockets.pockets[ui.selected],
-                inventory.pockets.item_cond(ui.selected),
-            )
-            .len();
+            let n = ui
+                .actions(
+                    inventory.pockets.pockets[ui.selected],
+                    inventory.pockets.item_cond(ui.selected),
+                )
+                .len();
             ui.menu = Some((choice as i32 + dy).rem_euclid(n as i32) as usize);
         } else {
-            if dx > 0 && ui.selected % 5 == 4 && ui.grabbed.is_none() && renderer.is_some() {
+            if dx > 0
+                && ui.selected % 5 == 4
+                && ui.grabbed.is_none()
+                && renderer.is_some()
+                && !ui.selling
+            {
                 // mTG_move_cursol_between_table_inventory_right: same Y.
                 ui.mail_slot = Some((ui.selected / 5 + 2) * 2);
                 crate::sound::se(crate::sound::se_id::CURSOR);
@@ -235,6 +260,17 @@ fn pockets_input(
     } else if let Some(choice) = ui.menu.take() {
         let item = inventory.pockets.pockets[slot];
         if item == EMPTY_NO {
+            return;
+        }
+        if ui.selling {
+            if choice == 0
+                && inventory.pockets.item_cond(slot) == 0
+                && items::sell_price(item).is_some()
+            {
+                ui.sell_slot = Some(slot);
+                ui.open = false;
+            }
+            crate::sound::se(crate::sound::se_id::CHOICE_CONFIRM);
             return;
         }
         if inventory.pockets.item_cond(slot) & 1 == 0 && held_tool(item).is_some() && choice == 0 {
@@ -294,7 +330,7 @@ fn refresh_pockets(
             pockets_listing(&inventory),
             ui.selected + 1,
             if let Some(choice) = ui.menu {
-                item_actions(
+                ui.actions(
                     inventory.pockets.pockets[ui.selected],
                     inventory.pockets.item_cond(ui.selected),
                 )[choice]

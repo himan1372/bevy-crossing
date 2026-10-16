@@ -3,13 +3,14 @@
 //! A shop building sits on the town map (placed on a free 5x4 grass rect
 //! near the town center). Pressing E at the door teleports the player into
 //! a shop interior built at a distant world offset (same pattern as the
-//! house plugin). Inside, E at Tom Nook opens the buy/sell menu.
+//! house plugin). Disc gameplay uses `shop_nook` for merchandise dialogue
+//! and pockets selling; the no-disc placeholder keeps its counter menu.
 //!
 //! Logic-crate usage: `rustimal_logic::shop::{ShopState, ShopTier}` drives
 //! sales-sum tracking and the tier/upgrade display (`mSP_PlusSales` clamp,
 //! `mSP_GetRealShopLevel` thresholds, `mSP_RenewShopLevel`). Stock,
-//! pricing, the UI, and the building itself are Bevy-side: the ported
-//! modules carry no price table, so prices here are sensible originals.
+//! pricing, the UI, and the building itself are Bevy-side; original price
+//! tables are installed at runtime by `items` from the user's disc.
 //! Renovation is simplified — the tier upgrades immediately when the sales
 //! threshold is crossed instead of after the retail 2-day remodel.
 
@@ -242,7 +243,7 @@ const PLAYER_RADIUS: f32 = 0.4;
 
 /// Interior obstacles (counter + display pedestals), in world coordinates.
 #[derive(Resource, Default)]
-struct ShopObstacles(Vec<Obstacle>);
+pub(crate) struct ShopObstacles(Vec<Obstacle>);
 
 struct Obstacle {
     min_x: f32,
@@ -486,15 +487,24 @@ fn build_shop_interior(
     // Tom Nook behind the counter (his disc model replaces the capsule).
     commands.spawn((
         Name::new("Tom Nook"),
+        crate::shop_nook::Shopkeeper::default(),
         crate::character::NpcModel(crate::character::NOOK),
         Mesh3d(meshes.add(Capsule3d::new(0.4, 1.0))),
         MeshMaterial3d(nook_mat),
-        Transform::from_xyz(ox, 1.0, oz - 4.1 * k),
+        Transform::from_xyz(
+            if real { ox + 1.5 } else { ox },
+            1.0,
+            if real { oz - 0.5 } else { oz - 4.1 * k },
+        ),
     ));
 
     // Display pedestals with sample goods (colors only; names/prices live
     // in the shop menu).
-    let mut obstacles = vec![counter];
+    let mut obstacles = if real {
+        disc.as_deref().map(room_obstacles).unwrap_or_default()
+    } else {
+        vec![counter]
+    };
     let pedestal_cols = [
         (0.75, 0.2, 0.2),
         (0.25, 0.4, 0.8),
@@ -526,7 +536,11 @@ fn build_shop_interior(
     // Persistent "inside shop" indicator (hidden until the player enters).
     commands.spawn((
         ShopHudText,
-        Text::new("Nook's — E at Nook to shop, E at the door to exit"),
+        Text::new(if real {
+            "Nook's — E facing goods to browse, E at Nook to sell; E at the door to exit"
+        } else {
+            "Nook's — E at Nook to shop, E at the door to exit"
+        }),
         TextFont {
             font_size: FontSize::Px(22.0),
             ..default()
@@ -764,8 +778,13 @@ fn nook_interact(
     player_query: Query<(&Transform, &Facing), With<Player>>,
     mut panel_query: Query<&mut Visibility, With<ShopPanel>>,
     room: Res<ShopRoom>,
+    disc: Option<Res<crate::game_disc::GameDisc>>,
 ) {
-    if *state != ShopLocation::Inside || ui.open || !focus.is_world() {
+    if disc.as_ref().is_some_and(|d| d.text.is_some())
+        || *state != ShopLocation::Inside
+        || ui.open
+        || !focus.is_world()
+    {
         return;
     }
     if !actions.just_pressed(Action::Interact) {
@@ -818,7 +837,7 @@ fn sell_list(inventory: &PlayerInventory) -> Vec<(ItemId, String, u32, u32)> {
 
 /// After a transaction, upgrade the tier if the sales sum earned it
 /// (simplified: immediate instead of the retail 2-day remodel).
-fn maybe_upgrade(shop: &mut shop::ShopState) -> Option<ShopTier> {
+pub(crate) fn maybe_upgrade(shop: &mut shop::ShopState) -> Option<ShopTier> {
     if shop.real_level() as u8 > shop.shop_level as u8 {
         shop.renew_level();
         Some(shop.shop_level)
@@ -1063,12 +1082,50 @@ fn shop_interior_movement(
 }
 
 fn hits_obstacle(x: f32, z: f32, obstacles: &ShopObstacles) -> bool {
+    blocked_at(x, z, PLAYER_RADIUS, obstacles)
+}
+
+pub(crate) fn blocked_at(x: f32, z: f32, radius: f32, obstacles: &ShopObstacles) -> bool {
     obstacles.0.iter().any(|o| {
-        x + PLAYER_RADIUS > o.min_x
-            && x - PLAYER_RADIUS < o.max_x
-            && z + PLAYER_RADIUS > o.min_z
-            && z - PLAYER_RADIUS < o.max_z
+        x + radius > o.min_x && x - radius < o.max_x && z + radius > o.min_z && z - radius < o.max_z
     })
+}
+
+/// The disc shell contains its own tables, rack and pots. Use the existing
+/// surface reader at 1/8-cell spacing, merging contiguous samples into row
+/// bounds. Both actors collide with the visible furniture, even empty tables.
+fn room_obstacles(disc: &crate::game_disc::GameDisc) -> Vec<Obstacle> {
+    let lists: Vec<u32> = [
+        "rom_shop1f_model",
+        "rom_shop1w_model",
+        "rom_shop1_fuku_model",
+    ]
+    .iter()
+    .filter_map(|n| disc.catalog.get(n).map(|a| a.offset))
+    .collect();
+    let surface = crate::disc_gfx::run_display_lists(&disc.rom, &lists);
+    let mut out = Vec::new();
+    let corner = SHOP_ORIGIN - Vec3::new(4.0, 0.0, 4.0);
+    for z in 0..64 {
+        let mut start = None;
+        for x in 0..=64 {
+            let raised = x < 64
+                && surface
+                    .height_at((x as f32 + 0.5) * 80.0, (z as f32 + 0.5) * 80.0)
+                    .is_some_and(|y| y / 640.0 > 1.2);
+            if raised {
+                start.get_or_insert(x);
+            } else if let Some(first) = start.take() {
+                out.push(Obstacle {
+                    min_x: corner.x + first as f32 * 0.125,
+                    max_x: corner.x + x as f32 * 0.125,
+                    min_z: corner.z + z as f32 * 0.125,
+                    max_z: corner.z + (z + 1) as f32 * 0.125,
+                });
+            }
+        }
+    }
+    out
 }
 
 /// Show/hide the "inside shop" indicator with the state.

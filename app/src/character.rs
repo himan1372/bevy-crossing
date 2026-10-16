@@ -753,7 +753,7 @@ fn animate_characters(
     time: Res<Time>,
     players: Query<(&Locomotion, &Facing), With<Player>>,
     villagers: Query<(&GlobalTransform, &Villager, Option<&VillagerTalk>)>,
-    npcs: Query<(), With<NpcModel>>,
+    npcs: Query<Option<&crate::shop_nook::Shopkeeper>, With<NpcModel>>,
     mut rigs: Query<(Entity, &ChildOf, &mut CharacterRig)>,
     mut transforms: Query<&mut Transform>,
     focus: Res<crate::input::InputFocus>,
@@ -850,8 +850,13 @@ fn animate_characters(
                     }
                 }
             }
-        } else if npcs.contains(owner) {
-            play(&mut rig, Motion::Wait, WAIT_SPEED, ticks, &mut transforms);
+        } else if let Ok(keeper) = npcs.get(owner) {
+            let motion = if keeper.is_some_and(|n| n.walking) {
+                Motion::Walk
+            } else {
+                Motion::Wait
+            };
+            play(&mut rig, motion, WAIT_SPEED, ticks, &mut transforms);
         } else if let Ok((g, villager, talk)) = villagers.get(owner) {
             let pos = g.translation();
             let moved = rig.last_pos.map_or(0.0, |p| (pos - p).with_y(0.0).length());

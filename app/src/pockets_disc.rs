@@ -1029,7 +1029,7 @@ fn draw(
         let options = if mail.menu.is_some() {
             mail.action_options().to_vec()
         } else {
-            crate::pockets::item_actions(selected, inventory.pockets.item_cond(ui.selected))
+            ui.actions(selected, inventory.pockets.item_cond(ui.selected))
         };
         if mail.discard {
             paint.text(
@@ -1041,9 +1041,10 @@ fn draw(
             );
         }
         let centre = Vec2::new(224.0, 166.0);
+        let compact = mail.menu.is_some() || ui.selling;
         let (menu_min, menu_max) = font.choice_bounds;
         for (mesh, material) in &font.choice_body {
-            let transform = if mail.menu.is_some() && menu_min.is_finite() && menu_max.is_finite() {
+            let transform = if compact && menu_min.is_finite() && menu_max.is_finite() {
                 let width = options
                     .iter()
                     .map(|s| text_width(s, &font.widths))
@@ -1082,11 +1083,8 @@ fn draw(
             ));
         }
         for (i, label) in options.iter().enumerate() {
-            let at = Vec2::new(
-                205.0,
-                150.0 + i as f32 * if mail.menu.is_some() { 14.0 } else { 16.0 },
-            );
-            let label = if mail.menu.is_some() {
+            let at = Vec2::new(205.0, 150.0 + i as f32 * if compact { 14.0 } else { 16.0 });
+            let label = if compact {
                 scaled_text(label, 28)
             } else {
                 (*label).to_string()

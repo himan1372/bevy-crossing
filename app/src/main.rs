@@ -46,6 +46,7 @@ mod roster;
 mod save;
 mod shop;
 mod shop_display;
+mod shop_nook;
 mod skeleton;
 mod sound;
 mod sound_rom;
@@ -111,6 +112,7 @@ fn main() {
         .add_plugins(MailPlugin)
         .add_plugins(ShopPlugin)
         .add_plugins(shop_display::ShopDisplayPlugin)
+        .add_plugins(shop_nook::ShopNookPlugin)
         .add_plugins(field_items::FieldItemsPlugin)
         .add_plugins(critters::CrittersPlugin)
         .add_plugins(sound::SoundPlugin)

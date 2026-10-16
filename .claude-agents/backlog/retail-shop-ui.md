@@ -1,6 +1,7 @@
 # Retail shop UI
 
-2026-10-16, codex. Planned only; no implementation or Philip acceptance.
+2026-10-16, codex. First ordinary-day Cranny slice implemented; Philip's
+shop playtest acceptance remains pending. This task and M4 remain open.
 
 Third UI task, after pockets and mail.
 
@@ -50,10 +51,9 @@ Local source root: C:/Users/phili/game c/shmanimal crossing/ACGC-PC-Port.
 The upstream ac_shop_goods page could not be fetched; local ac_shop_goods.c was
 read. Do not claim that upstream file was inspected.
 
-Current Bevy code already renders daily merchandise and sold-out signs, but the
-display renderer retains item/sold values without an interaction stock-index
-component. shop.rs still opens a Buy/Sell list at a fixed counter position and
-commits transactions from that list. Those are the concrete integration gaps.
+Before this slice, Bevy rendered merchandise/sold signs but retained no display
+stock index and opened a Buy/Sell list at a fixed counter. The disc path now
+uses those displays and original dialogue. The no-disc counter menu remains.
 
 ## First implementation slice
 
@@ -85,8 +85,64 @@ goods and per-slot selling cannot accidentally target another item. No leaked
 movement/tool/door input or stale selection; the WorldCamera identity stays
 explicit when menu/preview cameras are active. Use disposable save data only.
 
-Research and scope corrected only; no shop gameplay implementation, build/tests
-or Philip acceptance is claimed by this note update.
+## Implementation and evidence, 2026-10-16
+
+- shop_display.rs attaches exact stock indices/positions to goods and sold
+  signs, including duplicate IDs. Corrected source sapling reserve FE05 versus
+  flower FE08, so saplings no longer consume one of the two flower slots.
+- shop_nook.rs connects facing/forward display selection to original messages,
+  item0/free4 purchase substitutions, free2 sale offer, source message-number
+  mapping, acceptance/refusal and tool response scripts. Transaction state
+  rechecks stock identity, price, funds, capacity and the exact offered pocket
+  slot/condition before committing. Wallet overflow stages 30,000-Bell bags
+  before mutation; ledger and existing immediate-upgrade policy are retained.
+- Nook uses source four-zone routing, waypoints, turn limit, distance stops and
+  walk/run speeds; his existing disc rig walks instead of always idling. Room
+  surface sampling supplies table/rack/pot collision to both actors, replacing
+  the incorrect scaled placeholder counter in disc mode. This sampled geometry
+  is an adaptation, not a full translation of mCoBG or NPC movement states.
+- Dialogue uses existing retail frame/choices/font, Nook name plate and original
+  sound spec2/draw-table voice ID. Runtime item article tables/string bank now
+  support item articles and CUT_ARTICLE; existing villager contexts leave the
+  new optional article vector empty. Existing villager branching is preserved.
+- Talk to Nook offers the source Sell/cancel labels (other services hidden).
+  Selling opens pockets mode0x5 with compact Sell/Quit, no mail/grab/tool actions.
+  Selecting Sell returns the slot to Nook; his offer performs the confirmation.
+  World focus stays blocked during that handoff; exit clears owned state.
+
+Disposable review only (Temp cwd, synthetic saves, explicit user-disc path):
+shovel stock5 purchased for500, 12345->11845bells, selected display sold sign,
+one shovel added and ledger+500. Declined100-Bell apple offer retained both
+duplicates; accepted second apple removed only slot1, paid100 and ledger+50.
+Saved Temp state11945bells, slot0 apple/slot1 empty/other tools intact, ledger550.
+Sapling purchase decline, insufficient funds (0bells) and full15 pockets showed
+original refusal pages; neither failure changed stock/pockets/ledger or money.
+F9 between those disposable scenarios restored world input/state. Sell menu
+cancel followed by pockets cancel preserved12345bells and all3 items. Source
+articles display "That's a sapling." Corrected collision stopped a sustained
+forward walk at the table; Nook stayed beside it and dialogue still opened
+across it. Explicit missing-disc preview entered the placeholder shop and
+opened its existing counter menu. These are manual development observations,
+not Philip acceptance or a claim that every save/restart/audio path passed.
+
+Compile/lint/format/capture/default build results and final save hash are
+recorded in comms.txt after the final gate. No tests added or run.
+
+## Still open
+
+- Philip's comparison of following, turning, display targeting, dialogue and
+  selling. Precise retail cameras, approach/transfer poses and movement blending.
+- Clothing try-on, carpet/wall previews and paint/house service. Ordinary
+  clothing/wall/floor items currently use the normal purchase offer without a
+  preview; paint interaction is deferred rather than adding useless paint items.
+- Duplicate/all-item sale prompts, multi-marking, quest/present warning flows,
+  zero-value disposal, turnip pricing and special services. Only normal,
+  positive-price pocket items offer Sell; unsupported slots offer Quit.
+- Ticket gifts with qualifying purchases, repeat-service conversations,
+  catalogue/password/remodel/events and additional shop layouts/tiers. The
+  existing immediate tier upgrade remains simplified, not retail remodeling.
+- Overflow bag logic and duplicate display identity have source/code review
+  only in this slice; those edge cases were not exercised live.
 
 Load original assets at runtime from Philip's own disc; never commit extracted
 bytes. Keep the no-disc placeholder usable. Use source and existing translations,

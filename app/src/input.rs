@@ -225,7 +225,10 @@ pub(crate) fn update_focus(
         InputFocus::Paused
     } else if quest.open {
         InputFocus::Quest
-    } else if dialogue.active {
+    } else if dialogue.active
+        || dialogue.external_result.is_some()
+        || (pockets.selling && !pockets.open)
+    {
         InputFocus::Dialogue
     } else if mail.open {
         InputFocus::Mail

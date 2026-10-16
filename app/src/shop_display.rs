@@ -54,7 +54,10 @@ fn reserve_point(item: ItemId) -> Option<u16> {
         0x2204..=0x2223 => RSV_UMBRELLA,
         0x222D..=0x2238 => RSV_PAINT,
         0x2200..=0x22FF => RSV_TOOL,
-        0x2900..=0x290A => RSV_PLANT,
+        // aSD_ItemName2ReservePointName: ordinary-day saplings occupy
+        // the Halloween reserve; flower bags use the two plant slots.
+        0x2900..=0x2901 => RSV_HALLOWEEN,
+        0x2902..=0x290A => RSV_PLANT,
         _ => return None,
     })
 }
@@ -80,6 +83,13 @@ fn sold_sign(reserve: u16) -> u16 {
 struct GoodsOnDisplay {
     shown: Option<Vec<(ItemId, bool)>>,
     entities: Vec<Entity>,
+}
+
+/// Stock identity survives duplicate item IDs and sold-out signs.
+#[derive(Component)]
+pub(crate) struct ShopDisplay {
+    pub stock_index: usize,
+    pub position: Vec3,
 }
 
 /// The `l_shop_goods_dsp_table` lists (mode 0) for an item or sign:
@@ -133,19 +143,19 @@ fn show_goods(
     else {
         return;
     };
-    let mut slots: Vec<(u16, (i32, i32), Option<(ItemId, bool)>)> = layout
+    let mut slots: Vec<(u16, (i32, i32), Option<(usize, ItemId, bool)>)> = layout
         .items
         .iter()
         .enumerate()
         .filter(|(_, &m)| (RSV_PAPER..=RSV_SIGNBOARD).contains(&m))
         .map(|(i, &m)| (m, ((i % 16) as i32, (i / 16) as i32), None))
         .collect();
-    for s in &shop.stock {
+    for (index, s) in shop.stock.iter().enumerate() {
         let Some(reserve) = reserve_point(s.item) else {
             continue;
         };
         if let Some(slot) = slots.iter_mut().find(|t| t.0 == reserve && t.2.is_none()) {
-            slot.2 = Some((s.item, s.sold));
+            slot.2 = Some((index, s.item, s.sold));
         }
     }
 
@@ -169,13 +179,19 @@ fn show_goods(
             0.0
         };
         let shown = match goods {
-            Some((item, false)) => item,
-            Some((_, true)) | None if reserve == RSV_HALLOWEEN => sold_sign(reserve),
-            Some((_, true)) => sold_sign(reserve),
+            Some((_, item, false)) => item,
+            Some((_, _, true)) | None if reserve == RSV_HALLOWEEN => sold_sign(reserve),
+            Some((_, _, true)) => sold_sign(reserve),
             None => continue,
         };
         let assets = (&mut *meshes, &mut *materials, &mut *images);
         if let Some(e) = spawn_goods(&mut commands, &disc, shown, ut, corner, lift, assets) {
+            if let Some((stock_index, ..)) = goods {
+                commands.entity(e).insert(ShopDisplay {
+                    stock_index,
+                    position: corner + Vec3::new(centre.x, 0.0, centre.y),
+                });
+            }
             display.entities.push(e);
         }
     }

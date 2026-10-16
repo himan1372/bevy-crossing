@@ -1,0 +1,495 @@
+//! Ordinary Cranny transactions from `ac_npc_shop_common`, and the four
+//! `ac_npc_shop_master_move` routing zones. Disc scripts provide all dialogue.
+use bevy::prelude::*;
+
+use crate::dialogue::DialogueState;
+use crate::game_disc::GameDisc;
+use crate::input::{Action, Actions, InputFocus, InteractSet};
+use crate::interaction::{Facing, PlayerInventory};
+use crate::messages::MsgContext;
+use crate::player::Player;
+use crate::pockets::PocketsUi;
+use crate::shop::{ShopData, ShopLocation, SHOP_ORIGIN};
+use crate::shop_display::ShopDisplay;
+use crate::states::GameplaySet;
+
+#[derive(Component, Default)]
+pub(crate) struct Shopkeeper {
+    pub walking: bool,
+    next_zone: Option<usize>,
+}
+
+#[derive(Default)]
+enum Step {
+    #[default]
+    Idle,
+    Request,
+    SellStart,
+    Pockets,
+    Purchase {
+        index: usize,
+        item: u16,
+        price: u32,
+    },
+    Offer {
+        slot: usize,
+        item: u16,
+        condition: u32,
+        price: u32,
+    },
+    Finish,
+}
+
+#[derive(Resource, Default)]
+struct Conversation {
+    step: Step,
+    context: MsgContext,
+}
+
+// aNSC_get_msg_no, ordinary Nook (not the department-store twins).
+fn message(n: usize) -> usize {
+    n + match n {
+        0..100 => 0x107B,
+        100..200 => 0x2BAF,
+        200..300 => 0x2DE6,
+        _ => 0x3CD2,
+    }
+}
+
+fn say(disc: &GameDisc, dialogue: &mut DialogueState, actor: Entity, ctx: &MsgContext, n: usize) {
+    let Some(text) = disc.text.as_ref() else {
+        return;
+    };
+    let (pages, choice) = text.talk(message(n), ctx, &mut |_| 0);
+    dialogue.begin_external(actor, pages, choice.map(|c| c.labels));
+    info!("Nook message {:#06x}", message(n));
+}
+
+fn context(identity: &crate::save::PlayerIdentity) -> MsgContext {
+    let now = crate::clock::now();
+    MsgContext {
+        player_name: identity.player.clone(),
+        talk_name: "Tom Nook".into(),
+        free: vec![String::new(); 20],
+        items: vec![String::new(); 5],
+        item_articles: vec![0; 5],
+        month: now.month,
+        day: now.day,
+        hour: now.hour,
+        minute: now.minute,
+        weekday: now.weekday,
+        ..default()
+    }
+}
+
+/// mIN_get_item_article: read the disc tables rather than guessing from
+/// the spelling ("an hourglass", "some paper", furniture exceptions).
+fn item_article(disc: &GameDisc, item: u16) -> u8 {
+    const TABLES: [&str; 16] = [
+        "itemArt_Paper",
+        "itemArt_Money",
+        "itemArt_Tool",
+        "itemArt_Fish",
+        "itemArt_Cloth",
+        "itemArt_Etc",
+        "itemArt_Carpet",
+        "itemArt_Wall",
+        "itemArt_Fruit",
+        "itemArt_Plant",
+        "itemArt_MiniDisk",
+        "itemArt_Diary",
+        "itemArt_Ticket",
+        "itemArt_Insect",
+        "itemArt_Hukubukuro",
+        "itemArt_Kabu",
+    ];
+    let (symbol, index) = if crate::items::is_furniture(item) {
+        (
+            "ftrArt",
+            crate::furniture::furniture_index(item).map_or(usize::MAX, |i| i as usize),
+        )
+    } else {
+        (
+            TABLES[usize::from((item >> 8) & 15)],
+            usize::from(item & 255),
+        )
+    };
+    disc.catalog
+        .get(symbol)
+        .and_then(|a| disc.rom.slice(a.source, a.offset, a.size))
+        .and_then(|b| b.get(index))
+        .copied()
+        .unwrap_or(0)
+}
+
+/// A forward unit, as in aNSC_message_ctrl_talk_request_normal_day. Unit
+/// centres, rather than rendered mesh bounds, also work on table merchandise.
+fn aimed_display(pos: Vec3, facing: Vec3, display: &ShopDisplay) -> bool {
+    let delta = (display.position - pos).with_y(0.0);
+    let forward = delta.dot(facing);
+    forward > 0.0 && forward <= 1.65 && (delta - facing * forward).length() <= 0.48
+}
+
+// This controller needs the actor, inventory, dialogue and pockets at the
+// same confirmation point; separating their writes would permit partial sales.
+#[allow(clippy::too_many_arguments)]
+fn interact(
+    disc: Option<Res<GameDisc>>,
+    location: Res<State<ShopLocation>>,
+    mut focus: ResMut<InputFocus>,
+    mut actions: ResMut<Actions>,
+    player: Query<(&Transform, &Facing), With<Player>>,
+    nook: Query<(Entity, &Transform), With<Shopkeeper>>,
+    displays: Query<&ShopDisplay>,
+    mut flow: ResMut<Conversation>,
+    mut dialogue: ResMut<DialogueState>,
+    mut pockets: ResMut<PocketsUi>,
+    mut inventory: ResMut<PlayerInventory>,
+    mut shop: ResMut<ShopData>,
+    identity: Res<crate::save::PlayerIdentity>,
+) {
+    let Some(disc) = disc.filter(|d| d.text.is_some()) else {
+        return;
+    };
+    if *location != ShopLocation::Inside {
+        return;
+    }
+    let Ok((actor, nook_transform)) = nook.single() else {
+        return;
+    };
+    if matches!(flow.step, Step::Pockets) {
+        if pockets.open {
+            return;
+        }
+        pockets.selling = false;
+        *focus = InputFocus::Dialogue;
+        if let Some(slot) = pockets.sell_slot.take() {
+            let item = inventory.pockets.pockets[slot];
+            let condition = inventory.pockets.item_cond(slot);
+            let price = crate::items::sell_price(item);
+            flow.context.items[0] = crate::items::name(item);
+            flow.context.item_articles[0] = item_article(&disc, item);
+            flow.context.free[2] = price.unwrap_or(0).to_string();
+            if condition != 0 || price.is_none() {
+                // Recheck the handoff if the slot changed after selection.
+                say(&disc, &mut dialogue, actor, &flow.context, 29);
+                flow.step = Step::Finish;
+            } else {
+                say(&disc, &mut dialogue, actor, &flow.context, 27);
+                flow.step = Step::Offer {
+                    slot,
+                    item,
+                    condition,
+                    price: price.unwrap_or(0),
+                };
+            }
+        } else {
+            say(&disc, &mut dialogue, actor, &flow.context, 29);
+            flow.step = Step::Finish;
+        }
+        return;
+    }
+    if let Some(choice) = dialogue.external_result.take() {
+        *focus = InputFocus::Dialogue;
+        let step = std::mem::take(&mut flow.step);
+        match step {
+            Step::Request if choice == 0 => {
+                say(&disc, &mut dialogue, actor, &flow.context, 26);
+                flow.step = Step::SellStart;
+            }
+            Step::SellStart => {
+                *pockets = PocketsUi {
+                    open: true,
+                    selling: true,
+                    ..default()
+                };
+                *dialogue = DialogueState::default();
+                *focus = InputFocus::Pockets;
+                flow.step = Step::Pockets;
+                crate::sound::se(crate::sound::se_id::MENU_PAUSE);
+            }
+            Step::Purchase { index, item, price } => {
+                let valid = shop
+                    .stock
+                    .get(index)
+                    .is_some_and(|s| s.item == item && !s.sold && s.price == price);
+                let response = if choice != 0 || !valid {
+                    31
+                } else if inventory.bells < price {
+                    33
+                } else if !inventory.add(item) {
+                    39
+                } else {
+                    inventory.bells -= price;
+                    shop.stock[index].sold = true;
+                    shop.shop.record_purchase(price);
+                    crate::shop::maybe_upgrade(&mut shop.shop);
+                    crate::sound::se(crate::sound::se_id::REGISTER);
+                    info!("Nook purchase stock={index} item={item:#06x} price={price}");
+                    // aNSC_sell_answer0's tool-specific response.
+                    match item {
+                        0x2200 => 101,
+                        0x2201 => 103,
+                        0x2202 => 100,
+                        0x2203 => 102,
+                        0x251E => 104,
+                        _ => 34,
+                    }
+                };
+                say(&disc, &mut dialogue, actor, &flow.context, response);
+                flow.step = Step::Finish;
+            }
+            Step::Offer {
+                slot,
+                item,
+                condition,
+                price,
+            } => {
+                let valid = inventory.pockets.pockets[slot] == item
+                    && inventory.pockets.item_cond(slot) == condition;
+                let response = if choice != 0 || !valid {
+                    29
+                } else if !sell_slot(&mut inventory, slot, price) {
+                    200
+                } else {
+                    shop.shop.record_sale(price);
+                    crate::shop::maybe_upgrade(&mut shop.shop);
+                    crate::sound::se(crate::sound::se_id::REGISTER);
+                    info!("Nook sale slot={slot} item={item:#06x} payout={price}");
+                    28
+                };
+                say(&disc, &mut dialogue, actor, &flow.context, response);
+                flow.step = Step::Finish;
+            }
+            Step::Request => {
+                say(&disc, &mut dialogue, actor, &flow.context, 24);
+                flow.step = Step::Finish;
+            }
+            _ => {
+                *dialogue = DialogueState::default();
+                *focus = InputFocus::World;
+            }
+        }
+        return;
+    }
+    if !matches!(flow.step, Step::Idle)
+        || !focus.is_world()
+        || !actions.just_pressed(Action::Interact)
+    {
+        return;
+    }
+    let Ok((transform, facing)) = player.single() else {
+        return;
+    };
+    let display = displays
+        .iter()
+        .filter(|d| aimed_display(transform.translation, facing.dir, d))
+        .min_by(|a, b| {
+            a.position
+                .distance_squared(transform.translation)
+                .total_cmp(&b.position.distance_squared(transform.translation))
+        });
+    flow.context = context(&identity);
+    if let Some(display) = display {
+        let Some(stock) = shop.stock.get(display.stock_index) else {
+            return;
+        };
+        if stock.sold {
+            actions.consume(Action::Interact);
+            return;
+        }
+        // Paint changes the house rather than entering pockets: keep that
+        // service deferred instead of selling a useless paint-can item.
+        if (0x222D..=0x2238).contains(&stock.item) {
+            return;
+        }
+        actions.consume(Action::Interact);
+        *focus = InputFocus::Dialogue;
+        flow.context.items[0] = stock.name.clone();
+        flow.context.item_articles[0] = item_article(&disc, stock.item);
+        flow.context.free[4] = stock.price.to_string();
+        say(
+            &disc,
+            &mut dialogue,
+            actor,
+            &flow.context,
+            if (0x2000..=0x20FF).contains(&stock.item) {
+                222
+            } else {
+                30
+            },
+        );
+        flow.step = Step::Purchase {
+            index: display.stock_index,
+            item: stock.item,
+            price: stock.price,
+        };
+    } else {
+        let delta = (nook_transform.translation - transform.translation).with_y(0.0);
+        if delta.length() > 1.8 || facing.dir.dot(delta.normalize_or_zero()) < 0.5 {
+            return;
+        }
+        actions.consume(Action::Interact);
+        *focus = InputFocus::Dialogue;
+        say(&disc, &mut dialogue, actor, &flow.context, 23);
+        // Only implemented services are offered; preserve the disc's own
+        // Sell and cancellation labels, without exposing nonfunctional choices.
+        if let Some(options) = dialogue.choices_for_actor() {
+            let last = options.last().cloned();
+            if let (Some(first), Some(last)) = (options.first().cloned(), last) {
+                dialogue.set_actor_choices(vec![first, last]);
+            }
+        }
+        flow.step = Step::Request;
+    }
+}
+
+/// Original wallet overflow policy: exchange 30,000 bells into bags. Stage
+/// the complete pocket update first so failure cannot consume the offered item.
+fn sell_slot(inventory: &mut PlayerInventory, slot: usize, price: u32) -> bool {
+    let Some(mut bells) = inventory.bells.checked_add(price) else {
+        return false;
+    };
+    let mut pockets = inventory.pockets.clone();
+    pockets.pockets[slot] = 0;
+    pockets.set_item_cond(slot, 0);
+    while bells >= 99999 {
+        let Some(empty) = pockets.pockets.iter().position(|&i| i == 0) else {
+            return false;
+        };
+        // ITM_MONEY_30000 (m_private / the translated buried-items table).
+        pockets.pockets[empty] = 0x2102;
+        pockets.set_item_cond(empty, 0);
+        bells -= 30000;
+    }
+    inventory.pockets = pockets;
+    inventory.bells = bells;
+    true
+}
+
+fn zone(p: Vec3) -> usize {
+    if p.x < 120.0 {
+        if p.z < 180.0 {
+            1
+        } else {
+            2
+        }
+    } else if p.z < 160.0 {
+        0
+    } else {
+        3
+    }
+}
+
+fn follow(
+    disc: Option<Res<GameDisc>>,
+    location: Res<State<ShopLocation>>,
+    focus: Res<InputFocus>,
+    time: Res<Time>,
+    player: Query<&Transform, With<Player>>,
+    mut nook: Query<(&mut Transform, &mut Shopkeeper), Without<Player>>,
+    obstacles: Res<crate::shop::ShopObstacles>,
+) {
+    let Ok((mut transform, mut keeper)) = nook.single_mut() else {
+        return;
+    };
+    keeper.walking = false;
+    if disc.is_none() || *location != ShopLocation::Inside {
+        return;
+    }
+    let Ok(player) = player.single() else { return };
+    let corner = SHOP_ORIGIN - Vec3::new(4.0, 0.0, 4.0);
+    let pos = (transform.translation - corner) * 40.0;
+    let target = (player.translation - corner) * 40.0;
+    let delta = (target - pos).with_y(0.0);
+    let current_zone = zone(pos);
+    let player_zone = zone(target);
+    let can_walk = focus.is_world()
+        && delta.length() >= 80.0
+        && !(target.z < 120.0 && (current_zone == 2 || current_zone == 3));
+    let direction = if can_walk && (current_zone != player_zone || keeper.next_zone.is_some()) {
+        const NEXT: [[usize; 4]; 4] = [[0, 1, 1, 1], [0, 1, 2, 2], [1, 1, 2, 3], [2, 2, 2, 3]];
+        const POINTS: [(f32, f32); 4] = [
+            (220.0, 140.0),
+            (100.0, 140.0),
+            (100.0, 220.0),
+            (220.0, 220.0),
+        ];
+        let next = *keeper
+            .next_zone
+            .get_or_insert(NEXT[current_zone][player_zone]);
+        let d = Vec3::new(POINTS[next].0 - pos.x, 0.0, POINTS[next].1 - pos.z);
+        if d.length_squared() < 200.0 {
+            keeper.next_zone =
+                (current_zone != player_zone).then_some(NEXT[current_zone][player_zone]);
+        }
+        d
+    } else {
+        keeper.next_zone = None;
+        delta
+    };
+    let dt = time.delta_secs().min(0.1);
+    if direction.length_squared() > 0.001 {
+        let desired = direction.x.atan2(direction.z);
+        let (yaw, _, _) = transform.rotation.to_euler(EulerRot::YXZ);
+        let change = (desired - yaw + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
+            - std::f32::consts::PI;
+        let turn = 11.25_f32.to_radians() * 30.0 * dt;
+        transform.rotation = Quat::from_rotation_y(yaw + change.clamp(-turn, turn));
+        if can_walk && change.abs() < std::f32::consts::FRAC_PI_2 {
+            // aNSC_set_walk_spd=1, run_spd=4 game units per 30 Hz frame.
+            let speed = if delta.length() < 110.0 { 1.0 } else { 4.0 } * 30.0 / 40.0;
+            let step = transform.rotation * Vec3::Z * (speed * dt).min(direction.length() / 40.0);
+            if (player.translation - transform.translation - step)
+                .with_y(0.0)
+                .length()
+                >= 1.0
+            {
+                let before = transform.translation;
+                let x = before.x + step.x;
+                // aNSC_BGcheck uses an eight-game-unit radius (8 / 40).
+                if !crate::shop::blocked_at(x, before.z, 0.2, &obstacles) {
+                    transform.translation.x = x;
+                }
+                let z = before.z + step.z;
+                if !crate::shop::blocked_at(transform.translation.x, z, 0.2, &obstacles) {
+                    transform.translation.z = z;
+                }
+                keeper.walking = transform.translation.distance_squared(before) > 0.000001;
+            }
+        }
+    }
+}
+
+pub(crate) struct ShopNookPlugin;
+
+fn reset(
+    mut flow: ResMut<Conversation>,
+    mut dialogue: ResMut<DialogueState>,
+    mut pockets: ResMut<PocketsUi>,
+) {
+    *flow = Conversation::default();
+    if dialogue.external_name.is_some() {
+        *dialogue = DialogueState::default();
+    }
+    if pockets.selling {
+        *pockets = PocketsUi::default();
+    }
+}
+
+impl Plugin for ShopNookPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<Conversation>()
+            .add_systems(OnExit(crate::states::AppState::InGame), reset)
+            .add_systems(
+                Update,
+                interact.in_set(InteractSet::Objects).in_set(GameplaySet),
+            )
+            .add_systems(
+                Update,
+                follow
+                    .after(crate::locomotion::MovementSet)
+                    .in_set(GameplaySet),
+            );
+    }
+}

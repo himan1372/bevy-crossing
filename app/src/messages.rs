@@ -337,6 +337,8 @@ pub struct MsgContext {
     /// fills in for the topic (an item's name, a count...).
     pub free: Vec<String>,
     pub items: Vec<String>,
+    /// Optional mIN_ARTICLE_* values supplied by the speaking actor.
+    pub item_articles: Vec<u8>,
     pub year: u16,
     pub month: u8,
     pub weekday: u8,
@@ -479,6 +481,7 @@ impl GameText {
         let mut labels: Option<Vec<String>> = None;
         let mut branches: [Option<usize>; 6] = [None; 6];
         let mut capital = false;
+        let mut cut_article = false;
         let mut status = 0;
         let mut i = 0;
         let u16_at = |i: usize| -> u16 {
@@ -609,6 +612,16 @@ impl GameText {
                             put(ctx.free.get(slot as usize).map_or("", String::as_str), page);
                         }
                         code::ITEM0..=code::ITEM4 => {
+                            let slot = (k - code::ITEM0) as usize;
+                            let article = ctx.item_articles.get(slot).copied().unwrap_or(0);
+                            if !cut_article && article != 0 {
+                                if let Some(bytes) = self.strings.get(0x737 + usize::from(article))
+                                {
+                                    put(&plain(bytes), page);
+                                    page.push(' ');
+                                }
+                            }
+                            cut_article = false;
                             put(
                                 ctx.items
                                     .get((k - code::ITEM0) as usize)
@@ -618,6 +631,9 @@ impl GameText {
                         }
                         code::SPACE => page.push(' '),
                         code::CAPITAL_LETTER => capital = true,
+                        // mFont_CONT_CODE_CUT_ARTICLE, immediately before
+                        // CAPITAL_LETTER in the installed source's enum.
+                        116 => cut_article = true,
                         _ => {}
                     }
                     i += self.size_of(k);

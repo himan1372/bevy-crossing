@@ -450,6 +450,20 @@ fn advance_reveal(
                 rustimal_logic::na_voice::villager_spec(speaker.looks),
                 voice_id,
             );
+        } else if dialogue.external_name == Some("Tom Nook") {
+            let voice_id = disc
+                .as_ref()
+                .and_then(|disc| {
+                    let table = disc.catalog.get("npc_draw_data_tbl")?;
+                    let offset = crate::character::NOOK * 0x6C + 0x62;
+                    let b = disc
+                        .rom
+                        .slice(table.source, table.offset.checked_add(offset)?, 2)?;
+                    Some(u16::from_be_bytes([b[0], b[1]]))
+                })
+                .unwrap_or(0);
+            // m_npc.c::l_sp_actor_name: Nook's sound_id is 2.
+            crate::sound::voice_begin(2, voice_id);
         }
         *reveal = Reveal {
             total: items.len(),
@@ -477,11 +491,12 @@ fn advance_reveal(
         _ => 0xFF,
     };
     let was_done = reveal.done();
+    let speaking = speaker.is_some() || dialogue.external_name.is_some();
     while reveal.timer <= 0.0 && !reveal.done() {
         match items[reveal.shown] {
             Item::Char(_, rgb) => {
                 reveal.timer += 2.0;
-                if speaker.is_some() {
+                if speaking {
                     let i = reveal.shown;
                     let scale = (f32::from(reveal.line_scale) * f32::from(reveal.char_scale) / 32.0
                         + 0.5)
@@ -501,12 +516,12 @@ fn advance_reveal(
             Item::NewLine => {
                 reveal.line_scale = 32;
                 reveal.char_scale = 32;
-                if speaker.is_some() {
+                if speaking {
                     crate::sound::voice_character([0x84, 0xFF, 0xFF], 32, false);
                 }
             }
             Item::Status(status) => {
-                if speaker.is_some() {
+                if speaking {
                     crate::sound::voice_status(status);
                 }
             }
@@ -515,7 +530,7 @@ fn advance_reveal(
         }
         reveal.shown += 1;
     }
-    if !was_done && reveal.done() && speaker.is_some() {
+    if !was_done && reveal.done() && speaking {
         crate::sound::voice_end();
     }
     dialogue.revealing = !reveal.done();
@@ -601,8 +616,8 @@ fn draw_window(
     let widths = assets.widths;
     let speaker = speaker.and_then(|e| villagers.get(e).ok());
     let page = window_page(&page, speaker);
-    if let Some(v) = speaker {
-        let sex = if crate::roster::looks_female(v.looks) {
+    if speaker.is_some() || dialogue.external_name.is_some() {
+        let sex = if speaker.is_some_and(|v| crate::roster::looks_female(v.looks)) {
             1
         } else {
             0
@@ -611,12 +626,16 @@ fn draw_window(
         model(&mut commands, &assets.plates[sex], window_at, 1.0);
         // mMsg_Set_client_actor_p: centred in 9 pixels a letter, in the
         // window's space (drawn under mMsg_SetMatrix).
-        let width = text_width(v.name, &assets.widths);
+        let name = speaker
+            .map(|v| v.name)
+            .or(dialogue.external_name)
+            .unwrap_or_default();
+        let width = text_width(name, &assets.widths);
         let local = Vec2::new(61.0 + (9.0 * NAME_LEN - width) * 0.5, 64.0);
         let origin = WINDOW_CENTRE + local - SCREEN * 0.5;
         put(
             &mut commands,
-            text_mesh(v.name, origin, &widths, name_color, usize::MAX),
+            text_mesh(name, origin, &widths, name_color, usize::MAX),
             &font,
             [255; 4],
             2.0,
