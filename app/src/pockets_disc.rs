@@ -629,7 +629,7 @@ fn animate(
         }
     }
     for rig in &mut assets.rigs {
-        let grabbing = rig.catch.is_some() && ui.grabbed.is_some();
+        let grabbing = rig.catch.is_some() && (ui.grabbed.is_some() || mail.grabbed.is_some());
         if rig.grabbing != grabbing {
             rig.releasing = !grabbing;
             if grabbing {
@@ -885,7 +885,14 @@ fn draw(
         }
     }
     let selected = inventory.pockets.pockets[ui.selected];
-    for (slot, letter) in mailbox.letters.iter().take(10).enumerate() {
+    for (slot, index) in mailbox.slots().into_iter().enumerate() {
+        if mail.grabbed == Some(slot) {
+            continue;
+        }
+        let Some(index) = index else {
+            continue;
+        };
+        let letter = &mailbox.letters[index];
         if let Some(tex) = &assets.envelopes[usize::from(letter.read)] {
             paint.put(
                 quad_mesh(mail_at(slot) - Vec2::splat(12.0), Vec2::splat(24.0)),
@@ -897,6 +904,28 @@ fn draw(
     }
     let mail_slot = selected_mail(&ui, &mail);
     let at = mail_slot.map_or_else(|| slot_at(ui.selected), mail_at);
+    if let Some(letter) = mail
+        .grabbed
+        .and_then(|slot| mailbox.letter_index(slot))
+        .and_then(|i| mailbox.letters.get(i))
+    {
+        if let Some(tex) = &assets.envelopes[usize::from(letter.read)] {
+            let shadow = paint.put(
+                quad_mesh(at + Vec2::splat(4.0) - Vec2::splat(12.0), Vec2::splat(24.0)),
+                tex.clone(),
+                Color::srgba(0.0, 0.0, 0.0, 0.3),
+                174.0,
+            );
+            paint.commands.entity(shadow).insert(PocketCarry(at, 174.0));
+            let carry = paint.put(
+                quad_mesh(at - Vec2::splat(12.0), Vec2::splat(24.0)),
+                tex.clone(),
+                Color::WHITE,
+                175.0,
+            );
+            paint.commands.entity(carry).insert(PocketCarry(at, 175.0));
+        }
+    }
     if let Some(from) = ui.grabbed {
         let item = inventory.pockets.pockets[from];
         let present = inventory.pockets.item_cond(from) & 1 != 0;
@@ -937,10 +966,10 @@ fn draw(
     let labelled = ui
         .grabbed
         .map_or(selected, |from| inventory.pockets.pockets[from]);
-    let label = if let Some(slot) = mail_slot {
+    let label = if let Some(slot) = mail.grabbed.or(mail_slot) {
         mailbox
-            .letters
-            .get(slot)
+            .letter_index(slot)
+            .and_then(|index| mailbox.letters.get(index))
             .map(|l| format!("From {}", l.sender))
             .unwrap_or_default()
     } else if labelled == 0 {
@@ -996,25 +1025,75 @@ fn draw(
         [255, 60, 0, 255],
         130.0,
     );
-    if let Some(choice) = ui.menu {
-        let options =
-            crate::pockets::item_actions(selected, inventory.pockets.item_cond(ui.selected));
+    if let Some(choice) = mail.menu.or(ui.menu) {
+        let options = if mail.menu.is_some() {
+            mail.action_options().to_vec()
+        } else {
+            crate::pockets::item_actions(selected, inventory.pockets.item_cond(ui.selected))
+        };
+        if mail.discard {
+            paint.text(
+                &font,
+                &scaled_text("Throw it out?", 28),
+                Vec2::new(194.0, 128.0),
+                [220, 30, 220, 255],
+                162.0,
+            );
+        }
         let centre = Vec2::new(224.0, 166.0);
+        let (menu_min, menu_max) = font.choice_bounds;
         for (mesh, material) in &font.choice_body {
+            let transform = if mail.menu.is_some() && menu_min.is_finite() && menu_max.is_finite() {
+                let width = options
+                    .iter()
+                    .map(|s| text_width(s, &font.widths))
+                    .chain(
+                        mail.discard
+                            .then(|| text_width("Throw it out?", &font.widths)),
+                    )
+                    .fold(0.0, f32::max)
+                    * 0.875
+                    + 24.0;
+                let height =
+                    options.len() as f32 * 14.0 + 12.0 + if mail.discard { 22.0 } else { 0.0 };
+                let scale = Vec3::new(
+                    width * 16.0 / (menu_max.x - menu_min.x).max(1.0),
+                    height * 16.0 / (menu_max.y - menu_min.y).max(1.0),
+                    1.0,
+                );
+                let center = Vec2::new(
+                    186.0 + width * 0.5,
+                    (if mail.discard { 122.0 } else { 144.0 }) + height * 0.5,
+                );
+                Transform::from_translation(
+                    screen(center).with_z(160.0) - (menu_min + menu_max) * 0.5 * scale,
+                )
+                .with_scale(scale)
+            } else {
+                Transform::from_translation(screen(centre).with_z(160.0))
+                    .with_scale(Vec3::new(0.7, 0.7, 1.0))
+            };
             paint.commands.spawn((
                 Mesh3d(mesh.clone()),
                 MeshMaterial3d(material.clone()),
-                Transform::from_translation(screen(centre).with_z(160.0))
-                    .with_scale(Vec3::new(0.7, 0.7, 1.0)),
+                transform,
                 RenderLayers::layer(1),
                 ChildOf(dynamic),
             ));
         }
         for (i, label) in options.iter().enumerate() {
-            let at = Vec2::new(205.0, 150.0 + i as f32 * 16.0);
+            let at = Vec2::new(
+                205.0,
+                150.0 + i as f32 * if mail.menu.is_some() { 14.0 } else { 16.0 },
+            );
+            let label = if mail.menu.is_some() {
+                scaled_text(label, 28)
+            } else {
+                (*label).to_string()
+            };
             paint.text(
                 &font,
-                label,
+                &label,
                 at,
                 if i == choice {
                     [120, 50, 50, 255]

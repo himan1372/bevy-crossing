@@ -88,6 +88,8 @@ pub(crate) struct MsgAssets {
     /// Name plate per `PLATE_COLORS` entry.
     plates: [Model; 3],
     pub(crate) choice_body: Model,
+    /// Bounds cached before the meshes are extracted to RenderWorld.
+    pub(crate) choice_bounds: (Vec3, Vec3),
     /// `FONT_nes_tex_choice` / `FONT_nes_tex_next`.
     pub(crate) cursor: Handle<Image>,
     next: Handle<Image>,
@@ -181,12 +183,26 @@ fn setup(
     let plates = PLATE_COLORS.map(|(bg, _)| build(init.offset, plate.offset, bg));
     // con_sentaku2_modelT sets its own prim (255, 255, 155).
     let choice_body = build(choice_init.offset, choice.offset, [255; 4]);
+    let mut choice_bounds = (Vec3::splat(f32::INFINITY), Vec3::splat(f32::NEG_INFINITY));
+    for (mesh, _) in &choice_body {
+        if let Some(points) = meshes
+            .get(mesh)
+            .and_then(|m| m.attribute(Mesh::ATTRIBUTE_POSITION))
+            .and_then(|v| v.as_float3())
+        {
+            for &point in points {
+                choice_bounds.0 = choice_bounds.0.min(Vec3::from(point));
+                choice_bounds.1 = choice_bounds.1.max(Vec3::from(point));
+            }
+        }
+    }
     commands.insert_resource(MsgAssets {
         font,
         widths,
         window,
         plates,
         choice_body,
+        choice_bounds,
         cursor,
         next,
     });

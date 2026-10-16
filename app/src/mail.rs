@@ -54,6 +54,9 @@ pub struct Letter {
     /// Original stationery index; older port letters use the first paper.
     #[serde(default)]
     pub paper: u8,
+    /// Stable position in the ten-slot letter grid; absent in older saves.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slot: Option<u8>,
 }
 
 /// The player's mailbox: received letters plus sent ones.
@@ -61,6 +64,62 @@ pub struct Letter {
 pub struct Mailbox {
     pub letters: Vec<Letter>,
     pub sent: Vec<Letter>,
+}
+
+impl Mailbox {
+    pub(crate) fn slots(&self) -> [Option<usize>; MAILBOX_CAP] {
+        let mut slots = [None; MAILBOX_CAP];
+        let mut placed = vec![false; self.letters.len()];
+        for (index, letter) in self.letters.iter().enumerate() {
+            if let Some(slot) = letter.slot.map(usize::from).filter(|&s| s < MAILBOX_CAP) {
+                if slots[slot].is_none() {
+                    slots[slot] = Some(index);
+                    placed[index] = true;
+                }
+            }
+        }
+        for (index, done) in placed.into_iter().enumerate() {
+            if !done {
+                if let Some(slot) = slots.iter_mut().find(|s| s.is_none()) {
+                    *slot = Some(index);
+                }
+            }
+        }
+        slots
+    }
+
+    pub(crate) fn letter_index(&self, slot: usize) -> Option<usize> {
+        self.slots().get(slot).copied().flatten()
+    }
+
+    fn normalize_slots(&mut self) {
+        for (slot, index) in self.slots().into_iter().enumerate() {
+            if let Some(index) = index {
+                self.letters[index].slot = Some(slot as u8);
+            }
+        }
+    }
+
+    fn swap_slots(&mut self, from: usize, to: usize) {
+        if from >= MAILBOX_CAP || to >= MAILBOX_CAP {
+            return;
+        }
+        self.normalize_slots();
+        let slots = self.slots();
+        if let Some(index) = slots[from] {
+            self.letters[index].slot = Some(to as u8);
+        }
+        if let Some(index) = slots[to] {
+            self.letters[index].slot = Some(from as u8);
+        }
+    }
+
+    fn discard_slot(&mut self, slot: usize) {
+        self.normalize_slots();
+        if let Some(index) = self.letter_index(slot) {
+            self.letters.remove(index);
+        }
+    }
 }
 
 /// Mail UI state. Other plugins read `open` to yield the E key.
@@ -74,9 +133,93 @@ pub struct MailUi {
     pub(crate) write_text: String,
     pub(crate) page: usize,
     pub(crate) from_pockets: bool,
+    pub(crate) menu: Option<usize>,
+    pub(crate) discard: bool,
+    pub(crate) grabbed: Option<usize>,
 }
 
 impl MailUi {
+    pub(crate) fn cancel_action(&mut self) {
+        self.menu = None;
+        self.discard = false;
+        self.grabbed = None;
+        crate::sound::se(crate::sound::se_id::MENU_EXIT);
+    }
+
+    pub(crate) fn action_options(&self) -> &'static [&'static str] {
+        if self.discard {
+            &["Yes", "No"]
+        } else {
+            &["Read", "Grab", "Throw Away", "Quit"]
+        }
+    }
+
+    /// mTG_def_rmail and dump confirmation; mHD-style grab/drop swaps whole mail.
+    pub(crate) fn letter_actions(
+        &mut self,
+        actions: &mut Actions,
+        mailbox: &mut Mailbox,
+        slot: usize,
+        from_pockets: bool,
+    ) -> bool {
+        if (self.menu.is_some() || self.grabbed.is_some())
+            && (actions.consume(Action::Cancel) || actions.consume(Action::Back))
+        {
+            self.cancel_action();
+            return true;
+        }
+        if let Some(choice) = self.menu {
+            let down =
+                actions.just_pressed(Action::MoveDown) || actions.just_pressed(Action::MenuDown);
+            let up = actions.just_pressed(Action::MoveUp) || actions.just_pressed(Action::MenuUp);
+            if up || down {
+                self.menu = Some(
+                    (choice as i32 + i32::from(down) - i32::from(up))
+                        .rem_euclid(self.action_options().len() as i32)
+                        as usize,
+                );
+                crate::sound::se(crate::sound::se_id::CURSOR);
+                return true;
+            }
+            if actions.consume(Action::Confirm) || actions.consume(Action::Interact) {
+                self.menu = None;
+                if self.discard {
+                    if choice == 0 {
+                        mailbox.discard_slot(slot);
+                    }
+                    self.discard = false;
+                } else {
+                    match choice {
+                        0 => {
+                            if let Some(index) = mailbox.letter_index(slot) {
+                                self.read_from_pockets(index);
+                                self.from_pockets = from_pockets;
+                            }
+                        }
+                        1 => self.grabbed = Some(slot),
+                        2 => {
+                            self.discard = true;
+                            self.menu = Some(1);
+                        }
+                        _ => {}
+                    }
+                }
+                crate::sound::se(crate::sound::se_id::CHOICE_CONFIRM);
+            }
+            return true;
+        }
+        if actions.consume(Action::Confirm) || actions.consume(Action::Interact) {
+            if let Some(from) = self.grabbed.take() {
+                mailbox.swap_slots(from, slot);
+            } else if mailbox.letter_index(slot).is_some() {
+                self.menu = Some(0);
+                self.from_pockets = from_pockets;
+            }
+            crate::sound::se(crate::sound::se_id::CHOICE_OPEN);
+            return true;
+        }
+        false
+    }
     pub(crate) fn listing(&self) -> bool {
         self.open && self.reading.is_none() && !self.writing
     }
@@ -139,6 +282,7 @@ fn starter_letters() -> Vec<Letter> {
                 .to_string(),
             read: false,
             paper: 0,
+            slot: None,
         },
         Letter {
             sender: "Mom".to_string(),
@@ -150,6 +294,7 @@ fn starter_letters() -> Vec<Letter> {
                 .to_string(),
             read: false,
             paper: 0,
+            slot: None,
         },
         Letter {
             sender: "Tom Nook".to_string(),
@@ -162,6 +307,7 @@ fn starter_letters() -> Vec<Letter> {
                 .to_string(),
             read: false,
             paper: 0,
+            slot: None,
         },
     ]
 }
@@ -178,6 +324,7 @@ fn villager_letter(name: &str) -> Letter {
         ),
         read: false,
         paper: 0,
+        slot: None,
     }
 }
 
@@ -200,14 +347,21 @@ fn reply_letter(recipient: &str, rank: LetterRank) -> Letter {
         body,
         read: false,
         paper: 0,
+        slot: None,
     }
 }
 
 /// Push a letter, respecting the mailbox cap. Returns false when full.
-fn push_letter(mailbox: &mut Mailbox, letter: Letter) -> bool {
+fn push_letter(mailbox: &mut Mailbox, mut letter: Letter) -> bool {
     if mailbox.letters.len() >= MAILBOX_CAP {
         return false;
     }
+    mailbox.normalize_slots();
+    letter.slot = mailbox
+        .slots()
+        .iter()
+        .position(Option::is_none)
+        .map(|s| s as u8);
     mailbox.letters.push(letter);
     true
 }
@@ -400,6 +554,9 @@ fn mailbox_interact(
     ui.open = true;
     ui.from_pockets = false;
     ui.page = 0;
+    ui.menu = None;
+    ui.grabbed = None;
+    ui.discard = false;
     crate::sound::se(crate::sound::se_id::PANEL_OPEN);
     ui.selected = 0;
     ui.reading = None;
@@ -477,6 +634,7 @@ fn send_letter(
         body: text,
         read: true,
         paper: 0,
+        slot: None,
     });
     match rank {
         LetterRank::Ok => {
@@ -518,7 +676,7 @@ fn send_letter(
 /// Mail UI keyboard handling: list nav, reading, and composing.
 #[allow(clippy::too_many_arguments)]
 fn mail_ui_input(
-    actions: Res<Actions>,
+    mut actions: ResMut<Actions>,
     focus: Res<InputFocus>,
     mut key_events: MessageReader<KeyboardInput>,
     mut ui: ResMut<MailUi>,
@@ -531,6 +689,7 @@ fn mail_ui_input(
     >,
     mut panel_query: Query<&mut Visibility, (With<MailPanel>, Without<MailNotifyText>)>,
     font: Option<Res<crate::msg_window::MsgAssets>>,
+    renderer: Option<Res<crate::pockets_disc::PocketAssets>>,
 ) {
     if !ui.open || *focus != InputFocus::Mail {
         return;
@@ -616,6 +775,18 @@ fn mail_ui_input(
     }
 
     // --- List view ---
+    if renderer.as_ref().is_some_and(|r| r.hand_busy())
+        && !actions.just_pressed(Action::Cancel)
+        && !actions.just_pressed(Action::Back)
+    {
+        actions.consume(Action::Confirm);
+        actions.consume(Action::Interact);
+        return;
+    }
+    let slot = ui.selected;
+    if ui.letter_actions(&mut actions, &mut mailbox, slot, false) {
+        return;
+    }
     if actions.just_pressed(Action::Cancel) {
         ui.open = false;
         // ac_mailbox opens mSM_OVL_INVENTORY in mailbox mode; its exit
@@ -654,17 +825,14 @@ fn mail_ui_input(
     }
     if actions.just_pressed(Action::MenuDown) {
         let before = ui.selected;
-        ui.selected = (ui.selected + 1).min(mailbox.letters.len().saturating_sub(1));
+        ui.selected = (ui.selected + 1).min(MAILBOX_CAP - 1);
         crate::sound::cursor_changed(before, ui.selected);
         return;
     }
-    if actions.just_pressed(Action::Confirm) && ui.selected < mailbox.letters.len() {
-        ui.reading = Some(ui.selected);
-        ui.page = 0;
-        crate::sound::se(crate::sound::se_id::PAGE_OKURI);
-        return;
-    }
     if actions.just_pressed(Action::Compose) {
+        if ui.grabbed.is_some() {
+            return;
+        }
         ui.writing = true;
         crate::sound::se(crate::sound::se_id::CHOICE_OPEN);
         ui.write_recipient = 0;
@@ -750,8 +918,13 @@ fn refresh_mail_ui(
         *list_vis = Visibility::Inherited;
         *body_vis = Visibility::Hidden;
         let mut s = String::new();
-        for (i, letter) in mailbox.letters.iter().enumerate() {
+        for (i, index) in mailbox.slots().into_iter().enumerate() {
             let marker = if i == ui.selected { ">" } else { " " };
+            let Some(index) = index else {
+                s.push_str(&format!("{marker} (empty)\n"));
+                continue;
+            };
+            let letter = &mailbox.letters[index];
             let flag = if letter.read { "    " } else { "NEW " };
             s.push_str(&format!(
                 "{marker} [{flag}] {} — {}\n",
@@ -762,7 +935,26 @@ fn refresh_mail_ui(
             s.push_str("(no letters yet)\n");
         }
         list_text.0 = s;
-        hint_text.0 = "[Up/Down] select   [Enter] read   [N] write   [Esc] close".to_string();
+        hint_text.0 = if let Some(choice) = ui.menu {
+            format!(
+                "{}\n{}",
+                if ui.discard {
+                    "Throw it out?"
+                } else {
+                    "Letter"
+                },
+                ui.action_options()
+                    .iter()
+                    .enumerate()
+                    .map(|(i, s)| format!("{} {s}", if i == choice { ">" } else { " " }))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )
+        } else if ui.grabbed.is_some() {
+            "[Up/Down] move   [Enter] place/swap   [Esc] cancel".into()
+        } else {
+            "[Up/Down] select   [Enter] actions   [N] write   [Esc] close".into()
+        };
     }
 }
 

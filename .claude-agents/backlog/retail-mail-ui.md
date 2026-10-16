@@ -1,6 +1,7 @@
 # Retail mail UI
 
-2026-10-16, codex. First implementation; Philip comparison pending.
+2026-10-16, codex. Philip accepts UI/paper appearance; action/camera corrections
+below await his follow-up. Overall mail fidelity remains open.
 
 Second UI task, after retail-pockets-ui primitives.
 
@@ -31,7 +32,7 @@ M4 remains open; title and rename remain deferred.
 - [x] Runtime unread/read envelope icons in all ten pockets letter positions.
 - [x] Right from the item grid enters letters at the same Y (source row+2);
   left returns to items. Mailbox access selects within the 2x5 letter grid.
-- [x] Enter reads; Esc/Backspace returns to the opening context and preserves
+- [x] Enter opens Read/Grab/Throw Away/Quit; Esc/Backspace returns to the opening context and preserves
   the existing read-on-return behavior. Empty slots remain safe to select.
 - [x] Original stationery models, ruling, palette and per-paper text colors.
   The source table has64 populated papers; reserved/null entries use paper1.
@@ -41,7 +42,8 @@ M4 remains open; title and rename remain deferred.
   Enter-to-send, Esc-to-cancel, existing scorer/replies/capacity retained.
 - [x] Optional defaulted paper index in saved Letter; old saves remain readable.
 - [x] No-disc text panel stays usable. Pause hides the disc view through focus.
-- [ ] Philip: retail comparison and visual/navigation acceptance.
+- [x] Philip: first UI and paper appearance look fine.
+- [ ] Philip: corrected camera, compact action menu, moving/discard acceptance.
 
 app/src/mail_disc.rs renders cached stationery with pockets_disc.rs Paint/font
 primitives. mail.rs keeps storage, delivery, scoring and input; pockets.rs adds
@@ -75,6 +77,40 @@ letter grid; separate received-mail transfer/transit and carried-mail storage
 are not implemented by visual work. Subjects, page hints and PC keyboard
 composition are port adaptations. Original writing/reply text remains the port's
 writing. Full retail tag popups/keyboard, stationery selection/purchase, paper
-effects/animation, gifts/attachments, discard/reorder and sent-mail browsing
+effects/animation, gifts/attachments and sent-mail browsing
 remain follow-ups. No unavailable action is presented as working. M4 remains
 open; final retail visual/interaction acceptance belongs to Philip.
+
+## Camera regression, letter actions and compact menu correction
+
+Philip reports player movement separating from camera and requests letter move/
+discard. The added menu preview cameras made camera_follow's broad With<Camera>
+query match multiple cameras, so single_mut returned early. Fixed with a
+WorldCamera marker and camera follow ordered after the movement set. Existing
+world follow math is unchanged; preview/overlay cameras are excluded by identity.
+
+Source mTG_def_rmail now supplies Read/Grab/Throw Away/Quit behavior in both
+pockets and mailbox contexts. Grab carries the envelope/shadow with the closing
+hand, swaps occupied slots or moves to empty slots; Cancel never changes storage.
+Throw Away uses the source "Throw it out?" confirmation, initially No. Added a
+defaulted optional Letter.slot field so old saves still load and empty positions
+persist instead of compacting after moves/discards. Complete letter content,
+sender, paper and read status stay together. New mail fills a free slot.
+
+Philip additionally reports the new drop-down too big. Letter menus now fit the
+actual text bounds plus padding, at the source 0.875 text scale/14px row spacing.
+Choice-body bounds are cached during load before Bevy extracts mesh data; an
+initial review build tried to read extracted attributes and panicked, caught and
+fixed before publishing. The shared item menu retains its previous layout.
+
+Final disposable review: camera/player movement deltas match (~3.65 units in
+the first check; a second check after menu use also follows correctly), while
+both preview camera transforms remain fixed. Compact menu/confirmation inspected.
+Swapped letters0/1, canceled discard with No, confirmed discard of Neighbor0,
+moved Neighbor1 into the vacated slot1 leaving slot0 empty, canceled another
+move in mailbox and pockets. Temp F5/F9 preserves all nine remaining letters,
+their slot/paper/read fields,15 items,12345 bells and condition1; reading after
+load shows the correct Neighbor1 stationery/body. Explicit no-disc fallback
+also swaps, shows the confirmation, cancels and discards. User data untouched.
+Compile/lint/format/capture/default build gates pass; no tests added/run. Philip
+has not yet accepted the corrected menu size, movement or action behavior.

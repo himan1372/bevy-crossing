@@ -79,9 +79,19 @@ fn toggle_pockets(
     mut actions: ResMut<Actions>,
     mut focus: ResMut<InputFocus>,
     mut ui: ResMut<PocketsUi>,
+    mut mail: ResMut<crate::mail::MailUi>,
     mut panel: Query<&mut Visibility, With<PocketsPanel>>,
 ) {
     if ui.open && *focus != InputFocus::Pockets {
+        return;
+    }
+    if ui.open
+        && (actions.just_pressed(Action::Cancel) || actions.just_pressed(Action::Back))
+        && (mail.menu.is_some() || mail.grabbed.is_some())
+    {
+        mail.cancel_action();
+        actions.consume(Action::Cancel);
+        actions.consume(Action::Back);
         return;
     }
     if ui.open
@@ -104,6 +114,9 @@ fn toggle_pockets(
     ui.open = next;
     ui.menu = None;
     ui.grabbed = None;
+    mail.menu = None;
+    mail.grabbed = None;
+    mail.discard = false;
     // Acquire/release focus before Update world handlers. A combined
     // open/confirm or close/confirm press must never also use a tool/door.
     *focus = if next {
@@ -152,7 +165,7 @@ fn pockets_input(
     mut tool: ResMut<crate::ecology::EquippedTool>,
     renderer: Option<Res<crate::pockets_disc::PocketAssets>>,
     mut mail: ResMut<crate::mail::MailUi>,
-    mailbox: Res<crate::mail::Mailbox>,
+    mut mailbox: ResMut<crate::mail::Mailbox>,
 ) {
     if !ui.open || *focus != InputFocus::Pockets {
         return;
@@ -167,7 +180,11 @@ fn pockets_input(
     let dy = i32::from(actions.just_pressed(Action::MoveDown))
         - i32::from(actions.just_pressed(Action::MoveUp));
     if let Some(slot) = ui.mail_slot {
-        if dx < 0 && slot % 2 == 0 {
+        if mail.menu.is_some() {
+            mail.letter_actions(&mut actions, &mut mailbox, slot, true);
+            return;
+        }
+        if dx < 0 && slot % 2 == 0 && mail.grabbed.is_none() {
             ui.mail_slot = None;
             ui.selected = (slot / 2).saturating_sub(2) * 5 + 4;
         } else if dx != 0 || dy != 0 {
@@ -180,12 +197,7 @@ fn pockets_input(
             crate::sound::se(crate::sound::se_id::CURSOR);
             return;
         }
-        if (actions.consume(Action::Confirm) || actions.consume(Action::Interact))
-            && slot < mailbox.letters.len()
-        {
-            mail.read_from_pockets(slot);
-            crate::sound::se(crate::sound::se_id::PAGE_OKURI);
-        }
+        mail.letter_actions(&mut actions, &mut mailbox, slot, true);
         return;
     }
     if dx != 0 || dy != 0 {

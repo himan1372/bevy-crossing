@@ -865,6 +865,7 @@ fn quest_ui_input(
                         ),
                         read: false,
                         paper: 0,
+                        slot: None,
                     });
                     println!("Quest complete: reward {reward:?}");
                 }

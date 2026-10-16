@@ -10,6 +10,10 @@ use bevy::prelude::*;
 #[derive(Component)]
 pub struct Player;
 
+/// The camera following gameplay, separate from menu render-to-texture views.
+#[derive(Component)]
+pub(crate) struct WorldCamera;
+
 /// Spawn the player and camera.
 pub fn spawn_player(
     mut commands: Commands,
@@ -30,6 +34,8 @@ pub fn spawn_player(
 
     // Spawn camera
     commands.spawn((
+        WorldCamera,
+        Name::new("world camera"),
         Camera3d::default(),
         // The GameCube shows its colours as they are: no tonemapping.
         bevy::core_pipeline::tonemapping::Tonemapping::None,
@@ -134,7 +140,7 @@ pub fn camera_follow(
     mut camera_query: Query<
         &mut Transform,
         (
-            With<Camera>,
+            With<WorldCamera>,
             Without<Player>,
             Without<crate::msg_window::OverlayCamera>,
         ),
@@ -175,7 +181,7 @@ impl Plugin for PlayerPlugin {
             Update,
             (
                 player_movement.in_set(locomotion::MovementSet),
-                camera_follow,
+                camera_follow.after(locomotion::MovementSet),
             )
                 .in_set(GameplaySet),
         );
