@@ -109,6 +109,20 @@ pub struct DoorPanel {
 const DOOR_DEPTH: f32 = 0.1;
 
 impl DoorPanel {
+    /// Facing ray must reach the finite panel from outside the wall.
+    /// Used for player-home entry next to other interactive objects:
+    /// a broad facing cone can otherwise consume E aimed at a mailbox.
+    pub fn aimed_at(&self, pos: Vec3, facing_dir: Vec3, range: f32) -> bool {
+        let facing = Vec2::new(facing_dir.x, facing_dir.z).normalize_or_zero();
+        if facing.y * self.into_z <= 0.001 || (pos.z - self.face_z) * self.into_z > 0.0 {
+            return false;
+        }
+        let distance = (self.face_z - pos.z) / facing.y;
+        distance >= 0.0
+            && distance <= range
+            && (pos.x + facing.x * distance - self.center_x).abs() <= self.half_w
+    }
+
     /// True when a player at `pos` is within `range` of the panel and facing
     /// it (cosine at least `min_dot`). Measured on the ground plane to the
     /// nearest point of the panel, so standing anywhere along the door works

@@ -303,6 +303,10 @@ Evidence/scope: backlog/ground-light-flicker.md. **mailbox-flicker** restores
 source back-face culling for summer/winter body and lid surfaces; thin waving
 flags stay double-sided. All four mailboxes reviewed in both seasons in a
 Temp-only town. Philip acceptance pending; see backlog/mailbox-flicker.md.
+**player-door-interaction** narrows player-home entry to a short ray aimed at
+the finite door panel. Left mailbox opens from street and left edge in preview;
+direct door entry works. Philip acceptance pending. Gyroid conversation handler
+is not implemented (render/animation exist). Wishing fountain restoration follows.
 
 #### Special-building comparison fixes (2026-10-15)
 

@@ -142,6 +142,9 @@ fn build_villager_rooms(
 const WALK_HALF: f32 = 3.3;
 const PLAYER_RADIUS: f32 = 0.4;
 const DOOR_RANGE_OUT: f32 = 3.2;
+/// Player-home entry shares the doorstep with a mailbox and gyroid.
+/// Reach only the nearby panel we are actually aiming at.
+const PLAYER_DOOR_REACH: f32 = 1.25;
 const DOOR_RANGE_IN: f32 = 2.6;
 /// Interior door z offset from the origin: inner face of the south wall
 /// (wall centre +4.0, thickness 0.4).
@@ -482,7 +485,7 @@ fn house_enter(
     };
     let to_local = Quat::from_rotation_y(-house.door_yaw);
     let local_pos = house.door_pos + to_local * (transform.translation - house.door_pos);
-    if !door.faced_by(local_pos, to_local * facing.dir, DOOR_RANGE_OUT, DOOR_DOT)
+    if !door.aimed_at(local_pos, to_local * facing.dir, PLAYER_DOOR_REACH)
         || !actions.consume(Action::Interact)
     {
         return;
