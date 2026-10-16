@@ -490,10 +490,11 @@ fn quick_save(
 /// and ground items (despawn all, respawn everything not marked picked).
 fn quick_load(
     // One tuple param: these systems are at Bevy's 16-parameter limit.
-    (actions, focus, mut audio_reset): (
+    (actions, focus, mut audio_reset, mut net): (
         Res<Actions>,
         Res<InputFocus>,
         MessageWriter<crate::sound::ResetAudio>,
+        ResMut<crate::player_tools::NetAction>,
     ),
     mut player_query: Query<&mut Transform, With<Player>>,
     field: Option<ResMut<FieldItems>>,
@@ -514,6 +515,7 @@ fn quick_load(
         show_notification("No save found!", &mut timer, notify_query);
         return;
     };
+    net.cancel();
 
     if let Ok(mut transform) = player_query.single_mut() {
         transform.translation = Vec3::from_array(save.player_pos);

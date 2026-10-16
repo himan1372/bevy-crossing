@@ -247,6 +247,19 @@ pub struct CharacterRig {
     frame: f32,
     /// Owner's last world position (villagers: motion from movement).
     last_pos: Option<Vec3>,
+    net_active: bool,
+    net_held: bool,
+    pose_morph: f32,
+}
+
+impl CharacterRig {
+    /// m_player_draw.c_inc::Player_actor_draw_After: right hand callback20.
+    pub(crate) fn right_hand(&self) -> Option<Entity> {
+        self.joints.get(20).copied()
+    }
+    pub(crate) fn joint_count(&self) -> usize {
+        self.joints.len()
+    }
 }
 
 /// Which joint places a vertex: its load-time matrix (see module docs).
@@ -260,7 +273,7 @@ fn joint_of(v: &DecodedVtx, own: usize, matrix_joints: &[usize]) -> usize {
 }
 
 /// A part's mesh in joint-local model units, skinned to `joint_of`.
-fn skinned_part_mesh(part: &Part, own: usize, matrix_joints: &[usize]) -> Mesh {
+pub(crate) fn skinned_part_mesh(part: &Part, own: usize, matrix_joints: &[usize]) -> Mesh {
     let (w, h) = part
         .key
         .tex
@@ -423,6 +436,9 @@ fn spawn_rig(
         playing: Motion::Wait,
         frame: 1.0,
         last_pos: None,
+        net_active: false,
+        net_held: false,
+        pose_morph: 0.0,
     });
     debug!("{} face parts", face_parts.len());
     if !face_parts.is_empty() {
@@ -742,6 +758,8 @@ fn animate_characters(
     mut transforms: Query<&mut Transform>,
     focus: Res<crate::input::InputFocus>,
     mut footsteps: MessageWriter<crate::footsteps::Footstep>,
+    net: Res<crate::player_tools::NetAction>,
+    net_models: Option<Res<crate::player_tools::NetModels>>,
 ) {
     let dt = time.delta_secs();
     let ticks = dt * 60.0;
@@ -752,6 +770,38 @@ fn animate_characters(
             if let Ok(mut t) = transforms.get_mut(root) {
                 t.rotation = Quat::from_rotation_y(facing.dir.x.atan2(facing.dir.z));
             }
+            let action = net_models.as_ref().filter(|_| net.busy());
+            if rig.net_active != action.is_some() || rig.net_held != net.held {
+                rig.net_active = action.is_some();
+                rig.net_held = net.held;
+                rig.pose_morph = 5.0; // source morph_counter=-5, advanced0.5/tick
+            }
+            if let Some(models) = action {
+                let locals = models
+                    .player_swing
+                    .pose(net.player_frame)
+                    .local_transforms(&rig.skeleton);
+                let weight = if rig.pose_morph > 0.0 {
+                    (ticks * 0.5 / rig.pose_morph).min(1.0)
+                } else {
+                    1.0
+                };
+                for (&joint, local) in rig.joints.iter().zip(locals) {
+                    if let Ok(mut t) = transforms.get_mut(joint) {
+                        t.translation = t.translation.lerp(local.translation, weight);
+                        t.rotation = t.rotation.slerp(local.rotation, weight);
+                    }
+                }
+                rig.pose_morph = (rig.pose_morph - ticks * 0.5).max(0.0);
+                rig.last_pos = transforms.get(owner).ok().map(|t| t.translation);
+                continue;
+            }
+            let previous_pose = (rig.pose_morph > 0.0).then(|| {
+                rig.joints
+                    .iter()
+                    .map(|&joint| transforms.get(joint).copied().unwrap_or_default())
+                    .collect::<Vec<_>>()
+            });
             let motion = Motion::of(loco.state());
             let speed = if motion == Motion::Wait {
                 WAIT_SPEED
@@ -764,6 +814,26 @@ fn animate_characters(
                 .map_or(0.0, |(p, previous)| (p - previous).with_y(0.0).length());
             rig.last_pos = position;
             let contacts = play(&mut rig, motion, speed, ticks, &mut transforms);
+            if let Some(models) = net_models.as_ref().filter(|_| net.held) {
+                let hold = models.player_hold.pose(1.0).local_transforms(&rig.skeleton);
+                for ((&joint, local), &mask) in rig.joints.iter().zip(hold).zip(&models.hold_mask) {
+                    if mask == 1 {
+                        if let Ok(mut t) = transforms.get_mut(joint) {
+                            t.rotation = local.rotation;
+                        }
+                    }
+                }
+            }
+            if let Some(previous) = previous_pose {
+                let weight = (ticks * 0.5 / rig.pose_morph).min(1.0);
+                for (&joint, old) in rig.joints.iter().zip(previous) {
+                    if let Ok(mut t) = transforms.get_mut(joint) {
+                        t.translation = old.translation.lerp(t.translation, weight);
+                        t.rotation = old.rotation.slerp(t.rotation, weight);
+                    }
+                }
+                rig.pose_morph = (rig.pose_morph - ticks * 0.5).max(0.0);
+            }
             // Collision, menus and warps must not turn a stale locomotion
             // state into audible steps. Contact timing still follows the rig.
             let moving = dt > 0.0
@@ -825,6 +895,9 @@ fn animate_characters(
 
 pub struct CharacterPlugin;
 
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct CharacterAnimationSet;
+
 impl Plugin for CharacterPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
@@ -833,7 +906,9 @@ impl Plugin for CharacterPlugin {
                 spawn_player_model,
                 spawn_villager_models,
                 spawn_npc_models,
-                animate_characters.after(crate::locomotion::MovementSet),
+                animate_characters
+                    .after(crate::locomotion::MovementSet)
+                    .in_set(CharacterAnimationSet),
             )
                 .chain(),
         );

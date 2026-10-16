@@ -56,6 +56,7 @@ pub fn player_movement(
     shop_building: Option<Res<crate::shop::ShopBuilding>>,
     mut player_query: Query<(&mut Transform, &mut Facing, &mut Locomotion), With<Player>>,
     town: Res<Town>,
+    net: Res<crate::player_tools::NetAction>,
     time: Res<Time>,
 ) {
     if *state != HouseState::Town || *shop_loc != crate::shop::ShopLocation::Town {
@@ -67,6 +68,10 @@ pub fn player_movement(
     let Ok((mut transform, mut facing, mut loco)) = player_query.single_mut() else {
         return;
     };
+    if net.busy() {
+        *loco = Locomotion::default();
+        return;
+    }
 
     let movement = locomotion::step(&actions, time.delta().as_secs_f32(), &mut facing, &mut loco);
     if movement != Vec3::ZERO {

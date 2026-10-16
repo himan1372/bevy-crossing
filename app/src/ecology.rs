@@ -876,9 +876,10 @@ fn tool_interact(
     bug_query: Query<(Entity, &Bug, &Transform)>,
     bobber_query: Query<(Entity, &Bobber, &Transform)>,
     fish_query: Query<&Fish>,
-    (mut swing, mut landed): (
+    (mut swing, mut landed, mut net): (
         ResMut<NetSwing>,
         bevy::ecs::message::MessageWriter<crate::critters::FishCaught>,
+        ResMut<crate::player_tools::NetAction>,
     ),
     mut inventory: ResMut<PlayerInventory>,
     mut notify_timer: ResMut<CatchNotifyTimer>,
@@ -895,7 +896,8 @@ fn tool_interact(
     // A held tool always answers E (cast, reel, swing, or a "nothing here"
     // notice), so it takes the press outright. Doors and the mailbox need
     // empty hands, so they never compete for it.
-    if !actions.consume(Action::Interact) {
+    let net_contact = *tool == EquippedTool::Net && net.take_contact();
+    if !net_contact && !actions.consume(Action::Interact) {
         return;
     }
     let Ok((player_transform, facing)) = player_query.single() else {
@@ -980,10 +982,17 @@ fn tool_interact(
             println!("Cast!");
         }
         EquippedTool::Net => {
-            crate::sound::se_at(
-                crate::sound::se_id::TOOL_FURI,
-                player_pos + facing.dir * NET_RANGE * 0.7,
-            );
+            if !net_contact {
+                if net.begin() {
+                    crate::sound::se_at(
+                        crate::sound::se_id::TOOL_FURI,
+                        player_pos + facing.dir * NET_RANGE * 0.7,
+                    );
+                }
+                return;
+            }
+            // Existing catch selection remains until the separate capture
+            // slice; resolution now waits for the source's frame>6 gate.
             swing.0 = Some(player_pos + facing.dir * NET_RANGE * 0.7);
             let mut best: Option<(Entity, f32)> = None;
             for (entity, _bug, bug_transform) in bug_query.iter() {
@@ -1062,7 +1071,12 @@ impl Plugin for EcologyPlugin {
             )
             .add_systems(
                 Update,
-                (tool_select, tool_interact.in_set(InteractSet::Tools))
+                (
+                    tool_select,
+                    tool_interact
+                        .in_set(InteractSet::Tools)
+                        .after(crate::save::LoadSet),
+                )
                     .chain()
                     .in_set(GameplaySet),
             )

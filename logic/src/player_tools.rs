@@ -119,6 +119,43 @@ pub fn net_swing_outcome(check_type: i32, end_flag: bool, hit: bool) -> NetSwing
     }
 }
 
+/// m_player_item_net.c_inc::dummy_net_common: hold lag with walking speed
+/// and shape-angle delta, in GameCube short-angle units.
+pub fn net_walk_angle(anim_speed: f32, turn_delta: f32) -> [i16; 3] {
+    let speed = ((anim_speed - 0.22) / 0.379_999_96).clamp(0.0, 1.0);
+    let turn = (turn_delta / 1820.0).clamp(-1.0, 1.0);
+    let to_short = |degrees: f32| (degrees * 65536.0 / 360.0) as i16;
+    // C truncates the base and turn adjustment separately before adding.
+    let yaw =
+        to_short(1.0 - speed).wrapping_add(to_short(-turn * if turn >= 0.0 { 26.0 } else { 24.0 }));
+    let roll = to_short(-40.0 * (1.0 - speed)).wrapping_add(to_short(turn.abs() * 15.0));
+    [0, yaw, roll]
+}
+
+/// dummy_net_base / m_lib.c::add_calc_short_angle2. The call's apparent
+/// min/max names are reversed: maxStep=2730>>1, minStep=100>>1.
+pub fn chase_net_angle(current: i16, target: i16, ticks: f32) -> i16 {
+    if ticks <= 0.0 || current == target {
+        return current;
+    }
+    let diff = target.wrapping_sub(current);
+    let fraction = 1.0 - (1.0 - 0.2_f32).sqrt().powf(ticks);
+    let wanted = diff as f32 * fraction;
+    let max_step = (1365.0 * ticks).max(1.0);
+    let min_step = (50.0 * ticks).max(1.0);
+    let step = if wanted.abs() > min_step {
+        wanted.clamp(-max_step, max_step)
+    } else {
+        (diff as f32).signum() * min_step
+    } as i16;
+    let step = if step == 0 { diff.signum() } else { step };
+    if (step as i32).abs() >= (diff as i32).abs() {
+        target
+    } else {
+        current.wrapping_add(step)
+    }
+}
+
 /// Request priorities used inside the net/rod families (verified at
 /// the call sites).
 pub mod tool_priority {

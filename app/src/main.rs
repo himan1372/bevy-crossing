@@ -36,6 +36,7 @@ mod n64_material;
 mod npc;
 mod pause_menu;
 mod player;
+mod player_tools;
 mod pockets;
 mod quest;
 mod remote;
@@ -121,6 +122,7 @@ fn main() {
         .add_plugins(ClockPlugin)
         .add_plugins(environment::EnvironmentPlugin)
         .add_plugins(character::CharacterPlugin)
+        .add_plugins(player_tools::PlayerToolsPlugin)
         .add_plugins(face::FacePlugin)
         .add_plugins(roster::RosterPlugin)
         .add_systems(Startup, setup_light)

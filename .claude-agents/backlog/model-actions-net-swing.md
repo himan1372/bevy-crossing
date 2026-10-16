@@ -1,18 +1,18 @@
 # model-actions-net-swing — first held-tool action slice
 
-2026-10-15, codex. Planning only; implementation and Philip playtest pending.
+2026-10-15, codex. First action slice implemented; Philip playtest pending.
 
 Read Model-research/report.md and index.html before choosing this slice.
 Next task: a normal net held on the player, one complete empty swing, stop/recovery,
 and return to locomotion. Catch presentation and full tool families follow later.
 
-- [ ] Trace held-net setup, player/tool clips and procedural joint adjustment.
-- [ ] Load the normal net rig/materials at runtime from the user's disc.
-- [ ] Bind the net to the source hand transform and share the action clock.
-- [ ] Drive one non-looping player/tool swing and source-backed recovery.
-- [ ] Gate movement/repeated actions and cancel safely on load/scene/tool changes.
-- [ ] Retain usable no-disc action behavior.
-- [ ] Compile/lint/format/build; no tests unless Philip requests them.
+- [x] Trace held-net setup, player/tool clips and procedural joint adjustment.
+- [x] Load the normal net rig/materials at runtime from the user's disc.
+- [x] Bind the net to the source hand transform and share the action clock.
+- [x] Drive one non-looping player/tool swing and source-backed recovery.
+- [x] Gate movement/repeated actions and cancel safely on load/scene/tool changes.
+- [x] Retain usable no-disc action behavior.
+- [x] Compile/lint/format/build; no tests unless Philip requests them.
 - [ ] Philip: visual/action acceptance below.
 
 ## Research compared with current code
@@ -39,9 +39,10 @@ all-region coverage and a universal absence of LOD remain research claims.
 
 ## Why this slice comes first
 
-character.rs PLAYER_ANIMATIONS has wait1/walk1/run1 only; animate_characters
-selects only locomotion. ecology.rs tool_interact resolves the net on E
-immediately with a distance/facing/nearest candidate test and no held net model.
+Before this slice, character.rs PLAYER_ANIMATIONS had wait1/walk1/run1 only;
+animate_characters selected only locomotion. ecology.rs tool_interact resolved
+the net on E immediately with a distance/facing/nearest candidate test and no
+held net model.
 One empty swing/recovery exercises attachment, independent tool animation,
 one-shot completion and input ownership without the rod's bobber/line/bite chain.
 
@@ -94,6 +95,48 @@ does not award an item. Existing catches remain usable until their separate
 source-backed integration. Missing disc keeps the placeholder loop usable.
 
 Record compile/lint/format/build separately from Philip's visual acceptance.
-No tests/probes were added or run for this planning pass. No code changed.
-Claim through task-claimer.sh before implementation; planning claim released
-at handoff. M4 stays open; title/rename remain deferred.
+## Implementation and evidence
+
+app/src/player_tools.rs loads cKF_bs_r_tol_net_1 and its normal held, swing
+and swing-wait clips from the disc. The root attaches to player hand joint20;
+existing display-list decoding and segmentD joint skinning draw the net.
+The runtime BOY_part_data NET mask combines the net1 held-arm pose with
+locomotion. No disc-derived asset files or mask bytes are embedded/committed.
+
+The player swing is frames1-10 at 0.5 frames per 60-Hz tick. Recovery freezes
+the player at the final swing frame while the tool's swing_wait1 frames1-21
+finish. Procedural short-angle chase follows m_player_item_net and m_lib;
+an independent transform after dummy joint3 bends descendants4/5, outside
+clip morphing. Movement and facing lock during the action; repeated E does
+not restart it. Unequip, focus/room/scene changes and successful F9 cancel
+pending action/contact. Load precedes tool processing. Pause uses the existing
+virtual clock. Missing-disc action timing uses the source lengths, with the
+existing placeholder player and catches.
+
+Interim adaptations: movement stops immediately instead of retail braking;
+five-frame pose morphs use quaternion interpolation instead of short-Euler
+interpolation. Existing distance/facing catch selection is preserved, delayed
+until after source player frame6; this is NOT the full retail endpoint/capsule
+capture chain. The source swing effect near frame9, obstacle/pull reactions,
+capture presentation, ready/creep states and golden net remain follow-ups.
+
+Disposable Temp town review with Philip's disc: inspected held idle, windup,
+downstroke, recovery and return-to-ready screenshots; textures and original
+mesh are present and the net stays attached. A tree partly obscures the
+downstroke/recovery views, so these are not retail motion comparison sign-off.
+Empty swing leaves pockets at0/15. Movement position remains fixed during
+action and changes after recovery. Logs show one swing/recovery/ready cycle
+for repeated E, pause extends the timeline, unequip hides the net and cancels,
+and F9 cancels and restores the disposable saved position. Room/scene cleanup
+and successful bug catches were reviewed in code, not exercised in this pass.
+Screenshots/logs remain in Temp, outside the repository.
+
+Explicit missing-disc preview starts the placeholder town, equips the net,
+completes swing/recovery/ready, then permits movement; screenshot inspected.
+Only the existing placeholder player is drawn, as intended without disc art.
+
+Workspace check, all-target clippy with warnings denied, formatting, capture
+build and final default build pass. No tests added or run. Real save hash
+unchanged; settings untouched. Philip's visual/action acceptance remains open.
+Claim released at handoff; task stays in backlog for acceptance. M4 stays open;
+title/rename remain deferred.

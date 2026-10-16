@@ -330,10 +330,15 @@ display-list/cKF pipeline; no new fundamental rendering defect was established.
 Next bounded model task: **model-actions-net-swing**, a held normal net with one
 complete empty swing, procedural tool-joint adjustment and stop/recovery.
 See backlog/model-actions-net-swing.md for source references, relevant files,
-acceptance and research-access limits. Planning only; no action implementation
-or visual acceptance is implied. Main M3 loading work remains complete;
-render-look sign-off stays open. Rod/capture families follow this attachment
-and action-clock slice.
+acceptance and research-access limits. First slice implemented: runtime held
+normal net, source hand/held-arm mask, independent procedural bend, shared
+swing/recovery clock, movement/input gating and load/tool/scene cancellation.
+Disposable preview supports empty swing/recovery and pause/unequip/F9 behavior;
+Philip's visual/action acceptance remains pending. Existing catches retain
+their distance/facing selection, now delayed after frame6; retail capture,
+obstacle/pull, ready/creep and golden-tool work remain explicit follow-ups.
+Main M3 loading work remains complete; render-look sign-off stays open.
+Rod/capture families follow acceptance of this attachment/action-clock slice.
 
 Philip's latest audio report: “there is absolutely zero audio overlap.”
 Preserve that wording; it does not establish that every F9/save/load/restart

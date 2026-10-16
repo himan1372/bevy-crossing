@@ -87,6 +87,7 @@ mod placement;
 mod player_action;
 pub mod player_move;
 mod player_tools;
+pub use player_tools::{chase_net_angle, net_swing_outcome, net_walk_angle, NetSwingOutcome};
 pub mod quest;
 pub mod quest_gen;
 pub mod request_selector;
