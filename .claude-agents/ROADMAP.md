@@ -413,8 +413,12 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
 
 ## Migration: rustimal-crossing → bevy-crossing
 
-- [ ] **migrate-rustimal-modules** (backlog) — Port 194 Rust modules from
-  rustimal-crossing into `logic/`. 113 are new, 81 need merging (diverged).
-  Pilot `furniture.rs` done 2026-10-16 by muse. See backlog/migrate-rustimal-modules.md.
+- [ ] **migrate-rustimal-modules** (backlog) — Review 194 Rustimal module paths:
+  104 source-only, 90 overlapping (88 differ, 2 exact); preserve 27 Bevy-only
+  files. All nine graphics modules already exist here. Muse furniture pilot
+  copy verified against pinned source; Codex corrected lint/fmt and native
+  save-angle parity. 531 logic tests pass. Inherited storage/actor-loading
+  source gaps remain unwired and need correction before gameplay integration.
+  See backlog/migrate-rustimal-modules.md and docs/rustimal-migration-inventory.md.
   Philip's directive: the rustimal modules were built to end up here.
 

@@ -49,6 +49,12 @@
 //! placement direction); the numeric value of the place-table "free" sentinel
 //! (200) and any other sentinel values beyond what the brief quotes; collision
 //! edge geometry beyond profile-driven edges.
+//!
+//! Verification boundary (2026-10-16): `keep_items_to_fg` is a legacy
+//! first-free-cell abstraction, not C's position/layer-preserving storage
+//! save-back. `make_furniture_actors_from_layers` also omits C's ITEM_IS_FTR
+//! filtering and actor budget/bank checks. Neither helper is wired into the
+//! Bevy app; they need source-faithful replacements before gameplay use.
 
 /// Unit grid dimensions of one foreground layer (`UT_X_NUM`/`UT_Z_NUM`
 /// = `UT_BASE_NUM` = 16, `include/m_field_make.h`).
@@ -153,10 +159,9 @@ impl ShapeType {
     pub fn size_class(self) -> FurnitureSize {
         match self {
             ShapeType::TypeA => FurnitureSize::Size1x1,
-            ShapeType::TypeB90
-            | ShapeType::TypeB180
-            | ShapeType::TypeB270
-            | ShapeType::TypeB0 => FurnitureSize::Size1x2,
+            ShapeType::TypeB90 | ShapeType::TypeB180 | ShapeType::TypeB270 | ShapeType::TypeB0 => {
+                FurnitureSize::Size1x2
+            }
             ShapeType::TypeC => FurnitureSize::Size2x2,
         }
     }
@@ -182,10 +187,7 @@ impl ShapeType {
     pub fn unit_count(self) -> usize {
         match self {
             ShapeType::TypeA => 1,
-            ShapeType::TypeB90
-            | ShapeType::TypeB180
-            | ShapeType::TypeB270
-            | ShapeType::TypeB0 => 2,
+            ShapeType::TypeB90 | ShapeType::TypeB180 | ShapeType::TypeB270 | ShapeType::TypeB0 => 2,
             ShapeType::TypeC => 4,
         }
     }
@@ -757,9 +759,9 @@ pub fn judge_place_furniture(
         None => return PlaceJudge::MaxFurniture,
     };
 
-    let mut angle_idx =
-        (player_facing_to_angle_idx(player_angle) as i32 + special_orientation_offset(ftr_idx) as i32)
-            & 3;
+    let mut angle_idx = (player_facing_to_angle_idx(player_angle) as i32
+        + special_orientation_offset(ftr_idx) as i32)
+        & 3;
     let base_dir = match angle_idx {
         0 => Direction::South,
         1 => Direction::East,
@@ -851,19 +853,19 @@ pub fn judge_place_furniture(
         let (tx, tz) = look_at_unit(px, pz, base_dir, i);
 
         // ON_SURFACE 1x1 items go to layer 1 above SURFACE furniture.
-        if set_type == SetType::OnSurface && shape == ShapeType::TypeA {
-            if fg_layer1.get(tx, tz) == Some(EMPTY_NO)
-                && fg_layer0.get(tx, tz) != Some(EMPTY_NO)
-                && surface_below(tx, tz)
-            {
-                return PlaceJudge::Success {
-                    actor_slot,
-                    x: tx,
-                    z: tz,
-                    rotation: dir,
-                    layer: layer::SECONDARY,
-                };
-            }
+        if set_type == SetType::OnSurface
+            && shape == ShapeType::TypeA
+            && fg_layer1.get(tx, tz) == Some(EMPTY_NO)
+            && fg_layer0.get(tx, tz) != Some(EMPTY_NO)
+            && surface_below(tx, tz)
+        {
+            return PlaceJudge::Success {
+                actor_slot,
+                x: tx,
+                z: tz,
+                rotation: dir,
+                layer: layer::SECONDARY,
+            };
         }
 
         if shape != ShapeType::TypeC {
@@ -903,19 +905,24 @@ pub fn judge_place_furniture(
 }
 
 /// Quantize a runtime angle back to a saved cardinal rotation
-/// (`aMR_GetSaveAngle`): `sin > 0.8` -> EAST, `sin < -0.8` -> WEST,
-/// `cos > 0.8` -> SOUTH, `cos < -0.8` -> NORTH.
+/// (`aMR_GetSaveAngle`). C ORs independent sine and cosine contributions;
+/// retain that behavior even for non-unit inputs accepted by this API.
 pub fn save_angle_quantize(sin_v: f32, cos_v: f32) -> Direction {
+    let mut rotation = Direction::South as u8;
     if sin_v > 0.8 {
-        Direction::East
+        rotation |= Direction::East as u8;
     } else if sin_v < -0.8 {
-        Direction::West
-    } else if cos_v > 0.8 {
-        Direction::South
-    } else if cos_v < -0.8 {
-        Direction::North
-    } else {
-        Direction::South
+        rotation |= Direction::West as u8;
+    }
+    // cos > 0.8 contributes SOUTH (zero), so only NORTH changes the bits.
+    if cos_v < -0.8 {
+        rotation |= Direction::North as u8;
+    }
+    match rotation {
+        1 => Direction::East,
+        2 => Direction::North,
+        3 => Direction::West,
+        _ => Direction::South,
     }
 }
 
@@ -989,9 +996,11 @@ pub fn restore_switch_bit(layer: &RoomLayer, x: i32, z: i32) -> u8 {
 /// Build runtime actors from saved layers 0 and 1 (`aMR_MakeFurnitureActor`
 /// for `mCoBG_LAYER0`/`mCoBG_LAYER1`).
 ///
-/// Returns `(actor_index, ftr_idx, rotation, layer)` entries in scan order;
+/// Returns `(ftr_idx, rotation, layer)` entries in scan order;
 /// `RSV_FE1F` secondary cells are skipped since they belong to the primary
 /// cell's actor.
+/// This legacy helper accepts every other nonempty ID; it does not implement
+/// `aMR_MakeOneFurniture`'s item-kind, bank or actor-budget checks.
 pub fn make_furniture_actors_from_layers(
     layer0: &RoomLayer,
     layer1: &RoomLayer,
@@ -1011,11 +1020,13 @@ pub fn make_furniture_actors_from_layers(
     out
 }
 
-/// Return storage furniture contents to the higher FG layers on room exit
-/// (`aMR_KeepItem2Fg` core).
+/// Legacy first-free-cell storage helper, not a retail save-back routine.
 ///
 /// `stored` holds up to 3 items; they are written into the first free cells
 /// of the storage layers. Returns the number of items written back.
+/// C's `aMR_KeepItem2Fg` instead writes at the actor's unit in each successive
+/// layer and clears its corresponding held item; this signature lacks the
+/// position, actor layer and mutable held items needed to reproduce it.
 pub fn keep_items_to_fg(
     stored: &[u16; FTR_KEEP_ITEM_COUNT],
     storage1: &mut RoomLayer,
@@ -1087,22 +1098,7 @@ pub fn pc_ftr_no_rot_2_idx(ftr_no: u16, rot: u8) -> u16 {
 /// C ABI: quantize (sin, cos) of a runtime angle to a saved cardinal
 /// direction (`aMR_GetSaveAngle`); returns the `mRmTp_DIRECT_*` value.
 pub fn pc_ftr_save_angle(sin_v: f32, cos_v: f32) -> u8 {
-    // Matches C aMR_GetSaveAngle exactly: two independent chains.
-    // sin chain: EAST (1) if sin>0.8, WEST (3) if sin<-0.8
-    // cos chain: SOUTH (0) if cos>0.8, NORTH (2) if cos<-0.8
-    // Returns the OR of both (C does item |= EAST etc.)
-    let mut dir: u8 = 0;
-    if sin_v > 0.8 {
-        dir |= 1; // mRmTp_DIRECT_EAST
-    } else if sin_v < -0.8 {
-        dir |= 3; // mRmTp_DIRECT_WEST
-    }
-    if cos_v > 0.8 {
-        dir |= 0; // mRmTp_DIRECT_SOUTH (no-op, kept for clarity)
-    } else if cos_v < -0.8 {
-        dir |= 2; // mRmTp_DIRECT_NORTH
-    }
-    dir
+    save_angle_quantize(sin_v, cos_v) as u8
 }
 
 /// C ABI: number of storage slots per storage-capable furniture actor
@@ -1214,8 +1210,14 @@ mod tests {
         assert_eq!(player_facing_to_angle_idx(0xC000), Direction::East); // +180 = 0x4000
         assert_eq!(player_facing_to_angle_idx(0x4000), Direction::West); // +180 = 0xC000
         assert_eq!(special_orientation_offset(special_furniture::STEGO_HEAD), 1);
-        assert_eq!(special_orientation_offset(special_furniture::BALLOON_COMMON0), 1);
-        assert_eq!(special_orientation_offset(special_furniture::BALLOON_COMMON7), 1);
+        assert_eq!(
+            special_orientation_offset(special_furniture::BALLOON_COMMON0),
+            1
+        );
+        assert_eq!(
+            special_orientation_offset(special_furniture::BALLOON_COMMON7),
+            1
+        );
         assert_eq!(special_orientation_offset(special_furniture::FROG), 2);
         assert_eq!(special_orientation_offset(0), 0);
     }
@@ -1229,6 +1231,26 @@ mod tests {
         // At/below threshold falls through.
         assert_eq!(save_angle_quantize(0.8, 0.6), Direction::South);
         assert_eq!(pc_ftr_save_angle(0.9, 0.0), Direction::East as u8);
+    }
+
+    #[test]
+    fn save_angle_native_and_compatibility_match_source_flags() {
+        // aMR_GetSaveAngle has independent sine/cosine chains. Public
+        // helpers also accept non-unit inputs, where both may contribute.
+        for (sin, cos, expected) in [
+            (0.9, -0.9, Direction::West),
+            (-0.9, -0.9, Direction::West),
+            (0.9, 0.9, Direction::East),
+            (0.8, -0.8, Direction::South),
+            (-0.8, -0.9, Direction::North),
+            (-0.9, 0.8, Direction::West),
+            (f32::NAN, -0.9, Direction::North),
+            (0.9, f32::NAN, Direction::East),
+            (f32::NAN, f32::NAN, Direction::South),
+        ] {
+            assert_eq!(pc_ftr_save_angle(sin, cos), expected as u8);
+            assert_eq!(save_angle_quantize(sin, cos), expected);
+        }
     }
 
     #[test]
@@ -1315,7 +1337,13 @@ mod tests {
             true,
         );
         match r {
-            PlaceJudge::Success { x, z, rotation, layer, .. } => {
+            PlaceJudge::Success {
+                x,
+                z,
+                rotation,
+                layer,
+                ..
+            } => {
                 assert_eq!((x, z), (4, 4));
                 assert_eq!(rotation, Direction::North);
                 assert_eq!(layer, layer::MAIN);
@@ -1325,16 +1353,40 @@ mod tests {
         // Not flat -> CantPlace.
         assert_eq!(
             judge_place_furniture(
-                &room, (4, 4), 0, 10, ShapeType::TypeA, SetType::Normal, false, &surf,
-                &fg0, &fg1, &occupied, false, true, true
+                &room,
+                (4, 4),
+                0,
+                10,
+                ShapeType::TypeA,
+                SetType::Normal,
+                false,
+                &surf,
+                &fg0,
+                &fg1,
+                &occupied,
+                false,
+                true,
+                true
             ),
             PlaceJudge::CantPlace
         );
         // Not owned -> OtherRoom.
         assert_eq!(
             judge_place_furniture(
-                &room, (4, 4), 0, 10, ShapeType::TypeA, SetType::Normal, false, &surf,
-                &fg0, &fg1, &occupied, true, false, true
+                &room,
+                (4, 4),
+                0,
+                10,
+                ShapeType::TypeA,
+                SetType::Normal,
+                false,
+                &surf,
+                &fg0,
+                &fg1,
+                &occupied,
+                true,
+                false,
+                true
             ),
             PlaceJudge::OtherRoom
         );
@@ -1342,8 +1394,20 @@ mod tests {
         let full = MyRoomRuntime::new(0);
         assert_eq!(
             judge_place_furniture(
-                &full, (4, 4), 0, 10, ShapeType::TypeA, SetType::Normal, false, &surf,
-                &fg0, &fg1, &occupied, true, true, true
+                &full,
+                (4, 4),
+                0,
+                10,
+                ShapeType::TypeA,
+                SetType::Normal,
+                false,
+                &surf,
+                &fg0,
+                &fg1,
+                &occupied,
+                true,
+                true,
+                true
             ),
             PlaceJudge::MaxFurniture
         );
@@ -1380,8 +1444,20 @@ mod tests {
         }
         assert_eq!(
             judge_place_furniture(
-                &room, (4, 4), 0, 10, ShapeType::TypeA, SetType::Normal, false, &surf,
-                &fg0, &fg1, &occ, true, true, true
+                &room,
+                (4, 4),
+                0,
+                10,
+                ShapeType::TypeA,
+                SetType::Normal,
+                false,
+                &surf,
+                &fg0,
+                &fg1,
+                &occ,
+                true,
+                true,
+                true
             ),
             PlaceJudge::CantPlace
         );
