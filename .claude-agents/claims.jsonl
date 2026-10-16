@@ -1,168 +1,168 @@
-{"action":"claim","task":"audit-019-upgrade","agent":"lapis","timestamp":"2026-10-10T17:42:50Z"}
-{"action":"claim","task":"document-glb-pipeline","agent":"cosmo","timestamp":"2026-10-10T17:54Z"}
-{"action":"complete","task":"document-glb-pipeline","agent":"cosmo","timestamp":"2026-10-10T18:01Z"}
-{"action":"claim","task":"fix-letter-notify","agent":"lapis","timestamp":"2026-10-10T18:15:44Z"}
-{"action":"claim","task":"fix-shop-entry","agent":"claude","timestamp":"2026-10-10T19:29:08Z"}
-{"action":"complete","task":"fix-shop-entry","agent":"claude","timestamp":"2026-10-10T20:16:57Z"}
-{"action":"claim","task":"fix-letter-notify","agent":"claude","timestamp":"2026-10-10T20:18:30Z","note":"handed over by lapis (Philip) in chat"}
-{"action":"complete","task":"fix-letter-notify","agent":"claude","timestamp":"2026-10-10T20:45:29Z"}
-{"action":"claim","task":"logic-clippy-cleanup","agent":"claude","timestamp":"2026-10-10T20:50:11Z"}
-{"action":"complete","task":"logic-clippy-cleanup","agent":"claude","timestamp":"2026-10-10T21:08:20Z"}
-{"action":"claim","task":"workspace-fmt","agent":"claude","timestamp":"2026-10-10T21:11:51Z"}
-{"action":"complete","task":"workspace-fmt","agent":"claude","timestamp":"2026-10-10T21:15:19Z"}
-{"action":"claim","task":"m0-foundations","agent":"claude","timestamp":"2026-10-10T21:41:41Z"}
-{"action":"complete","task":"m0-foundations","agent":"claude","timestamp":"2026-10-10T22:07:57Z"}
-{"action":"claim","task":"logic-expose","agent":"claude","timestamp":"2026-10-10T22:56:51Z"}
-{"action":"complete","task":"logic-expose","agent":"claude","timestamp":"2026-10-10T23:00:36Z"}
-{"action":"claim","task":"walk-run","agent":"claude","timestamp":"2026-10-10T23:00:48Z"}
-{"action":"complete","task":"walk-run","agent":"claude","timestamp":"2026-10-11T00:14:56Z"}
-{"action":"claim","task":"pockets-inventory","agent":"claude","timestamp":"2026-10-11T00:14:56Z"}
-{"action":"complete","task":"pockets-inventory","agent":"claude","timestamp":"2026-10-11T00:38:21Z"}
-{"action":"claim","task":"talk-system","agent":"claude","timestamp":"2026-10-11T00:38:21Z"}
-{"action":"complete","task":"talk-system","agent":"claude","timestamp":"2026-10-11T00:59:57Z"}
-{"action":"claim","task":"villager-routines","agent":"claude","timestamp":"2026-10-11T00:59:57Z"}
-{"action":"complete","task":"villager-routines","agent":"claude","timestamp":"2026-10-11T02:29:16Z"}
-{"action":"claim","task":"quests-full","agent":"claude","timestamp":"2026-10-11T02:29:16Z"}
-{"action":"complete","task":"quests-full","agent":"claude","timestamp":"2026-10-11T02:44:23Z"}
-{"action":"claim","task":"game-clock","agent":"claude","timestamp":"2026-10-11T02:45:08Z"}
-{"action":"complete","task":"game-clock","agent":"claude","timestamp":"2026-10-11T02:48:43Z"}
-{"action":"claim","task":"art-direction","agent":"claude","timestamp":"2026-10-11T04:20:00Z"}
-{"action":"complete","task":"art-direction","agent":"claude","timestamp":"2026-10-12T12:00:00Z","note":"superseded by disc-asset direction"}
-{"action":"claim","task":"disc-reader","agent":"claude","timestamp":"2026-10-12T12:10:00Z"}
-{"action":"claim","task":"yaz0","agent":"claude","timestamp":"2026-10-12T12:10:00Z"}
-{"action":"complete","task":"disc-reader","agent":"claude","timestamp":"2026-10-12T12:40:00Z"}
-{"action":"complete","task":"yaz0","agent":"claude","timestamp":"2026-10-12T12:40:00Z"}
-{"action":"claim","task":"dol-rel-image","agent":"claude","timestamp":"2026-10-12T13:00:00Z"}
-{"action":"complete","task":"dol-rel-image","agent":"claude","timestamp":"2026-10-12T13:20:00Z"}
-{"action":"claim","task":"asset-table","agent":"claude","timestamp":"2026-10-12T07:18:59Z"}
-{"action":"complete","task":"asset-table","agent":"claude","timestamp":"2026-10-12T07:22:25Z"}
-{"action":"claim","task":"disc-loader-app","agent":"claude","timestamp":"2026-10-12T07:24:21Z"}
-{"action":"complete","task":"disc-loader-app","agent":"claude","timestamp":"2026-10-12T07:32:23Z"}
-{"action":"claim","task":"gx-backend-bevy","agent":"claude","timestamp":"2026-10-12T07:45:24Z"}
-{"action":"complete","task":"gx-backend-bevy","agent":"claude","timestamp":"2026-10-12T07:46:09Z"}
-{"action":"claim","task":"tev-materials","agent":"claude","timestamp":"2026-10-12T08:15:41Z"}
-{"action":"complete","task":"tev-materials","agent":"claude","timestamp":"2026-10-12T08:15:41Z"}
-{"action":"claim","task":"town-from-disc","agent":"claude","timestamp":"2026-10-12T08:55:26Z"}
-{"action":"complete","task":"town-from-disc","agent":"claude","timestamp":"2026-10-13T21:54:09Z"}
-{"action":"claim","task":"field-items-from-disc","agent":"claude","timestamp":"2026-10-13T21:54:09Z"}
-{"action":"complete","task":"field-items-from-disc","agent":"claude","timestamp":"2026-10-13T21:54:09Z"}
-{"action":"claim","task":"critters-from-disc","agent":"claude","timestamp":"2026-10-13T21:54:09Z"}
-{"action":"complete","task":"critters-from-disc","agent":"claude","timestamp":"2026-10-13T21:54:10Z"}
-{"action":"claim","task":"render-perf","agent":"claude","timestamp":"2026-10-13T21:54:10Z"}
-{"action":"complete","task":"render-perf","agent":"claude","timestamp":"2026-10-13T21:54:10Z"}
-{"action":"claim","task":"look-fixes-2026-10-13","agent":"claude","timestamp":"2026-10-13T21:54:10Z"}
-{"action":"complete","task":"look-fixes-2026-10-13","agent":"claude","timestamp":"2026-10-13T21:54:11Z"}
-{"action":"claim","task":"fix-letter-notify","agent":"claude","timestamp":"2026-10-13T21:54:32Z"}
-{"action":"complete","task":"fix-letter-notify","agent":"claude","timestamp":"2026-10-13T21:54:32Z"}
-{"action":"claim","task":"fix-shop-entry","agent":"claude","timestamp":"2026-10-13T21:54:32Z"}
-{"action":"complete","task":"fix-shop-entry","agent":"claude","timestamp":"2026-10-13T21:54:32Z"}
-{"action":"claim","task":"game-clock","agent":"claude","timestamp":"2026-10-13T21:54:33Z"}
-{"action":"complete","task":"game-clock","agent":"claude","timestamp":"2026-10-13T21:54:33Z"}
-{"action":"claim","task":"logic-clippy-cleanup","agent":"claude","timestamp":"2026-10-13T21:54:33Z"}
-{"action":"complete","task":"logic-clippy-cleanup","agent":"claude","timestamp":"2026-10-13T21:54:33Z"}
-{"action":"claim","task":"logic-expose","agent":"claude","timestamp":"2026-10-13T21:54:34Z"}
-{"action":"complete","task":"logic-expose","agent":"claude","timestamp":"2026-10-13T21:54:34Z"}
-{"action":"claim","task":"m0-foundations","agent":"claude","timestamp":"2026-10-13T21:54:34Z"}
-{"action":"complete","task":"m0-foundations","agent":"claude","timestamp":"2026-10-13T21:54:35Z"}
-{"action":"claim","task":"pockets-inventory","agent":"claude","timestamp":"2026-10-13T21:54:35Z"}
-{"action":"complete","task":"pockets-inventory","agent":"claude","timestamp":"2026-10-13T21:54:35Z"}
-{"action":"claim","task":"quests-full","agent":"claude","timestamp":"2026-10-13T21:54:35Z"}
-{"action":"complete","task":"quests-full","agent":"claude","timestamp":"2026-10-13T21:54:36Z"}
-{"action":"claim","task":"talk-system","agent":"claude","timestamp":"2026-10-13T21:54:36Z"}
-{"action":"complete","task":"talk-system","agent":"claude","timestamp":"2026-10-13T21:54:36Z"}
-{"action":"claim","task":"villager-routines","agent":"claude","timestamp":"2026-10-13T21:54:36Z"}
-{"action":"complete","task":"villager-routines","agent":"claude","timestamp":"2026-10-13T21:54:37Z"}
-{"action":"claim","task":"walk-run","agent":"claude","timestamp":"2026-10-13T21:54:37Z"}
-{"action":"complete","task":"walk-run","agent":"claude","timestamp":"2026-10-13T21:54:37Z"}
-{"action":"claim","task":"workspace-fmt","agent":"claude","timestamp":"2026-10-13T21:54:37Z"}
-{"action":"complete","task":"workspace-fmt","agent":"claude","timestamp":"2026-10-13T21:54:38Z"}
-{"action":"claim","task":"mailbox-flag","agent":"claude","timestamp":"2026-10-13T21:56:44Z"}
-{"action":"complete","task":"mailbox-flag","agent":"claude","timestamp":"2026-10-13T22:03:16Z"}
-{"action":"claim","task":"ui-from-disc","agent":"claude","timestamp":"2026-10-13T22:08:52Z"}
-{"action":"release","task":"ui-from-disc","agent":"claude","timestamp":"2026-10-13T23:46:46Z"}
-{"action":"claim","task":"gc-iso-reader-tune","agent":"claude","timestamp":"2026-10-13T23:46:46Z"}
-{"action":"complete","task":"gc-iso-reader-tune","agent":"claude","timestamp":"2026-10-13T23:50:46Z"}
-{"action":"claim","task":"ui-from-disc","agent":"claude","timestamp":"2026-10-13T23:50:47Z"}
-{"action":"complete","task":"ui-from-disc","agent":"claude","timestamp":"2026-10-14T00:35:12Z"}
-{"action":"claim","task":"dialogue-polish","agent":"claude","timestamp":"2026-10-14T00:35:12Z"}
-{"action":"claim","task":"audio-from-disc","agent":"claude","timestamp":"2026-10-14T00:49:40Z"}
-{"action":"release","task":"audio-from-disc","agent":"claude","timestamp":"2026-10-14T00:56:05Z"}
-{"action":"claim","task":"pause-menu","agent":"claude","timestamp":"2026-10-14T00:56:06Z"}
-{"action":"complete","task":"pause-menu","agent":"claude","timestamp":"2026-10-14T00:58:32Z"}
-{"action":"release","task":"dialogue-polish","agent":"claude","timestamp":"2026-10-14T00:58:45Z"}
-{"action":"claim","task":"critter-behaviour","agent":"claude","timestamp":"2026-10-14T01:01:49Z"}
-{"action":"complete","task":"critter-behaviour","agent":"claude","timestamp":"2026-10-14T08:25:16Z"}
-{"action":"claim","task":"audio-from-disc","agent":"claude","timestamp":"2026-10-14T08:41:54Z"}
-{"action":"claim","task":"villager-voice-types","agent":"codex","timestamp":"2026-10-14T21:50:14Z"}
-{"action":"release","task":"villager-voice-types","agent":"codex","timestamp":"2026-10-14T21:56:20Z"}
-{"action":"claim","task":"player-footsteps","agent":"codex","timestamp":"2026-10-14T22:21:07Z"}
-{"action":"release","task":"player-footsteps","agent":"codex","timestamp":"2026-10-14T22:39:39Z"}
-{"action":"claim","task":"ui-mailbox-sounds","agent":"codex","timestamp":"2026-10-14T22:52:41Z"}
-{"action":"release","task":"ui-mailbox-sounds","agent":"codex","timestamp":"2026-10-14T22:56:56Z"}
-{"action":"claim","task":"ui-mailbox-sounds","agent":"codex","timestamp":"2026-10-14T23:03:11Z"}
-{"action":"release","task":"ui-mailbox-sounds","agent":"codex","timestamp":"2026-10-14T23:19:57Z"}
-{"action":"claim","task":"m4-audio-audit","agent":"codex","timestamp":"2026-10-14T23:30:23Z"}
-{"action":"release","task":"m4-audio-audit","agent":"codex","timestamp":"2026-10-14T23:32:37Z"}
-{"action":"claim","task":"ui-mailbox-sounds","agent":"codex","timestamp":"2026-10-14T23:36:32Z"}
-{"action":"release","task":"ui-mailbox-sounds","agent":"codex","timestamp":"2026-10-14T23:37:14Z"}
-{"action":"claim","task":"audio-trigger-lifecycle","agent":"codex","timestamp":"2026-10-14T23:37:14Z"}
-{"action":"release","task":"audio-trigger-lifecycle","agent":"codex","timestamp":"2026-10-14T23:43:53Z"}
-{"action":"claim","task":"audio-scene-music","agent":"codex","timestamp":"2026-10-14T23:51:01Z"}
-{"action":"release","task":"audio-scene-music","agent":"codex","timestamp":"2026-10-14T23:57:45Z"}
-{"action":"claim","task":"audio-action-coverage","agent":"codex","timestamp":"2026-10-15T00:01:12Z"}
-{"action":"release","task":"audio-action-coverage","agent":"codex","timestamp":"2026-10-15T00:13:05Z"}
-{"action":"claim","task":"audio-world-ambience","agent":"codex","timestamp":"2026-10-15T00:23:23Z"}
-{"action":"release","task":"audio-world-ambience","agent":"codex","timestamp":"2026-10-15T00:39:39Z"}
-{"action":"claim","task":"audio-world-ambience","agent":"codex","timestamp":"2026-10-15T08:08:27Z"}
-{"action":"release","task":"audio-world-ambience","agent":"codex","timestamp":"2026-10-15T08:08:30Z"}
-{"action":"claim","task":"audio-mix-and-fidelity","agent":"codex","timestamp":"2026-10-15T08:12:51Z"}
-{"action":"release","task":"audio-mix-and-fidelity","agent":"codex","timestamp":"2026-10-15T08:46:15Z"}
-{"action":"claim","task":"audio-mix-and-fidelity","agent":"codex","timestamp":"2026-10-15T08:51:20Z"}
-{"action":"release","task":"audio-mix-and-fidelity","agent":"codex","timestamp":"2026-10-15T08:51:21Z"}
-{"action":"claim","task":"audio-voice-edge-cases","agent":"codex","timestamp":"2026-10-15T08:52:43Z"}
-{"action":"release","task":"audio-voice-edge-cases","agent":"codex","timestamp":"2026-10-15T09:16:18Z"}
-{"action":"claim","task":"audio-voice-edge-cases","agent":"codex","timestamp":"2026-10-15T18:37:16Z"}
-{"action":"release","task":"audio-voice-edge-cases","agent":"codex","timestamp":"2026-10-15T18:39:00Z"}
-{"action":"claim","task":"audio-voice-edge-cases","agent":"codex","timestamp":"2026-10-15T18:42:30Z"}
-{"action":"release","task":"audio-voice-edge-cases","agent":"codex","timestamp":"2026-10-15T18:42:40Z"}
-{"action":"claim","task":"audio-acceptance","agent":"codex","timestamp":"2026-10-15T18:45:24Z"}
-{"action":"release","task":"audio-acceptance","agent":"codex","timestamp":"2026-10-15T18:58:23Z"}
-{"action":"claim","task":"model-actions-net-swing","agent":"codex","timestamp":"2026-10-15T19:19:21Z"}
-{"action":"release","task":"model-actions-net-swing","agent":"codex","timestamp":"2026-10-15T19:20:50Z"}
-{"action":"claim","task":"special-building-look","agent":"codex","timestamp":"2026-10-15T19:26:40Z"}
-{"action":"release","task":"special-building-look","agent":"codex","timestamp":"2026-10-15T19:42:06Z"}
-{"action":"claim","task":"villager-house-glass","agent":"codex","timestamp":"2026-10-15T20:00:12Z"}
-{"action":"release","task":"villager-house-glass","agent":"codex","timestamp":"2026-10-15T20:10:38Z"}
-{"action":"claim","task":"house-board-collision","agent":"codex","timestamp":"2026-10-15T20:29:03Z"}
-{"action":"release","task":"house-board-collision","agent":"codex","timestamp":"2026-10-15T20:37:24Z"}
-{"action":"claim","task":"house-board-collision","agent":"codex","timestamp":"2026-10-15T21:54:42Z"}
-{"action":"release","task":"house-board-collision","agent":"codex","timestamp":"2026-10-15T22:06:59Z"}
-{"action":"claim","task":"ground-light-flicker","agent":"codex","timestamp":"2026-10-15T22:07:41Z"}
-{"action":"release","task":"ground-light-flicker","agent":"codex","timestamp":"2026-10-15T22:10:44Z"}
-{"action":"claim","task":"mailbox-flicker","agent":"codex","timestamp":"2026-10-15T22:11:04Z"}
-{"action":"release","task":"mailbox-flicker","agent":"codex","timestamp":"2026-10-15T23:51:18Z"}
-{"action":"claim","task":"player-door-interaction","agent":"codex","timestamp":"2026-10-16T00:31:35Z"}
-{"action":"release","task":"player-door-interaction","agent":"codex","timestamp":"2026-10-16T00:35:42Z"}
-{"action":"claim","task":"wishing-fountain","agent":"codex","timestamp":"2026-10-16T00:37:04Z"}
-{"action":"release","task":"wishing-fountain","agent":"codex","timestamp":"2026-10-16T00:49:42Z"}
-{"action":"claim","task":"model-actions-net-swing","agent":"codex","timestamp":"2026-10-16T01:05:42Z"}
-{"action":"release","task":"model-actions-net-swing","agent":"codex","timestamp":"2026-10-16T02:37:33Z"}
-{"action":"claim","task":"roadmap-ui-fidelity","agent":"codex","timestamp":"2026-10-16T08:14:55Z"}
-{"action":"release","task":"roadmap-ui-fidelity","agent":"codex","timestamp":"2026-10-16T08:16:58Z"}
-{"action":"claim","task":"roadmap-ui-fidelity","agent":"codex","timestamp":"2026-10-16T08:17:25Z"}
-{"action":"release","task":"roadmap-ui-fidelity","agent":"codex","timestamp":"2026-10-16T08:17:25Z"}
-{"action":"claim","task":"retail-pockets-ui","agent":"codex","timestamp":"2026-10-16T08:20:34Z"}
-{"action":"release","task":"retail-pockets-ui","agent":"codex","timestamp":"2026-10-16T09:13:30Z"}
-{"action":"claim","task":"retail-pockets-ui","agent":"codex","timestamp":"2026-10-16T09:17:42Z"}
-{"action":"release","task":"retail-pockets-ui","agent":"codex","timestamp":"2026-10-16T09:40:47Z"}
-{"action":"claim","task":"retail-pockets-ui","agent":"codex","timestamp":"2026-10-16T19:29:48Z"}
-{"action":"release","task":"retail-pockets-ui","agent":"codex","timestamp":"2026-10-16T19:39:56Z"}
-{"action":"claim","task":"retail-mail-ui","agent":"codex","timestamp":"2026-10-16T19:45:11Z"}
-{"action":"release","task":"retail-mail-ui","agent":"codex","timestamp":"2026-10-16T20:00:11Z"}
-{"action":"claim","task":"retail-mail-ui","agent":"codex","timestamp":"2026-10-16T20:08:47Z"}
-{"action":"release","task":"retail-mail-ui","agent":"codex","timestamp":"2026-10-16T20:20:19Z"}
-{"action":"claim","task":"retail-shop-ui","agent":"codex","timestamp":"2026-10-16T20:28:47Z"}
-{"action":"release","task":"retail-shop-ui","agent":"codex","timestamp":"2026-10-16T20:30:01Z"}
-{"action":"claim","task":"retail-shop-ui","agent":"codex","timestamp":"2026-10-16T20:32:24Z"}
-{"action":"release","task":"retail-shop-ui","agent":"codex","timestamp":"2026-10-16T21:07:18Z"}
-{"agent": "muse", "task": "migrate-rustimal-furniture-pilot", "status": "in_progress", "timestamp": "2026-10-16T21:30Z"}
+{"action": "claim", "task": "audit-019-upgrade", "agent": "lapis", "timestamp": "2026-10-10T17:42:50Z"}
+{"action": "claim", "task": "document-glb-pipeline", "agent": "cosmo", "timestamp": "2026-10-10T17:54Z"}
+{"action": "complete", "task": "document-glb-pipeline", "agent": "cosmo", "timestamp": "2026-10-10T18:01Z"}
+{"action": "claim", "task": "fix-letter-notify", "agent": "lapis", "timestamp": "2026-10-10T18:15:44Z"}
+{"action": "claim", "task": "fix-shop-entry", "agent": "claude", "timestamp": "2026-10-10T19:29:08Z"}
+{"action": "complete", "task": "fix-shop-entry", "agent": "claude", "timestamp": "2026-10-10T20:16:57Z"}
+{"action": "claim", "task": "fix-letter-notify", "agent": "claude", "timestamp": "2026-10-10T20:18:30Z", "note": "handed over by lapis (Philip) in chat"}
+{"action": "complete", "task": "fix-letter-notify", "agent": "claude", "timestamp": "2026-10-10T20:45:29Z"}
+{"action": "claim", "task": "logic-clippy-cleanup", "agent": "claude", "timestamp": "2026-10-10T20:50:11Z"}
+{"action": "complete", "task": "logic-clippy-cleanup", "agent": "claude", "timestamp": "2026-10-10T21:08:20Z"}
+{"action": "claim", "task": "workspace-fmt", "agent": "claude", "timestamp": "2026-10-10T21:11:51Z"}
+{"action": "complete", "task": "workspace-fmt", "agent": "claude", "timestamp": "2026-10-10T21:15:19Z"}
+{"action": "claim", "task": "m0-foundations", "agent": "claude", "timestamp": "2026-10-10T21:41:41Z"}
+{"action": "complete", "task": "m0-foundations", "agent": "claude", "timestamp": "2026-10-10T22:07:57Z"}
+{"action": "claim", "task": "logic-expose", "agent": "claude", "timestamp": "2026-10-10T22:56:51Z"}
+{"action": "complete", "task": "logic-expose", "agent": "claude", "timestamp": "2026-10-10T23:00:36Z"}
+{"action": "claim", "task": "walk-run", "agent": "claude", "timestamp": "2026-10-10T23:00:48Z"}
+{"action": "complete", "task": "walk-run", "agent": "claude", "timestamp": "2026-10-11T00:14:56Z"}
+{"action": "claim", "task": "pockets-inventory", "agent": "claude", "timestamp": "2026-10-11T00:14:56Z"}
+{"action": "complete", "task": "pockets-inventory", "agent": "claude", "timestamp": "2026-10-11T00:38:21Z"}
+{"action": "claim", "task": "talk-system", "agent": "claude", "timestamp": "2026-10-11T00:38:21Z"}
+{"action": "complete", "task": "talk-system", "agent": "claude", "timestamp": "2026-10-11T00:59:57Z"}
+{"action": "claim", "task": "villager-routines", "agent": "claude", "timestamp": "2026-10-11T00:59:57Z"}
+{"action": "complete", "task": "villager-routines", "agent": "claude", "timestamp": "2026-10-11T02:29:16Z"}
+{"action": "claim", "task": "quests-full", "agent": "claude", "timestamp": "2026-10-11T02:29:16Z"}
+{"action": "complete", "task": "quests-full", "agent": "claude", "timestamp": "2026-10-11T02:44:23Z"}
+{"action": "claim", "task": "game-clock", "agent": "claude", "timestamp": "2026-10-11T02:45:08Z"}
+{"action": "complete", "task": "game-clock", "agent": "claude", "timestamp": "2026-10-11T02:48:43Z"}
+{"action": "claim", "task": "art-direction", "agent": "claude", "timestamp": "2026-10-11T04:20:00Z"}
+{"action": "complete", "task": "art-direction", "agent": "claude", "timestamp": "2026-10-12T12:00:00Z", "note": "superseded by disc-asset direction"}
+{"action": "claim", "task": "disc-reader", "agent": "claude", "timestamp": "2026-10-12T12:10:00Z"}
+{"action": "claim", "task": "yaz0", "agent": "claude", "timestamp": "2026-10-12T12:10:00Z"}
+{"action": "complete", "task": "disc-reader", "agent": "claude", "timestamp": "2026-10-12T12:40:00Z"}
+{"action": "complete", "task": "yaz0", "agent": "claude", "timestamp": "2026-10-12T12:40:00Z"}
+{"action": "claim", "task": "dol-rel-image", "agent": "claude", "timestamp": "2026-10-12T13:00:00Z"}
+{"action": "complete", "task": "dol-rel-image", "agent": "claude", "timestamp": "2026-10-12T13:20:00Z"}
+{"action": "claim", "task": "asset-table", "agent": "claude", "timestamp": "2026-10-12T07:18:59Z"}
+{"action": "complete", "task": "asset-table", "agent": "claude", "timestamp": "2026-10-12T07:22:25Z"}
+{"action": "claim", "task": "disc-loader-app", "agent": "claude", "timestamp": "2026-10-12T07:24:21Z"}
+{"action": "complete", "task": "disc-loader-app", "agent": "claude", "timestamp": "2026-10-12T07:32:23Z"}
+{"action": "claim", "task": "gx-backend-bevy", "agent": "claude", "timestamp": "2026-10-12T07:45:24Z"}
+{"action": "complete", "task": "gx-backend-bevy", "agent": "claude", "timestamp": "2026-10-12T07:46:09Z"}
+{"action": "claim", "task": "tev-materials", "agent": "claude", "timestamp": "2026-10-12T08:15:41Z"}
+{"action": "complete", "task": "tev-materials", "agent": "claude", "timestamp": "2026-10-12T08:15:41Z"}
+{"action": "claim", "task": "town-from-disc", "agent": "claude", "timestamp": "2026-10-12T08:55:26Z"}
+{"action": "complete", "task": "town-from-disc", "agent": "claude", "timestamp": "2026-10-13T21:54:09Z"}
+{"action": "claim", "task": "field-items-from-disc", "agent": "claude", "timestamp": "2026-10-13T21:54:09Z"}
+{"action": "complete", "task": "field-items-from-disc", "agent": "claude", "timestamp": "2026-10-13T21:54:09Z"}
+{"action": "claim", "task": "critters-from-disc", "agent": "claude", "timestamp": "2026-10-13T21:54:09Z"}
+{"action": "complete", "task": "critters-from-disc", "agent": "claude", "timestamp": "2026-10-13T21:54:10Z"}
+{"action": "claim", "task": "render-perf", "agent": "claude", "timestamp": "2026-10-13T21:54:10Z"}
+{"action": "complete", "task": "render-perf", "agent": "claude", "timestamp": "2026-10-13T21:54:10Z"}
+{"action": "claim", "task": "look-fixes-2026-10-13", "agent": "claude", "timestamp": "2026-10-13T21:54:10Z"}
+{"action": "complete", "task": "look-fixes-2026-10-13", "agent": "claude", "timestamp": "2026-10-13T21:54:11Z"}
+{"action": "claim", "task": "fix-letter-notify", "agent": "claude", "timestamp": "2026-10-13T21:54:32Z"}
+{"action": "complete", "task": "fix-letter-notify", "agent": "claude", "timestamp": "2026-10-13T21:54:32Z"}
+{"action": "claim", "task": "fix-shop-entry", "agent": "claude", "timestamp": "2026-10-13T21:54:32Z"}
+{"action": "complete", "task": "fix-shop-entry", "agent": "claude", "timestamp": "2026-10-13T21:54:32Z"}
+{"action": "claim", "task": "game-clock", "agent": "claude", "timestamp": "2026-10-13T21:54:33Z"}
+{"action": "complete", "task": "game-clock", "agent": "claude", "timestamp": "2026-10-13T21:54:33Z"}
+{"action": "claim", "task": "logic-clippy-cleanup", "agent": "claude", "timestamp": "2026-10-13T21:54:33Z"}
+{"action": "complete", "task": "logic-clippy-cleanup", "agent": "claude", "timestamp": "2026-10-13T21:54:33Z"}
+{"action": "claim", "task": "logic-expose", "agent": "claude", "timestamp": "2026-10-13T21:54:34Z"}
+{"action": "complete", "task": "logic-expose", "agent": "claude", "timestamp": "2026-10-13T21:54:34Z"}
+{"action": "claim", "task": "m0-foundations", "agent": "claude", "timestamp": "2026-10-13T21:54:34Z"}
+{"action": "complete", "task": "m0-foundations", "agent": "claude", "timestamp": "2026-10-13T21:54:35Z"}
+{"action": "claim", "task": "pockets-inventory", "agent": "claude", "timestamp": "2026-10-13T21:54:35Z"}
+{"action": "complete", "task": "pockets-inventory", "agent": "claude", "timestamp": "2026-10-13T21:54:35Z"}
+{"action": "claim", "task": "quests-full", "agent": "claude", "timestamp": "2026-10-13T21:54:35Z"}
+{"action": "complete", "task": "quests-full", "agent": "claude", "timestamp": "2026-10-13T21:54:36Z"}
+{"action": "claim", "task": "talk-system", "agent": "claude", "timestamp": "2026-10-13T21:54:36Z"}
+{"action": "complete", "task": "talk-system", "agent": "claude", "timestamp": "2026-10-13T21:54:36Z"}
+{"action": "claim", "task": "villager-routines", "agent": "claude", "timestamp": "2026-10-13T21:54:36Z"}
+{"action": "complete", "task": "villager-routines", "agent": "claude", "timestamp": "2026-10-13T21:54:37Z"}
+{"action": "claim", "task": "walk-run", "agent": "claude", "timestamp": "2026-10-13T21:54:37Z"}
+{"action": "complete", "task": "walk-run", "agent": "claude", "timestamp": "2026-10-13T21:54:37Z"}
+{"action": "claim", "task": "workspace-fmt", "agent": "claude", "timestamp": "2026-10-13T21:54:37Z"}
+{"action": "complete", "task": "workspace-fmt", "agent": "claude", "timestamp": "2026-10-13T21:54:38Z"}
+{"action": "claim", "task": "mailbox-flag", "agent": "claude", "timestamp": "2026-10-13T21:56:44Z"}
+{"action": "complete", "task": "mailbox-flag", "agent": "claude", "timestamp": "2026-10-13T22:03:16Z"}
+{"action": "claim", "task": "ui-from-disc", "agent": "claude", "timestamp": "2026-10-13T22:08:52Z"}
+{"action": "release", "task": "ui-from-disc", "agent": "claude", "timestamp": "2026-10-13T23:46:46Z"}
+{"action": "claim", "task": "gc-iso-reader-tune", "agent": "claude", "timestamp": "2026-10-13T23:46:46Z"}
+{"action": "complete", "task": "gc-iso-reader-tune", "agent": "claude", "timestamp": "2026-10-13T23:50:46Z"}
+{"action": "claim", "task": "ui-from-disc", "agent": "claude", "timestamp": "2026-10-13T23:50:47Z"}
+{"action": "complete", "task": "ui-from-disc", "agent": "claude", "timestamp": "2026-10-14T00:35:12Z"}
+{"action": "claim", "task": "dialogue-polish", "agent": "claude", "timestamp": "2026-10-14T00:35:12Z"}
+{"action": "claim", "task": "audio-from-disc", "agent": "claude", "timestamp": "2026-10-14T00:49:40Z"}
+{"action": "release", "task": "audio-from-disc", "agent": "claude", "timestamp": "2026-10-14T00:56:05Z"}
+{"action": "claim", "task": "pause-menu", "agent": "claude", "timestamp": "2026-10-14T00:56:06Z"}
+{"action": "complete", "task": "pause-menu", "agent": "claude", "timestamp": "2026-10-14T00:58:32Z"}
+{"action": "release", "task": "dialogue-polish", "agent": "claude", "timestamp": "2026-10-14T00:58:45Z"}
+{"action": "claim", "task": "critter-behaviour", "agent": "claude", "timestamp": "2026-10-14T01:01:49Z"}
+{"action": "complete", "task": "critter-behaviour", "agent": "claude", "timestamp": "2026-10-14T08:25:16Z"}
+{"action": "claim", "task": "audio-from-disc", "agent": "claude", "timestamp": "2026-10-14T08:41:54Z"}
+{"action": "claim", "task": "villager-voice-types", "agent": "codex", "timestamp": "2026-10-14T21:50:14Z"}
+{"action": "release", "task": "villager-voice-types", "agent": "codex", "timestamp": "2026-10-14T21:56:20Z"}
+{"action": "claim", "task": "player-footsteps", "agent": "codex", "timestamp": "2026-10-14T22:21:07Z"}
+{"action": "release", "task": "player-footsteps", "agent": "codex", "timestamp": "2026-10-14T22:39:39Z"}
+{"action": "claim", "task": "ui-mailbox-sounds", "agent": "codex", "timestamp": "2026-10-14T22:52:41Z"}
+{"action": "release", "task": "ui-mailbox-sounds", "agent": "codex", "timestamp": "2026-10-14T22:56:56Z"}
+{"action": "claim", "task": "ui-mailbox-sounds", "agent": "codex", "timestamp": "2026-10-14T23:03:11Z"}
+{"action": "release", "task": "ui-mailbox-sounds", "agent": "codex", "timestamp": "2026-10-14T23:19:57Z"}
+{"action": "claim", "task": "m4-audio-audit", "agent": "codex", "timestamp": "2026-10-14T23:30:23Z"}
+{"action": "release", "task": "m4-audio-audit", "agent": "codex", "timestamp": "2026-10-14T23:32:37Z"}
+{"action": "claim", "task": "ui-mailbox-sounds", "agent": "codex", "timestamp": "2026-10-14T23:36:32Z"}
+{"action": "release", "task": "ui-mailbox-sounds", "agent": "codex", "timestamp": "2026-10-14T23:37:14Z"}
+{"action": "claim", "task": "audio-trigger-lifecycle", "agent": "codex", "timestamp": "2026-10-14T23:37:14Z"}
+{"action": "release", "task": "audio-trigger-lifecycle", "agent": "codex", "timestamp": "2026-10-14T23:43:53Z"}
+{"action": "claim", "task": "audio-scene-music", "agent": "codex", "timestamp": "2026-10-14T23:51:01Z"}
+{"action": "release", "task": "audio-scene-music", "agent": "codex", "timestamp": "2026-10-14T23:57:45Z"}
+{"action": "claim", "task": "audio-action-coverage", "agent": "codex", "timestamp": "2026-10-15T00:01:12Z"}
+{"action": "release", "task": "audio-action-coverage", "agent": "codex", "timestamp": "2026-10-15T00:13:05Z"}
+{"action": "claim", "task": "audio-world-ambience", "agent": "codex", "timestamp": "2026-10-15T00:23:23Z"}
+{"action": "release", "task": "audio-world-ambience", "agent": "codex", "timestamp": "2026-10-15T00:39:39Z"}
+{"action": "claim", "task": "audio-world-ambience", "agent": "codex", "timestamp": "2026-10-15T08:08:27Z"}
+{"action": "release", "task": "audio-world-ambience", "agent": "codex", "timestamp": "2026-10-15T08:08:30Z"}
+{"action": "claim", "task": "audio-mix-and-fidelity", "agent": "codex", "timestamp": "2026-10-15T08:12:51Z"}
+{"action": "release", "task": "audio-mix-and-fidelity", "agent": "codex", "timestamp": "2026-10-15T08:46:15Z"}
+{"action": "claim", "task": "audio-mix-and-fidelity", "agent": "codex", "timestamp": "2026-10-15T08:51:20Z"}
+{"action": "release", "task": "audio-mix-and-fidelity", "agent": "codex", "timestamp": "2026-10-15T08:51:21Z"}
+{"action": "claim", "task": "audio-voice-edge-cases", "agent": "codex", "timestamp": "2026-10-15T08:52:43Z"}
+{"action": "release", "task": "audio-voice-edge-cases", "agent": "codex", "timestamp": "2026-10-15T09:16:18Z"}
+{"action": "claim", "task": "audio-voice-edge-cases", "agent": "codex", "timestamp": "2026-10-15T18:37:16Z"}
+{"action": "release", "task": "audio-voice-edge-cases", "agent": "codex", "timestamp": "2026-10-15T18:39:00Z"}
+{"action": "claim", "task": "audio-voice-edge-cases", "agent": "codex", "timestamp": "2026-10-15T18:42:30Z"}
+{"action": "release", "task": "audio-voice-edge-cases", "agent": "codex", "timestamp": "2026-10-15T18:42:40Z"}
+{"action": "claim", "task": "audio-acceptance", "agent": "codex", "timestamp": "2026-10-15T18:45:24Z"}
+{"action": "release", "task": "audio-acceptance", "agent": "codex", "timestamp": "2026-10-15T18:58:23Z"}
+{"action": "claim", "task": "model-actions-net-swing", "agent": "codex", "timestamp": "2026-10-15T19:19:21Z"}
+{"action": "release", "task": "model-actions-net-swing", "agent": "codex", "timestamp": "2026-10-15T19:20:50Z"}
+{"action": "claim", "task": "special-building-look", "agent": "codex", "timestamp": "2026-10-15T19:26:40Z"}
+{"action": "release", "task": "special-building-look", "agent": "codex", "timestamp": "2026-10-15T19:42:06Z"}
+{"action": "claim", "task": "villager-house-glass", "agent": "codex", "timestamp": "2026-10-15T20:00:12Z"}
+{"action": "release", "task": "villager-house-glass", "agent": "codex", "timestamp": "2026-10-15T20:10:38Z"}
+{"action": "claim", "task": "house-board-collision", "agent": "codex", "timestamp": "2026-10-15T20:29:03Z"}
+{"action": "release", "task": "house-board-collision", "agent": "codex", "timestamp": "2026-10-15T20:37:24Z"}
+{"action": "claim", "task": "house-board-collision", "agent": "codex", "timestamp": "2026-10-15T21:54:42Z"}
+{"action": "release", "task": "house-board-collision", "agent": "codex", "timestamp": "2026-10-15T22:06:59Z"}
+{"action": "claim", "task": "ground-light-flicker", "agent": "codex", "timestamp": "2026-10-15T22:07:41Z"}
+{"action": "release", "task": "ground-light-flicker", "agent": "codex", "timestamp": "2026-10-15T22:10:44Z"}
+{"action": "claim", "task": "mailbox-flicker", "agent": "codex", "timestamp": "2026-10-15T22:11:04Z"}
+{"action": "release", "task": "mailbox-flicker", "agent": "codex", "timestamp": "2026-10-15T23:51:18Z"}
+{"action": "claim", "task": "player-door-interaction", "agent": "codex", "timestamp": "2026-10-16T00:31:35Z"}
+{"action": "release", "task": "player-door-interaction", "agent": "codex", "timestamp": "2026-10-16T00:35:42Z"}
+{"action": "claim", "task": "wishing-fountain", "agent": "codex", "timestamp": "2026-10-16T00:37:04Z"}
+{"action": "release", "task": "wishing-fountain", "agent": "codex", "timestamp": "2026-10-16T00:49:42Z"}
+{"action": "claim", "task": "model-actions-net-swing", "agent": "codex", "timestamp": "2026-10-16T01:05:42Z"}
+{"action": "release", "task": "model-actions-net-swing", "agent": "codex", "timestamp": "2026-10-16T02:37:33Z"}
+{"action": "claim", "task": "roadmap-ui-fidelity", "agent": "codex", "timestamp": "2026-10-16T08:14:55Z"}
+{"action": "release", "task": "roadmap-ui-fidelity", "agent": "codex", "timestamp": "2026-10-16T08:16:58Z"}
+{"action": "claim", "task": "roadmap-ui-fidelity", "agent": "codex", "timestamp": "2026-10-16T08:17:25Z"}
+{"action": "release", "task": "roadmap-ui-fidelity", "agent": "codex", "timestamp": "2026-10-16T08:17:25Z"}
+{"action": "claim", "task": "retail-pockets-ui", "agent": "codex", "timestamp": "2026-10-16T08:20:34Z"}
+{"action": "release", "task": "retail-pockets-ui", "agent": "codex", "timestamp": "2026-10-16T09:13:30Z"}
+{"action": "claim", "task": "retail-pockets-ui", "agent": "codex", "timestamp": "2026-10-16T09:17:42Z"}
+{"action": "release", "task": "retail-pockets-ui", "agent": "codex", "timestamp": "2026-10-16T09:40:47Z"}
+{"action": "claim", "task": "retail-pockets-ui", "agent": "codex", "timestamp": "2026-10-16T19:29:48Z"}
+{"action": "release", "task": "retail-pockets-ui", "agent": "codex", "timestamp": "2026-10-16T19:39:56Z"}
+{"action": "claim", "task": "retail-mail-ui", "agent": "codex", "timestamp": "2026-10-16T19:45:11Z"}
+{"action": "release", "task": "retail-mail-ui", "agent": "codex", "timestamp": "2026-10-16T20:00:11Z"}
+{"action": "claim", "task": "retail-mail-ui", "agent": "codex", "timestamp": "2026-10-16T20:08:47Z"}
+{"action": "release", "task": "retail-mail-ui", "agent": "codex", "timestamp": "2026-10-16T20:20:19Z"}
+{"action": "claim", "task": "retail-shop-ui", "agent": "codex", "timestamp": "2026-10-16T20:28:47Z"}
+{"action": "release", "task": "retail-shop-ui", "agent": "codex", "timestamp": "2026-10-16T20:30:01Z"}
+{"action": "claim", "task": "retail-shop-ui", "agent": "codex", "timestamp": "2026-10-16T20:32:24Z"}
+{"action": "release", "task": "retail-shop-ui", "agent": "codex", "timestamp": "2026-10-16T21:07:18Z"}
+{"agent": "muse", "task": "migrate-rustimal-furniture-pilot", "status": "completed", "timestamp": "2026-10-16T21:30Z", "completed_at": "2026-10-16T21:32Z"}
