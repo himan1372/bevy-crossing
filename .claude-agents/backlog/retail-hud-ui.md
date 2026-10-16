@@ -25,4 +25,3 @@ not guessed layouts or gameplay rules. Claim before implementation. Run suitable
 compile/lint/format/build checks for code changes; no tests unless Philip requests
 them. Record implementation evidence separately from Philip's actual acceptance.
 M4 remains open; title and rename remain deferred.
-
