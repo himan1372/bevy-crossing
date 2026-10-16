@@ -28,6 +28,7 @@ mod interior;
 mod items;
 mod locomotion;
 mod mail;
+mod mail_disc;
 mod mailbox;
 mod messages;
 mod model_view;

@@ -864,6 +864,7 @@ fn quest_ui_input(
                             "Thanks for helping me out! You're the best!\n\n- {giver_name}"
                         ),
                         read: false,
+                        paper: 0,
                     });
                     println!("Quest complete: reward {reward:?}");
                 }

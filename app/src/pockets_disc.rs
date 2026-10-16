@@ -72,6 +72,7 @@ pub(crate) struct PocketAssets {
     hand: Model,
     portrait: Handle<Image>,
     hand_image: Handle<Image>,
+    envelopes: [Option<Handle<Image>>; 2],
     rigs: Vec<UiRig>,
     patterns: Vec<PatternTile>,
     scroll: f32,
@@ -433,6 +434,8 @@ fn setup(
     commands.insert_resource(PocketAssets {
         portrait,
         hand_image,
+        envelopes: [false, true]
+            .map(|read| envelope(&disc, read).map(|rgba| images.add(image(rgba, 32, 32)))),
         frame,
         hand,
         rigs,
@@ -538,6 +541,37 @@ fn slot_at(slot: usize) -> Vec2 {
     )
 }
 
+fn mail_at(slot: usize) -> Vec2 {
+    Vec2::new(
+        215.0 + 24.0 * (slot % 2) as f32,
+        82.0 + 24.0 * (slot / 2) as f32,
+    )
+}
+
+fn envelope(disc: &GameDisc, read: bool) -> Option<Vec<u8>> {
+    let suffix = if read { "mtegami2" } else { "mtegami" };
+    let tex = disc.catalog.get(&format!("inv_mwin_{suffix}_tex"))?;
+    let pal = disc.catalog.get(&format!("inv_mwin_{suffix}_pal"))?;
+    gx_texture::decode(
+        disc.rom.slice(tex.source, tex.offset, tex.size)?,
+        GxFormat::C4,
+        32,
+        32,
+        Some((
+            disc.rom.slice(pal.source, pal.offset, pal.size)?,
+            TlutFormat::Rgb5A3,
+        )),
+    )
+}
+
+fn selected_mail(ui: &PocketsUi, mail: &crate::mail::MailUi) -> Option<usize> {
+    if mail.listing() {
+        Some(mail.selected)
+    } else {
+        ui.mail_slot
+    }
+}
+
 /// mHD_hand_pos_get + mHD_hand_ovl_draw, CLOSE_KEEP offsets (10,2).
 /// The carried icon is displaced from the pocket center, exposing its rim.
 fn held_item_offset() -> Vec2 {
@@ -554,6 +588,7 @@ fn held_item_offset() -> Vec2 {
 fn animate(
     time: Res<Time>,
     ui: Res<PocketsUi>,
+    mail: Res<crate::mail::MailUi>,
     mut assets: ResMut<PocketAssets>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut pattern_materials: ResMut<Assets<PocketPattern>>,
@@ -569,22 +604,23 @@ fn animate(
     if ticks <= 0.0 || assets.root.is_none() {
         return;
     }
-    if assets.was_open != ui.open {
-        assets.was_open = ui.open;
-        assets.slide_speed = if ui.open { 75.0 } else { 1.0 };
+    let open = (ui.open && !mail.open) || mail.listing();
+    if assets.was_open != open {
+        assets.was_open = open;
+        assets.slide_speed = if open { 75.0 } else { 1.0 };
         assets.slide_ticks = 0.0;
         assets.slide_flag = false;
     }
     // mSM_move_menu: 60Hz accumulator, alternate-tick speed changes.
     assets.slide_ticks += ticks;
     while assets.slide_ticks >= 1.0 {
-        if !assets.slide_flag && ((ui.open && assets.slide <= 120.0) || !ui.open) {
+        if !assets.slide_flag && ((open && assets.slide <= 120.0) || !open) {
             assets.slide_speed =
-                (assets.slide_speed * if ui.open { 0.5 } else { 2.0 }).clamp(1.0, 75.0);
+                (assets.slide_speed * if open { 0.5 } else { 2.0 }).clamp(1.0, 75.0);
         }
         assets.slide_flag = !assets.slide_flag;
-        assets.slide = (assets.slide + assets.slide_speed * if ui.open { -0.5 } else { 0.5 })
-            .clamp(0.0, 300.0);
+        assets.slide =
+            (assets.slide + assets.slide_speed * if open { -0.5 } else { 0.5 }).clamp(0.0, 300.0);
         assets.slide_ticks -= 1.0;
     }
     if let Some(root) = assets.root {
@@ -654,7 +690,8 @@ fn animate(
             rig.releasing = false;
         }
     }
-    let target = slot_at(ui.selected) + Vec2::new(6.0, -6.0);
+    let target = selected_mail(&ui, &mail).map_or_else(|| slot_at(ui.selected), mail_at)
+        + Vec2::new(6.0, -6.0);
     let delta = target - assets.hand_at;
     let distance = delta.length();
     // mHD_hand_position_move/add_calc: ease, max6/min0.5 pixels/tick.
@@ -685,14 +722,14 @@ fn animate(
     }
 }
 
-struct Paint<'a, 'w, 's> {
-    commands: &'a mut Commands<'w, 's>,
-    meshes: &'a mut Assets<Mesh>,
-    materials: &'a mut Assets<StandardMaterial>,
-    root: Entity,
+pub(crate) struct Paint<'a, 'w, 's> {
+    pub commands: &'a mut Commands<'w, 's>,
+    pub meshes: &'a mut Assets<Mesh>,
+    pub materials: &'a mut Assets<StandardMaterial>,
+    pub root: Entity,
 }
 impl Paint<'_, '_, '_> {
-    fn put(&mut self, mesh: Mesh, tex: Handle<Image>, tint: Color, z: f32) -> Entity {
+    pub(crate) fn put(&mut self, mesh: Mesh, tex: Handle<Image>, tint: Color, z: f32) -> Entity {
         self.commands
             .spawn((
                 Mesh3d(self.meshes.add(mesh)),
@@ -709,7 +746,7 @@ impl Paint<'_, '_, '_> {
             ))
             .id()
     }
-    fn text(&mut self, font: &MsgAssets, text: &str, at: Vec2, color: [u8; 4], z: f32) {
+    pub(crate) fn text(&mut self, font: &MsgAssets, text: &str, at: Vec2, color: [u8; 4], z: f32) {
         self.put(
             text_mesh(text, at, &font.widths, color, usize::MAX),
             font.font.clone(),
@@ -726,15 +763,22 @@ fn draw(
     ui: Res<PocketsUi>,
     inventory: Res<PlayerInventory>,
     identity: Res<crate::save::PlayerIdentity>,
+    mail: Res<crate::mail::MailUi>,
+    mailbox: Res<crate::mail::Mailbox>,
     focus: Res<crate::input::InputFocus>,
     mut assets: ResMut<PocketAssets>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
 ) {
-    let visible = ui.open && *focus == crate::input::InputFocus::Pockets;
+    let open = (ui.open && !mail.open) || mail.listing();
+    let visible = open
+        && matches!(
+            *focus,
+            crate::input::InputFocus::Pockets | crate::input::InputFocus::Mail
+        );
     if !visible {
-        if !ui.open && assets.root.is_some() && assets.slide < 300.0 {
+        if !open && !mail.open && assets.root.is_some() && assets.slide < 300.0 {
             return;
         }
         if let Some(root) = assets.root.take() {
@@ -785,7 +829,13 @@ fn draw(
         ));
         assets.root = Some(root);
     }
-    if !fresh && !ui.is_changed() && !inventory.is_changed() && !identity.is_changed() {
+    if !fresh
+        && !ui.is_changed()
+        && !inventory.is_changed()
+        && !identity.is_changed()
+        && !mail.is_changed()
+        && !mailbox.is_changed()
+    {
         return;
     }
     if let Some(old) = assets.dynamic.take() {
@@ -835,7 +885,18 @@ fn draw(
         }
     }
     let selected = inventory.pockets.pockets[ui.selected];
-    let at = slot_at(ui.selected);
+    for (slot, letter) in mailbox.letters.iter().take(10).enumerate() {
+        if let Some(tex) = &assets.envelopes[usize::from(letter.read)] {
+            paint.put(
+                quad_mesh(mail_at(slot) - Vec2::splat(12.0), Vec2::splat(24.0)),
+                tex.clone(),
+                Color::WHITE,
+                120.0,
+            );
+        }
+    }
+    let mail_slot = selected_mail(&ui, &mail);
+    let at = mail_slot.map_or_else(|| slot_at(ui.selected), mail_at);
     if let Some(from) = ui.grabbed {
         let item = inventory.pockets.pockets[from];
         let present = inventory.pockets.item_cond(from) & 1 != 0;
@@ -876,7 +937,13 @@ fn draw(
     let labelled = ui
         .grabbed
         .map_or(selected, |from| inventory.pockets.pockets[from]);
-    let label = if labelled == 0 {
+    let label = if let Some(slot) = mail_slot {
+        mailbox
+            .letters
+            .get(slot)
+            .map(|l| format!("From {}", l.sender))
+            .unwrap_or_default()
+    } else if labelled == 0 {
         String::new()
     } else {
         crate::items::name(labelled)

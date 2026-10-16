@@ -51,6 +51,9 @@ pub struct Letter {
     pub subject: String,
     pub body: String,
     pub read: bool,
+    /// Original stationery index; older port letters use the first paper.
+    #[serde(default)]
+    pub paper: u8,
 }
 
 /// The player's mailbox: received letters plus sent ones.
@@ -64,11 +67,26 @@ pub struct Mailbox {
 #[derive(Resource, Default)]
 pub struct MailUi {
     pub open: bool,
-    selected: usize,
-    reading: Option<usize>,
-    writing: bool,
-    write_recipient: usize,
-    write_text: String,
+    pub(crate) selected: usize,
+    pub(crate) reading: Option<usize>,
+    pub(crate) writing: bool,
+    pub(crate) write_recipient: usize,
+    pub(crate) write_text: String,
+    pub(crate) page: usize,
+    pub(crate) from_pockets: bool,
+}
+
+impl MailUi {
+    pub(crate) fn listing(&self) -> bool {
+        self.open && self.reading.is_none() && !self.writing
+    }
+
+    pub(crate) fn read_from_pockets(&mut self, index: usize) {
+        self.open = true;
+        self.reading = Some(index);
+        self.page = 0;
+        self.from_pockets = true;
+    }
 }
 
 /// World position of the mailbox (set at startup).
@@ -120,6 +138,7 @@ fn starter_letters() -> Vec<Letter> {
                 write! Love, Mom"
                 .to_string(),
             read: false,
+            paper: 0,
         },
         Letter {
             sender: "Mom".to_string(),
@@ -130,6 +149,7 @@ fn starter_letters() -> Vec<Letter> {
                 there! Love, Mom"
                 .to_string(),
             read: false,
+            paper: 0,
         },
         Letter {
             sender: "Tom Nook".to_string(),
@@ -141,6 +161,7 @@ fn starter_letters() -> Vec<Letter> {
                 rush. Your friend, Tom Nook"
                 .to_string(),
             read: false,
+            paper: 0,
         },
     ]
 }
@@ -156,6 +177,7 @@ fn villager_letter(name: &str) -> Letter {
             wanted to say hi! — {name}"
         ),
         read: false,
+        paper: 0,
     }
 }
 
@@ -177,6 +199,7 @@ fn reply_letter(recipient: &str, rank: LetterRank) -> Letter {
         subject: "Re: your letter".to_string(),
         body,
         read: false,
+        paper: 0,
     }
 }
 
@@ -375,6 +398,8 @@ fn mailbox_interact(
         return;
     }
     ui.open = true;
+    ui.from_pockets = false;
+    ui.page = 0;
     crate::sound::se(crate::sound::se_id::PANEL_OPEN);
     ui.selected = 0;
     ui.reading = None;
@@ -438,6 +463,9 @@ fn send_letter(
     if text.is_empty() {
         crate::sound::se(crate::sound::se_id::MENU_EXIT);
         show_mail_notify("Blank letter discarded.", timer, notify_query);
+        if ui.from_pockets {
+            ui.open = false;
+        }
         return;
     }
     crate::sound::se(crate::sound::se_id::CHOICE_CONFIRM);
@@ -448,6 +476,7 @@ fn send_letter(
         subject: format!("To {recipient}"),
         body: text,
         read: true,
+        paper: 0,
     });
     match rank {
         LetterRank::Ok => {
@@ -481,12 +510,16 @@ fn send_letter(
         }
     }
     println!("Sent letter to {recipient} (score {total}, rank {rank:?})");
+    if ui.from_pockets {
+        ui.open = false;
+    }
 }
 
 /// Mail UI keyboard handling: list nav, reading, and composing.
 #[allow(clippy::too_many_arguments)]
 fn mail_ui_input(
     actions: Res<Actions>,
+    focus: Res<InputFocus>,
     mut key_events: MessageReader<KeyboardInput>,
     mut ui: ResMut<MailUi>,
     mut mailbox: ResMut<Mailbox>,
@@ -497,8 +530,9 @@ fn mail_ui_input(
         (With<MailNotifyText>, Without<MailPanel>),
     >,
     mut panel_query: Query<&mut Visibility, (With<MailPanel>, Without<MailNotifyText>)>,
+    font: Option<Res<crate::msg_window::MsgAssets>>,
 ) {
-    if !ui.open {
+    if !ui.open || *focus != InputFocus::Mail {
         return;
     }
 
@@ -509,7 +543,19 @@ fn mail_ui_input(
                 letter.read = true;
             }
             ui.reading = None;
+            ui.page = 0;
+            if ui.from_pockets {
+                ui.open = false;
+            }
             crate::sound::se(crate::sound::se_id::PAGE_OKURI);
+        }
+        if let Some((letter, font)) = mailbox.letters.get(idx).zip(font.as_deref()) {
+            let count = crate::mail_disc::page_count(&letter.body, &font.widths);
+            if actions.just_pressed(Action::MoveRight) || actions.just_pressed(Action::Confirm) {
+                ui.page = (ui.page + 1).min(count.saturating_sub(1));
+            } else if actions.just_pressed(Action::MoveLeft) {
+                ui.page = ui.page.saturating_sub(1);
+            }
         }
         return;
     }
@@ -532,10 +578,14 @@ fn mail_ui_input(
                 }
             }
         }
-        let names: Vec<String> = villagers.iter().map(|v| v.name.to_string()).collect();
+        let mut names: Vec<String> = villagers.iter().map(|v| v.name.to_string()).collect();
+        names.sort_unstable();
         if actions.just_pressed(Action::Cancel) {
             ui.writing = false;
             ui.write_text.clear();
+            if ui.from_pockets {
+                ui.open = false;
+            }
             crate::sound::se(crate::sound::se_id::MENU_EXIT);
             return;
         }
@@ -580,6 +630,22 @@ fn mail_ui_input(
     // Drain any stray key events so a queued 'n' can't leak into a
     // letter the player starts composing below.
     key_events.clear();
+    if font.is_some()
+        && (actions.just_pressed(Action::MoveLeft)
+            || actions.just_pressed(Action::MoveRight)
+            || actions.just_pressed(Action::MoveUp)
+            || actions.just_pressed(Action::MoveDown))
+    {
+        let dx = i32::from(actions.just_pressed(Action::MoveRight))
+            - i32::from(actions.just_pressed(Action::MoveLeft));
+        let dy = i32::from(actions.just_pressed(Action::MoveDown))
+            - i32::from(actions.just_pressed(Action::MoveUp));
+        let col = (ui.selected as i32 % 2 + dx).rem_euclid(2);
+        let row = (ui.selected as i32 / 2 + dy).rem_euclid(5);
+        ui.selected = (row * 2 + col) as usize;
+        crate::sound::se(crate::sound::se_id::CURSOR);
+        return;
+    }
     if actions.just_pressed(Action::MenuUp) {
         let before = ui.selected;
         ui.selected = ui.selected.saturating_sub(1);
@@ -592,8 +658,9 @@ fn mail_ui_input(
         crate::sound::cursor_changed(before, ui.selected);
         return;
     }
-    if actions.just_pressed(Action::Confirm) && !mailbox.letters.is_empty() {
-        ui.reading = Some(ui.selected.min(mailbox.letters.len() - 1));
+    if actions.just_pressed(Action::Confirm) && ui.selected < mailbox.letters.len() {
+        ui.reading = Some(ui.selected);
+        ui.page = 0;
         crate::sound::se(crate::sound::se_id::PAGE_OKURI);
         return;
     }
@@ -611,6 +678,8 @@ fn refresh_mail_ui(
     ui: Res<MailUi>,
     mailbox: Res<Mailbox>,
     villagers: Query<&Villager>,
+    font: Option<Res<crate::msg_window::MsgAssets>>,
+    mut panels: Query<&mut Node, With<MailPanel>>,
     mut list_query: Query<
         (&mut Text, &mut Visibility),
         (
@@ -636,6 +705,13 @@ fn refresh_mail_ui(
         ),
     >,
 ) {
+    for mut panel in &mut panels {
+        panel.display = if font.is_some() {
+            Display::None
+        } else {
+            Display::Flex
+        };
+    }
     if !ui.is_changed() && !mailbox.is_changed() {
         return;
     }
@@ -662,7 +738,8 @@ fn refresh_mail_ui(
     } else if ui.writing {
         *list_vis = Visibility::Hidden;
         *body_vis = Visibility::Inherited;
-        let names: Vec<String> = villagers.iter().map(|v| v.name.to_string()).collect();
+        let mut names: Vec<String> = villagers.iter().map(|v| v.name.to_string()).collect();
+        names.sort_unstable();
         let name = names
             .get(ui.write_recipient)
             .map(|s| s.as_str())
@@ -728,6 +805,7 @@ impl Plugin for MailPlugin {
             .insert_resource(MailNotifyTimer::default())
             .insert_resource(MailRng(0x5EED1234))
             .add_systems(Startup, setup_mail_ui)
+            .add_plugins(crate::mail_disc::MailDiscPlugin)
             .add_systems(
                 Startup,
                 spawn_mailbox.after(crate::house::find_player_house),

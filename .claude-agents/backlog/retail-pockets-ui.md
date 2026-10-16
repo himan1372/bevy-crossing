@@ -162,3 +162,8 @@ different times. F5 wrote only the Temp save with phi/woponese, 15 pockets,
 Check/clippy/fmt and capture/default builds pass, no tests added or run. Real
 save hash and settings unchanged. Full retail visual acceptance, including
 exact recessed-slot appearance and remaining hand/tag fidelity, stays pending.
+
+retail-mail-ui now populates/selects the ten envelope slots, opens stationery
+reading and returns to pockets. Both grids currently share the existing mailbox
+pool; separate carried-mail transfer/storage remains explicitly outside this
+visual implementation. See retail-mail-ui.md for evidence and remaining scope.

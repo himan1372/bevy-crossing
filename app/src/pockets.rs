@@ -20,6 +20,7 @@ pub struct PocketsUi {
     pub selected: usize,
     pub menu: Option<usize>,
     pub grabbed: Option<usize>,
+    pub mail_slot: Option<usize>,
 }
 
 #[derive(Component)]
@@ -150,11 +151,13 @@ fn pockets_input(
     mut inventory: ResMut<PlayerInventory>,
     mut tool: ResMut<crate::ecology::EquippedTool>,
     renderer: Option<Res<crate::pockets_disc::PocketAssets>>,
+    mut mail: ResMut<crate::mail::MailUi>,
+    mailbox: Res<crate::mail::Mailbox>,
 ) {
     if !ui.open || *focus != InputFocus::Pockets {
         return;
     }
-    if renderer.is_some_and(|r| r.hand_busy()) {
+    if renderer.as_ref().is_some_and(|r| r.hand_busy()) {
         actions.consume(Action::Confirm);
         actions.consume(Action::Interact);
         return;
@@ -163,6 +166,28 @@ fn pockets_input(
         - i32::from(actions.just_pressed(Action::MoveLeft));
     let dy = i32::from(actions.just_pressed(Action::MoveDown))
         - i32::from(actions.just_pressed(Action::MoveUp));
+    if let Some(slot) = ui.mail_slot {
+        if dx < 0 && slot % 2 == 0 {
+            ui.mail_slot = None;
+            ui.selected = (slot / 2).saturating_sub(2) * 5 + 4;
+        } else if dx != 0 || dy != 0 {
+            ui.mail_slot = Some(
+                ((slot as i32 / 2 + dy).rem_euclid(5) * 2 + (slot as i32 % 2 + dx).rem_euclid(2))
+                    as usize,
+            );
+        }
+        if dx != 0 || dy != 0 {
+            crate::sound::se(crate::sound::se_id::CURSOR);
+            return;
+        }
+        if (actions.consume(Action::Confirm) || actions.consume(Action::Interact))
+            && slot < mailbox.letters.len()
+        {
+            mail.read_from_pockets(slot);
+            crate::sound::se(crate::sound::se_id::PAGE_OKURI);
+        }
+        return;
+    }
     if dx != 0 || dy != 0 {
         if let Some(choice) = ui.menu {
             let n = item_actions(
@@ -172,6 +197,12 @@ fn pockets_input(
             .len();
             ui.menu = Some((choice as i32 + dy).rem_euclid(n as i32) as usize);
         } else {
+            if dx > 0 && ui.selected % 5 == 4 && ui.grabbed.is_none() && renderer.is_some() {
+                // mTG_move_cursol_between_table_inventory_right: same Y.
+                ui.mail_slot = Some((ui.selected / 5 + 2) * 2);
+                crate::sound::se(crate::sound::se_id::CURSOR);
+                return;
+            }
             let col = (ui.selected as i32 % 5 + dx).rem_euclid(5);
             let row = (ui.selected as i32 / 5 + dy).rem_euclid(3);
             ui.selected = (row * 5 + col) as usize;
