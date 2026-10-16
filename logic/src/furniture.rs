@@ -1,3 +1,9 @@
+//! Furniture logic ported from rustimal-crossing.
+//!
+//! Pure Rust kernels for Animal Crossing furniture systems.
+//! Originally developed with C ABI for the PC port; now native Rust for Bevy.
+//! See rustimal-crossing rust/src/furniture.rs for the C-ABI version history.
+
 //! Furniture placement and house-interior runtime model.
 //!
 //! Source: GAFE01_00 Rev. 0 decomp, verified against the local tree.
@@ -106,7 +112,7 @@ pub fn ftr_no_rot_2_idx(no: u16, rot: u8) -> u16 {
 }
 /// `mRmTp_FtrIdx2FtrItemNo(idx, direct)`: index + cardinal direction -> saved item.
 pub fn ftr_idx_2_item_no(idx: u16, dir: Direction) -> u16 {
-    (idx << 2) | (dir as u16)
+    ((idx << 2) | (dir as u16)) & 0xFFFF
 }
 /// Inverse: saved item -> (furniture index, direction).
 pub fn ftr_item_no_2_idx_dir(item: u16) -> (u16, Direction) {
@@ -147,9 +153,10 @@ impl ShapeType {
     pub fn size_class(self) -> FurnitureSize {
         match self {
             ShapeType::TypeA => FurnitureSize::Size1x1,
-            ShapeType::TypeB90 | ShapeType::TypeB180 | ShapeType::TypeB270 | ShapeType::TypeB0 => {
-                FurnitureSize::Size1x2
-            }
+            ShapeType::TypeB90
+            | ShapeType::TypeB180
+            | ShapeType::TypeB270
+            | ShapeType::TypeB0 => FurnitureSize::Size1x2,
             ShapeType::TypeC => FurnitureSize::Size2x2,
         }
     }
@@ -175,7 +182,10 @@ impl ShapeType {
     pub fn unit_count(self) -> usize {
         match self {
             ShapeType::TypeA => 1,
-            ShapeType::TypeB90 | ShapeType::TypeB180 | ShapeType::TypeB270 | ShapeType::TypeB0 => 2,
+            ShapeType::TypeB90
+            | ShapeType::TypeB180
+            | ShapeType::TypeB270
+            | ShapeType::TypeB0 => 2,
             ShapeType::TypeC => 4,
         }
     }
@@ -747,9 +757,9 @@ pub fn judge_place_furniture(
         None => return PlaceJudge::MaxFurniture,
     };
 
-    let mut angle_idx = (player_facing_to_angle_idx(player_angle) as i32
-        + special_orientation_offset(ftr_idx) as i32)
-        & 3;
+    let mut angle_idx =
+        (player_facing_to_angle_idx(player_angle) as i32 + special_orientation_offset(ftr_idx) as i32)
+            & 3;
     let base_dir = match angle_idx {
         0 => Direction::South,
         1 => Direction::East,
@@ -841,19 +851,19 @@ pub fn judge_place_furniture(
         let (tx, tz) = look_at_unit(px, pz, base_dir, i);
 
         // ON_SURFACE 1x1 items go to layer 1 above SURFACE furniture.
-        if set_type == SetType::OnSurface
-            && shape == ShapeType::TypeA
-            && fg_layer1.get(tx, tz) == Some(EMPTY_NO)
-            && fg_layer0.get(tx, tz) != Some(EMPTY_NO)
-            && surface_below(tx, tz)
-        {
-            return PlaceJudge::Success {
-                actor_slot,
-                x: tx,
-                z: tz,
-                rotation: dir,
-                layer: layer::SECONDARY,
-            };
+        if set_type == SetType::OnSurface && shape == ShapeType::TypeA {
+            if fg_layer1.get(tx, tz) == Some(EMPTY_NO)
+                && fg_layer0.get(tx, tz) != Some(EMPTY_NO)
+                && surface_below(tx, tz)
+            {
+                return PlaceJudge::Success {
+                    actor_slot,
+                    x: tx,
+                    z: tz,
+                    rotation: dir,
+                    layer: layer::SECONDARY,
+                };
+            }
         }
 
         if shape != ShapeType::TypeC {
@@ -1064,29 +1074,40 @@ pub fn reserve_furniture(
 }
 
 /// C ABI: low-2-bit rotation of a saved furniture item (`FTR_GET_ROTATION`).
-#[no_mangle]
-pub extern "C" fn pc_ftr_get_rotation(item: u16) -> u8 {
+pub fn pc_ftr_get_rotation(item: u16) -> u8 {
     ftr_get_rotation(item)
 }
 
 /// C ABI: build a saved item number from furniture index + rotation
 /// (`FTR_NO_ROT_2_IDX`).
-#[no_mangle]
-pub extern "C" fn pc_ftr_no_rot_2_idx(ftr_no: u16, rot: u8) -> u16 {
+pub fn pc_ftr_no_rot_2_idx(ftr_no: u16, rot: u8) -> u16 {
     ftr_no_rot_2_idx(ftr_no, rot)
 }
 
 /// C ABI: quantize (sin, cos) of a runtime angle to a saved cardinal
 /// direction (`aMR_GetSaveAngle`); returns the `mRmTp_DIRECT_*` value.
-#[no_mangle]
-pub extern "C" fn pc_ftr_save_angle(sin_v: f32, cos_v: f32) -> u8 {
-    save_angle_quantize(sin_v, cos_v) as u8
+pub fn pc_ftr_save_angle(sin_v: f32, cos_v: f32) -> u8 {
+    // Matches C aMR_GetSaveAngle exactly: two independent chains.
+    // sin chain: EAST (1) if sin>0.8, WEST (3) if sin<-0.8
+    // cos chain: SOUTH (0) if cos>0.8, NORTH (2) if cos<-0.8
+    // Returns the OR of both (C does item |= EAST etc.)
+    let mut dir: u8 = 0;
+    if sin_v > 0.8 {
+        dir |= 1; // mRmTp_DIRECT_EAST
+    } else if sin_v < -0.8 {
+        dir |= 3; // mRmTp_DIRECT_WEST
+    }
+    if cos_v > 0.8 {
+        dir |= 0; // mRmTp_DIRECT_SOUTH (no-op, kept for clarity)
+    } else if cos_v < -0.8 {
+        dir |= 2; // mRmTp_DIRECT_NORTH
+    }
+    dir
 }
 
 /// C ABI: number of storage slots per storage-capable furniture actor
 /// (`aFTR_KEEP_ITEM_COUNT`).
-#[no_mangle]
-pub extern "C" fn pc_furniture_storage_slots() -> usize {
+pub fn pc_furniture_storage_slots() -> usize {
     FTR_KEEP_ITEM_COUNT
 }
 
@@ -1094,8 +1115,7 @@ pub extern "C" fn pc_furniture_storage_slots() -> usize {
 /// (`aMR_GetSceneFurnitureMax`). Kinds: 0=NPC house, 1=small, 2=medium,
 /// 3=large, 4=upper, 5=basement, 6=cottage, 7=museum painting,
 /// 8=museum fossil, 9=shop.
-#[no_mangle]
-pub extern "C" fn pc_scene_furniture_max(kind: u8) -> usize {
+pub fn pc_scene_furniture_max(kind: u8) -> usize {
     let k = match kind {
         0 => SceneKind::NpcHouse,
         1 => SceneKind::SmallPlayerRoom,
@@ -1112,32 +1132,27 @@ pub extern "C" fn pc_scene_furniture_max(kind: u8) -> usize {
 }
 
 /// C ABI: 1 when `(x, z)` is inside the 8x8 normal interior (`aMR_BOUNDS_OK`).
-#[no_mangle]
-pub extern "C" fn pc_room_bounds_ok(x: i32, z: i32) -> u8 {
+pub fn pc_room_bounds_ok(x: i32, z: i32) -> u8 {
     RoomLayer::bounds_ok(x, z) as u8
 }
 
 /// C ABI: switch-bit index for an interior cell, or 0xFF when out of bounds.
-#[no_mangle]
-pub extern "C" fn pc_switch_bit_index(x: i32, z: i32) -> u8 {
+pub fn pc_switch_bit_index(x: i32, z: i32) -> u8 {
     RoomLayer::switch_bit_index(x, z).unwrap_or(0xFF)
 }
 
 /// C ABI: second-layer placement query (`aMR_JudgePlace2ndLayer`).
-#[no_mangle]
-pub extern "C" fn pc_judge_place_2nd_layer(below_is_surface: u8, layer1_empty: u8) -> u8 {
+pub fn pc_judge_place_2nd_layer(below_is_surface: u8, layer1_empty: u8) -> u8 {
     judge_place_2nd_layer(below_is_surface != 0, layer1_empty != 0) as u8
 }
 
 /// C ABI: storage predicate (`aFTR_IS_STORAGE`).
-#[no_mangle]
-pub extern "C" fn pc_ftr_is_storage(interaction_type: u16) -> u8 {
+pub fn pc_ftr_is_storage(interaction_type: u16) -> u8 {
     is_storage(interaction_type) as u8
 }
 
 /// C ABI: furniture weight (`aMR_GetWeight` always returns 1).
-#[no_mangle]
-pub extern "C" fn pc_furniture_weight() -> u32 {
+pub fn pc_furniture_weight() -> u32 {
     furniture_weight()
 }
 
@@ -1199,14 +1214,8 @@ mod tests {
         assert_eq!(player_facing_to_angle_idx(0xC000), Direction::East); // +180 = 0x4000
         assert_eq!(player_facing_to_angle_idx(0x4000), Direction::West); // +180 = 0xC000
         assert_eq!(special_orientation_offset(special_furniture::STEGO_HEAD), 1);
-        assert_eq!(
-            special_orientation_offset(special_furniture::BALLOON_COMMON0),
-            1
-        );
-        assert_eq!(
-            special_orientation_offset(special_furniture::BALLOON_COMMON7),
-            1
-        );
+        assert_eq!(special_orientation_offset(special_furniture::BALLOON_COMMON0), 1);
+        assert_eq!(special_orientation_offset(special_furniture::BALLOON_COMMON7), 1);
         assert_eq!(special_orientation_offset(special_furniture::FROG), 2);
         assert_eq!(special_orientation_offset(0), 0);
     }
@@ -1306,13 +1315,7 @@ mod tests {
             true,
         );
         match r {
-            PlaceJudge::Success {
-                x,
-                z,
-                rotation,
-                layer,
-                ..
-            } => {
+            PlaceJudge::Success { x, z, rotation, layer, .. } => {
                 assert_eq!((x, z), (4, 4));
                 assert_eq!(rotation, Direction::North);
                 assert_eq!(layer, layer::MAIN);
@@ -1322,40 +1325,16 @@ mod tests {
         // Not flat -> CantPlace.
         assert_eq!(
             judge_place_furniture(
-                &room,
-                (4, 4),
-                0,
-                10,
-                ShapeType::TypeA,
-                SetType::Normal,
-                false,
-                &surf,
-                &fg0,
-                &fg1,
-                &occupied,
-                false,
-                true,
-                true
+                &room, (4, 4), 0, 10, ShapeType::TypeA, SetType::Normal, false, &surf,
+                &fg0, &fg1, &occupied, false, true, true
             ),
             PlaceJudge::CantPlace
         );
         // Not owned -> OtherRoom.
         assert_eq!(
             judge_place_furniture(
-                &room,
-                (4, 4),
-                0,
-                10,
-                ShapeType::TypeA,
-                SetType::Normal,
-                false,
-                &surf,
-                &fg0,
-                &fg1,
-                &occupied,
-                true,
-                false,
-                true
+                &room, (4, 4), 0, 10, ShapeType::TypeA, SetType::Normal, false, &surf,
+                &fg0, &fg1, &occupied, true, false, true
             ),
             PlaceJudge::OtherRoom
         );
@@ -1363,20 +1342,8 @@ mod tests {
         let full = MyRoomRuntime::new(0);
         assert_eq!(
             judge_place_furniture(
-                &full,
-                (4, 4),
-                0,
-                10,
-                ShapeType::TypeA,
-                SetType::Normal,
-                false,
-                &surf,
-                &fg0,
-                &fg1,
-                &occupied,
-                true,
-                true,
-                true
+                &full, (4, 4), 0, 10, ShapeType::TypeA, SetType::Normal, false, &surf,
+                &fg0, &fg1, &occupied, true, true, true
             ),
             PlaceJudge::MaxFurniture
         );
@@ -1413,20 +1380,8 @@ mod tests {
         }
         assert_eq!(
             judge_place_furniture(
-                &room,
-                (4, 4),
-                0,
-                10,
-                ShapeType::TypeA,
-                SetType::Normal,
-                false,
-                &surf,
-                &fg0,
-                &fg1,
-                &occ,
-                true,
-                true,
-                true
+                &room, (4, 4), 0, 10, ShapeType::TypeA, SetType::Normal, false, &surf,
+                &fg0, &fg1, &occ, true, true, true
             ),
             PlaceJudge::CantPlace
         );
