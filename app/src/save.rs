@@ -36,10 +36,27 @@ const SAVE_FILE_NAME: &str = "savegame.json";
 const SAVE_VERSION: u32 = 1;
 const NOTIFY_DURATION_SECS: f32 = 2.5;
 
+/// Philip's chosen identity until the deferred introduction supplies names.
+#[derive(Resource, Serialize, Deserialize, Clone)]
+pub(crate) struct PlayerIdentity {
+    pub player: String,
+    pub town: String,
+}
+impl Default for PlayerIdentity {
+    fn default() -> Self {
+        Self {
+            player: "phi".into(),
+            town: "woponese".into(),
+        }
+    }
+}
+
 /// Serializable snapshot of game state.
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub struct SaveData {
     pub version: u32,
+    #[serde(default)]
+    pub(crate) identity: PlayerIdentity,
     pub town_seed: u32,
     pub player_pos: [f32; 3],
     pub bells: u32,
@@ -180,6 +197,12 @@ fn new_player_seed() -> u32 {
 /// Startup systems (town gen, player spawn, item spawn) can use them.
 fn init_save(mut commands: Commands) {
     let loaded = read_save();
+    commands.insert_resource(
+        loaded
+            .as_ref()
+            .map(|s| s.identity.clone())
+            .unwrap_or_default(),
+    );
     match &loaded {
         Some(s) => {
             println!(
@@ -339,6 +362,7 @@ fn collect_save(
     };
     SaveData {
         version: SAVE_VERSION,
+        identity: PlayerIdentity::default(),
         town_seed: seed.0,
         player_pos,
         bells: inventory.bells,
@@ -444,7 +468,11 @@ fn quick_save(
     quest: Res<crate::quest::QuestState>,
     mut timer: ResMut<NotifyTimer>,
     notify_query: Query<&mut Text, With<NotifyText>>,
-    (look, roster): (Res<PlayerLook>, Option<Res<crate::roster::TownRoster>>),
+    (look, roster, identity): (
+        Res<PlayerLook>,
+        Option<Res<crate::roster::TownRoster>>,
+        Res<PlayerIdentity>,
+    ),
 ) {
     // World focus only: saving or loading mid-UI would leave that UI stale.
     // F5, or Save in the pause menu (taken once play resumes).
@@ -470,6 +498,7 @@ fn quick_save(
         &quest,
     );
     save.player_face = Some(look.face as u8);
+    save.identity = identity.clone();
     save.player_cloth = Some(look.cloth as u16);
     if let Some(r) = roster {
         save.villagers = Some(r.residents.iter().map(|e| e.index).collect());
@@ -490,11 +519,12 @@ fn quick_save(
 /// and ground items (despawn all, respawn everything not marked picked).
 fn quick_load(
     // One tuple param: these systems are at Bevy's 16-parameter limit.
-    (actions, focus, mut audio_reset, mut net): (
+    (actions, focus, mut audio_reset, mut net, mut identity): (
         Res<Actions>,
         Res<InputFocus>,
         MessageWriter<crate::sound::ResetAudio>,
         ResMut<crate::player_tools::NetAction>,
+        ResMut<PlayerIdentity>,
     ),
     mut player_query: Query<&mut Transform, With<Player>>,
     field: Option<ResMut<FieldItems>>,
@@ -516,6 +546,7 @@ fn quick_load(
         return;
     };
     net.cancel();
+    *identity = save.identity.clone();
 
     if let Ok(mut transform) = player_query.single_mut() {
         transform.translation = Vec3::from_array(save.player_pos);

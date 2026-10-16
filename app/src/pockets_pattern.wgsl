@@ -12,7 +12,7 @@
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let pixel = vec2((in.world_position.x-offset.x)/16.0+160.0,
                      120.0-in.world_position.y/16.0);
-    let uv = (pixel+vec2(offset.y,0.0))/32.0;
+    let uv = (pixel+vec2(offset.y))/32.0;
     let rgb = textureSample(cloth,cloth_sampler,uv).rgb;
     let alpha = textureSample(mask,mask_sampler,in.uv).a;
     if alpha < 0.01 { discard; }

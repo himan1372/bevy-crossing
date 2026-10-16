@@ -538,6 +538,19 @@ fn slot_at(slot: usize) -> Vec2 {
     )
 }
 
+/// mHD_hand_pos_get + mHD_hand_ovl_draw, CLOSE_KEEP offsets (10,2).
+/// The carried icon is displaced from the pocket center, exposing its rim.
+fn held_item_offset() -> Vec2 {
+    let (sin_z, cos_z) = 70.3125_f32.to_radians().sin_cos();
+    let cos_x = (-135.0_f32).to_radians().cos();
+    let target_x = -5.0 + 10.0 * cos_z - 2.0 * cos_x * sin_z + 4.0 - 2.5;
+    let target_y = 12.0 + 10.0 * sin_z + 2.0 * cos_x * cos_z - 4.0 + 2.5;
+    Vec2::new(
+        target_x - 6.9 * cos_z - 7.0 * cos_x * sin_z,
+        -(target_y - 6.9 * sin_z + 7.0 * cos_x * cos_z - 10.0),
+    )
+}
+
 fn animate(
     time: Res<Time>,
     ui: Res<PocketsUi>,
@@ -657,13 +670,12 @@ fn animate(
     }
     for (entity, carry) in &carries {
         if let Ok(mut t) = transforms.get_mut(entity) {
-            let delta = hand_at - Vec2::new(6.0, -6.0) - carry.0;
+            let delta = hand_at - Vec2::new(6.0, -6.0) + held_item_offset() - carry.0;
             t.translation = Vec3::new(delta.x * 16.0, -delta.y * 16.0, carry.1);
         }
     }
     // mSM_menu_control_move supplies the 0.3535/tick rate and integer
-    // quarter-texel offsets. Philip requests horizontal leftward scrolling;
-    // sample progressively rightward in the texture, without a Y offset.
+    // quarter-texel offsets. Sample down/right so the cloth moves up/left.
     assets.scroll = (assets.scroll + 0.3535 * ticks).rem_euclid(1024.0);
     let phase = assets.scroll * 0.25;
     for pattern in &assets.patterns {
@@ -713,6 +725,7 @@ fn draw(
     font: Res<MsgAssets>,
     ui: Res<PocketsUi>,
     inventory: Res<PlayerInventory>,
+    identity: Res<crate::save::PlayerIdentity>,
     focus: Res<crate::input::InputFocus>,
     mut assets: ResMut<PocketAssets>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -772,7 +785,7 @@ fn draw(
         ));
         assets.root = Some(root);
     }
-    if !fresh && !ui.is_changed() && !inventory.is_changed() {
+    if !fresh && !ui.is_changed() && !inventory.is_changed() && !identity.is_changed() {
         return;
     }
     if let Some(old) = assets.dynamic.take() {
@@ -887,7 +900,28 @@ fn draw(
             141.0,
         );
     }
-    let money = format!("{}", inventory.bells);
+    // mIV_SetLineStrings_centering: town then player, source scale/colors.
+    for (name, origin, scale, color) in [
+        (
+            &identity.town,
+            Vec2::new(105.0, 52.0),
+            28,
+            [60, 80, 110, 255],
+        ),
+        (
+            &identity.player,
+            Vec2::new(111.0, 64.0),
+            30,
+            [70, 70, 100, 255],
+        ),
+    ] {
+        let name: String = name.chars().take(8).collect();
+        let text = scaled_text(&name, scale);
+        let at = origin + Vec2::new((90.0 - text_width(&text, &font.widths)).max(0.0) * 0.5, 0.0);
+        paint.text(&font, &text, at, color, 130.0);
+    }
+    // mIV_set_money uses 0.875 scale and the same right edge.
+    let money = scaled_text(&inventory.bells.to_string(), 28);
     paint.text(
         &font,
         &money,
@@ -932,6 +966,11 @@ fn draw(
             }
         }
     }
+}
+
+fn scaled_text(text: &str, scale: u8) -> String {
+    use crate::messages::markup;
+    format!("{}{}{text}", markup::LINE_SCALE, markup::arg(scale))
 }
 
 pub struct PocketDiscPlugin;

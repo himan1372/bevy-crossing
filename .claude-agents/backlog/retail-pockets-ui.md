@@ -136,3 +136,29 @@ gift carry/cancel, sapling/gyroid swap followed by release and menu reopen.
 Screenshots stay in Temp; no user save/settings or disc bytes are committed.
 Check/clippy/fmt, capture and default builds pass; no tests added or run.
 Philip comparison acceptance remains pending and M4 remains open.
+
+## Diagonal scroll, held offset and identity, 2026-10-16
+
+Philip now specifies up-left scrolling instead of horizontal-only, a crescent
+of pocket rim around the picked-up item, identity labels and smaller bells.
+Inspected plat-test-pics/Screenshot 2026-10-16 152928.png. Philip supplies player
+`phi` and town `woponese` (the reference picture's player text is not substituted).
+
+- Shared cloth sampling advances equally in both screen axes, moving up-left.
+- Carried icon/shadow uses mHD_hand_pos_get/mHD_hand_ovl_draw CLOSE_KEEP
+  offsets and X/Z rotation math, rather than staying centered over a pocket.
+  Ordinary resting icons retain the previously corrected grid alignment.
+- Town and player text use mIV_SetLineStrings_centering positions, colors and
+  scales (0.875/0.9375). Bells uses mIV_set_money's 0.875 scale/right alignment.
+- Added PlayerIdentity and a backward-compatible defaulted JSON identity field.
+  Old saves and new towns use Philip's chosen names; future saves preserve the
+  resource and F9 restores it. Introduction/rename UI stays deferred. Dialogue's
+  existing placeholder-name substitution remains separate follow-up scope.
+
+Final disposable-town review shows the source-offset held gift/rim, restored
+item after Cancel, the requested names, smaller bells and diagonal pattern at
+different times. F5 wrote only the Temp save with phi/woponese, 15 pockets,
+12345 bells and condition bits1; F9/reopen retained the labels and inventory.
+Check/clippy/fmt and capture/default builds pass, no tests added or run. Real
+save hash and settings unchanged. Full retail visual acceptance, including
+exact recessed-slot appearance and remaining hand/tag fidelity, stays pending.
