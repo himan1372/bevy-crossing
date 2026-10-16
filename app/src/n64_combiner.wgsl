@@ -140,7 +140,7 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     var i: Inputs;
     i.texel = vec4(1.0);
     if (cc.flags & FLAG_TEXTURED) != 0u {
-        i.texel = textureSample(tex, tex_sampler, in.uv);
+        i.texel = textureSample(tex, tex_sampler, in.uv + cc.extra.yz);
     }
 
     // Shade: vertex colour, or the scene's ambient + sun + moon lights.

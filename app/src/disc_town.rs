@@ -267,7 +267,7 @@ pub struct RetailLayout {
     pub player_home_bodies: [Option<PlayerHomeBody>; 4],
     /// Occupied board units, including the non-drawing second half.
     pub board_cells: HashSet<(usize, usize, usize, usize)>,
-    /// Shop, post office, police box, museum and tailor, as placed.
+    /// Public buildings and the wishing fountain, as placed.
     pub buildings: Vec<RetailBuilding>,
     /// Each playable acre's field items (`mActor_name_t`, row by row),
     /// from its layout; objects the plan moved aside are emptied.
@@ -365,7 +365,7 @@ struct BuildingSpec {
     shift: (f32, f32),
 }
 
-const BUILDINGS: [BuildingSpec; 5] = [
+const BUILDINGS: [BuildingSpec; 6] = [
     // ac_shop.c: x -20, z +20.
     BuildingSpec {
         item: 0x5804,
@@ -411,6 +411,15 @@ const BUILDINGS: [BuildingSpec; 5] = [
         palette: 93, // aSTR_PAL_TAILOR
         shift: (-20.0, 20.0),
     },
+    // ac_shrine.c::aSHR_actor_ct (WISHING_WELL).
+    BuildingSpec {
+        item: 0x5825,
+        prefix: "shrine",
+        parts: &["trunk", "figure", "base", "statue"],
+        light: "",
+        palette: 63, // aSTR_PAL_SHRINE
+        shift: (20.0, -19.0),
+    },
 ];
 
 /// Game units per cell.
@@ -443,7 +452,13 @@ fn place_buildings(
         };
         let spec = &BUILDINGS[spec_index];
         let prefix = format!("obj_s_{}", spec.prefix);
-        let lists = part_lists(&disc.catalog, &prefix, spec.parts);
+        // The tree overhang is visual, not the fountain's solid basin.
+        let footprint_parts = if spec.prefix == "shrine" {
+            &["base"][..]
+        } else {
+            spec.parts
+        };
+        let lists = part_lists(&disc.catalog, &prefix, footprint_parts);
         if lists.is_empty() {
             continue;
         }
@@ -538,7 +553,14 @@ fn spawn_buildings(
         if let Some((list, _, _)) = &door_pose {
             lists.retain(|l| l != list);
         }
-        let mut model = build_model(disc, &lists, palette, meshes, materials, images);
+        let (mut model, flow) = if spec.prefix == "shrine" {
+            fountain_model(disc, &prefix, palette, (meshes, materials, images))
+        } else {
+            (
+                build_model(disc, &lists, palette, meshes, materials, images),
+                Vec::new(),
+            )
+        };
         let window_lights = match spec.prefix {
             "tailor" => &mut lights.tailor,
             "shop1" => &mut lights.cranny,
@@ -565,6 +587,12 @@ fn spawn_buildings(
                 Visibility::default(),
             ))
             .id();
+        if !flow.is_empty() {
+            commands.entity(root).insert(FountainFlow {
+                frame: 0.0,
+                materials: flow,
+            });
+        }
         for (mesh, material) in &model {
             commands.spawn((
                 Mesh3d(mesh.clone()),
@@ -604,6 +632,119 @@ fn spawn_buildings(
                 (meshes, materials, images),
             ) {
                 commands.spawn((Mesh3d(mesh), MeshMaterial3d(material), ChildOf(door_root)));
+            }
+        }
+    }
+}
+
+type FountainMaterials = Vec<(Handle<N64Material>, Vec2)>;
+
+#[derive(Component)]
+struct FountainFlow {
+    frame: f32,
+    materials: FountainMaterials,
+}
+
+/// aSHR_actor_draw: opaque shrine parts, seasonal cedar foliage, then
+/// translucent water/spray/bubbles with independent texture scrolls.
+fn fountain_model(
+    disc: &GameDisc,
+    prefix: &str,
+    palette: Option<u32>,
+    (meshes, materials, images): (
+        &mut Assets<Mesh>,
+        &mut Assets<N64Material>,
+        &mut Assets<Image>,
+    ),
+) -> (Vec<(Handle<Mesh>, Handle<N64Material>)>, FountainMaterials) {
+    let mut model = build_model(
+        disc,
+        &part_lists(
+            &disc.catalog,
+            prefix,
+            &["trunk", "figure", "base", "statue"],
+        ),
+        palette,
+        meshes,
+        materials,
+        images,
+    );
+    let term = current_term();
+    let leaf = if term == 4 {
+        "obj_f_tree_leaf_tex"
+    } else if is_winter(term) {
+        "obj_w_tree_leaf_tex"
+    } else {
+        "obj_s_tree3_leaf_tex"
+    };
+    let tree_pal = disc.catalog.get("mFM_obj_tree_01_pal_dol").map(|p| {
+        p.offset + TREE_PAL_IDX[term % 18] % (p.size / PALETTE_BYTES).max(1) * PALETTE_BYTES
+    });
+    let mut segs = Segments::default();
+    if let Some(bytes) = tree_pal.and_then(|p| disc.rom.slice(RomSource::Rel, p, PALETTE_BYTES)) {
+        segs.set_segment(9, bytes.into());
+    }
+    if let Some(bytes) = disc
+        .catalog
+        .get(leaf)
+        .and_then(|a| disc.rom.slice(RomSource::Rel, a.offset, a.size))
+    {
+        segs.set_segment(10, bytes.into());
+    }
+    model.extend(build_model_full(
+        disc,
+        &part_lists(&disc.catalog, prefix, &["leaf"]),
+        None,
+        DrawColors {
+            prim: [255; 4],
+            prim_lod: 255,
+            env: [0; 4],
+        },
+        false,
+        (&segs, &[]),
+        (meshes, materials, images),
+    ));
+    let mut flow = Vec::new();
+    // Offsets are quarter texels per texture_frame, normalized by the
+    // original tile dimensions. TEXEL1 still uses the shared combiner's
+    // existing TEXEL0 approximation; these animate the first tile only.
+    for (part, scroll) in [
+        ("water", Vec2::new(-50.0 / (4.0 * 32.0), 0.0)),
+        ("sprash", Vec2::new(0.0, 5.0 / (4.0 * 16.0))),
+        ("bubble", Vec2::new(0.0, -12.0 / (4.0 * 64.0))),
+    ] {
+        let overlay = build_model(
+            disc,
+            &part_lists(&disc.catalog, prefix, &[part]),
+            palette,
+            meshes,
+            materials,
+            images,
+        );
+        for (_, handle) in &overlay {
+            if let Some(mut material) = materials.get_mut(handle) {
+                material.blend = true;
+                material.combiner.flags |= crate::n64_material::FLAG_BLEND;
+            }
+            flow.push((handle.clone(), scroll));
+        }
+        model.extend(overlay);
+    }
+    (model, flow)
+}
+
+fn update_fountain_flow(
+    time: Res<Time>,
+    mut flows: Query<&mut FountainFlow>,
+    mut materials: ResMut<Assets<N64Material>>,
+) {
+    for mut flow in &mut flows {
+        flow.frame = (flow.frame + time.delta_secs() * 60.0) % 8192.0;
+        for (handle, scroll) in &flow.materials {
+            if let Some(mut material) = materials.get_mut(handle) {
+                let uv = (*scroll * flow.frame).rem_euclid(Vec2::ONE);
+                material.combiner.extra.y = uv.x;
+                material.combiner.extra.z = uv.y;
             }
         }
     }
@@ -2077,6 +2218,10 @@ impl Plugin for DiscTownPlugin {
         .add_systems(
             Update,
             (follow_ground, update_cranny_door).run_if(in_state(AppState::InGame)),
+        )
+        .add_systems(
+            Update,
+            update_fountain_flow.in_set(crate::states::GameplaySet),
         );
     }
 }

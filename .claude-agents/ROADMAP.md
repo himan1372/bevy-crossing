@@ -306,7 +306,11 @@ Temp-only town. Philip acceptance pending; see backlog/mailbox-flicker.md.
 **player-door-interaction** narrows player-home entry to a short ray aimed at
 the finite door panel. Left mailbox opens from street and left edge in preview;
 direct door entry works. Philip acceptance pending. Gyroid conversation handler
-is not implemented (render/animation exist). Wishing fountain restoration follows.
+is not implemented (render/animation exist). **wishing-fountain** restores the
+original layout actor, summer/winter meshes, foliage, translucent water layers
+and first-tile scrolling with basin collision. Seasonal preview evidence and
+remaining two-tile water/shadow/rating-conversation limits are recorded in
+backlog/wishing-fountain.md. Philip visual acceptance pending.
 
 #### Special-building comparison fixes (2026-10-15)
 

@@ -85,7 +85,7 @@ pub struct CombinerUniform {
     pub alpha1: UVec4,
     pub prim: Vec4,
     pub env: Vec4,
-    /// x = primitive LOD fraction.
+    /// x = primitive LOD fraction, yz = animated texture UV offset.
     pub extra: Vec4,
     pub flags: u32,
 }
