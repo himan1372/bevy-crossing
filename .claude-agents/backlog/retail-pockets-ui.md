@@ -55,8 +55,9 @@ from local C source and graphics from the disc, not assumed from that page.
 
 Inventory-specific run_inventory_frame exposes tile1 coverage without changing
 the global world-model TEXEL1 fallback. Runtime CPU composition combines that
-coverage with the default cloth pattern; colour scroll updates retain the fixed
-mask. UI I4 intensity supplies coverage, avoiding opaque white strips. Explicit
+coverage with the default cloth pattern in the first pass. The correction below
+replaces that CPU composition with shared GPU sampling. UI I4 intensity supplies
+coverage, avoiding opaque white strips. Explicit
 per-part depths preserve retail list order for transparent layers on reopening.
 The player walks at0.5 source frames/tick, hand points at0.275/catches at0.45,
 and scroll advances0.3535 per60Hz tick with quarter-texel offsets. Philip requests
@@ -80,9 +81,8 @@ save was written to inspect this result. Movement while pockets owns focus stays
 at the same world position. Local Qwen reviewed the bounded swap/condition code;
 its conclusion was checked against the original hand swap and inventory helpers.
 
-Port adaptations/follow-ups: preview and hand use the existing orthographic
-overlay rather than separate retail perspective views; cursor easing, five-row
-mail integration, identity fields and full original tag layout/popup placement
+Port adaptations/follow-ups: five-row mail integration, identity fields and full
+original tag layout/popup placement
 need further retail comparison. The existing choice window supplies action
 windows. Only Grab/swap and already-supported normal net/rod equipment are
 exposed; eating, dropping/placing, clothing changes, gift opening, letters,
@@ -106,3 +106,33 @@ Workspace check, all-target clippy with warnings denied and formatting pass;
 capture build/live review and normal workspace build recorded in comms.txt.
 No automated tests added or run. User save SHA256 remains unchanged; user
 settings were not edited. Claim released at handoff; Philip final acceptance pending.
+
+## Pockets motion and alignment correction, 2026-10-16
+
+Philip reports only the upper-left background moved in sync, rough player/hand
+motion, and present/shirt/fishing-pole/plant icons offset from their circles.
+These are unresolved feedback on the first pass, not final acceptance.
+
+- All cloth parts now share one panel-local GPU texture phase. Coverage retains
+  each part's own UVs; the entire cloth scrolls left continuously, with no CPU
+  image replacement or tile-size-dependent phase. Frame and circle masks stay fixed.
+- Player and hand now render into separate transparent perspective views using
+  original mSM_change_view/mIV_set_player/mHD camera, root scale and rotation.
+  Fixed source menu lighting replaces town lighting/fog only for these materials.
+  Source walk/point speeds remain unchanged. Ordinary pocket Grab keeps the
+  player walking; the source player catch clip belongs to the equipment table.
+- Hand closes, holds and reverses open at source speed; navigation/confirm waits
+  during close/release. Carried icon/shadow follows the eased hand, with source
+  shadow offset. Cancel stays available. Full original hand offset/morph/tag
+  behavior remains a fidelity follow-up.
+- Disc inv_mwin_v vertices for all15 circles confirm centers on columns
+  -77,-53,-29,-5,19 and rows -10,-34,-58. Removed mSM's separate item-view X
+  correction from the shared orthographic frame/icon layout. Every icon, pointer
+  target and carried-item destination now uses those same centers.
+
+Manual disposable-town screenshots reviewed: all15 filled slots, unobstructed
+gift/shirt/rod and plant, shared pattern at separate times, player/hand movement,
+gift carry/cancel, sapling/gyroid swap followed by release and menu reopen.
+Screenshots stay in Temp; no user save/settings or disc bytes are committed.
+Check/clippy/fmt, capture and default builds pass; no tests added or run.
+Philip comparison acceptance remains pending and M4 remains open.

@@ -46,6 +46,8 @@ pub const FLAG_OPAQUE: u32 = 128;
 pub const FLAG_GROUND_DECAL: u32 = 256;
 /// Mailbox shell/lid have separate opposing inside and outside faces.
 pub const FLAG_CULL_BACK: u32 = 512;
+/// Submenu portrait/cursor use mSM_change_view's fixed lights, not town time.
+pub(crate) const FLAG_MENU_LIGHTING: u32 = 1024;
 
 /// Mux selectors for one cycle: colour a b c d, alpha a b c d.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

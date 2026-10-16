@@ -247,7 +247,9 @@ fn update_environment(
         light.uniform()
     };
     for (_, material) in materials.iter_mut() {
-        material.env = env;
+        if material.combiner.flags & crate::n64_material::FLAG_MENU_LIGHTING == 0 {
+            material.env = env;
+        }
     }
     // Rooms stand in black (no sky).
     let [r, g, b] = if indoors {

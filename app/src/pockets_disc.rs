@@ -2,10 +2,12 @@
 //! All graphics and icon pointer tables are read from the user's disc.
 use std::collections::HashMap;
 
-use bevy::asset::RenderAssetUsages;
+use bevy::asset::{embedded_asset, RenderAssetUsages};
 use bevy::camera::visibility::RenderLayers;
+use bevy::camera::RenderTarget;
 use bevy::prelude::*;
-use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+use bevy::render::render_resource::{AsBindGroup, Extent3d, TextureDimension, TextureFormat};
+use bevy::shader::ShaderRef;
 use disc::{
     gx_texture::{self, GxFormat, TlutFormat},
     RomSource, Target,
@@ -30,27 +32,49 @@ struct UiRig {
     speed: f32,
     catch: Option<Animation>,
     grabbing: bool,
+    releasing: bool,
 }
 
 struct PatternTile {
-    image: Handle<Image>,
-    mask: Vec<u8>,
-    width: usize,
+    source: Handle<N64Material>,
+    material: Handle<PocketPattern>,
+}
+
+/// One continuous screen-space cloth tile, independently masked per part.
+#[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
+struct PocketPattern {
+    #[uniform(0)]
+    offset: Vec4,
+    #[texture(1)]
+    #[sampler(2)]
+    cloth: Handle<Image>,
+    #[texture(3)]
+    #[sampler(4)]
+    mask: Handle<Image>,
+}
+impl Material for PocketPattern {
+    fn fragment_shader() -> ShaderRef {
+        "embedded://bevy_crossing/pockets_pattern.wgsl".into()
+    }
+    fn alpha_mode(&self) -> AlphaMode {
+        AlphaMode::Blend
+    }
 }
 
 #[derive(Component)]
 struct PocketHand;
+#[derive(Component)]
+struct PocketCarry(Vec2, f32);
 
 #[derive(Resource)]
 pub(crate) struct PocketAssets {
     frame: Model,
-    preview: Model,
     hand: Model,
+    portrait: Handle<Image>,
+    hand_image: Handle<Image>,
     rigs: Vec<UiRig>,
     patterns: Vec<PatternTile>,
-    cloth: Vec<u8>,
     scroll: f32,
-    scroll_step: i32,
     slide: f32,
     slide_speed: f32,
     slide_ticks: f32,
@@ -61,6 +85,14 @@ pub(crate) struct PocketAssets {
     root: Option<Entity>,
     dynamic: Option<Entity>,
     white: Handle<Image>,
+}
+impl PocketAssets {
+    pub(crate) fn hand_busy(&self) -> bool {
+        self.rigs.iter().any(|r| {
+            r.releasing
+                || (r.grabbing && r.catch.as_ref().is_some_and(|a| r.frame < a.frames as f32))
+        })
+    }
 }
 
 fn image(rgba: Vec<u8>, w: u32, h: u32) -> Image {
@@ -136,6 +168,7 @@ fn build(
     materials: &mut Assets<N64Material>,
     images: &mut Assets<Image>,
     patterns: &mut Vec<PatternTile>,
+    pattern_materials: &mut Assets<PocketPattern>,
 ) -> Model {
     let lists: Vec<_> = entries
         .iter()
@@ -187,6 +220,16 @@ fn build(
                 gx_texture::decode(tex, GxFormat::C4, 32, 32, Some((pal, TlutFormat::Rgb5A3)))
             });
         if let Some(cloth) = cloth {
+            let cloth_key = crate::disc_gfx::TexKey {
+                img_addr: 0,
+                format: rustimal_logic::graphics::texture::GxTexFormat::C4,
+                width: 32,
+                height: 32,
+                wrap_s: 1,
+                wrap_t: 1,
+                tlut_addr: 0,
+            };
+            let cloth = images.add(crate::n64_material::texture_image(cloth, &cloth_key));
             for (part, (_, material)) in sink.parts.iter().zip(&model) {
                 if !part.key.two_cycle {
                     continue;
@@ -199,29 +242,15 @@ fn build(
                 else {
                     continue;
                 };
-                let rgba = mask
-                    .as_chunks::<4>()
-                    .0
-                    .iter()
-                    .enumerate()
-                    .flat_map(|(i, m)| {
-                        let x = i % key.width as usize;
-                        let y = i / key.width as usize;
-                        let c = ((y % 32) * 32 + x % 32) * 4;
-                        [cloth[c], cloth[c + 1], cloth[c + 2], m[3]]
-                    })
-                    .collect();
-                if let Some(mut mat) = materials.get_mut(material) {
-                    let mut texture = crate::n64_material::texture_image(rgba, key);
-                    texture.asset_usage = RenderAssetUsages::default();
-                    let handle = images.add(texture);
-                    mat.texture = Some(handle.clone());
-                    patterns.push(PatternTile {
-                        image: handle,
+                let mask = images.add(crate::n64_material::texture_image(mask, key));
+                patterns.push(PatternTile {
+                    source: material.clone(),
+                    material: pattern_materials.add(PocketPattern {
+                        offset: Vec4::ZERO,
+                        cloth: cloth.clone(),
                         mask,
-                        width: key.width as usize,
-                    });
-                }
+                    }),
+                });
             }
         }
     }
@@ -235,6 +264,7 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<N64Material>>,
     mut images: ResMut<Assets<Image>>,
+    mut pattern_materials: ResMut<Assets<PocketPattern>>,
 ) {
     let mut patterns = Vec::new();
     let mut rigs = Vec::new();
@@ -247,6 +277,7 @@ fn setup(
         &mut materials,
         &mut images,
         &mut patterns,
+        &mut pattern_materials,
     );
     for (kind, count, env) in [
         ("b", 15, [100, 100, 255, 255]),
@@ -265,6 +296,7 @@ fn setup(
                 &mut materials,
                 &mut images,
                 &mut patterns,
+                &mut pattern_materials,
             ));
         }
     }
@@ -281,6 +313,7 @@ fn setup(
         &mut materials,
         &mut images,
         &mut patterns,
+        &mut pattern_materials,
     ));
     let mut preview = Vec::new();
     if let Some(skeleton) = disc
@@ -323,6 +356,7 @@ fn setup(
                 speed: 0.5,
                 catch: None,
                 grabbing: false,
+                releasing: false,
             });
         }
     }
@@ -376,25 +410,34 @@ fn setup(
                 speed: 0.275,
                 catch,
                 grabbing: false,
+                releasing: false,
             });
         }
     }
+    // mSM_change_view's fixed ambient and directional light.
+    for (_, handle) in preview.iter().chain(&hand) {
+        if let Some(mut mat) = materials.get_mut(handle) {
+            mat.combiner.flags |= crate::n64_material::FLAG_MENU_LIGHTING;
+            mat.combiner.flags &= !crate::n64_material::FLAG_FOG;
+            mat.env = crate::n64_material::EnvUniform {
+                ambient: Vec4::new(105.0 / 255.0, 90.0 / 255.0, 90.0 / 255.0, 1.0),
+                sun_dir: Vec3::new(0.0, 1.0, 1.0).normalize().extend(0.0),
+                sun_color: Vec4::new(1.0, 1.0, 245.0 / 255.0, 1.0),
+                moon_color: Vec4::ZERO,
+                ..default()
+            };
+        }
+    }
+    let portrait = make_view(&mut commands, &mut images, &preview, 2, true);
+    let hand_image = make_view(&mut commands, &mut images, &hand, 3, false);
     commands.insert_resource(PocketAssets {
+        portrait,
+        hand_image,
         frame,
-        preview,
         hand,
         rigs,
         patterns,
-        cloth: disc
-            .player_cloth
-            .get(226 * 512..227 * 512)
-            .zip(disc.player_cloth_palettes.get(226 * 32..227 * 32))
-            .and_then(|(tex, pal)| {
-                gx_texture::decode(tex, GxFormat::C4, 32, 32, Some((pal, TlutFormat::Rgb5A3)))
-            })
-            .unwrap_or_default(),
         scroll: 0.0,
-        scroll_step: -1,
         slide: 300.0,
         slide_speed: 75.0,
         slide_ticks: 0.0,
@@ -408,10 +451,89 @@ fn setup(
     });
 }
 
-/// mTG_item_col_pos / line_pos, converted to 320x240 screen space.
+fn make_view(
+    commands: &mut Commands,
+    images: &mut Assets<Image>,
+    model: &Model,
+    layer: usize,
+    player: bool,
+) -> Handle<Image> {
+    let size = if player { 512 } else { 128 };
+    let image = images.add(Image::new_target_texture(
+        size,
+        size,
+        TextureFormat::Rgba8Unorm,
+        Some(TextureFormat::Rgba8UnormSrgb),
+    ));
+    let transform = if player {
+        Transform::from_scale(Vec3::splat(0.01))
+    } else {
+        Transform::from_xyz(0.0, 0.0, 77.0)
+            .with_scale(Vec3::splat(0.0004))
+            .with_rotation(Quat::from_euler(
+                EulerRot::ZYX,
+                70.3125_f32.to_radians(),
+                0.0,
+                -135.0_f32.to_radians(),
+            ))
+    };
+    for (mesh, material) in model {
+        commands.spawn((
+            Mesh3d(mesh.clone()),
+            MeshMaterial3d(material.clone()),
+            transform,
+            RenderLayers::layer(layer),
+        ));
+    }
+    let (eye, look, fov, near, far) = if player {
+        let angle = 12.65625_f32.to_radians();
+        (
+            Vec3::new(0.0, 25.0 + 330.0 * angle.sin(), 330.0 * angle.cos()),
+            Vec3::new(0.0, 25.0, 0.0),
+            20.0_f32,
+            100.0,
+            800.0,
+        )
+    } else {
+        (Vec3::new(0.0, 0.0, 80.0), Vec3::ZERO, 35.0, 1.0, 2000.0)
+    };
+    commands.spawn((
+        Name::new(if player {
+            "pockets portrait camera"
+        } else {
+            "pockets hand camera"
+        }),
+        Camera3d::default(),
+        Camera {
+            order: -2,
+            is_active: false,
+            clear_color: Color::NONE.into(),
+            ..default()
+        },
+        RenderTarget::Image(image.clone().into()),
+        Projection::Perspective(PerspectiveProjection {
+            fov: fov.to_radians(),
+            aspect_ratio: 1.0,
+            near,
+            far,
+            ..default()
+        }),
+        Transform::from_translation(eye).looking_at(look, Vec3::Y),
+        RenderLayers::layer(layer),
+        PocketView,
+    ));
+    image
+}
+
+#[derive(Component)]
+struct PocketView;
+
+/// mTG_item_col_pos / line_pos, matching the inv_mwin pocket-quad centers.
+/// Both frame and icons share this orthographic view: applying mSM's separate
+/// item-view X correction here would shift icons away from their circles.
 fn slot_at(slot: usize) -> Vec2 {
     Vec2::new(
-        160.0 + (-77.0 + 24.0 * (slot % 5) as f32) * 0.975,
+        83.0 + 24.0 * (slot % 5) as f32,
         130.0 + 24.0 * (slot / 5) as f32,
     )
 }
@@ -421,10 +543,15 @@ fn animate(
     ui: Res<PocketsUi>,
     mut assets: ResMut<PocketAssets>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut images: ResMut<Assets<Image>>,
+    mut pattern_materials: ResMut<Assets<PocketPattern>>,
     mut transforms: Query<&mut Transform>,
     hands: Query<Entity, With<PocketHand>>,
+    carries: Query<(Entity, &PocketCarry)>,
+    mut cameras: Query<&mut Camera, With<PocketView>>,
 ) {
+    for mut camera in &mut cameras {
+        camera.is_active = assets.root.is_some();
+    }
     let ticks = time.delta_secs() * 60.0;
     if ticks <= 0.0 || assets.root.is_none() {
         return;
@@ -455,16 +582,21 @@ fn animate(
     for rig in &mut assets.rigs {
         let grabbing = rig.catch.is_some() && ui.grabbed.is_some();
         if rig.grabbing != grabbing {
-            rig.frame = 1.0;
+            rig.releasing = !grabbing;
+            if grabbing {
+                rig.frame = 1.0;
+            }
             rig.grabbing = grabbing;
         }
-        let anim = if grabbing {
+        let anim = if grabbing || rig.releasing {
             rig.catch.as_ref().unwrap_or(&rig.animation)
         } else {
             &rig.animation
         };
         let end = anim.frames as f32;
-        rig.frame = if grabbing {
+        rig.frame = if rig.releasing {
+            (rig.frame - ticks * 0.45).max(1.0)
+        } else if grabbing {
             (rig.frame + ticks * 0.45).min(end)
         } else {
             1.0 + (rig.frame - 1.0 + ticks * rig.speed).rem_euclid((end - 1.0).max(1.0))
@@ -505,49 +637,38 @@ fn animate(
                     .collect::<Vec<_>>(),
             );
         }
+        if rig.releasing && rig.frame <= 1.0 {
+            rig.releasing = false;
+        }
     }
     let target = slot_at(ui.selected) + Vec2::new(6.0, -6.0);
-    let hand_at = assets.hand_at.lerp(target, 1.0 - 0.75_f32.powf(ticks));
+    let delta = target - assets.hand_at;
+    let distance = delta.length();
+    // mHD_hand_position_move/add_calc: ease, max6/min0.5 pixels/tick.
+    let step = (distance * (1.0 - 0.5_f32.sqrt().powf(ticks)))
+        .clamp(0.5 * ticks, 6.0 * ticks)
+        .min(distance);
+    let hand_at = assets.hand_at + delta.normalize_or_zero() * step;
     assets.hand_at = hand_at;
     for hand in &hands {
         if let Ok(mut t) = transforms.get_mut(hand) {
-            t.translation = screen(hand_at).with_z(180.0);
+            t.translation = Vec3::new(hand_at.x * 16.0, -hand_at.y * 16.0, 180.0);
+        }
+    }
+    for (entity, carry) in &carries {
+        if let Ok(mut t) = transforms.get_mut(entity) {
+            let delta = hand_at - Vec2::new(6.0, -6.0) - carry.0;
+            t.translation = Vec3::new(delta.x * 16.0, -delta.y * 16.0, carry.1);
         }
     }
     // mSM_menu_control_move supplies the 0.3535/tick rate and integer
     // quarter-texel offsets. Philip requests horizontal leftward scrolling;
     // sample progressively rightward in the texture, without a Y offset.
     assets.scroll = (assets.scroll + 0.3535 * ticks).rem_euclid(1024.0);
-    let step = assets.scroll as i32;
-    if step == assets.scroll_step || assets.cloth.is_empty() {
-        return;
-    }
-    assets.scroll_step = step;
-    let phase = (step & 127) as f32 * 0.25;
+    let phase = assets.scroll * 0.25;
     for pattern in &assets.patterns {
-        let Some(mut img) = images.get_mut(&pattern.image) else {
-            continue;
-        };
-        let Some(data) = img.data.as_mut() else {
-            continue;
-        };
-        for (i, p) in data.as_chunks_mut::<4>().0.iter_mut().enumerate() {
-            let x = i % pattern.width;
-            let y = i / pattern.width;
-            let sx = x as f32 + phase;
-            let sy = y as f32;
-            let ix = sx.floor() as usize;
-            let iy = sy.floor() as usize;
-            let fx = sx.fract();
-            let fy = sy.fract();
-            for (c, out) in p.iter_mut().take(3).enumerate() {
-                let read =
-                    |x: usize, y: usize| assets.cloth[((y % 32) * 32 + x % 32) * 4 + c] as f32;
-                let a = read(ix, iy) * (1.0 - fx) + read(ix + 1, iy) * fx;
-                let b = read(ix, iy + 1) * (1.0 - fx) + read(ix + 1, iy + 1) * fx;
-                *out = (a * (1.0 - fy) + b * fy) as u8;
-            }
-            p[3] = pattern.mask[i * 4 + 3];
+        if let Some(mut material) = pattern_materials.get_mut(&pattern.material) {
+            material.offset = Vec4::new(assets.slide * 16.0, phase, 0.0, 0.0);
         }
     }
 }
@@ -559,20 +680,22 @@ struct Paint<'a, 'w, 's> {
     root: Entity,
 }
 impl Paint<'_, '_, '_> {
-    fn put(&mut self, mesh: Mesh, tex: Handle<Image>, tint: Color, z: f32) {
-        self.commands.spawn((
-            Mesh3d(self.meshes.add(mesh)),
-            MeshMaterial3d(self.materials.add(StandardMaterial {
-                base_color: tint,
-                base_color_texture: Some(tex),
-                unlit: true,
-                alpha_mode: AlphaMode::Blend,
-                ..default()
-            })),
-            Transform::from_xyz(0.0, 0.0, z),
-            RenderLayers::layer(1),
-            ChildOf(self.root),
-        ));
+    fn put(&mut self, mesh: Mesh, tex: Handle<Image>, tint: Color, z: f32) -> Entity {
+        self.commands
+            .spawn((
+                Mesh3d(self.meshes.add(mesh)),
+                MeshMaterial3d(self.materials.add(StandardMaterial {
+                    base_color: tint,
+                    base_color_texture: Some(tex),
+                    unlit: true,
+                    alpha_mode: AlphaMode::Blend,
+                    ..default()
+                })),
+                Transform::from_xyz(0.0, 0.0, z),
+                RenderLayers::layer(1),
+                ChildOf(self.root),
+            ))
+            .id()
     }
     fn text(&mut self, font: &MsgAssets, text: &str, at: Vec2, color: [u8; 4], z: f32) {
         self.put(
@@ -619,28 +742,34 @@ fn draw(
             ))
             .id();
         for (index, (mesh, material)) in assets.frame.iter().enumerate() {
-            commands.spawn((
+            let mut entity = commands.spawn((
                 Mesh3d(mesh.clone()),
-                MeshMaterial3d(material.clone()),
                 // Retail issues these blended layers in list order. Bevy
                 // needs distinct depths; entity IDs change after reopening.
                 Transform::from_xyz(0.0, 0.0, index as f32 * 0.1),
                 RenderLayers::layer(1),
                 ChildOf(root),
             ));
+            if let Some(pattern) = assets.patterns.iter().find(|p| p.source == *material) {
+                entity.insert(MeshMaterial3d(pattern.material.clone()));
+            } else {
+                entity.insert(MeshMaterial3d(material.clone()));
+            }
         }
         // The current player appearance in the upper-left preview well.
-        // Orthographic adaptation of mIV_set_player's separate perspective view.
-        for (mesh, material) in &assets.preview {
-            commands.spawn((
-                Mesh3d(mesh.clone()),
-                MeshMaterial3d(material.clone()),
-                Transform::from_translation(screen(Vec2::new(83.0, 98.0)).with_z(80.0))
-                    .with_scale(Vec3::splat(0.16)),
-                RenderLayers::layer(1),
-                ChildOf(root),
-            ));
-        }
+        // Composite mIV_set_player's separate perspective view.
+        commands.spawn((
+            Mesh3d(meshes.add(quad_mesh(Vec2::new(20.0, 9.0), Vec2::splat(128.0)))),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color_texture: Some(assets.portrait.clone()),
+                unlit: true,
+                alpha_mode: AlphaMode::Blend,
+                ..default()
+            })),
+            Transform::from_xyz(0.0, 0.0, 80.0),
+            RenderLayers::layer(1),
+            ChildOf(root),
+        ));
         assets.root = Some(root);
     }
     if !fresh && !ui.is_changed() && !inventory.is_changed() {
@@ -698,12 +827,20 @@ fn draw(
         let item = inventory.pockets.pockets[from];
         let present = inventory.pockets.item_cond(from) & 1 != 0;
         if let Some(tex) = assets.icons.get(&(item, present)) {
-            paint.put(
+            let shadow = paint.put(
+                quad_mesh(at + Vec2::splat(4.0) - Vec2::splat(12.0), Vec2::splat(24.0)),
+                tex.clone(),
+                Color::srgba(0.0, 0.0, 0.0, 0.3),
+                174.0,
+            );
+            paint.commands.entity(shadow).insert(PocketCarry(at, 174.0));
+            let carry = paint.put(
                 quad_mesh(at - Vec2::splat(12.0), Vec2::splat(24.0)),
                 tex.clone(),
                 Color::WHITE,
                 175.0,
             );
+            paint.commands.entity(carry).insert(PocketCarry(at, 175.0));
         }
     }
     if assets.hand.is_empty() {
@@ -714,25 +851,14 @@ fn draw(
             130.0,
         );
     } else {
-        // Original hand model and rotation (mHD_ROT_X/Z); orthographic
-        // placement in the shared overlay replaces its separate 64px view.
-        for (mesh, material) in &assets.hand {
-            paint.commands.spawn((
-                Mesh3d(mesh.clone()),
-                MeshMaterial3d(material.clone()),
-                PocketHand,
-                Transform::from_translation(screen(assets.hand_at).with_z(180.0))
-                    .with_rotation(Quat::from_euler(
-                        EulerRot::ZYX,
-                        70.3125_f32.to_radians(),
-                        0.0,
-                        -135.0_f32.to_radians(),
-                    ))
-                    .with_scale(Vec3::splat(0.08)),
-                RenderLayers::layer(1),
-                ChildOf(dynamic),
-            ));
-        }
+        // Composite the separately rendered source hand view at its eased target.
+        let hand = paint.put(
+            quad_mesh(Vec2::splat(-16.0), Vec2::splat(32.0)),
+            assets.hand_image.clone(),
+            Color::WHITE,
+            180.0,
+        );
+        paint.commands.entity(hand).insert(PocketHand);
     }
     let labelled = ui
         .grabbed
@@ -811,17 +937,19 @@ fn draw(
 pub struct PocketDiscPlugin;
 impl Plugin for PocketDiscPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            Update,
-            setup
-                .run_if(resource_exists::<MsgAssets>)
-                .run_if(not(resource_exists::<PocketAssets>)),
-        )
-        .add_systems(
-            Update,
-            draw.after(crate::input::InteractSet::Ui)
-                .run_if(resource_exists::<PocketAssets>),
-        );
+        embedded_asset!(app, "pockets_pattern.wgsl");
+        app.add_plugins(MaterialPlugin::<PocketPattern>::default())
+            .add_systems(
+                Update,
+                setup
+                    .run_if(resource_exists::<MsgAssets>)
+                    .run_if(not(resource_exists::<PocketAssets>)),
+            )
+            .add_systems(
+                Update,
+                draw.after(crate::input::InteractSet::Ui)
+                    .run_if(resource_exists::<PocketAssets>),
+            );
         app.add_systems(
             Update,
             animate.after(draw).run_if(resource_exists::<PocketAssets>),

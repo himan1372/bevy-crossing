@@ -149,8 +149,14 @@ fn pockets_input(
     mut ui: ResMut<PocketsUi>,
     mut inventory: ResMut<PlayerInventory>,
     mut tool: ResMut<crate::ecology::EquippedTool>,
+    renderer: Option<Res<crate::pockets_disc::PocketAssets>>,
 ) {
     if !ui.open || *focus != InputFocus::Pockets {
+        return;
+    }
+    if renderer.is_some_and(|r| r.hand_busy()) {
+        actions.consume(Action::Confirm);
+        actions.consume(Action::Interact);
         return;
     }
     let dx = i32::from(actions.just_pressed(Action::MoveRight))
