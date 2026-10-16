@@ -212,7 +212,7 @@ fn read_actions(
 }
 
 /// Priority: pause, then the modal UIs, else the world.
-fn update_focus(
+pub(crate) fn update_focus(
     pause: Option<Res<State<PauseState>>>,
     dialogue: Res<crate::dialogue::DialogueState>,
     mail: Res<crate::mail::MailUi>,

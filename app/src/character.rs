@@ -94,7 +94,7 @@ impl PlayerLook {
 
 /// The segments the player draw points at for `look` (boy, not swollen,
 /// eyes and mouth in their first, neutral frames).
-fn player_segments(disc: &GameDisc, look: PlayerLook) -> Segments {
+pub(crate) fn player_segments(disc: &GameDisc, look: PlayerLook) -> Segments {
     let slice = |bank: &std::sync::Arc<[u8]>, start: usize, len: usize| -> std::sync::Arc<[u8]> {
         bank.get(start..start + len).unwrap_or_default().into()
     };

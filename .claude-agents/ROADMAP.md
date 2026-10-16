@@ -108,14 +108,14 @@ Each milestone ends with a Philip playtest.
 
 - [x] **ui-from-disc** — completed scope: disc font, dialogue/name plate and choice windows with a no-disc fallback. Pockets, pause, shop and mail panels still use the port's own UI; this does not mean every HUD/menu has been recreated from the disc.
 - [ ] **net-render-fidelity** — Philip reports the held net does not look retail. Audit source asset selection, textures/materials, mesh skinning, scale and pose against retail; correct the demonstrated mismatch before net visual sign-off. See backlog/net-render-fidelity.md.
-- [ ] **retail-pockets-ui** — first UI task: source-backed pocket layout, item icons, selection and action windows using runtime disc assets. Preserve the existing 15-slot inventory behavior. See backlog/retail-pockets-ui.md.
+- [~] **retail-pockets-ui** — implemented first pass: original inventory frame, runtime category icons, disc font, animated player/hand, leftward background scroll, open/close slide, 15-slot selection and Grab/swap plus supported net/rod Hold actions. Philip says the static layout looks much better; final animation/retail comparison acceptance remains open. Identity fields, full retail tag/action families, mail integration and exact perspective/effects remain named follow-ups. See backlog/retail-pockets-ui.md.
 - [ ] **retail-mail-ui** — retail letter list, stationery, reading and available letter actions, reusing the pockets/window primitives. See backlog/retail-mail-ui.md.
 - [ ] **retail-shop-ui** — retail buying/selling and item-selection presentation over existing shop logic. See backlog/retail-shop-ui.md.
 - [ ] **retail-pause-ui** — compare the original pause/save flow and implement its applicable presentation; retain accessible port Settings and Quit controls. See backlog/retail-pause-ui.md.
 - [ ] **retail-hud-ui** — source-backed clock/date, bells and context prompts; replace the current development-style overlay where retail has an equivalent. See backlog/retail-hud-ui.md.
 
-UI order: pockets → mail → shop → pause/save → HUD. These are planned,
-unimplemented visual tasks; each requires source tracing, runtime disc loading,
+UI order: pockets → mail → shop → pause/save → HUD. Pockets has a first
+implementation; the other UI tasks remain planned. Each requires source tracing, runtime disc loading,
 a usable no-disc fallback and Philip's comparison acceptance. This order does
 not move title-screen or rename out of their deferred status.
 

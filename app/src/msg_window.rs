@@ -80,16 +80,16 @@ pub struct OverlayCamera;
 
 /// What the window is drawn with.
 #[derive(Resource)]
-struct MsgAssets {
-    font: Handle<Image>,
+pub(crate) struct MsgAssets {
+    pub(crate) font: Handle<Image>,
     /// `mFont_GetCodeWidth(c, TRUE)`.
-    widths: [u8; 256],
+    pub(crate) widths: [u8; 256],
     window: Model,
     /// Name plate per `PLATE_COLORS` entry.
     plates: [Model; 3],
-    choice_body: Model,
+    pub(crate) choice_body: Model,
     /// `FONT_nes_tex_choice` / `FONT_nes_tex_next`.
-    cursor: Handle<Image>,
+    pub(crate) cursor: Handle<Image>,
     next: Handle<Image>,
 }
 
@@ -102,7 +102,7 @@ struct Shown {
 }
 
 /// Screen pixel (y down) to overlay units.
-fn screen(p: Vec2) -> Vec3 {
+pub(crate) fn screen(p: Vec2) -> Vec3 {
     Vec3::new(
         (p.x - SCREEN.x * 0.5) * SCALE,
         (SCREEN.y * 0.5 - p.y) * SCALE,
@@ -238,7 +238,7 @@ fn coverage_image(texels: &[u8], width: u32, height: u32) -> Image {
 }
 
 /// One `size` quad at `at` (screen pixels), the whole texture on it.
-fn quad_mesh(at: Vec2, size: Vec2) -> Mesh {
+pub(crate) fn quad_mesh(at: Vec2, size: Vec2) -> Mesh {
     let mut pos = Vec::new();
     for (dx, dy) in [(0.0, 0.0), (size.x, 0.0), (size.x, size.y), (0.0, size.y)] {
         let p = screen(at + Vec2::new(dx, dy));
@@ -283,7 +283,13 @@ fn choice_layout(answers: &[&str], widths: &[u8; 256]) -> (Vec2, Vec2, Vec2) {
 /// A text mesh: one quad per character from `origin` (screen pixels),
 /// `\n` starting a new 16-pixel line, the first `limit` pieces of the page
 /// (`messages::markup`), each character in its own colour or `color`.
-fn text_mesh(text: &str, origin: Vec2, widths: &[u8; 256], color: [u8; 4], limit: usize) -> Mesh {
+pub(crate) fn text_mesh(
+    text: &str,
+    origin: Vec2,
+    widths: &[u8; 256],
+    color: [u8; 4],
+    limit: usize,
+) -> Mesh {
     let (mut pos, mut uv, mut idx, mut col) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     let mut cursor = origin;
     let (mut line_scale, mut char_scale) = (1.0, 1.0);
@@ -335,7 +341,7 @@ fn text_mesh(text: &str, origin: Vec2, widths: &[u8; 256], color: [u8; 4], limit
     .with_inserted_indices(Indices::U32(idx))
 }
 
-fn text_width(text: &str, widths: &[u8; 256]) -> f32 {
+pub(crate) fn text_width(text: &str, widths: &[u8; 256]) -> f32 {
     let (mut line, mut next, mut width, mut maximum) = (1.0, 1.0, 0.0_f32, 0.0_f32);
     for item in markup::parse(text) {
         match item {

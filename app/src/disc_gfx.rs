@@ -222,6 +222,9 @@ pub struct Part {
 /// Collects emitted triangles, grouped by render state.
 #[derive(Default)]
 pub struct TriangleSink {
+    /// Inventory frame: expose tile1's mask for runtime CPU composition
+    /// with its clothing tile0. Other display-list consumers keep tile0.
+    inventory_mask: bool,
     pub parts: Vec<Part>,
     current: Option<PartKey>,
     pub gx_lists_skipped: usize,
@@ -280,7 +283,11 @@ impl TriangleSink {
 
 impl GxBackend for TriangleSink {
     fn set_state(&mut self, state: &GbiState) {
-        let tile = &state.tiles[0];
+        let tile = &state.tiles[if self.inventory_mask && state.othermode.is_2cycle() {
+            1
+        } else {
+            0
+        }];
         // Image addresses stay segmented here; `Segments` resolves them
         // when the texture is decoded.
         let textured = tile.img_addr != 0 && tile.img_addr < UNRESOLVED;
@@ -420,6 +427,25 @@ fn run_lists_full(
     env: [u8; 4],
     tluts: &[(usize, u32)],
 ) -> TriangleSink {
+    run_lists_config(rom, entries, prim, prim_lod, env, tluts, false)
+}
+
+/// mIV_set_base_frame_dl: two-tile cloth colour and frame coverage.
+/// The pockets renderer composites these at runtime; global TEXEL1 behavior
+/// remains untouched for existing world models.
+pub(crate) fn run_inventory_frame(rom: &RomImage, entries: &[u32]) -> TriangleSink {
+    run_lists_config(rom, entries, [255; 4], 255, [0; 4], &[], true)
+}
+
+fn run_lists_config(
+    rom: &RomImage,
+    entries: &[u32],
+    prim: [u8; 4],
+    prim_lod: u8,
+    env: [u8; 4],
+    tluts: &[(usize, u32)],
+    inventory_mask: bool,
+) -> TriangleSink {
     let mem = RelGfx::new(rom);
     let mut emu = Emu64::new();
     for seg in 1..16 {
@@ -455,7 +481,10 @@ fn run_lists_full(
             t.count = 16;
         }
     }
-    let mut sink = TriangleSink::default();
+    let mut sink = TriangleSink {
+        inventory_mask,
+        ..Default::default()
+    };
     for (i, &entry) in entries.iter().enumerate() {
         // Vertices remember which list loaded them (see `LIST_TAG`) until
         // a list loads a matrix of its own.

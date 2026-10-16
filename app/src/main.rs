@@ -38,6 +38,7 @@ mod pause_menu;
 mod player;
 mod player_tools;
 mod pockets;
+mod pockets_disc;
 mod quest;
 mod remote;
 mod roster;
