@@ -241,14 +241,19 @@ matching original animations). No new implementation or test evidence here.
 2026-10-17: Philip reports the bounded movement adapter works. The next slice
 adds runtime original leaf icons, source birth/pop/bye scale kernels and pickup1
 clip, preserving atomic inventory/storage and save/load. Full evidence, remaining
-dust/material/collision limits and pending Philip acceptance are in
+dust/material/collision limits and Philip's bounded acceptance are in
 furniture-birth-pickup-animation.md. No additional module migration batch started.
+
+2026-10-17: Philip reports "wokrs good whats next" after placement/pickup
+presentation. Next bounded proposal is furniture-storage-animation.md: source
+wardrobe/closet opening and closing around the existing storage interaction.
+This is planning only; M4, migration and the documented fidelity gaps stay open.
 
 Furniture follow-up: bounded G + direction push/pull/rotation and original player
 clips are implemented separately in furniture-movement-animation.md, including
 atomic stacked actors/storage/switches and save/load presentation rules. Exact
 TypeB contact-dependent pivots and broader fidelity remain open. Philip's first
-slice acceptance does not accept this new movement implementation.
+slice acceptance was followed by separate movement acceptance ("works, next").
 
 - [x] furniture.rs import/pilot update, 2026-10-16
 - [x] Bounded pilot verification/corrections and inventory audit, 2026-10-16

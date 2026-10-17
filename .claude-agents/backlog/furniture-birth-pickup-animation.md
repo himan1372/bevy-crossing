@@ -25,7 +25,7 @@ retail kagu_happa/dust effects and existing icon/Gfx loading where applicable.
 - [x] Audit source, callers and existing translations.
 - [x] Implement bounded presentation with explicit remaining fidelity limits.
 - [x] Record validation evidence separately from playtest acceptance.
-- [ ] Philip playtest acceptance.
+- [x] Philip playtest acceptance of this bounded slice (2026-10-17: "wokrs good whats next").
 
 M4/migration and long-piece contact-dependent pivot fidelity remain open.
 
@@ -100,4 +100,7 @@ the current N64 material exposes one texture. No replacement cloud art was
 invented. Other per-type constructors, collision-edge fidelity/growth, loose
 starter diary, storage opening/closing, full source scripts and every model's
 visual fidelity remain separate. Birth math uses Rust sine, not a bit-exact
-retail trig-table kernel. Philip has accepted movement, not this new slice.
+retail trig-table kernel. Philip accepts this bounded placement/pickup presentation
+slice (2026-10-17: "wokrs good whats next"); the listed fidelity gaps remain open.
+Next proposal: furniture-storage-animation.md. No storage animation implementation
+or new automated evidence is implied by this acceptance update.
