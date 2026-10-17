@@ -422,7 +422,12 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   layer occupancy; 18 focused furniture tests pass. First player-room gameplay
   slice now connects placement/pickup, three-item storage and numeric layout
   save/F9 restore to runtime disc rendering and collision. Retail movement,
-  animations, per-type behavior and Philip acceptance remain separate/open.
+  animations and per-type behavior remain separate/open. Philip accepts the
+  current slice so far: collision, remembered furniture and saving work. Next
+  bounded movement adapter now adds G + directions for push/pull/turn, original
+  clips, atomic storage/stack/switch preservation and save/load focus. Philip
+  acceptance and exact long-piece retail pivots remain open; see
+  backlog/furniture-movement-animation.md.
   See backlog/migrate-rustimal-modules.md and docs/rustimal-migration-inventory.md.
   Philip's directive: the rustimal modules were built to end up here.
 

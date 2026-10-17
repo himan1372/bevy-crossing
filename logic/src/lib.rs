@@ -59,6 +59,7 @@ mod fish_tables;
 mod force_call;
 mod frame_loops;
 pub mod furniture;
+pub mod furniture_motion;
 pub mod game_time;
 mod gbi_runtime;
 pub mod graphics;

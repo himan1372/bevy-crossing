@@ -137,8 +137,18 @@ Voices, accents and music-note playback were accepted. No town tune is configure
 Other lifecycle/fidelity checks remain in `backlog/audio-acceptance.md`; do not
 infer acceptance from the overlap statement.
 
-First obtain Philip's playtest of the furniture slice: placement, pickup,
-storage, cancel/full pockets, collision, F5/F9 and restart. Address any observed
-defects before expanding. Then propose the next bounded source-backed furniture
-movement/rotation and animation task and claim it, keeping migration and M4 open.
-Do not start another batch of module imports merely because this slice compiles.
+Philip subsequently reported collision, remembered furniture and saving work,
+and everything checks out so far. That accepts the first placement/storage slice.
+He then authorized furniture-movement-animation implementation. Hold G beside
+furniture with empty hands; toward/away directions push/pull, sideways turns;
+release G to let go. Numeric destination commits atomically before original
+disc-backed player/furniture animation; supported stacked actors, storage goods
+and switches travel together. P/F5/F9 are supported during this interaction.
+See backlog/furniture-movement-animation.md for current evidence and deliberate
+limits: TypeB primary-cell pivots/conservative swept footprints still differ
+from full retail contact-dependent pivots/friction, and player root/slip/control
+timing is a bounded adapter. Birth/pickup/open-close, loose diary, upgrades and
+per-type behavior remain follow-ups. Obtain Philip's movement playtest before
+claiming acceptance. Keep migration/M4 open; no automatic next import batch.
+Current user-save SHA256 at implementation start/end:
+04B547074C3F23DE979FCB158A2BD9F674796C07A5EC57D335821ADDF998003B.

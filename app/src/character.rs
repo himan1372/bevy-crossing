@@ -249,6 +249,7 @@ pub struct CharacterRig {
     last_pos: Option<Vec3>,
     net_active: bool,
     net_held: bool,
+    furniture_phase: Option<u8>,
     pose_morph: f32,
 }
 
@@ -438,6 +439,7 @@ fn spawn_rig(
         last_pos: None,
         net_active: false,
         net_held: false,
+        furniture_phase: None,
         pose_morph: 0.0,
     });
     debug!("{} face parts", face_parts.len());
@@ -760,6 +762,7 @@ fn animate_characters(
     mut footsteps: MessageWriter<crate::footsteps::Footstep>,
     net: Res<crate::player_tools::NetAction>,
     net_models: Option<Res<crate::player_tools::NetModels>>,
+    room: Res<crate::player_room::PlayerRoom>,
 ) {
     let dt = time.delta_secs();
     let ticks = dt * 60.0;
@@ -769,6 +772,34 @@ fn animate_characters(
             // Facing angle as the actor's shape rotation: 0 = +z, 90 deg = +x.
             if let Ok(mut t) = transforms.get_mut(root) {
                 t.rotation = Quat::from_rotation_y(facing.dir.x.atan2(facing.dir.z));
+            }
+            let furniture = room.animation();
+            if rig.furniture_phase != furniture.map(|(_, _, phase)| phase) {
+                rig.furniture_phase = furniture.map(|(_, _, phase)| phase);
+                rig.pose_morph = 5.0;
+            }
+            if let Some((animation, frame, _)) = furniture {
+                let mut pose = animation.pose(frame);
+                // Actor translation belongs to the collision-checked room
+                // transaction; do not apply clip root motion a second time.
+                let start = animation.pose(1.0).translation;
+                pose.translation.x = start.x;
+                pose.translation.z = start.z;
+                let locals = pose.local_transforms(&rig.skeleton);
+                let weight = if rig.pose_morph > 0.0 {
+                    (ticks * 0.5 / rig.pose_morph).min(1.0)
+                } else {
+                    1.0
+                };
+                for (&joint, local) in rig.joints.iter().zip(locals) {
+                    if let Ok(mut t) = transforms.get_mut(joint) {
+                        t.translation = t.translation.lerp(local.translation, weight);
+                        t.rotation = t.rotation.slerp(local.rotation, weight);
+                    }
+                }
+                rig.pose_morph = (rig.pose_morph - ticks * 0.5).max(0.0);
+                rig.last_pos = transforms.get(owner).ok().map(|t| t.translation);
+                continue;
             }
             let action = net_models.as_ref().filter(|_| net.busy());
             if rig.net_active != action.is_some() || rig.net_held != net.held {

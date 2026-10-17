@@ -491,6 +491,7 @@ pub struct FurnitureReservation {
 }
 
 /// Runtime room state (`l_aMR_work` + `MY_ROOM_ACTOR` furniture fields).
+#[derive(Clone)]
 pub struct MyRoomRuntime {
     /// Actor budget for this scene (`aMR_GetSceneFurnitureMax`).
     pub list_size: usize,

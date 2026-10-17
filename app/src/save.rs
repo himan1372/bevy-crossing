@@ -479,9 +479,10 @@ fn quick_save(
         Res<crate::player_room::PlayerRoom>,
     ),
 ) {
-    // World focus only: saving or loading mid-UI would leave that UI stale.
+    // Furniture movement already has an atomic committed destination. Other
+    // modal UIs must close before saving to avoid retaining stale UI state.
     // F5, or Save in the pause menu (taken once play resumes).
-    if !focus.is_world() {
+    if !matches!(*focus, InputFocus::World | InputFocus::Furniture) {
         return;
     }
     let asked = std::mem::take(&mut request.0);
@@ -546,7 +547,9 @@ fn quick_load(
     mut timer: ResMut<NotifyTimer>,
     notify_query: Query<&mut Text, With<NotifyText>>,
 ) {
-    if !actions.just_pressed(Action::QuickLoad) || !focus.is_world() {
+    if !actions.just_pressed(Action::QuickLoad)
+        || !matches!(*focus, InputFocus::World | InputFocus::Furniture)
+    {
         return;
     }
     let Some(save) = read_save() else {

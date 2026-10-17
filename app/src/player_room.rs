@@ -3,8 +3,8 @@
 //!
 //! Source: ac_my_room's actor construction/KeepItem2Fg, ac_my_room_move's
 //! placement/pickup, and ac_my_room_msg_ctrl's three-item storage choices.
-//! Transactions are immediate in this slice; retail birth, pickup, furniture
-//! opening, pushing and turning animations remain separate work.
+//! Placement/pickup/storage commit immediately; movement commits its numeric
+//! destination before playing the original clips. Birth/pickup/opening remain.
 use std::collections::HashMap;
 
 use bevy::prelude::*;
@@ -22,6 +22,8 @@ use crate::interaction::{Facing, PlayerInventory};
 use crate::player::Player;
 use crate::pockets::PocketsUi;
 use crate::states::GameplaySet;
+
+mod movement;
 
 /// Four 16x16 source layers, including owner-cell storage save-back.
 /// An absent field means an old save's default room; an empty room is explicit.
@@ -78,6 +80,7 @@ enum StorageFlow {
 
 #[derive(Resource)]
 pub(crate) struct PlayerRoom {
+    movement: movement::Movement,
     layers: [RoomLayer; 4],
     runtime: MyRoomRuntime,
     profiles: HashMap<u16, FurnitureProfile>,
@@ -92,6 +95,7 @@ pub(crate) struct PlayerRoom {
 impl Default for PlayerRoom {
     fn default() -> Self {
         Self {
+            movement: movement::Movement::default(),
             layers: std::array::from_fn(|_| RoomLayer::default()),
             runtime: MyRoomRuntime::new(32), // aMR_GetSceneFurnitureMax: small room
             profiles: HashMap::new(),
@@ -110,6 +114,13 @@ fn layer_views(layers: &mut [RoomLayer; 4]) -> [Option<&mut RoomLayer>; 4] {
 }
 
 impl PlayerRoom {
+    pub(crate) fn manipulating(&self) -> bool {
+        self.movement.grip.is_some() || self.movement.active.is_some()
+    }
+
+    pub(crate) fn animation(&self) -> Option<(&crate::skeleton::Animation, f32, u8)> {
+        self.movement.animation()
+    }
     pub(crate) fn snapshot(&self) -> Option<RoomSave> {
         if !self.initialized {
             return self.original.clone();
@@ -127,6 +138,7 @@ impl PlayerRoom {
     }
 
     pub(crate) fn restore(&mut self, saved: Option<&RoomSave>, disc: Option<&GameDisc>) {
+        self.movement.reset();
         self.layers = std::array::from_fn(|_| RoomLayer::default());
         self.original = saved.cloned();
         self.initialized = saved.is_some() || disc.is_some();
@@ -442,6 +454,7 @@ fn setup(
         loaded.0.as_ref().and_then(|s| s.home_furniture.as_ref()),
         disc.as_deref(),
     );
+    room.movement.load(disc.as_deref());
     info!(
         "player furniture: {} profiles, {} placed actors",
         room.profiles.len(),
@@ -701,7 +714,7 @@ fn interact(
     }
 }
 
-#[derive(Component, PartialEq)]
+#[derive(Component, Clone, Copy, PartialEq)]
 struct RoomPiece {
     slot: usize,
     item: u16,
@@ -715,7 +728,7 @@ fn refresh(
     mut commands: Commands,
     mut room: ResMut<PlayerRoom>,
     disc: Option<Res<GameDisc>>,
-    existing: Query<(Entity, &RoomPiece)>,
+    mut existing: Query<(Entity, &mut RoomPiece, &mut Transform)>,
     mut obstacles: ResMut<InteriorObstacles>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<crate::n64_material::N64Material>>,
@@ -742,13 +755,27 @@ fn refresh(
             })
         })
         .collect();
-    for (entity, piece) in &existing {
-        if !wanted.contains(piece) {
+    for (entity, mut piece, mut transform) in &mut existing {
+        if let Some(next) = wanted.iter().find(|p| {
+            p.slot == piece.slot && p.item >> 2 == piece.item >> 2 && p.layer == piece.layer
+        }) {
+            *piece = *next;
+            transform.translation.y = if piece.layer == 1 {
+                crate::furniture::top_height(
+                    &disc,
+                    room.runtime.occupancy[0][piece.z as usize][piece.x as usize]
+                        .and_then(|id| room.runtime.actors[id as usize].as_ref())
+                        .map_or(0, |a| ftr::ftr_idx_2_item_no(a.name, Direction::South)),
+                )
+            } else {
+                0.0
+            };
+        } else {
             commands.entity(entity).despawn();
         }
     }
     for piece in wanted {
-        if existing.iter().any(|(_, p)| p == &piece) {
+        if existing.iter().any(|(_, p, _)| *p == piece) {
             continue;
         }
         let lift = if piece.layer == 1 {
@@ -807,6 +834,19 @@ impl Plugin for PlayerRoomPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PlayerRoom>()
             .add_systems(Startup, setup.after(crate::house::build_interior))
+            .add_systems(
+                Update,
+                movement::advance
+                    .before(InteractSet::Doors)
+                    .before(crate::locomotion::MovementSet)
+                    .before(crate::character::CharacterAnimationSet)
+                    .after(crate::save::LoadSet)
+                    .in_set(GameplaySet),
+            )
+            .add_systems(
+                Update,
+                movement::animate_roots.after(refresh).in_set(GameplaySet),
+            )
             .add_systems(
                 Update,
                 interact

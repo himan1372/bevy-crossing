@@ -28,6 +28,8 @@ pub enum Action {
     MoveRight,
     /// Hold to run instead of walk.
     Run,
+    /// Hold beside furniture, then use movement directions to push/pull/turn.
+    FurnitureGrab,
     /// Doors, mailbox, talk, pick up, use tool.
     Interact,
     /// Advance dialogue (E also advances, via `Interact`).
@@ -82,6 +84,7 @@ impl Default for KeyBindings {
             (MoveLeft, vec![K::KeyA, K::ArrowLeft]),
             (MoveRight, vec![K::KeyD, K::ArrowRight]),
             (Run, vec![K::ShiftLeft, K::ShiftRight]),
+            (FurnitureGrab, vec![K::KeyG]),
             (Interact, vec![K::KeyE]),
             (Advance, vec![K::Space]),
             (Tool1, vec![K::Digit1]),
@@ -173,6 +176,7 @@ pub enum InputFocus {
     Quest,
     Pockets,
     Paused,
+    Furniture,
 }
 
 impl InputFocus {
@@ -219,6 +223,7 @@ pub(crate) fn update_focus(
     shop: Res<crate::shop::ShopUi>,
     quest: Res<crate::quest::QuestUi>,
     pockets: Res<crate::pockets::PocketsUi>,
+    room: Res<crate::player_room::PlayerRoom>,
     mut focus: ResMut<InputFocus>,
 ) {
     let next = if pause.is_some_and(|p| *p.get() == PauseState::Paused) {
@@ -238,6 +243,8 @@ pub(crate) fn update_focus(
         InputFocus::Shop
     } else if pockets.open {
         InputFocus::Pockets
+    } else if room.manipulating() {
+        InputFocus::Furniture
     } else {
         InputFocus::World
     };

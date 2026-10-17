@@ -613,7 +613,7 @@ fn update_house_hud(
             HouseState::Town => Visibility::Hidden,
         };
         let hint = if room.available {
-            "House - I: place furniture | Backspace: pick up | E: storage / exit"
+            "House - I: place | Backspace: pick up | E: storage | Hold G + directions: move / turn"
         } else {
             "House — press E at the door to exit"
         };

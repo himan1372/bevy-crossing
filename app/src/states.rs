@@ -45,7 +45,10 @@ pub(crate) fn toggle_pause(
     state: Res<State<PauseState>>,
     mut next: ResMut<NextState<PauseState>>,
 ) {
-    if !matches!(*focus, InputFocus::World | InputFocus::Paused) {
+    if !matches!(
+        *focus,
+        InputFocus::World | InputFocus::Furniture | InputFocus::Paused
+    ) {
         return;
     }
     if !actions.consume(Action::Pause) {

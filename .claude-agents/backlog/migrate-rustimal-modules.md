@@ -228,11 +228,26 @@ Settings untouched; no extracted bytes, screenshot assets or Temp saves committe
 Philip acceptance remains pending. Full TypeC/1x2 variety, every model, villager
 collision traversal and all source-specific behaviors were not manually certified.
 
+### Philip playtest feedback, 2026-10-16
+
+Philip reports collision works, furniture is remembered, saving works and
+"everything checks out so far." Record acceptance of the current playable slice
+on that basis; this does not certify every model or remaining retail behavior.
+Next bounded proposal: furniture-movement-animation.md (push/pull/rotation and
+matching original animations). No new implementation or test evidence here.
+
 ## Progress
+
+Furniture follow-up: bounded G + direction push/pull/rotation and original player
+clips are implemented separately in furniture-movement-animation.md, including
+atomic stacked actors/storage/switches and save/load presentation rules. Exact
+TypeB contact-dependent pivots and broader fidelity remain open. Philip's first
+slice acceptance does not accept this new movement implementation.
 
 - [x] furniture.rs import/pilot update, 2026-10-16
 - [x] Bounded pilot verification/corrections and inventory audit, 2026-10-16
 - [x] Furniture storage/actor-loading kernel corrections and focused regressions
 - [x] First player-room placement/pickup/storage/save integration (bounded scope above)
-- [ ] Philip playtest acceptance and remaining furniture gameplay/source fidelity
+- [x] Philip playtest acceptance of the current first playable furniture slice
+- [ ] Remaining furniture gameplay/source fidelity
 - [ ] Remaining 193 source-module reviews (not 193 new imports)
