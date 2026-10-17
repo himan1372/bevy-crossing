@@ -261,6 +261,24 @@ impl CharacterRig {
     pub(crate) fn joint_count(&self) -> usize {
         self.joints.len()
     }
+    /// Player_actor_draw_After_Larm2: callback16, VecX(1100).
+    pub(crate) fn left_hand_position(
+        &self,
+        root: &Transform,
+        player: &Transform,
+        transforms: &Query<&Transform>,
+    ) -> Option<Vec3> {
+        let locals = self
+            .joints
+            .iter()
+            .map(|&j| transforms.get(j).copied().ok())
+            .collect::<Option<Vec<_>>>()?;
+        let world = self.skeleton.world_from_locals(&locals);
+        Some(
+            (player.to_matrix() * root.to_matrix() * world.get(16)?)
+                .transform_point3(Vec3::X * 1100.0),
+        )
+    }
 }
 
 /// Which joint places a vertex: its load-time matrix (see module docs).

@@ -1163,6 +1163,78 @@ pub fn reserve_furniture(
     Some(slot)
 }
 
+/// aMR_SetFirstScale/aMR_FtrBirth. Presentation only; foreground ownership
+/// remains independent of the appearance animation.
+#[derive(Clone, Debug)]
+pub struct FurnitureBirth {
+    phase: i16,
+    step: i16,
+    amplitude: f32,
+    ticks: f32,
+    pub scale: [f32; 3],
+    pub finished: bool,
+}
+
+impl Default for FurnitureBirth {
+    fn default() -> Self {
+        Self {
+            phase: 0,
+            step: 6000,
+            amplitude: 0.5,
+            ticks: 0.0,
+            scale: [1.0; 3],
+            finished: false,
+        }
+    }
+}
+
+impl FurnitureBirth {
+    pub fn advance(&mut self, ticks: f32) {
+        if !ticks.is_finite() || ticks <= 0.0 || self.finished {
+            return;
+        }
+        self.ticks += ticks;
+        while self.ticks >= 1.0 && !self.finished {
+            self.ticks -= 1.0;
+            let previous = self.phase;
+            self.phase = self.phase.wrapping_add(self.step);
+            let y = (self.phase as f32 * std::f32::consts::TAU / 65536.0).sin() * self.amplitude;
+            self.scale = [1.0 - y, 1.0 + y, 1.0 - y];
+            if previous < 0 && self.phase >= 0 {
+                self.amplitude *= 0.4;
+                self.step += 1500;
+            }
+            if self.amplitude < 0.02 {
+                self.finished = true;
+                self.scale = [1.0; 3];
+            }
+        }
+    }
+}
+
+/// aMR_FtrBye: uniform 1/12-per-tick shrink, disappearing below 1/4.
+pub fn pickup_visual_scale(ticks: f32) -> f32 {
+    let scale = 1.0 - ticks.max(0.0) / 12.0;
+    if scale < 0.25 {
+        0.0
+    } else {
+        scale
+    }
+}
+
+/// aMR_ItemNo2IconNo, using the retail item-number enum ranges. The display
+/// lists themselves come from the runtime aMR_icon_display_data table.
+pub fn furniture_icon(item: u16) -> usize {
+    match item {
+        12540..=12603 => 5,   // college notebook through Japanese diary
+        0x15B0..=0x17AB => 1, // haniwa
+        7432..=7591 => 3,     // umbrellas, including personal designs
+        6060..=7111 => 2,     // mannequins, including personal designs
+        7916..=8015 => 4,     // fossil furniture
+        _ => 0,
+    }
+}
+
 /// C ABI: low-2-bit rotation of a saved furniture item (`FTR_GET_ROTATION`).
 pub fn pc_ftr_get_rotation(item: u16) -> u8 {
     ftr_get_rotation(item)

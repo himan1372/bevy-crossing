@@ -204,6 +204,11 @@ pub(super) fn advance(
         return;
     };
     let ticks = time.delta_secs() * 60.0;
+    if room.presentation.busy() {
+        *loco = crate::locomotion::Locomotion::default();
+        *focus = InputFocus::Furniture;
+        return;
+    }
     if room.movement.active.is_some() {
         *loco = crate::locomotion::Locomotion::default();
         let Some(active) = room.movement.active.as_mut() else {

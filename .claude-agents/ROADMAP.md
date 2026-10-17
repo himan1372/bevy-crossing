@@ -426,8 +426,11 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   current slice so far: collision, remembered furniture and saving work. Next
   bounded movement adapter now adds G + directions for push/pull/turn, original
   clips, atomic storage/stack/switch preservation and save/load focus. Philip
-  acceptance and exact long-piece retail pivots remain open; see
-  backlog/furniture-movement-animation.md.
+  reports this adapter works (2026-10-17). Exact long-piece retail pivots stay
+  open; see backlog/furniture-movement-animation.md. Next bounded slice:
+  backlog/furniture-birth-pickup-animation.md now implements original leaf
+  display lists, birth pop and pickup clip/shrink with atomic save/load reset.
+  Its playtest acceptance, exact dust and remaining furniture fidelity stay open.
   See backlog/migrate-rustimal-modules.md and docs/rustimal-migration-inventory.md.
   Philip's directive: the rustimal modules were built to end up here.
 

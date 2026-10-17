@@ -88,6 +88,10 @@ pub(crate) struct PocketAssets {
     white: Handle<Image>,
 }
 impl PocketAssets {
+    /// aMR_SetReserveFurniture waits for the submenu to finish closing.
+    pub(crate) fn world_ready(&self) -> bool {
+        !self.was_open && self.slide >= 300.0
+    }
     pub(crate) fn hand_busy(&self) -> bool {
         self.rigs.iter().any(|r| {
             r.releasing

@@ -238,6 +238,12 @@ matching original animations). No new implementation or test evidence here.
 
 ## Progress
 
+2026-10-17: Philip reports the bounded movement adapter works. The next slice
+adds runtime original leaf icons, source birth/pop/bye scale kernels and pickup1
+clip, preserving atomic inventory/storage and save/load. Full evidence, remaining
+dust/material/collision limits and pending Philip acceptance are in
+furniture-birth-pickup-animation.md. No additional module migration batch started.
+
 Furniture follow-up: bounded G + direction push/pull/rotation and original player
 clips are implemented separately in furniture-movement-animation.md, including
 atomic stacked actors/storage/switches and save/load presentation rules. Exact

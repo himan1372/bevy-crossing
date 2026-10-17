@@ -147,8 +147,14 @@ and switches travel together. P/F5/F9 are supported during this interaction.
 See backlog/furniture-movement-animation.md for current evidence and deliberate
 limits: TypeB primary-cell pivots/conservative swept footprints still differ
 from full retail contact-dependent pivots/friction, and player root/slip/control
-timing is a bounded adapter. Birth/pickup/open-close, loose diary, upgrades and
-per-type behavior remain follow-ups. Obtain Philip's movement playtest before
-claiming acceptance. Keep migration/M4 open; no automatic next import batch.
+timing is a bounded adapter. Philip reports movement works (2026-10-17).
+Next implemented slice: furniture-birth-pickup-animation.md, original runtime
+leaf icons/placement flight,46-tick reservation wait, native birth pop/shrink
+curves and original pickup1 clip with animated-hand leaf retrieval. Numeric
+transactions commit first; P/F5/F9 and restart remain safe. Pickup clears switch
+bits; pockets close before placement presentation starts. Obtain Philip's
+birth/pickup playtest; exact dust (two-texture material), collision growth/edges,
+open-close, loose diary, upgrades and per-type behavior remain follow-ups.
+Keep migration/M4 open; no automatic next import batch.
 Current user-save SHA256 at implementation start/end:
-04B547074C3F23DE979FCB158A2BD9F674796C07A5EC57D335821ADDF998003B.
+13A8755B8D093084928EF214197945D909D55FE31F4097BD63AACBB45F06A3C4.

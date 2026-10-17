@@ -41,7 +41,7 @@ saves/settings. Record implementation evidence separately from Philip playtest.
 - [x] Audit original control/movement/rotation and player animation semantics for this adapter.
 - [x] Implement bounded movement/rotation and matching clips.
 - [x] Record checks and remaining source limitations below.
-- [ ] Philip playtest acceptance.
+- [x] Philip playtest acceptance of the bounded movement adapter, 2026-10-17 ("works, next").
 
 ## Implemented, Codex, 2026-10-16
 
@@ -110,9 +110,10 @@ was shortened. Screenshots/logs/synthetic saves stay in Temp under
 bevy-crossing-furniture-motion-review. Actual save baseline in this turn:
 04B547074C3F23DE979FCB158A2BD9F674796C07A5EC57D335821ADDF998003B.
 
-Philip accepted the preceding placement/storage slice, not these new controls.
-Next acceptance: push/pull/turn from each side, release/cancel, stacked pieces,
-blocked paths, P, F5/F9 and restart. Migration and M4 remain open.
+Philip accepted the preceding placement/storage slice and subsequently reports
+the bounded movement adapter works (2026-10-17). This does not certify every
+model or close the explicitly documented retail pivot/contact/root-slip gaps.
+Next bounded task: furniture-birth-pickup-animation.md. Migration and M4 remain open.
 
 Final capture-build continuation: fresh process restored the saved box/tape stack
 (two actors); left turn saved12537/7769 at cell18 and both switch masks stayed2.

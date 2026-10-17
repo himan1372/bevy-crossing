@@ -4,7 +4,8 @@
 //! Source: ac_my_room's actor construction/KeepItem2Fg, ac_my_room_move's
 //! placement/pickup, and ac_my_room_msg_ctrl's three-item storage choices.
 //! Placement/pickup/storage commit immediately; movement commits its numeric
-//! destination before playing the original clips. Birth/pickup/opening remain.
+//! destination before playing the original clips. Birth and pickup have
+//! temporary disc-backed presentation; opening remains separate.
 use std::collections::HashMap;
 
 use bevy::prelude::*;
@@ -24,6 +25,7 @@ use crate::pockets::PocketsUi;
 use crate::states::GameplaySet;
 
 mod movement;
+mod presentation;
 
 /// Four 16x16 source layers, including owner-cell storage save-back.
 /// An absent field means an old save's default room; an empty room is explicit.
@@ -81,6 +83,7 @@ enum StorageFlow {
 #[derive(Resource)]
 pub(crate) struct PlayerRoom {
     movement: movement::Movement,
+    presentation: presentation::Presentation,
     layers: [RoomLayer; 4],
     runtime: MyRoomRuntime,
     profiles: HashMap<u16, FurnitureProfile>,
@@ -96,6 +99,7 @@ impl Default for PlayerRoom {
     fn default() -> Self {
         Self {
             movement: movement::Movement::default(),
+            presentation: presentation::Presentation::default(),
             layers: std::array::from_fn(|_| RoomLayer::default()),
             runtime: MyRoomRuntime::new(32), // aMR_GetSceneFurnitureMax: small room
             profiles: HashMap::new(),
@@ -115,11 +119,13 @@ fn layer_views(layers: &mut [RoomLayer; 4]) -> [Option<&mut RoomLayer>; 4] {
 
 impl PlayerRoom {
     pub(crate) fn manipulating(&self) -> bool {
-        self.movement.grip.is_some() || self.movement.active.is_some()
+        self.presentation.busy() || self.movement.grip.is_some() || self.movement.active.is_some()
     }
 
     pub(crate) fn animation(&self) -> Option<(&crate::skeleton::Animation, f32, u8)> {
-        self.movement.animation()
+        self.presentation
+            .animation()
+            .or_else(|| self.movement.animation())
     }
     pub(crate) fn snapshot(&self) -> Option<RoomSave> {
         if !self.initialized {
@@ -139,6 +145,7 @@ impl PlayerRoom {
 
     pub(crate) fn restore(&mut self, saved: Option<&RoomSave>, disc: Option<&GameDisc>) {
         self.movement.reset();
+        self.presentation.reset();
         self.layers = std::array::from_fn(|_| RoomLayer::default());
         self.original = saved.cloned();
         self.initialized = saved.is_some() || disc.is_some();
@@ -227,7 +234,7 @@ impl PlayerRoom {
         pos: Vec3,
         facing: Vec3,
         disc: &GameDisc,
-    ) -> Result<(), &'static str> {
+    ) -> Result<usize, &'static str> {
         let (idx, _) = ftr::ftr_item_no_2_idx_dir(item).ok_or("That isn't furniture.")?;
         let p = self
             .profiles
@@ -317,6 +324,9 @@ impl PlayerRoom {
             return Err("There's no room to put that here.");
         }
         ftr::set_furniture_to_fg(&mut self.layers[layer], idx, shape, rotation, x, z, true);
+        if let Some(bit) = RoomLayer::switch_bit_index(x, z) {
+            self.layers[layer].ftr_switch &= !(1u64 << bit);
+        }
         let mut actor = ftr::FurnitureActor::new(idx, shape, layer, x, z);
         actor.original_shape_type = p.shape;
         actor.angle_y = rotation as u8 as f32 * 90.0;
@@ -325,7 +335,7 @@ impl PlayerRoom {
         self.runtime.actors[slot] = Some(actor);
         self.dirty = true;
         info!("placed furniture {item:#06x} at ({x},{z}), layer {layer}");
-        Ok(())
+        Ok(slot)
     }
 
     fn pickup(&mut self, slot: usize, inventory: &mut PlayerInventory) -> Result<(), &'static str> {
@@ -361,6 +371,9 @@ impl PlayerRoom {
             actor.cell_z,
             false,
         );
+        if let Some(bit) = RoomLayer::switch_bit_index(actor.cell_x, actor.cell_z) {
+            self.layers[actor.layer].ftr_switch &= !(1u64 << bit);
+        }
         self.runtime.release(slot as u16);
         self.runtime.actors[slot] = None;
         inventory.pockets = pockets;
@@ -455,6 +468,7 @@ fn setup(
         disc.as_deref(),
     );
     room.movement.load(disc.as_deref());
+    room.presentation.load(disc.as_deref());
     info!(
         "player furniture: {} profiles, {} placed actors",
         room.profiles.len(),
@@ -512,7 +526,14 @@ fn interact(
                     inventory.pockets.pockets[slot] = 0;
                     inventory.pockets.set_item_cond(slot, 0);
                 }
-                result
+                result.map(|slot| {
+                    let actor = room.runtime.actors[slot].as_ref().cloned();
+                    if let Some(actor) = actor {
+                        let at = presentation::actor_center(&room, &actor);
+                        room.presentation
+                            .birth(slot, item, at, transform.translation, facing.dir);
+                    }
+                })
             }
             PocketRequest::Store { owner, slot, item }
                 if inventory.pockets.pockets.get(slot) == Some(&item)
@@ -543,7 +564,11 @@ fn interact(
         if let Err(message) = result {
             notice(&mut dialogue, &mut room, &mut focus, message);
         } else {
-            *focus = InputFocus::World;
+            *focus = if room.presentation.busy() {
+                InputFocus::Furniture
+            } else {
+                InputFocus::World
+            };
             crate::sound::se(crate::sound::se_id::CHOICE_CONFIRM);
         }
         return;
@@ -686,8 +711,14 @@ fn interact(
         .map(|t| t.0);
     let Some(slot) = target else { return };
     if actions.consume(Action::Back) {
+        let old = room.runtime.actors[slot].as_ref().cloned();
         if let Err(message) = room.pickup(slot, &mut inventory) {
             notice(&mut dialogue, &mut room, &mut focus, message);
+        } else if let Some(old) = old {
+            let at = presentation::actor_center(&room, &old);
+            room.presentation
+                .pickup(slot, ftr::ftr_idx_2_item_no(old.name, Direction::South), at);
+            *focus = InputFocus::Furniture;
         }
     } else if room.runtime.actors[slot]
         .as_ref()
@@ -771,7 +802,20 @@ fn refresh(
                 0.0
             };
         } else {
-            commands.entity(entity).despawn();
+            if room.presentation.picking_up(piece.slot) {
+                let long = crate::furniture::furniture_index(piece.item)
+                    .and_then(|idx| room.profiles.get(&(idx as u16)))
+                    .is_some_and(|p| p.shape.unit_count() == 2);
+                commands
+                    .entity(entity)
+                    .remove::<RoomPiece>()
+                    .insert(presentation::RetiringPiece {
+                        base: *transform,
+                        long,
+                    });
+            } else {
+                commands.entity(entity).despawn();
+            }
         }
     }
     for piece in wanted {
@@ -836,6 +880,20 @@ impl Plugin for PlayerRoomPlugin {
             .add_systems(Startup, setup.after(crate::house::build_interior))
             .add_systems(
                 Update,
+                presentation::advance
+                    .after(crate::save::LoadSet)
+                    .before(movement::advance)
+                    .in_set(GameplaySet),
+            )
+            .add_systems(
+                Update,
+                presentation::render
+                    .after(movement::animate_roots)
+                    .after(crate::character::CharacterAnimationSet)
+                    .in_set(GameplaySet),
+            )
+            .add_systems(
+                Update,
                 movement::advance
                     .before(InteractSet::Doors)
                     .before(crate::locomotion::MovementSet)
@@ -852,6 +910,7 @@ impl Plugin for PlayerRoomPlugin {
                 interact
                     .in_set(InteractSet::Objects)
                     .in_set(GameplaySet)
+                    .before(crate::character::CharacterAnimationSet)
                     .after(crate::save::LoadSet),
             )
             .add_systems(
