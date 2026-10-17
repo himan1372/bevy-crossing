@@ -101,6 +101,9 @@ pub struct SaveData {
     /// Legacy furniture names (pre-pockets); read for conversion only.
     #[serde(default)]
     pub furniture: Vec<String>,
+    /// Placed furniture and its owner-cell storage. None preserves old saves.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) home_furniture: Option<crate::player_room::RoomSave>,
     /// Item numbering of the pockets: 0/1 the slice's own, 2 the game's
     /// (`crate::items`). Older pockets are migrated on load.
     #[serde(default)]
@@ -380,6 +383,7 @@ fn collect_save(
         shop_sales: shop.shop.sales_sum,
         shop_tier: shop.shop.shop_level as u8,
         furniture: Vec::new(),
+        home_furniture: None,
         item_numbers: ITEM_NUMBERS,
         shop_priorities: shop.priorities,
         shop_stock_day: shop.stock_day,
@@ -468,10 +472,11 @@ fn quick_save(
     quest: Res<crate::quest::QuestState>,
     mut timer: ResMut<NotifyTimer>,
     notify_query: Query<&mut Text, With<NotifyText>>,
-    (look, roster, identity): (
+    (look, roster, identity, room): (
         Res<PlayerLook>,
         Option<Res<crate::roster::TownRoster>>,
         Res<PlayerIdentity>,
+        Res<crate::player_room::PlayerRoom>,
     ),
 ) {
     // World focus only: saving or loading mid-UI would leave that UI stale.
@@ -499,6 +504,7 @@ fn quick_save(
     );
     save.player_face = Some(look.face as u8);
     save.identity = identity.clone();
+    save.home_furniture = room.snapshot();
     save.player_cloth = Some(look.cloth as u16);
     if let Some(r) = roster {
         save.villagers = Some(r.residents.iter().map(|e| e.index).collect());
@@ -519,12 +525,14 @@ fn quick_save(
 /// and ground items (despawn all, respawn everything not marked picked).
 fn quick_load(
     // One tuple param: these systems are at Bevy's 16-parameter limit.
-    (actions, focus, mut audio_reset, mut net, mut identity): (
+    (actions, focus, mut audio_reset, mut net, mut identity, mut room, disc): (
         Res<Actions>,
         Res<InputFocus>,
         MessageWriter<crate::sound::ResetAudio>,
         ResMut<crate::player_tools::NetAction>,
         ResMut<PlayerIdentity>,
+        ResMut<crate::player_room::PlayerRoom>,
+        Option<Res<crate::game_disc::GameDisc>>,
     ),
     mut player_query: Query<&mut Transform, With<Player>>,
     field: Option<ResMut<FieldItems>>,
@@ -547,6 +555,7 @@ fn quick_load(
     };
     net.cancel();
     *identity = save.identity.clone();
+    room.restore(save.home_furniture.as_ref(), disc.as_deref());
 
     if let Ok(mut transform) = player_query.single_mut() {
         transform.translation = Vec3::from_array(save.player_pos);

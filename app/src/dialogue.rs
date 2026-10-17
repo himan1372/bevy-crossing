@@ -56,6 +56,17 @@ pub struct DialogueState {
 const TRADE_CHOICES: [&str; 2] = ["Let's trade!", "No thanks."];
 
 impl DialogueState {
+    /// Furniture owns its result just as an NPC controller does, but has no
+    /// speaking actor (and must not animate a villager's mouth).
+    pub(crate) fn begin_furniture(&mut self, page: String, choices: Option<Vec<String>>) {
+        *self = Self {
+            active: true,
+            lines: vec![page],
+            external_name: Some(""),
+            external_choices: choices,
+            ..default()
+        };
+    }
     pub(crate) fn choices_for_actor(&self) -> Option<&Vec<String>> {
         self.external_choices.as_ref()
     }

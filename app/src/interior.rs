@@ -20,8 +20,6 @@ use crate::n64_material::{part_mesh, texture_image, CombinerUniform, N64Material
 
 /// `aMI` draws the room at scale 0.0625; 40 game units per cell.
 const ROOM_SCALE: f32 = 0.0625 / 40.0;
-/// Furniture is drawn at 0.01 like other actors.
-const FURNITURE_SCALE: f32 = 0.01 / 40.0;
 /// The small room's floor spans model cells 1..5 in x and z at height 1:
 /// its centre goes on the interior origin.
 const ROOM_CENTRE: Vec3 = Vec3::new(3.0, 1.0, 3.0);
@@ -36,13 +34,6 @@ const TEXTURE: usize = 0x800;
 /// `mHm_player_room_default_data_c`: wall u8, floor u8, item ut_x i32,
 /// ut_z i32, item u16 (0x10 bytes).
 const DEFAULT_SIZE: u32 = 0x10;
-
-/// Furniture placed in a new house (`mHm_InitHomeInfo`): the house's own
-/// default item, and the orange box in the back-left corner.
-const STARTING_FURNITURE: [(&str, &str); 2] = [
-    ("int_sum_casse01_on_model", "int_sum_casse01_pal"),
-    ("int_nog_mikanbox_model", "int_nog_mikanbox_pal"),
-];
 
 /// A piece of furniture in the room: (centre relative to the room
 /// centre, half extents x/z) for collisions.
@@ -73,11 +64,6 @@ pub fn spawn_player_room(
         .rom
         .slice(RomSource::Rel, defaults.offset, DEFAULT_SIZE)?;
     let (wall, floor) = (d[0] as usize, d[1] as usize);
-    let item_ut = (
-        i32::from_be_bytes([d[4], d[5], d[6], d[7]]),
-        i32::from_be_bytes([d[8], d[9], d[10], d[11]]),
-    );
-
     let assets = (&mut *meshes, &mut *materials, &mut *images);
     spawn_shell(
         commands,
@@ -93,43 +79,8 @@ pub fn spawn_player_room(
         assets,
     );
 
-    // Starting furniture on the room grid: unit (x, z) covers model cells
-    // [x, x+1] (the floor starts at cell 1).
-    let spots = [item_ut, (1, 1)];
-    let mut out = Vec::new();
-    for ((model, pal), (ux, uz)) in STARTING_FURNITURE.iter().zip(spots) {
-        let Some(list) = disc.catalog.get(model).map(|a| a.offset) else {
-            continue;
-        };
-        let palette = disc.catalog.get(pal).map(|a| a.offset);
-        let centre = Vec3::new(ux as f32 + 0.5, 0.0, uz as f32 + 0.5) - ROOM_CENTRE.with_y(0.0);
-        let piece = commands
-            .spawn((
-                Name::new(model.trim_end_matches("_model").to_string()),
-                Transform::from_translation(origin + centre)
-                    .with_scale(Vec3::splat(FURNITURE_SCALE)),
-                Visibility::default(),
-            ))
-            .id();
-        spawn_lists(
-            commands,
-            disc,
-            piece,
-            &[list],
-            palette,
-            &Segments::default(),
-            false,
-            meshes,
-            materials,
-            images,
-        );
-        out.push(RoomFurniture {
-            centre,
-            half: Vec2::splat(0.5),
-        });
-    }
     info!("player room from the disc: wallpaper {wall}, carpet {floor}");
-    Some(out)
+    Some(Vec::new())
 }
 
 /// Floor segments (`aMI` / `aSI` draw): textures in 8-B, palette in C.

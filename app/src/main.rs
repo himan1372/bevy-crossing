@@ -37,6 +37,7 @@ mod n64_material;
 mod npc;
 mod pause_menu;
 mod player;
+mod player_room;
 mod player_tools;
 mod pockets;
 mod pockets_disc;
@@ -109,6 +110,7 @@ fn main() {
         .add_plugins(DialoguePlugin)
         .add_plugins(EcologyPlugin)
         .add_plugins(HousePlugin)
+        .add_plugins(player_room::PlayerRoomPlugin)
         .add_plugins(MailPlugin)
         .add_plugins(ShopPlugin)
         .add_plugins(shop_display::ShopDisplayPlugin)

@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use bevy::prelude::*;
 use disc::{RomSource, Target};
-use rustimal_logic::furniture::ShapeType;
+use rustimal_logic::furniture::{FurnitureProfile, SetType, ShapeType};
 
 use crate::disc_gfx::{run_display_lists, Segments};
 use crate::game_disc::GameDisc;
@@ -106,6 +106,54 @@ fn read_profile(disc: &GameDisc, index: u32) -> Option<Profile> {
         scale: f(4),
         shape: shape_type(b[8]),
     })
+}
+
+/// Persistent gameplay fields from aFTR_PROFILE and aMR_layer_set_info.
+/// The latter is a separate table, not a field of the retail profile.
+pub(crate) fn gameplay_profile(disc: &GameDisc, index: u16) -> Option<FurnitureProfile> {
+    let p = read_profile(disc, u32::from(index))?;
+    let table = disc.catalog.get("furniture_quality")?;
+    let Target::File(RomSource::Rel, offset) = disc
+        .rom
+        .pointer_at(RomSource::Rel, table.offset + u32::from(index) * 4)?
+    else {
+        return None;
+    };
+    let b = disc.rom.slice(RomSource::Rel, offset + 0x28, 8)?;
+    let sets = disc.catalog.get("aMR_layer_set_info")?;
+    let set = *disc
+        .rom
+        .slice(sets.source, sets.offset, sets.size)?
+        .get(index as usize)?;
+    Some(FurnitureProfile {
+        height: p.height,
+        scale: p.scale,
+        shape: p.shape,
+        move_bg_type: b[1],
+        check_rotation: b[2],
+        kankyo_map: b[3],
+        contact_action: b[4],
+        interaction_type: u16::from_be_bytes([b[6], b[7]]),
+        set_type: match set {
+            1 => SetType::Surface,
+            2 => SetType::OnSurface,
+            _ => SetType::Normal,
+        },
+        unique_behavior: disc.rom.pointer_at(RomSource::Rel, offset + 0x30).is_some(),
+    })
+}
+
+/// Resolve the same draw paths used by spawn_furniture before consuming a
+/// pocket item. Unsupported models remain in pockets.
+pub(crate) fn can_render(disc: &GameDisc, index: u16) -> bool {
+    let Some(p) = read_profile(disc, u32::from(index)) else {
+        return false;
+    };
+    if !p.opaque.is_empty() || !p.translucent.is_empty() || profile_skeleton(disc, &p).is_some() {
+        return true;
+    }
+    let (opaque, translucent) = drawn_lists(disc, &p, &mut Segments::default());
+    !opaque.is_empty() || !translucent.is_empty()
 }
 
 /// The skeleton a profile draws: its rig's, or the `cKF_bs_r_int_*` one

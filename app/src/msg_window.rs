@@ -616,7 +616,7 @@ fn draw_window(
     let widths = assets.widths;
     let speaker = speaker.and_then(|e| villagers.get(e).ok());
     let page = window_page(&page, speaker);
-    if speaker.is_some() || dialogue.external_name.is_some() {
+    if speaker.is_some() || dialogue.external_name.is_some_and(|name| !name.is_empty()) {
         let sex = if speaker.is_some_and(|v| crate::roster::looks_female(v.looks)) {
             1
         } else {

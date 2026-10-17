@@ -1041,7 +1041,7 @@ fn draw(
             );
         }
         let centre = Vec2::new(224.0, 166.0);
-        let compact = mail.menu.is_some() || ui.selling;
+        let compact = mail.menu.is_some() || ui.selling || ui.storing.is_some() || ui.home;
         let (menu_min, menu_max) = font.choice_bounds;
         for (mesh, material) in &font.choice_body {
             let transform = if compact && menu_min.is_finite() && menu_max.is_finite() {

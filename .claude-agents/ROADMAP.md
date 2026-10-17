@@ -419,8 +419,10 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   copy verified against pinned source; Codex corrected lint/fmt and native
   save-angle parity. Storage/actor-loading follow-up now corrects owner-cell/layer
   save-back/restore, furniture-bank IDs, actor/bank/budget gates and separate
-  layer occupancy; 18 focused furniture tests pass. Bevy gameplay integration,
-  runtime per-type constructors and Philip acceptance remain separate/open.
+  layer occupancy; 18 focused furniture tests pass. First player-room gameplay
+  slice now connects placement/pickup, three-item storage and numeric layout
+  save/F9 restore to runtime disc rendering and collision. Retail movement,
+  animations, per-type behavior and Philip acceptance remain separate/open.
   See backlog/migrate-rustimal-modules.md and docs/rustimal-migration-inventory.md.
   Philip's directive: the rustimal modules were built to end up here.
 

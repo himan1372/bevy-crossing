@@ -24,6 +24,9 @@ pub struct PocketsUi {
     /// Inventory mode 0x5: return a slot to Nook, never transact here.
     pub(crate) selling: bool,
     pub(crate) sell_slot: Option<usize>,
+    pub(crate) home: bool,
+    pub(crate) storing: Option<usize>,
+    pub(crate) room_request: Option<crate::player_room::PocketRequest>,
 }
 
 #[derive(Component)]
@@ -84,6 +87,7 @@ fn toggle_pockets(
     mut ui: ResMut<PocketsUi>,
     mut mail: ResMut<crate::mail::MailUi>,
     mut panel: Query<&mut Visibility, With<PocketsPanel>>,
+    home: Res<crate::player_room::PlayerRoom>,
 ) {
     if ui.open && *focus != InputFocus::Pockets {
         return;
@@ -115,6 +119,9 @@ fn toggle_pockets(
         return;
     }
     ui.open = next;
+    if next {
+        ui.home = home.available;
+    }
     ui.menu = None;
     ui.grabbed = None;
     mail.menu = None;
@@ -170,6 +177,14 @@ impl PocketsUi {
                 // own source flows; don't offer an unsupported transaction.
                 vec!["Quit"]
             }
+        } else if self.storing.is_some() {
+            if crate::player_room::can_store(item, condition) {
+                vec!["Put in", "Quit"]
+            } else {
+                vec!["Quit"]
+            }
+        } else if self.home && condition == 0 && items::is_furniture(item) {
+            vec!["Place in room", "Grab"]
         } else {
             item_actions(item, condition)
         }
@@ -234,6 +249,7 @@ fn pockets_input(
                 && ui.grabbed.is_none()
                 && renderer.is_some()
                 && !ui.selling
+                && ui.storing.is_none()
             {
                 // mTG_move_cursol_between_table_inventory_right: same Y.
                 ui.mail_slot = Some((ui.selected / 5 + 2) * 2);
@@ -271,6 +287,24 @@ fn pockets_input(
                 ui.open = false;
             }
             crate::sound::se(crate::sound::se_id::CHOICE_CONFIRM);
+            return;
+        }
+        if let Some(owner) = ui.storing {
+            if choice == 0 && crate::player_room::can_store(item, inventory.pockets.item_cond(slot))
+            {
+                ui.room_request =
+                    Some(crate::player_room::PocketRequest::Store { owner, slot, item });
+                ui.open = false;
+            }
+            return;
+        }
+        if ui.home
+            && choice == 0
+            && inventory.pockets.item_cond(slot) == 0
+            && items::is_furniture(item)
+        {
+            ui.room_request = Some(crate::player_room::PocketRequest::Place { slot, item });
+            ui.open = false;
             return;
         }
         if inventory.pockets.item_cond(slot) & 1 == 0 && held_tool(item).is_some() && choice == 0 {

@@ -150,10 +150,89 @@ entry alone cannot establish completion through the script. Historical claim
 records were not manually edited in this verification. Future claims/releases
 must go through the script; compatibility cleanup remains a separate follow-up.
 
+### First playable furniture slice, Codex, 2026-10-16
+
+Philip authorized connecting the corrected kernels to placement and storage.
+A PC crash interrupted research before implementation; the claim was recovered
+through task-claimer.sh. This is one bounded gameplay integration, not completion
+of the migration or M4.
+
+Implemented in app/src/player_room.rs, furniture.rs, interior.rs, house.rs,
+pockets.rs/pockets_disc.rs, input.rs, dialogue.rs/msg_window.rs and save.rs:
+
+- Player-owned small room only: pockets offer Place in room for ordinary
+  furniture. Profiles, original IDs, meshes, textures, height/shape and separate
+  aMR_layer_set_info values are read from the runtime disc. Missing model support
+  refuses the transaction and retains the pocket item. Villager rooms are not
+  editable. The original tape deck and orange box are initialized from disc data.
+- Placement uses the C aMR_GetPlayerLookAtUnit adjacent-unit table/angular
+  offsets, source opposite-facing orientation and special item offsets, native
+  footprint/free-slot/budget checks, with room-wall/player-circle guards. The
+  inherited native judge's straight five-cell approximation is deliberately
+  not used as retail placement. 1x2 fallback searches all rotations at those
+  units; this retains the translated BUGFIXES-style fallback, not the retail C
+  stale-target loop. Full TypeC square_offset behavior and collisionless
+  under-player placement remain follow-ups. Supported small objects can stand
+  on non-storage surfaces; the base cannot be picked up while something is on it.
+- Backspace picks up aimed furniture, prioritizing layer 1 and using source
+  50/56-unit ranges. Furniture plus all held contents must fit before any item
+  moves. Empty hands are required. E opens drawers/wardrobes/closets; Put in
+  reuses retail pockets, Take out lists up to three stored items plus Quit.
+  Layer-1 storage has two held slots. Full/cancel paths keep both sides intact.
+- Storage selection follows mSM_check_item_for_furniture: normal-condition
+  ITEM1 goods only, excluding fish/insects/turnips, exercise cards and knife/fork.
+  Furniture leaves are excluded by the source. Music-player interaction remains
+  separate; the general storage predicate still preserves its saved contents.
+- make_furniture_actors_from_layers and restore_stored_items_from_fg rebuild
+  room ownership. Potential stored leaves above storage are masked only from
+  the secondary actor scan, then restored from the intact foreground layers.
+  Model roots update only when a piece changes. Player collision refresh keeps
+  villager-room obstacles. The no-disc room retains its existing placeholders.
+- Additive optional home_furniture saves four numeric 16x16 layers and switch
+  masks. Missing field initializes old saves' original room; explicit empty
+  layers remain empty. Malformed layer lengths fail deserialization. F5 calls
+  keep_items_to_fg on cloned actors/layers so live storage never empties; F9 and
+  startup restore layout/storage. Without disc profiles, numeric layout data is
+  retained through save/load instead of being replaced by defaults.
+
+Storage currently uses the existing disc message/choice renderer with concise
+adapter text, not the complete original room-message scripts. Furniture has no
+speaking actor/nameplate. Transactions are immediate; source birth/pickup/door
+animations, pushing/pulling/rotation, switches and per-type behavior, loose items
+(including the previously omitted starter diary), upgrades, complete TypeC
+placement and exact source storage dialogue remain open. Nothing here is Philip
+playtest acceptance. Handoff prompt: docs/codex-handoff.md.
+
+Disposable manual evidence so far: original wardrobe placement/removal; ordinary
+apple Put in/Take out; repeated F5 keeps live contents; F9 restores three distinct
+stored items at the owner's cell in layers 1/2/3; full-pocket pickup/retrieval,
+full-storage refusal and Escape cancellation preserve inventory/layers; pickup
+with four free slots returns wardrobe, apple, shirt and paper atomically and
+clears all four owner cells. A fresh process restored the wardrobe and all three
+contents. Explicit empty layers loaded without respawning starter items. Orange
+box + tape deck placement saved in main/secondary layers at the same cell,
+rendered at the original surface height, and Backspace recovered the deck before
+the box. Collision held the player at z=3001.366 in front of the wardrobe; after
+pickup, W crossed its former space to z=2999.358. A room filled with 14 boxes
+refused placement, retained the pocket wardrobe and kept all 14 actors. Explicit
+missing-disc preview entered the placeholder house, opened/closed pockets and
+saved/loaded/saved without changing the numeric room layout or item. Early menu
+attempts before facing/reveal settled were retried and are not evidence.
+
+Workspace check, all-target clippy with warnings denied, format check, capture
+build and final default workspace build pass. No tests added/run in this slice;
+historical kernel-test counts above are separate. All preview processes closed.
+Real save SHA256 remained
+ECD1F9A7D016A0E5862882A704FDB3B88B16AAB51183CA1E7B29084139359BDC.
+Settings untouched; no extracted bytes, screenshot assets or Temp saves committed.
+Philip acceptance remains pending. Full TypeC/1x2 variety, every model, villager
+collision traversal and all source-specific behaviors were not manually certified.
+
 ## Progress
 
 - [x] furniture.rs import/pilot update, 2026-10-16
 - [x] Bounded pilot verification/corrections and inventory audit, 2026-10-16
 - [x] Furniture storage/actor-loading kernel corrections and focused regressions
-- [ ] Wire corrected kernels into Bevy furniture gameplay and obtain playtest acceptance
+- [x] First player-room placement/pickup/storage/save integration (bounded scope above)
+- [ ] Philip playtest acceptance and remaining furniture gameplay/source fidelity
 - [ ] Remaining 193 source-module reviews (not 193 new imports)

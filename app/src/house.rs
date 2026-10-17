@@ -58,9 +58,10 @@ pub struct ReturnPosition(pub Vec3);
 
 /// Interior furniture collision boxes, in world coordinates.
 #[derive(Resource, Default)]
-struct InteriorObstacles(Vec<Obstacle>);
+pub(crate) struct InteriorObstacles(Vec<Obstacle>);
 
 struct Obstacle {
+    player_room: bool,
     min_x: f32,
     max_x: f32,
     min_z: f32,
@@ -71,6 +72,7 @@ impl Obstacle {
     /// A room furniture box, in a room at `origin`.
     fn around(origin: Vec3, f: &crate::interior::RoomFurniture) -> Self {
         Self {
+            player_room: origin == INTERIOR_ORIGIN,
             min_x: origin.x + f.centre.x - f.half.x,
             max_x: origin.x + f.centre.x + f.half.x,
             min_z: origin.z + f.centre.z - f.half.y,
@@ -79,18 +81,33 @@ impl Obstacle {
     }
 }
 
+impl InteriorObstacles {
+    pub(crate) fn replace_player(&mut self, furniture: &[crate::interior::RoomFurniture]) {
+        self.0.retain(|o| !o.player_room);
+        self.0.extend(
+            furniture
+                .iter()
+                .map(|f| Obstacle::around(INTERIOR_ORIGIN, f)),
+        );
+    }
+}
+
 /// Marker for the "inside house" HUD indicator.
 #[derive(Component)]
 struct HouseHudText;
 
 /// Far-away origin where the interior room is built (well clear of the town).
-const INTERIOR_ORIGIN: Vec3 = Vec3::new(3000.0, 0.0, 3000.0);
+pub(crate) const INTERIOR_ORIGIN: Vec3 = Vec3::new(3000.0, 0.0, 3000.0);
 /// Villager rooms sit beside the player's, this far apart in x.
 const VILLAGER_ROOM_SPACING: f32 = 100.0;
 
 /// The room the player is in (or last entered): its origin and bounds.
 #[derive(Resource, Clone, Copy)]
-struct CurrentRoom(Vec3, RoomBounds);
+pub(crate) struct CurrentRoom(Vec3, RoomBounds);
+
+pub(crate) fn is_player_room(room: &CurrentRoom, state: &State<HouseState>) -> bool {
+    *state.get() == HouseState::Inside && room.0 == INTERIOR_ORIGIN
+}
 
 impl Default for CurrentRoom {
     fn default() -> Self {
@@ -228,7 +245,7 @@ fn furniture_footprint(size: FurnitureSize) -> (f32, f32) {
 
 /// Build the interior room once at the distant origin.
 #[allow(clippy::too_many_arguments)]
-fn build_interior(
+pub(crate) fn build_interior(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -349,6 +366,7 @@ fn build_interior(
             Transform::from_xyz(ox + lx, h / 2.0, oz + lz),
         ));
         obstacles.push(Obstacle {
+            player_room: true,
             min_x: ox + lx - fw / 2.0,
             max_x: ox + lx + fw / 2.0,
             min_z: oz + lz - fd / 2.0,
@@ -586,13 +604,22 @@ fn hits_obstacle(x: f32, z: f32, obstacles: &InteriorObstacles) -> bool {
 /// Show/hide the "inside house" indicator with the state.
 fn update_house_hud(
     state: Res<State<HouseState>>,
-    mut query: Query<&mut Visibility, With<HouseHudText>>,
+    room: Res<crate::player_room::PlayerRoom>,
+    mut query: Query<(&mut Visibility, &mut Text), With<HouseHudText>>,
 ) {
-    for mut vis in query.iter_mut() {
+    for (mut vis, mut text) in query.iter_mut() {
         *vis = match *state.get() {
             HouseState::Inside => Visibility::Visible,
             HouseState::Town => Visibility::Hidden,
         };
+        let hint = if room.available {
+            "House - I: place furniture | Backspace: pick up | E: storage / exit"
+        } else {
+            "House — press E at the door to exit"
+        };
+        if text.0 != hint {
+            text.0 = hint.into();
+        }
     }
 }
 
