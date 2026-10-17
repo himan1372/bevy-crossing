@@ -72,7 +72,7 @@ storage save-back. The following evidence is bounded, not full C equivalence:
 - Furniture model rendering still uses ShapeType and housing uses FurnitureSize;
   importing the rest does not wire placement/storage/moving into Bevy gameplay.
 
-### Inherited source gaps: not fixed by this verification
+### Inherited source gaps found by the pilot verification
 
 - keep_items_to_fg scatters held items into first-free cells in two layers and
   does not clear actor items. C aMR_KeepItem2Fg writes each item at its owner's
@@ -84,8 +84,63 @@ storage save-back. The following evidence is bounded, not full C equivalence:
   These helpers are not called by the Bevy app; fix before wiring them.
 
 Both gaps existed in canonical Rustimal and pre-pilot Bevy, not just Muse's
-update. They are now documented on the public helpers. Copy fidelity and passing
-tests are not proof that every original translation is faithful to retail.
+update. They were corrected in the subsequent authorized slice below. Copy
+fidelity and passing tests are not proof of full retail equivalence.
+
+### Storage and actor-loading correction, 2026-10-16
+
+Philip authorized this follow-up after verification. Original C reviewed:
+ac_my_room.c::aMR_KeepItem2Fg, aMR_MakeItemDataInFurniture,
+aMR_MakeOneFurniture/aMR_MakeFurnitureActor, aMR_SetFurnitureType and
+aMR_FurnitureCt; ac_my_room_move.c_inc::aMR_UnitNum2FtrItemNoFtrID;
+m_room_type.c::mRmTp_FtrItemNo2FtrIdx/mRmTp_FtrIdx2FtrItemNo; m_name_table.h.
+
+- keep_items_to_fg now receives a mutable actor and optional destination-layer
+  views. It writes held slot n at the actor's primary cell in layer actor.layer
+  +1+n, keeps empty/missing-layer holes, and clears only successful writes. A
+  layer-0 actor can use three layers; a layer-1 actor only two. Invalid cells or
+  unavailable layers preserve held items. As C does, nonempty owner destination
+  cells are overwritten; unrelated cells are not touched.
+- Added restore_stored_items_from_fg following the C layer/row order and owner
+  footprint lookup, with caller-supplied aFTR_IS_STORAGE profile predicate.
+  Ownerless/non-storage items, RSV_NO and RSV_WALL_NO remain unchanged. Successful
+  transfers clear the foreground cell and restore the corresponding held slot.
+- make_furniture_actors_from_layers now builds the persistent actor subset in
+  the provided room, rather than returning unfiltered tuples. It scans main then
+  secondary, validates ITEM_IS_FTR, respects existing actors/budget/first free
+  slots and requires a successful profile/bank callback before using a slot.
+  The callback owns GetFurnitureBank2's cached-bank/load decision; no actual
+  disc-bank loading was added to logic. Original B0 profile rotations, angles,
+  primary cells and saved switches are retained. Other per-type constructors,
+  haniwa initialization, rendering and runtime asset ownership remain separate.
+- Occupancy now has independent main/secondary grids. Malformed/overlapping
+  footprints are rejected without partial occupancy mutation; C's unchecked
+  stores are not reproduced. Releasing one actor preserves other layer owners.
+- Found/fixed related bank encoding: native saved-item conversion previously
+  treated profile indices as raw item bits. It now maps FTR0 (0x1000) and FTR1
+  (0x3000/index0x400) correctly and rejects non-furniture IDs when decoding.
+  set_furniture_to_fg uses that conversion. Low-level raw rotation macros and
+  compatibility wrappers remain distinct and unchanged.
+
+API changes are deliberate for the new source semantics: saved-item decoding
+returns Option; the loader accepts layer views, mutable room and bank callback;
+storage accepts actor/layer views; occupancy is indexed by layer first. Existing
+Bevy code uses only ShapeType/FurnitureSize, so no gameplay callers or user-save
+schema were changed. Keep these signatures when merging future Rustimal callers.
+
+Focused regression coverage: both furniture banks/rotation boundaries and invalid
+IDs; source scan order/first-free slots with existing actors; failed banks/zero
+budget; two-layer occupancy/release; B0 rotated footprints/saved switches; invalid
+footprints; primary-cell storage save/restore with a held-slot hole; missing
+layers/invalid cells; layer-1 capacity; footprint owner/non-storage/ownerless and
+reserved-cell restoration. All 18 furniture tests passed in the focused run.
+Final full logic suite: 528 unit + 10 integration tests pass (538 total), with
+workspace check/all-target clippy/format clean. Build evidence is recorded in
+comms.txt after completion. No real town save was loaded or rewritten.
+
+These are logic-layer corrections, not in-game furniture placement, storage UI
+or a Philip playtest acceptance. Integration remains the next separate task;
+the migration and M4 remain open.
 
 ### Coordination evidence
 
@@ -99,5 +154,6 @@ must go through the script; compatibility cleanup remains a separate follow-up.
 
 - [x] furniture.rs import/pilot update, 2026-10-16
 - [x] Bounded pilot verification/corrections and inventory audit, 2026-10-16
-- [ ] Furniture storage/actor-loading source gaps before gameplay integration
+- [x] Furniture storage/actor-loading kernel corrections and focused regressions
+- [ ] Wire corrected kernels into Bevy furniture gameplay and obtain playtest acceptance
 - [ ] Remaining 193 source-module reviews (not 193 new imports)

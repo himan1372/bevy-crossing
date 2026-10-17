@@ -17,6 +17,11 @@ The former 113-new/81-overlap/10-Bevy-only counts mixed directory levels. All ni
 
 Furniture was already present before the pilot; the pilot updated it rather than adding a missing module. Its original imported baseline matches the pinned source apart from a module preamble and removal of ABI export attributes/calling conventions. See the migration task note for correction and source-gap evidence.
 
+The later authorized furniture correction changes native loader/storage APIs,
+adds per-layer occupancy and fixes banked item IDs. Preserve these verified
+adaptations when comparing future source revisions; this inventory's hashes and
+counts remain the original pinned snapshot, not a new claim of file equivalence.
+
 | Relative module path | Inventory status |
 | --- | --- |
 | `action_audio.rs` | Bevy only; preserve |

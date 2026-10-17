@@ -50,11 +50,9 @@
 //! (200) and any other sentinel values beyond what the brief quotes; collision
 //! edge geometry beyond profile-driven edges.
 //!
-//! Verification boundary (2026-10-16): `keep_items_to_fg` is a legacy
-//! first-free-cell abstraction, not C's position/layer-preserving storage
-//! save-back. `make_furniture_actors_from_layers` also omits C's ITEM_IS_FTR
-//! filtering and actor budget/bank checks. Neither helper is wired into the
-//! Bevy app; they need source-faithful replacements before gameplay use.
+//! Loading/storage kernels preserve source item banks, owner cells and layer
+//! order. Runtime callers supply furniture profiles/bank availability; rendering,
+//! per-type constructors and Bevy placement/storage integration remain separate.
 
 /// Unit grid dimensions of one foreground layer (`UT_X_NUM`/`UT_Z_NUM`
 /// = `UT_BASE_NUM` = 16, `include/m_field_make.h`).
@@ -68,6 +66,7 @@ pub mod layer {
     pub const STORAGE1: usize = 2;
     pub const STORAGE2: usize = 3;
     pub const NUM: usize = 4;
+    pub const ACTOR_NUM: usize = 2;
 }
 
 /// Empty foreground cell (`EMPTY_NO`, `include/m_name_table.h`).
@@ -104,11 +103,12 @@ pub enum Direction {
 pub fn ftr_get_rotation(item: u16) -> u8 {
     (item & 3) as u8
 }
-/// `FTR_IDX_2_NO(f)`: furniture index -> item-number base.
+/// `FTR_IDX_2_NO(f)`: raw saved item bits -> item-number base.
+/// This is distinct from the banked profile-index conversion below.
 pub fn ftr_idx_2_no(idx: u16) -> u16 {
     idx >> 2
 }
-/// `FTR_NO_2_IDX(f)`: item-number base -> furniture index.
+/// `FTR_NO_2_IDX(f)`: raw item-number base -> saved item bits.
 pub fn ftr_no_2_idx(no: u16) -> u16 {
     no << 2
 }
@@ -118,10 +118,18 @@ pub fn ftr_no_rot_2_idx(no: u16, rot: u8) -> u16 {
 }
 /// `mRmTp_FtrIdx2FtrItemNo(idx, direct)`: index + cardinal direction -> saved item.
 pub fn ftr_idx_2_item_no(idx: u16, dir: Direction) -> u16 {
-    ((idx << 2) | (dir as u16)) & 0xFFFF
+    let base = if idx < 0x400 { 0x1000u16 } else { 0x2000u16 };
+    base.wrapping_add(idx.wrapping_shl(2))
+        .wrapping_add(dir as u16)
 }
-/// Inverse: saved item -> (furniture index, direction).
-pub fn ftr_item_no_2_idx_dir(item: u16) -> (u16, Direction) {
+/// `ITEM_IS_FTR` and `mRmTp_FtrItemNo2FtrIdx`: only banks 1 and 3
+/// represent furniture. Reservation markers, scenery and pocket items don't.
+pub fn ftr_item_no_2_idx_dir(item: u16) -> Option<(u16, Direction)> {
+    let idx = match item >> 12 {
+        1 => (item - 0x1000) >> 2,
+        3 => 0x400 + ((item - 0x3000) >> 2),
+        _ => return None,
+    };
     let rot = ftr_get_rotation(item);
     let dir = match rot {
         0 => Direction::South,
@@ -129,7 +137,7 @@ pub fn ftr_item_no_2_idx_dir(item: u16) -> (u16, Direction) {
         2 => Direction::North,
         _ => Direction::West,
     };
-    (item >> 2, dir)
+    Some((idx, dir))
 }
 
 /// Runtime furniture shape (`aFTR_SHAPE_TYPE*`, `include/ac_furniture.h`).
@@ -356,7 +364,8 @@ pub struct FloorBitInfo {
 /// One house floor: four FG layers plus surface data
 /// (`mHm_flr_c`, `include/m_home_h.h`).
 ///
-/// Layers 2/3 are the persistent "contents above furniture" layers that
+/// Layers above each actor (including layer 1 for a layer-0 actor) are the
+/// persistent "contents above furniture" layers that
 /// storage-capable furniture converts into `FTR_ACTOR.items[3]` on room entry
 /// and writes back on room exit.
 #[derive(Clone, Debug, Default)]
@@ -486,8 +495,8 @@ pub struct MyRoomRuntime {
     /// Actor budget for this scene (`aMR_GetSceneFurnitureMax`).
     pub list_size: usize,
     pub actors: Vec<Option<FurnitureActor>>,
-    /// Unit -> actor slot occupying it (`aMR_place_table`), `None` = free.
-    pub occupancy: [[Option<u16>; UT_X_NUM]; UT_Z_NUM],
+    /// Separate layer-0/1 unit -> actor-slot tables (`aMR_place_table`).
+    pub occupancy: [[[Option<u16>; UT_X_NUM]; UT_Z_NUM]; layer::ACTOR_NUM],
     pub reservations: [FurnitureReservation; RSV_FTR_NUM],
 }
 
@@ -497,7 +506,7 @@ impl MyRoomRuntime {
         MyRoomRuntime {
             list_size: n,
             actors: vec![None; n],
-            occupancy: [[None; UT_X_NUM]; UT_Z_NUM],
+            occupancy: [[[None; UT_X_NUM]; UT_Z_NUM]; layer::ACTOR_NUM],
             reservations: [FurnitureReservation::default(); RSV_FTR_NUM],
         }
     }
@@ -515,7 +524,17 @@ impl MyRoomRuntime {
     /// Occupy the footprint cells of `shape` at `(x, z)` with `actor_slot`.
     /// Returns false (leaving the table unchanged) if any cell is out of the
     /// 16x16 grid or already occupied.
-    pub fn occupy(&mut self, shape: ShapeType, x: i32, z: i32, actor_slot: u16) -> bool {
+    pub fn occupy(
+        &mut self,
+        layer: usize,
+        shape: ShapeType,
+        x: i32,
+        z: i32,
+        actor_slot: u16,
+    ) -> bool {
+        let Some(occupancy) = self.occupancy.get_mut(layer) else {
+            return false;
+        };
         let mut cells = [(0i32, 0i32); 4];
         let n = shape.unit_count();
         for i in 0..n {
@@ -524,21 +543,21 @@ impl MyRoomRuntime {
             if !(0..UT_X_NUM as i32).contains(&cx) || !(0..UT_Z_NUM as i32).contains(&cz) {
                 return false;
             }
-            if self.occupancy[cz as usize][cx as usize].is_some() {
+            if occupancy[cz as usize][cx as usize].is_some() {
                 return false;
             }
             cells[i] = (cx, cz);
         }
         for i in 0..n {
             let (cx, cz) = cells[i];
-            self.occupancy[cz as usize][cx as usize] = Some(actor_slot);
+            occupancy[cz as usize][cx as usize] = Some(actor_slot);
         }
         true
     }
 
     /// Release every cell owned by `actor_slot`.
     pub fn release(&mut self, actor_slot: u16) {
-        for row in self.occupancy.iter_mut() {
+        for row in self.occupancy.iter_mut().flatten() {
             for cell in row.iter_mut() {
                 if *cell == Some(actor_slot) {
                     *cell = None;
@@ -928,7 +947,7 @@ pub fn save_angle_quantize(sin_v: f32, cos_v: f32) -> Direction {
 
 /// Write a furniture actor back into its FG layer (`aMR_SetFurniture2FG`).
 ///
-/// The primary cell gets `FTR_NO_ROT_2_IDX(ftr_idx, rotation)`; every other
+/// The primary cell gets the banked item number for `ftr_idx` and rotation; every other
 /// occupied cell gets `RSV_FE1F`. With `on_flag == false` all cells are
 /// cleared to `EMPTY_NO`.
 pub fn set_furniture_to_fg(
@@ -946,7 +965,7 @@ pub fn set_furniture_to_fg(
         let (dx, dz) = shape.unit_offsets()[i];
         cells[i] = (x + dx, z + dz);
     }
-    let primary_item = ftr_no_rot_2_idx(ftr_idx, rotation as u8);
+    let primary_item = ftr_idx_2_item_no(ftr_idx, rotation);
     for i in 0..n {
         let (cx, cz) = cells[i];
         let v = if on_flag {
@@ -993,71 +1012,130 @@ pub fn restore_switch_bit(layer: &RoomLayer, x: i32, z: i32) -> u8 {
     }
 }
 
-/// Build runtime actors from saved layers 0 and 1 (`aMR_MakeFurnitureActor`
-/// for `mCoBG_LAYER0`/`mCoBG_LAYER1`).
-///
-/// Returns `(ftr_idx, rotation, layer)` entries in scan order;
-/// `RSV_FE1F` secondary cells are skipped since they belong to the primary
-/// cell's actor.
-/// This legacy helper accepts every other nonempty ID; it does not implement
-/// `aMR_MakeOneFurniture`'s item-kind, bank or actor-budget checks.
+/// `aMR_MakeFurnitureActor` / `aMR_MakeOneFurniture`: scan layer 0 then 1,
+/// row-major, filter furniture and allocate the first free slot within budget.
+/// `bank` implements `aMR_GetFurnitureBank2`: return the profile's shape only
+/// when its bank already exists or was successfully loaded. No slot is used
+/// on failure. Rendering and per-type actor constructors remain runtime-owned.
 pub fn make_furniture_actors_from_layers(
-    layer0: &RoomLayer,
-    layer1: &RoomLayer,
-) -> Vec<(u16, Direction, usize)> {
-    let mut out = Vec::new();
-    for (layer_idx, layer) in [layer0, layer1].iter().enumerate() {
+    layers: [Option<&RoomLayer>; layer::ACTOR_NUM],
+    room: &mut MyRoomRuntime,
+    bank: &mut dyn FnMut(u16, u16) -> Option<ShapeType>,
+) -> usize {
+    let mut made = 0;
+    for (layer_idx, layer) in layers.into_iter().enumerate() {
+        let Some(layer) = layer else { continue };
         for z in 0..UT_Z_NUM as i32 {
             for x in 0..UT_X_NUM as i32 {
                 let item = layer.get(x, z).unwrap_or(EMPTY_NO);
-                if item != EMPTY_NO && item != RSV_FE1F {
-                    let (idx, dir) = ftr_item_no_2_idx_dir(item);
-                    out.push((idx, dir, layer_idx));
+                let Some((idx, dir)) = ftr_item_no_2_idx_dir(item) else {
+                    continue;
+                };
+                if room.count_furniture() >= room.list_size {
+                    return made;
                 }
+                let Some(slot) = room.search_free_actor() else {
+                    return made;
+                };
+                let Some(original_shape) = bank(idx, item) else {
+                    continue;
+                };
+                // aMR_SetFurnitureType rotates only the canonical B0 profile.
+                let shape = if original_shape == ShapeType::TypeB0 {
+                    [
+                        ShapeType::TypeB0,
+                        ShapeType::TypeB90,
+                        ShapeType::TypeB180,
+                        ShapeType::TypeB270,
+                    ][dir as usize]
+                } else {
+                    original_shape
+                };
+                // Reject malformed/overlapping FG footprints without partial
+                // occupancy writes, rather than reproducing C's unchecked stores.
+                if !room.occupy(layer_idx, shape, x, z, slot as u16) {
+                    continue;
+                }
+                let mut actor = FurnitureActor::new(idx, shape, layer_idx, x, z);
+                actor.original_shape_type = original_shape;
+                actor.angle_y = (dir as u8 as f32) * 90.0;
+                actor.angle_y_target = actor.angle_y;
+                actor.s_angle_y = ((dir as u16) << 14) as i16;
+                actor.switch_bit = restore_switch_bit(layer, x, z);
+                room.actors[slot] = Some(actor);
+                made += 1;
             }
         }
     }
-    out
+    made
 }
 
-/// Legacy first-free-cell storage helper, not a retail save-back routine.
-///
-/// `stored` holds up to 3 items; they are written into the first free cells
-/// of the storage layers. Returns the number of items written back.
-/// C's `aMR_KeepItem2Fg` instead writes at the actor's unit in each successive
-/// layer and clears its corresponding held item; this signature lacks the
-/// position, actor layer and mutable held items needed to reproduce it.
+/// `aMR_KeepItem2Fg`: save each held slot at the actor's primary unit in
+/// successive layers above it. Empty/unavailable slots do not compact later
+/// items. Clear a held slot only after its destination write succeeds.
+/// `cell_x/z` are the resolved `aMR_Wpos2PlaceNumber` primary unit, including
+/// the TypeC half-cell correction; this pure kernel does not infer world units.
 pub fn keep_items_to_fg(
-    stored: &[u16; FTR_KEEP_ITEM_COUNT],
-    storage1: &mut RoomLayer,
-    storage2: &mut RoomLayer,
+    actor: &mut FurnitureActor,
+    layers: &mut [Option<&mut RoomLayer>; layer::NUM],
 ) -> usize {
     let mut written = 0;
-    let mut layers: [&mut RoomLayer; 2] = [storage1, storage2];
-    for &item in stored.iter() {
-        if item == EMPTY_NO {
-            continue;
-        }
-        let mut placed = false;
-        for layer in layers.iter_mut() {
-            'scan: for z in 0..UT_Z_NUM as i32 {
-                for x in 0..UT_X_NUM as i32 {
-                    if layer.get(x, z) == Some(EMPTY_NO) {
-                        layer.set(x, z, item);
-                        placed = true;
-                        break 'scan;
-                    }
-                }
-            }
-            if placed {
-                break;
-            }
-        }
-        if placed {
+    if actor.layer >= layer::NUM {
+        return written;
+    }
+    for (slot, destination) in layers.iter_mut().skip(actor.layer + 1).enumerate() {
+        let item = actor.items[slot];
+        if item != EMPTY_NO
+            && destination
+                .as_deref_mut()
+                .is_some_and(|fg| fg.set(actor.cell_x, actor.cell_z, item))
+        {
+            actor.items[slot] = EMPTY_NO;
             written += 1;
         }
     }
     written
+}
+
+/// `aMR_MakeItemDataInFurniture`: associate higher-layer items with the
+/// footprint owner in layer 0/1, moving them into the corresponding held slot.
+/// The caller's profile lookup supplies `aFTR_IS_STORAGE`. `RSV_NO`/`RSV_WALL_NO`
+/// and ownerless/non-storage cells stay in the foreground unchanged.
+pub fn restore_stored_items_from_fg(
+    room: &mut MyRoomRuntime,
+    layers: &mut [Option<&mut RoomLayer>; layer::NUM],
+    storage: &dyn Fn(u16) -> bool,
+) -> usize {
+    let mut restored = 0;
+    for owner_layer in 0..layer::ACTOR_NUM {
+        if layers[owner_layer].is_none() {
+            continue;
+        }
+        for (slot, higher) in layers.iter_mut().skip(owner_layer + 1).enumerate() {
+            let Some(higher) = higher else { continue };
+            for z in 0..UT_Z_NUM {
+                for x in 0..UT_X_NUM {
+                    let item = higher.items[z][x];
+                    if matches!(item, EMPTY_NO | 0xFFFF | 0xFFFE) {
+                        continue;
+                    }
+                    let Some(owner) = room.occupancy[owner_layer][z][x] else {
+                        continue;
+                    };
+                    let Some(actor) = room.actors.get_mut(owner as usize).and_then(Option::as_mut)
+                    else {
+                        continue;
+                    };
+                    if actor.layer == owner_layer && storage(actor.name) {
+                        actor.items[slot] = item;
+                        higher.items[z][x] = EMPTY_NO;
+                        restored += 1;
+                    }
+                }
+            }
+        }
+    }
+    restored
 }
 
 /// Reserve a furniture birth slot (`aMR_ReserveFurniture`).
@@ -1168,7 +1246,7 @@ mod tests {
                 let item = ftr_idx_2_item_no(idx, dir);
                 assert_eq!(ftr_get_rotation(item), rot);
                 assert_eq!(ftr_no_rot_2_idx(ftr_idx_2_no(item), rot), item);
-                let (back_idx, back_dir) = ftr_item_no_2_idx_dir(item);
+                let (back_idx, back_dir) = ftr_item_no_2_idx_dir(item).unwrap();
                 assert_eq!(back_idx, idx);
                 assert_eq!(back_dir, dir);
             }
@@ -1266,7 +1344,7 @@ mod tests {
             4,
             true
         ));
-        assert_eq!(fg.get(4, 4), Some(ftr_no_rot_2_idx(100, 1)));
+        assert_eq!(fg.get(4, 4), Some(0x1191));
         assert_eq!(fg.get(5, 4), Some(RSV_FE1F));
         assert_eq!(fg.get(4, 5), Some(RSV_FE1F));
         assert_eq!(fg.get(5, 5), Some(RSV_FE1F));
@@ -1285,9 +1363,18 @@ mod tests {
         // Deserialization skips RSV_FE1F cells.
         let mut fg2 = RoomLayer::default();
         set_furniture_to_fg(&mut fg2, 100, ShapeType::TypeC, Direction::East, 4, 4, true);
-        let actors = make_furniture_actors_from_layers(&fg2, &RoomLayer::default());
-        assert_eq!(actors.len(), 1);
-        assert_eq!(actors[0], (100, Direction::East, layer::MAIN));
+        let mut room = MyRoomRuntime::new(2);
+        assert_eq!(
+            make_furniture_actors_from_layers([Some(&fg2), None], &mut room, &mut |_, _| Some(
+                ShapeType::TypeC
+            )),
+            1
+        );
+        let actor = room.actors[0].as_ref().unwrap();
+        assert_eq!(
+            (actor.name, actor.angle_y, actor.layer),
+            (100, 90.0, layer::MAIN)
+        );
     }
 
     #[test]
@@ -1466,14 +1553,14 @@ mod tests {
     #[test]
     fn occupancy_and_reservations() {
         let mut room = MyRoomRuntime::new(64);
-        assert!(room.occupy(ShapeType::TypeB0, 4, 4, 7));
-        assert_eq!(room.occupancy[4][4], Some(7));
-        assert_eq!(room.occupancy[4][5], Some(7));
+        assert!(room.occupy(layer::MAIN, ShapeType::TypeB0, 4, 4, 7));
+        assert_eq!(room.occupancy[layer::MAIN][4][4], Some(7));
+        assert_eq!(room.occupancy[layer::MAIN][4][5], Some(7));
         // Overlap rejected.
-        assert!(!room.occupy(ShapeType::TypeA, 5, 4, 8));
+        assert!(!room.occupy(layer::MAIN, ShapeType::TypeA, 5, 4, 8));
         room.release(7);
-        assert_eq!(room.occupancy[4][4], None);
-        assert!(room.occupy(ShapeType::TypeA, 5, 4, 8));
+        assert_eq!(room.occupancy[layer::MAIN][4][4], None);
+        assert!(room.occupy(layer::MAIN, ShapeType::TypeA, 5, 4, 8));
 
         let mut rsv = [FurnitureReservation::default(); RSV_FTR_NUM];
         assert_eq!(reserve_furniture(&mut rsv, 100, 1, 0, 4, 4), Some(0));
@@ -1515,21 +1602,258 @@ mod tests {
 
     #[test]
     fn storage_roundtrip_to_fg() {
-        let mut s1 = RoomLayer::default();
-        let mut s2 = RoomLayer::default();
-        let stored = [0x2101u16, 0x2202, EMPTY_NO];
-        let n = keep_items_to_fg(&stored, &mut s1, &mut s2);
-        assert_eq!(n, 2);
-        assert_eq!(s1.get(0, 0), Some(0x2101));
-        assert_eq!(s1.get(1, 0), Some(0x2202));
-        // Full storage layers -> nothing more written.
-        for z in 0..UT_Z_NUM as i32 {
-            for x in 0..UT_X_NUM as i32 {
-                s1.set(x, z, 0x1111);
-                s2.set(x, z, 0x2222);
-            }
+        let mut floor = HouseFloor::default();
+        floor.layer_main.set(4, 5, 0x1028); // profile 10 at its owner cell
+        floor.layer_storage1.set(0, 0, 0x2514); // unrelated item must not move
+        let mut actor = FurnitureActor::new(10, ShapeType::TypeA, layer::MAIN, 4, 5);
+        let stored = [0x2800, EMPTY_NO, 0x2203];
+        actor.items = stored;
+        assert_eq!(
+            keep_items_to_fg(&mut actor, &mut floor_layers(&mut floor)),
+            2
+        );
+        assert_eq!(actor.items, [EMPTY_NO; 3]);
+        assert_eq!(floor.layer_secondary.get(4, 5), Some(0x2800));
+        assert_eq!(floor.layer_storage1.get(4, 5), Some(EMPTY_NO));
+        assert_eq!(floor.layer_storage2.get(4, 5), Some(0x2203));
+        assert_eq!(floor.layer_storage1.get(0, 0), Some(0x2514));
+        assert_eq!(
+            keep_items_to_fg(&mut actor, &mut floor_layers(&mut floor)),
+            0
+        );
+
+        // Rebuild from the actual saved item, then restore contents through
+        // the source's owner tables; no test-only reconstruction of slots.
+        let mut room = MyRoomRuntime::new(4);
+        assert_eq!(
+            make_furniture_actors_from_layers(
+                [Some(&floor.layer_main), Some(&floor.layer_secondary)],
+                &mut room,
+                &mut |idx, _| (idx == 10).then_some(ShapeType::TypeA)
+            ),
+            1
+        );
+        assert_eq!(
+            restore_stored_items_from_fg(&mut room, &mut floor_layers(&mut floor), &|idx| idx
+                == 10),
+            2
+        );
+        assert_eq!(room.actors[0].as_ref().unwrap().items, stored);
+        assert_eq!(floor.layer_secondary.get(4, 5), Some(EMPTY_NO));
+        assert_eq!(floor.layer_storage2.get(4, 5), Some(EMPTY_NO));
+        assert_eq!(floor.layer_storage1.get(0, 0), Some(0x2514));
+    }
+
+    fn floor_layers(floor: &mut HouseFloor) -> [Option<&mut RoomLayer>; layer::NUM] {
+        [
+            Some(&mut floor.layer_main),
+            Some(&mut floor.layer_secondary),
+            Some(&mut floor.layer_storage1),
+            Some(&mut floor.layer_storage2),
+        ]
+    }
+
+    #[test]
+    fn saved_item_banks_are_not_raw_rotation_macros() {
+        for (item, idx, dir) in [
+            (0x1000, 0, Direction::South),
+            (0x1FFF, 1023, Direction::West),
+            (0x3000, 1024, Direction::South),
+            (0x33C7, 1265, Direction::West),
+        ] {
+            assert_eq!(ftr_item_no_2_idx_dir(item), Some((idx, dir)));
+            assert_eq!(ftr_idx_2_item_no(idx, dir), item);
         }
-        let n2 = keep_items_to_fg(&stored, &mut s1, &mut s2);
-        assert_eq!(n2, 0);
+        for item in [EMPTY_NO, 0x0F05, 0x2200, 0x2800, RSV_FE1F, 0xFFFE, 0xFFFF] {
+            assert_eq!(ftr_item_no_2_idx_dir(item), None);
+        }
+    }
+
+    #[test]
+    fn actor_loading_filters_banks_and_uses_scan_order_and_free_slots() {
+        let mut main = RoomLayer::default();
+        let mut secondary = RoomLayer::default();
+        for (x, item) in [0x0F05, 0x2200, RSV_FE1F, 0x1001, 0x3002]
+            .into_iter()
+            .enumerate()
+        {
+            main.set(x as i32, 0, item);
+        }
+        main.set(0, 1, 0x101F);
+        secondary.set(4, 0, 0x1020); // same cell, separate layer occupancy
+        secondary.set(5, 0, 0x1024); // budget reached before bank lookup
+        let mut room = MyRoomRuntime::new(4);
+        room.actors[1] = Some(FurnitureActor::new(55, ShapeType::TypeA, 0, 9, 9));
+        let mut requests = Vec::new();
+        assert_eq!(
+            make_furniture_actors_from_layers(
+                [Some(&main), Some(&secondary)],
+                &mut room,
+                &mut |idx, item| {
+                    requests.push((idx, item));
+                    (idx != 0).then_some(ShapeType::TypeA)
+                }
+            ),
+            3
+        );
+        assert_eq!(
+            requests,
+            [(0, 0x1001), (1024, 0x3002), (7, 0x101F), (8, 0x1020)]
+        );
+        assert_eq!(
+            room.actors
+                .iter()
+                .map(|a| a.as_ref().unwrap().name)
+                .collect::<Vec<_>>(),
+            [1024, 55, 7, 8]
+        );
+        let actor = room.actors[0].as_ref().unwrap();
+        assert_eq!(
+            (actor.cell_x, actor.cell_z, actor.layer, actor.angle_y),
+            (4, 0, 0, 180.0)
+        );
+        assert_eq!(actor.s_angle_y, i16::MIN);
+        assert_eq!(room.occupancy[0][0][4], Some(0));
+        assert_eq!(room.occupancy[1][0][4], Some(3));
+        assert_eq!(secondary.get(5, 0), Some(0x1024));
+        room.release(0);
+        assert_eq!(room.occupancy[0][0][4], None);
+        assert_eq!(room.occupancy[1][0][4], Some(3));
+    }
+
+    #[test]
+    fn actor_loading_rotates_source_b0_footprints_and_restores_switches() {
+        let mut main = RoomLayer::default();
+        for (x, item) in [(2, 0x1000), (6, 0x1001), (10, 0x1002), (14, 0x1003)] {
+            main.set(x, 4, item);
+        }
+        main.ftr_switch = 1 << (1 + 3 * 8); // (2,4)
+        let mut room = MyRoomRuntime::new(4);
+        assert_eq!(
+            make_furniture_actors_from_layers([Some(&main), None], &mut room, &mut |_, _| Some(
+                ShapeType::TypeB0
+            )),
+            4
+        );
+        for (slot, shape, x, z) in [
+            (0, ShapeType::TypeB0, 3, 4),
+            (1, ShapeType::TypeB90, 6, 3),
+            (2, ShapeType::TypeB180, 9, 4),
+            (3, ShapeType::TypeB270, 14, 5),
+        ] {
+            assert_eq!(room.actors[slot].as_ref().unwrap().shape_type, shape);
+            assert_eq!(room.occupancy[0][z][x], Some(slot as u16));
+        }
+        assert_eq!(room.actors[0].as_ref().unwrap().switch_bit, 1);
+        assert_eq!(room.actors[1].as_ref().unwrap().switch_bit, 0);
+    }
+
+    #[test]
+    fn actor_loading_failed_footprints_and_banks_leave_slots_free() {
+        let mut main = RoomLayer::default();
+        main.set(15, 0, 0x1000); // B0 runs outside grid
+        main.set(1, 1, 0x1004); // unavailable bank
+        main.set(2, 1, 0x1008); // first successful actor still uses slot 0
+        let mut room = MyRoomRuntime::new(2);
+        assert_eq!(
+            make_furniture_actors_from_layers([Some(&main), None], &mut room, &mut |idx, _| {
+                match idx {
+                    0 => Some(ShapeType::TypeB0),
+                    1 => None,
+                    _ => Some(ShapeType::TypeA),
+                }
+            }),
+            1
+        );
+        assert_eq!(room.actors[0].as_ref().unwrap().name, 2);
+        assert!(room.actors[1].is_none());
+        assert_eq!(room.occupancy[0][0][15], None);
+        let mut empty = MyRoomRuntime::new(0);
+        assert_eq!(
+            make_furniture_actors_from_layers([Some(&main), None], &mut empty, &mut |_, _| panic!(
+                "full room must not load a bank"
+            )),
+            0
+        );
+    }
+
+    #[test]
+    fn storage_preserves_holes_missing_layers_and_invalid_destinations() {
+        let mut secondary = RoomLayer::default();
+        let mut last = RoomLayer::default();
+        last.set(4, 5, 0x2514); // C overwrites the owner's destination, not a free cell
+        let mut actor = FurnitureActor::new(10, ShapeType::TypeA, 0, 4, 5);
+        actor.items = [0x2800, 0x2200, 0x2203];
+        assert_eq!(
+            keep_items_to_fg(
+                &mut actor,
+                &mut [None, Some(&mut secondary), None, Some(&mut last)]
+            ),
+            2
+        );
+        assert_eq!(actor.items, [EMPTY_NO, 0x2200, EMPTY_NO]);
+        assert_eq!(secondary.get(4, 5), Some(0x2800));
+        assert_eq!(last.get(4, 5), Some(0x2203));
+        actor.cell_x = -1;
+        let before = last.items;
+        assert_eq!(
+            keep_items_to_fg(&mut actor, &mut [None, None, Some(&mut last), None]),
+            0
+        );
+        assert_eq!(actor.items, [EMPTY_NO, 0x2200, EMPTY_NO]);
+        assert_eq!(last.items, before);
+        actor.layer = usize::MAX;
+        assert_eq!(
+            keep_items_to_fg(&mut actor, &mut [None, None, None, None]),
+            0
+        );
+    }
+
+    #[test]
+    fn secondary_storage_uses_only_the_two_layers_above_it() {
+        let mut floor = HouseFloor::default();
+        let mut actor = FurnitureActor::new(10, ShapeType::TypeA, 1, 2, 3);
+        actor.items = [0x2800, 0x2203, 0x2514];
+        assert_eq!(
+            keep_items_to_fg(&mut actor, &mut floor_layers(&mut floor)),
+            2
+        );
+        assert_eq!(floor.layer_main.get(2, 3), Some(EMPTY_NO));
+        assert_eq!(floor.layer_secondary.get(2, 3), Some(EMPTY_NO));
+        assert_eq!(floor.layer_storage1.get(2, 3), Some(0x2800));
+        assert_eq!(floor.layer_storage2.get(2, 3), Some(0x2203));
+        assert_eq!(actor.items, [EMPTY_NO, EMPTY_NO, 0x2514]);
+    }
+
+    #[test]
+    fn storage_restore_requires_a_storage_owner_and_ignores_source_sentinels() {
+        let mut floor = HouseFloor::default();
+        floor.layer_main.set(4, 4, 0x1000);
+        let mut room = MyRoomRuntime::new(1);
+        make_furniture_actors_from_layers(
+            [Some(&floor.layer_main), None],
+            &mut room,
+            &mut |_, _| Some(ShapeType::TypeC),
+        );
+        floor.layer_secondary.set(5, 5, 0x2800); // secondary footprint cell identifies owner
+        floor.layer_storage1.set(4, 4, 0xFFFF);
+        floor.layer_storage2.set(4, 4, 0xFFFE);
+        floor.layer_storage2.set(0, 0, 0x2200); // ownerless
+        assert_eq!(
+            restore_stored_items_from_fg(&mut room, &mut floor_layers(&mut floor), &|_| false),
+            0
+        );
+        assert_eq!(floor.layer_secondary.get(5, 5), Some(0x2800));
+        assert_eq!(
+            restore_stored_items_from_fg(&mut room, &mut floor_layers(&mut floor), &|_| true),
+            1
+        );
+        assert_eq!(
+            room.actors[0].as_ref().unwrap().items,
+            [0x2800, EMPTY_NO, EMPTY_NO]
+        );
+        assert_eq!(floor.layer_storage1.get(4, 4), Some(0xFFFF));
+        assert_eq!(floor.layer_storage2.get(4, 4), Some(0xFFFE));
+        assert_eq!(floor.layer_storage2.get(0, 0), Some(0x2200));
     }
 }

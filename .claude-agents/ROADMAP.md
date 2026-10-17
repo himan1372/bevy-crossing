@@ -417,8 +417,10 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   104 source-only, 90 overlapping (88 differ, 2 exact); preserve 27 Bevy-only
   files. All nine graphics modules already exist here. Muse furniture pilot
   copy verified against pinned source; Codex corrected lint/fmt and native
-  save-angle parity. 531 logic tests pass. Inherited storage/actor-loading
-  source gaps remain unwired and need correction before gameplay integration.
+  save-angle parity. Storage/actor-loading follow-up now corrects owner-cell/layer
+  save-back/restore, furniture-bank IDs, actor/bank/budget gates and separate
+  layer occupancy; 18 focused furniture tests pass. Bevy gameplay integration,
+  runtime per-type constructors and Philip acceptance remain separate/open.
   See backlog/migrate-rustimal-modules.md and docs/rustimal-migration-inventory.md.
   Philip's directive: the rustimal modules were built to end up here.
 
