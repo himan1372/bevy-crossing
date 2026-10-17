@@ -5,7 +5,7 @@
 //! placement/pickup, and ac_my_room_msg_ctrl's three-item storage choices.
 //! Placement/pickup/storage commit immediately; movement commits its numeric
 //! destination before playing the original clips. Birth and pickup have
-//! temporary disc-backed presentation; opening remains separate.
+//! temporary disc-backed presentation, including supported storage doors.
 use std::collections::HashMap;
 
 use bevy::prelude::*;
@@ -26,6 +26,7 @@ use crate::states::GameplaySet;
 
 mod movement;
 mod presentation;
+mod storage;
 
 /// Four 16x16 source layers, including owner-cell storage save-back.
 /// An absent field means an old save's default room; an empty room is explicit.
@@ -71,6 +72,7 @@ pub(crate) enum PocketRequest {
 enum StorageFlow {
     #[default]
     Idle,
+    Opening(usize),
     Choose(usize),
     Take {
         owner: usize,
@@ -84,6 +86,7 @@ enum StorageFlow {
 pub(crate) struct PlayerRoom {
     movement: movement::Movement,
     presentation: presentation::Presentation,
+    storage: storage::Storage,
     layers: [RoomLayer; 4],
     runtime: MyRoomRuntime,
     profiles: HashMap<u16, FurnitureProfile>,
@@ -100,6 +103,7 @@ impl Default for PlayerRoom {
         Self {
             movement: movement::Movement::default(),
             presentation: presentation::Presentation::default(),
+            storage: storage::Storage::default(),
             layers: std::array::from_fn(|_| RoomLayer::default()),
             runtime: MyRoomRuntime::new(32), // aMR_GetSceneFurnitureMax: small room
             profiles: HashMap::new(),
@@ -119,12 +123,16 @@ fn layer_views(layers: &mut [RoomLayer; 4]) -> [Option<&mut RoomLayer>; 4] {
 
 impl PlayerRoom {
     pub(crate) fn manipulating(&self) -> bool {
-        self.presentation.busy() || self.movement.grip.is_some() || self.movement.active.is_some()
+        self.presentation.busy()
+            || self.storage.busy()
+            || self.movement.grip.is_some()
+            || self.movement.active.is_some()
     }
 
     pub(crate) fn animation(&self) -> Option<(&crate::skeleton::Animation, f32, u8)> {
         self.presentation
             .animation()
+            .or_else(|| self.storage.animation())
             .or_else(|| self.movement.animation())
     }
     pub(crate) fn snapshot(&self) -> Option<RoomSave> {
@@ -146,6 +154,7 @@ impl PlayerRoom {
     pub(crate) fn restore(&mut self, saved: Option<&RoomSave>, disc: Option<&GameDisc>) {
         self.movement.reset();
         self.presentation.reset();
+        self.storage.reset();
         self.layers = std::array::from_fn(|_| RoomLayer::default());
         self.original = saved.cloned();
         self.initialized = saved.is_some() || disc.is_some();
@@ -469,6 +478,7 @@ fn setup(
     );
     room.movement.load(disc.as_deref());
     room.presentation.load(disc.as_deref());
+    room.storage.load(disc.as_deref());
     info!(
         "player furniture: {} profiles, {} placed actors",
         room.profiles.len(),
@@ -487,6 +497,24 @@ fn notice(
     *focus = InputFocus::Dialogue;
 }
 
+fn storage_choices(
+    dialogue: &mut DialogueState,
+    room: &mut PlayerRoom,
+    focus: &mut InputFocus,
+    owner: usize,
+) {
+    dialogue.begin_furniture(
+        "What would you like to do?".into(),
+        Some(vec![
+            "Put something in".into(),
+            "Take something out".into(),
+            "Quit".into(),
+        ]),
+    );
+    room.flow = StorageFlow::Choose(owner);
+    *focus = InputFocus::Dialogue;
+}
+
 // Inventory, actor storage and UI ownership commit in one system to avoid
 // partial transfers if a menu closes, the pockets fill, or the scene changes.
 #[allow(clippy::too_many_arguments)]
@@ -502,6 +530,7 @@ fn interact(
     mut inventory: ResMut<PlayerInventory>,
     mut ui: ResMut<PocketsUi>,
     mut dialogue: ResMut<DialogueState>,
+    rigs: Query<(&RoomPiece, &crate::furniture::storage::StorageRig)>,
 ) {
     room.available = disc.is_some() && crate::house::is_player_room(&current, &state);
     let request = ui.room_request.take();
@@ -509,6 +538,7 @@ fn interact(
         ui.home = false;
         ui.storing = None;
         room.flow = StorageFlow::Idle;
+        room.storage.reset();
         return;
     }
     let Some(disc) = disc else { return };
@@ -564,7 +594,7 @@ fn interact(
         if let Err(message) = result {
             notice(&mut dialogue, &mut room, &mut focus, message);
         } else {
-            *focus = if room.presentation.busy() {
+            *focus = if room.presentation.busy() || room.storage.busy() {
                 InputFocus::Furniture
             } else {
                 InputFocus::World
@@ -577,7 +607,17 @@ fn interact(
         if !ui.open {
             ui.storing = None;
             room.flow = StorageFlow::Idle;
-            *focus = InputFocus::World;
+            *focus = if room.storage.busy() {
+                InputFocus::Furniture
+            } else {
+                InputFocus::World
+            };
+        }
+        return;
+    }
+    if let StorageFlow::Opening(owner) = room.flow {
+        if room.storage.ready() {
+            storage_choices(&mut dialogue, &mut room, &mut focus, owner);
         }
         return;
     }
@@ -668,6 +708,9 @@ fn interact(
             }
             _ => {}
         }
+        if room.storage.busy() && matches!(room.flow, StorageFlow::Idle) {
+            *focus = InputFocus::Furniture;
+        }
         return;
     }
     if !focus.is_world() || *tool != crate::ecology::EquippedTool::None {
@@ -732,16 +775,28 @@ fn interact(
         })
         && actions.consume(Action::Interact)
     {
-        dialogue.begin_furniture(
-            "What would you like to do?".into(),
-            Some(vec![
-                "Put something in".into(),
-                "Take something out".into(),
-                "Quit".into(),
-            ]),
-        );
-        room.flow = StorageFlow::Choose(slot);
-        *focus = InputFocus::Dialogue;
+        if let Some((_, rig)) = rigs.iter().find(|(piece, _)| piece.slot == slot) {
+            let actor = room.runtime.actors[slot].as_ref().cloned();
+            if let Some(actor) = actor {
+                let front = Quat::from_rotation_y(actor.angle_y.to_radians()) * Vec3::Z;
+                let at = presentation::actor_center(&room, &actor);
+                // Original wardrobes/closets require front contact. Side/back
+                // attempts leave storage and inventory untouched.
+                if facing.dir.dot(front) > -0.9 || (transform.translation - at).dot(front) <= 0.0 {
+                    return;
+                }
+                let wardrobe = room
+                    .profiles
+                    .get(&actor.name)
+                    .is_some_and(|p| p.interaction_type & ftr::interaction::STORAGE_WARDROBE != 0);
+                if room.storage.begin(slot, wardrobe, rig.end, at, -front) {
+                    room.flow = StorageFlow::Opening(slot);
+                    *focus = InputFocus::Furniture;
+                    return;
+                }
+            }
+        }
+        storage_choices(&mut dialogue, &mut room, &mut focus, slot);
     }
 }
 
@@ -878,6 +933,14 @@ impl Plugin for PlayerRoomPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PlayerRoom>()
             .add_systems(Startup, setup.after(crate::house::build_interior))
+            .add_systems(
+                Update,
+                storage::advance
+                    .after(crate::save::LoadSet)
+                    .before(movement::advance)
+                    .in_set(GameplaySet),
+            )
+            .add_systems(Update, storage::render.after(refresh).in_set(GameplaySet))
             .add_systems(
                 Update,
                 presentation::advance

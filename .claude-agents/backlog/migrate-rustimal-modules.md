@@ -247,7 +247,15 @@ furniture-birth-pickup-animation.md. No additional module migration batch starte
 2026-10-17: Philip reports "wokrs good whats next" after placement/pickup
 presentation. Next bounded proposal is furniture-storage-animation.md: source
 wardrobe/closet opening and closing around the existing storage interaction.
-This is planning only; M4, migration and the documented fidelity gaps stay open.
+Philip then authorized implementation ("lets get it"). Nineteen audited common
+wardrobe/closet constructors now retain runtime cKF joints and original player
+open/wait/close clips around the accepted storage transaction flow. Source timing,
+front-contact gating and safe pockets/notice completion/reset are connected.
+Check, all-target lint, format and capture/default builds pass; bounded disposable
+previews cover transactions/cancel/capacity, rotated doors, moving stored goods,
+stack pickup, pause/save/load/restart and no-disc numeric preservation. No tests
+added/run. Full evidence/limits in furniture-storage-animation.md; Philip's
+acceptance of this new slice is pending. M4, migration and fidelity gaps stay open.
 
 Furniture follow-up: bounded G + direction push/pull/rotation and original player
 clips are implemented separately in furniture-movement-animation.md, including

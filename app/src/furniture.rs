@@ -5,7 +5,8 @@
 //! texture animation, its scale and footprint shape. Furniture without
 //! lists draws its `cKF_bs_r_int_*` skeleton from its own draw function
 //! (`cKF_Si3_draw_R_SV`), standing still in the animation's first frame
-//! (`cKF_SkeletonInfo_R_init_standard_stop`, speed 0).
+//! (`cKF_SkeletonInfo_R_init_standard_stop`, speed 0). Audited common storage
+//! doors retain their runtime joints for the player-room open/close demo.
 //!
 //! Placement follows `aMR_FurnitureCt`: the item's low two bits are the
 //! rotation (0/90/180/270 degrees), the model sits on its unit's centre
@@ -22,6 +23,8 @@ use crate::disc_gfx::{run_display_lists, Segments};
 use crate::game_disc::GameDisc;
 use crate::n64_material::N64Material;
 use crate::skeleton::{place_on_joints, Animation, Skeleton};
+
+pub(crate) mod storage;
 
 /// Game units per room unit (`mFI_UT_WORLDSIZE_X_F`).
 const UNIT: f32 = 40.0;
@@ -350,6 +353,22 @@ pub fn spawn_furniture(
             );
         }
     } else if let Some((skeleton, anim)) = skeleton {
+        // Only audited common door constructors use this animated path.
+        // Other per-type furniture keeps its existing fixed-pose renderer.
+        if let Some((end, animation)) = storage::open_end(&profile.name).zip(anim.as_ref()) {
+            storage::spawn(
+                commands,
+                disc,
+                parent,
+                skeleton,
+                animation.clone(),
+                end,
+                profile.palette,
+                &segs,
+                assets,
+            );
+            return Some(parent);
+        }
         let lists = skeleton.lists();
         let mut sink = run_display_lists(&disc.rom, &lists);
         let world = skeleton.world_matrices(anim.as_ref(), 1.0);

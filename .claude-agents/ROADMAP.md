@@ -431,8 +431,11 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   backlog/furniture-birth-pickup-animation.md now implements original leaf
   display lists, birth pop and pickup clip/shrink with atomic save/load reset.
   Philip accepts this bounded presentation slice (2026-10-17). Exact dust and
-  remaining furniture fidelity stay open. Next proposal is storage opening and
-  closing; see backlog/furniture-storage-animation.md (planning only).
+  remaining furniture fidelity stay open. Storage opening/closing now connects
+  19 audited original wardrobe/closet rigs, original player clips and safe
+  storage UI completion/cancel/load handling. Check/lint/format/builds and bounded
+  disposable previews pass; Philip acceptance is pending. See
+  backlog/furniture-storage-animation.md. Drawers/special constructors remain open.
   See backlog/migrate-rustimal-modules.md and docs/rustimal-migration-inventory.md.
   Philip's directive: the rustimal modules were built to end up here.
 

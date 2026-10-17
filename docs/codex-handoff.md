@@ -116,8 +116,9 @@ leaves are excluded by retail, not arbitrarily omitted. Music disk players
 have a separate source flow. Do not treat ordinary wardrobe storage as music
 playback. Keep full-pocket/cancel/blocked placement transactions atomic.
 
-This slice does not finish retail pushing/pulling/rotation, birth and pickup
-animations, opening/closing furniture, per-type constructors and behavior,
+This first slice did not finish retail pushing/pulling/rotation, birth and pickup
+animations or opening/closing furniture; bounded follow-ups are recorded below.
+Remaining full source fidelity includes per-type constructors and behavior,
 loose-item rendering (including the previously omitted starter diary), full
 room upgrades/decorating or exact retail storage script text. Consult task notes
 before expanding scope; preserve anything already accepted.
@@ -152,9 +153,26 @@ Next implemented slice: furniture-birth-pickup-animation.md, original runtime
 leaf icons/placement flight,46-tick reservation wait, native birth pop/shrink
 curves and original pickup1 clip with animated-hand leaf retrieval. Numeric
 transactions commit first; P/F5/F9 and restart remain safe. Pickup clears switch
-bits; pockets close before placement presentation starts. Obtain Philip's
-birth/pickup playtest; exact dust (two-texture material), collision growth/edges,
-open-close, loose diary, upgrades and per-type behavior remain follow-ups.
+bits; pockets close before placement presentation starts. Philip accepts this
+bounded birth/pickup slice (2026-10-17: "wokrs good whats next"). Exact dust
+(two-texture material), collision growth/edges, loose diary, upgrades and broader
+per-type behavior remain follow-ups.
 Keep migration/M4 open; no automatic next import batch.
-Current user-save SHA256 at implementation start/end:
-13A8755B8D093084928EF214197945D909D55FE31F4097BD63AACBB45F06A3C4.
+Latest implementation: furniture-storage-animation.md, authorized by "lets get
+it". Nineteen audited original common wardrobe/closet models retain animated cKF
+joints using existing character skinning. E from the front plays original
+open/wait/close furniture and player clips; doors stay open during choices,
+notices and pockets, then close after completion/cancel and pockets' slide.
+P/F5/pause Save/F9/restart preserve numeric transactions; transient door state
+resets closed. Drawers/special constructors remain on prior immediate storage
+flow; exact player root/contact snapping and retail scripts remain open.
+Check, all-target clippy -D warnings, format, capture/default builds pass. No
+tests added/run. Disposable previews cover storage transfers/cancel/full limits,
+pause Save/F9, fresh-process rotated wardrobe, moving stored goods, stack pickup,
+and explicit missing-disc F5/F9/F5 numeric preservation. Initial Windows paging
+failures resolved with single compiler job and unloading our local Ollama model;
+the helper request timed out and supplied no evidence. All own previews closed;
+screenshots/logs/synthetic saves stay Temp furniture-storage-review/nodisc.
+Obtain Philip's storage-animation playtest before expanding. Migration/M4 open.
+Current user-save SHA256 at storage implementation start/end:
+DD89745CCFEDDEAEA619A1C931FEE5233EC533C1860E3B5A910A00B8121E5721.
