@@ -458,6 +458,9 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   Stationery-room follow-up extends the same path to all encoded paper bundles,
   preserving design/quantity, hidden storage and atomic refusal. Source review
   and bounded disposable checks pass; acceptance/evidence in stationery-room.md.
+  Fruit-shell-room.md extends that path to six fruit and eight shells/coral;
+  original models and bounded placement/pickup/save/refusal checks pass. Philip
+  acceptance remains pending; no broader loose-item or M4/migration completion.
   See backlog/migrate-rustimal-modules.md and docs/rustimal-migration-inventory.md.
   Philip's directive: the rustimal modules were built to end up here.
 

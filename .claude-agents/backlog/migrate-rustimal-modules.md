@@ -314,3 +314,9 @@ shared paper model, surface/floor, pickup, F5/F9, full/blocked refusal and hidde
 storage checked in disposable preview; no tests added/run. Normal-condition and
 mail/selling/storage routing preserved. Evidence/final builds in task note;
 Philip acceptance pending. No M4/migration completion or new module batch.
+
+Fruit-shell-room.md: Philip authorized both families together. Shared loose path
+adds six fruit and eight shells (coral included), using original indoor goods
+models; mushroom/candy excluded. Gallery and bounded surface/floor/pickup/F5/F9,
+hidden storage/full-pocket/blocked checks pass. No tests added/run. Final build
+evidence in task note; Philip acceptance pending, M4/migration remain open.
