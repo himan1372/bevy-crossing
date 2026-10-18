@@ -51,3 +51,8 @@ All own previews33880/31016 closed. Screenshots/logs/synthetic saves stay Temp.
 Actual save hash unchanged DD89745CCFEDDEAEA619A1C931FEE5233EC533C1860E3B5A910A00B8121E5721;
 user settings and unrelated .gitignore preserved. Await Philip's playtest.
 Philip requested no codex-handoff.md update; that file is unchanged in this slice.
+
+Subsequent resolution: compiler-memory-failure.md identifies two SteelSeries
+capture processes holding about40GiB private memory. Philip approved stopping
+both; after that, unchanged source passed release and normal development builds.
+The earlier normal-build memory blocker is resolved; F4 is in both executables.
