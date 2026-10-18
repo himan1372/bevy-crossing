@@ -461,6 +461,10 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   Fruit-shell-room.md extends that path to six fruit and eight shells/coral;
   original models and bounded placement/pickup/save/refusal checks pass. Philip
   acceptance remains pending; no broader loose-item or M4/migration completion.
+  Furniture-carry-loose.md adds push/pull with supported loose surface goods,
+  synchronized visuals and atomic destination validation. Mixed stacks and
+  save/load/refusal previews pass; loaded turns remain safely refused and Philip
+  acceptance remains pending.
   See backlog/migrate-rustimal-modules.md and docs/rustimal-migration-inventory.md.
   Philip's directive: the rustimal modules were built to end up here.
 

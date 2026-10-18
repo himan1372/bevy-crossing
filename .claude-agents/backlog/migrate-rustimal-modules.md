@@ -320,3 +320,11 @@ adds six fruit and eight shells (coral included), using original indoor goods
 models; mushroom/candy excluded. Gallery and bounded surface/floor/pickup/F5/F9,
 hidden storage/full-pocket/blocked checks pass. No tests added/run. Final build
 evidence in task note; Philip acceptance pending, M4/migration remain open.
+
+Furniture-carry-loose.md follows Philip authorization: supported loose surface
+goods accompany push/pull with existing native relocation and animation progress.
+Copied-layer destination checks precede publish/player-path validation. Four-cell
+and single-cell, mixed top furniture/goods, switches, mid-motion save/load and
+blocked/unsupported/turn refusal evidence recorded; no tests added/run. Loaded
+rotation/source pivots remain open. Philip acceptance pending; no M4/migration
+closure or broader module import batch.

@@ -29,11 +29,20 @@ struct Visual {
     turn: f32,
 }
 
+struct Carried {
+    item: u16,
+    x: i32,
+    z: i32,
+    from: Vec3,
+    to: Vec3,
+}
+
 pub(super) struct Active {
     kind: Kind,
     ticks: f32,
     rotation: f32,
     visuals: Vec<Visual>,
+    carried: Vec<Carried>,
     player_from: Vec3,
     player_to: Vec3,
 }
@@ -169,6 +178,71 @@ fn blocked(runtime: &MyRoomRuntime, profiles: &HashMap<u16, FurnitureProfile>, p
                         && p.z - RADIUS < z + 0.95
                 })
         })
+}
+
+type Relocation = (MyRoomRuntime, [RoomLayer; 4], Vec<usize>, Vec<Carried>);
+
+/// aMR_RequestItemToFitFurniture / UnFit: collect relative surface cells on
+/// copies, reuse the native actor move, then restore goods at the destination.
+fn relocate(
+    room: &PlayerRoom,
+    slot: usize,
+    target: (i32, i32, Direction),
+    rotating: bool,
+) -> Result<Relocation, &'static str> {
+    let actor = room.runtime.actors[slot]
+        .as_ref()
+        .ok_or("That furniture is gone.")?;
+    let mut layers = room.layers.clone();
+    let mut carried = Vec::new();
+    let delta = (target.0 - actor.cell_x, target.1 - actor.cell_z);
+    for &(dx, dz) in actor
+        .shape_type
+        .unit_offsets()
+        .iter()
+        .take(actor.shape_type.unit_count())
+    {
+        let (x, z) = (actor.cell_x + dx, actor.cell_z + dz);
+        let item = layers[1].get(x, z).ok_or("Clear the top first.")?;
+        if item == 0 || room.runtime.occupancy[1][z as usize][x as usize].is_some() {
+            continue;
+        }
+        if rotating
+            || !loose::supports(item)
+            || !room.profiles.get(&actor.name).is_some_and(|p| {
+                p.set_type == SetType::Surface && !ftr::is_storage(p.interaction_type)
+            })
+        {
+            return Err("Clear the top first.");
+        }
+        layers[1].set(x, z, 0);
+        let from = corner() + Vec3::new(x as f32 + 0.5, 0.0, z as f32 + 0.5);
+        carried.push(Carried {
+            item,
+            x: x + delta.0,
+            z: z + delta.1,
+            from,
+            to: from + Vec3::new(delta.0 as f32, 0.0, delta.1 as f32),
+        });
+    }
+    let (next, mut layers, ids) = rustimal_logic::furniture_motion::relocate(
+        &room.runtime,
+        &layers,
+        slot,
+        target,
+        4,
+        &|name| room.profiles.get(&name).cloned(),
+    )?;
+    for piece in &carried {
+        if layers[1].get(piece.x, piece.z) != Some(0)
+            || next.occupancy[1][piece.z as usize][piece.x as usize].is_some()
+            || next.occupancy[0][piece.z as usize][piece.x as usize] != Some(slot as u16)
+        {
+            return Err("There's no room to move.");
+        }
+        layers[1].set(piece.x, piece.z, piece.item);
+    }
+    Ok((next, layers, ids, carried))
 }
 
 #[allow(clippy::too_many_arguments)] // One atomic room/player/input transaction.
@@ -358,15 +432,8 @@ pub(super) fn advance(
             direction(old_dir),
         )
     };
-    let result = rustimal_logic::furniture_motion::relocate(
-        &room.runtime,
-        &room.layers,
-        slot,
-        target,
-        4,
-        &|name| room.profiles.get(&name).cloned(),
-    );
-    let result = result.and_then(|(next, layers, ids)| {
+    let result = relocate(&room, slot, target, rotating);
+    let result = result.and_then(|(next, layers, ids, carried)| {
         let destination = transform.translation + if rotating { Vec3::ZERO } else { dir };
         // Check the complete player path against all non-moving actors and the
         // room walls; check the destination against the committed furniture.
@@ -445,6 +512,7 @@ pub(super) fn advance(
             ticks: 0.0,
             rotation: 0.0,
             visuals,
+            carried,
             player_from: transform.translation,
             player_to: destination,
         });
@@ -462,7 +530,8 @@ pub(super) fn advance(
 
 pub(super) fn animate_roots(
     room: Res<PlayerRoom>,
-    mut pieces: Query<(&RoomPiece, &mut Transform)>,
+    mut pieces: Query<(&RoomPiece, &mut Transform), Without<loose::Piece>>,
+    mut goods: Query<(&loose::Piece, &mut Transform), Without<RoomPiece>>,
 ) {
     let progress = room.movement.progress();
     for (piece, mut transform) in &mut pieces {
@@ -490,5 +559,21 @@ pub(super) fn animate_roots(
         transform.translation.x = position.x;
         transform.translation.z = position.z;
         transform.rotation = Quat::from_rotation_y(yaw);
+    }
+    for (piece, mut transform) in &mut goods {
+        let target = corner() + Vec3::new(piece.x as f32 + 0.5, 0.0, piece.z as f32 + 0.5);
+        let position = room
+            .movement
+            .active
+            .as_ref()
+            .and_then(|active| {
+                let carried = active.carried.iter().find(|v| {
+                    piece.layer == 1 && v.item == piece.item && v.x == piece.x && v.z == piece.z
+                })?;
+                Some(carried.from.lerp(carried.to, progress))
+            })
+            .unwrap_or(target);
+        transform.translation.x = position.x;
+        transform.translation.z = position.z;
     }
 }
