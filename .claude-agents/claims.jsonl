@@ -210,3 +210,5 @@
 {"action":"release","task":"room-loose-animation","agent":"codex","timestamp":"2026-10-18T18:05:37Z"}
 {"action":"claim","task":"mushroom-candy-room","agent":"codex","timestamp":"2026-10-18T18:12:20Z"}
 {"action":"release","task":"mushroom-candy-room","agent":"codex","timestamp":"2026-10-18T18:25:04Z"}
+{"action":"claim","task":"money-turnip-room","agent":"codex","timestamp":"2026-10-18T18:29:26Z"}
+{"action":"release","task":"money-turnip-room","agent":"codex","timestamp":"2026-10-18T18:39:17Z"}

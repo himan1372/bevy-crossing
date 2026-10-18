@@ -489,4 +489,10 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   and presentation. Bounded model/place/pickup/carry/turn/refusal/storage/save
   previews pass; eating/seasonal acquisition and Philip acceptance remain open.
   See backlog/mushroom-candy-room.md; M4/migration remain open.
+  Money/turnip follow-up adds original loose bag2100..2103 and turnip2F00..2F03
+  models, source money landing sound, exact denomination/bundle/spoiled ID
+  transfers and shared carry/turn/presentation. Bounded room/pocket/wallet and
+  storage/refusal/save checks pass. Turnip storage remains excluded; redemption,
+  trading/aging/acquisition and Philip acceptance remain open. See
+  backlog/money-turnip-room.md; M4/migration remain open.
 

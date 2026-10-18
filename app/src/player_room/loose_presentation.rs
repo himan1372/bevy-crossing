@@ -162,6 +162,8 @@ pub(super) fn advance(
                 crate::sound::se_at(
                     if (0x2800..=0x2804).contains(&a.piece.item) {
                         0x127
+                    } else if (0x2100..=0x2103).contains(&a.piece.item) {
+                        0x444
                     } else {
                         0x128
                     },
