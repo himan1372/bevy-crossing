@@ -9,9 +9,12 @@ pub(super) type Angles = [[u8; 16]; 16];
 /// Keep the complete item number: placing/picking up a bundle moves it intact.
 /// All eight source foods include mushrooms/candy; shells include coral.
 /// Money denominations and turnip bundle/spoiled IDs stay intact as items.
+/// Music discs stay loose items; fans/pinwheels use their source surface yaw flag.
 pub(super) fn supports(item: u16) -> bool {
     (0x2000..=0x20FF).contains(&item)
         || (0x2100..=0x2103).contains(&item)
+        || (0x224C..=0x225B).contains(&item)
+        || (0x2A00..=0x2A36).contains(&item)
         || (0x2B00..=0x2B0F).contains(&item)
         || (0x2800..=0x2807).contains(&item)
         || (0x2514..=0x251B).contains(&item)

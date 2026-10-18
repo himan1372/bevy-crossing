@@ -495,4 +495,10 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   storage/refusal/save checks pass. Turnip storage remains excluded; redemption,
   trading/aging/acquisition and Philip acceptance remain open. See
   backlog/money-turnip-room.md; M4/migration remain open.
+  Music/fan/pinwheel follow-up adds55 loose music-item IDs plus eight fans/eight
+  pinwheels, using original indoor models and source surface-yaw flags. Mixed
+  turn/carry/place/pickup, variant galleries, atomic refusal/hidden storage and
+  save/reload have bounded evidence. Music registration/playback, toy use and
+  Philip acceptance remain separate/open. See backlog/music-fan-pinwheel-room.md;
+  M4/migration remain open.
 
