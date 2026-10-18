@@ -461,7 +461,7 @@ pub(crate) fn can_store(item: u16, condition: u32) -> bool {
 }
 
 pub(crate) fn can_place_in_room(item: u16) -> bool {
-    crate::items::is_furniture(item) || (0x2B00..=0x2B0F).contains(&item)
+    crate::items::is_furniture(item) || loose::supports(item)
 }
 
 fn setup(
@@ -557,7 +557,7 @@ fn interact(
                 if inventory.pockets.pockets.get(slot) == Some(&item)
                     && inventory.pockets.item_cond(slot) == 0 =>
             {
-                let result = if (0x2B00..=0x2B0F).contains(&item) {
+                let result = if loose::supports(item) {
                     loose::place(&mut room, item, transform.translation, facing.dir, &disc)
                         .map(|()| None)
                 } else {

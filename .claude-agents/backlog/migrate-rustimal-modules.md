@@ -307,3 +307,10 @@ using the existing surface kernel and original local search order. Blocked
 placement is atomic; disposable surface/floor/F5/F9 and refusal checks pass.
 Exact throw/wall-ray/slope fidelity and other loose families remain open. No
 tests added/run or new module migration batch; Philip acceptance pending.
+
+Stationery-room.md: Philip authorized the next small family. Shared diary path
+now accepts stationery0x2000..0x20FF with encoded design/quantity intact. Original
+shared paper model, surface/floor, pickup, F5/F9, full/blocked refusal and hidden
+storage checked in disposable preview; no tests added/run. Normal-condition and
+mail/selling/storage routing preserved. Evidence/final builds in task note;
+Philip acceptance pending. No M4/migration completion or new module batch.

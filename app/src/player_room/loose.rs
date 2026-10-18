@@ -1,6 +1,12 @@
 //! Source aSG_DrawGoodsPicture mode1: foreground goods on floor/surfaces.
-//! Bounded diary family; storage contents are never displayed as room goods.
+//! Diaries and stationery; storage contents are never displayed as room goods.
 use super::*;
+
+/// ITM_PAPER_START..END includes all 64 designs and four encoded quantities.
+/// Keep the complete item number: placing/picking up a bundle moves it intact.
+pub(super) fn supports(item: u16) -> bool {
+    (0x2000..=0x20FF).contains(&item) || (0x2B00..=0x2B0F).contains(&item)
+}
 
 #[derive(Component, Clone, Copy)]
 pub(super) struct Piece {
@@ -16,7 +22,7 @@ fn visible(room: &PlayerRoom) -> Vec<Piece> {
         for z in 0..16 {
             for x in 0..16 {
                 let item = room.layers[layer].items[z][x];
-                if !(0x2B00..=0x2B0F).contains(&item) {
+                if !supports(item) {
                     continue;
                 }
                 let storage = room.runtime.occupancy[0][z][x]
@@ -48,7 +54,7 @@ pub(super) fn place(
     disc: &GameDisc,
 ) -> Result<(), &'static str> {
     if !crate::shop_display::has_goods_model(disc, item) {
-        return Err("That diary isn't available on the selected disc.");
+        return Err("That item isn't available on the selected disc.");
     }
     let offsets = [
         (0, 1),

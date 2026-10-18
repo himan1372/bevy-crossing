@@ -455,6 +455,9 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   Authorized follow-up diary-placement.md connects normal-condition pocket
   diaries to front surfaces/floor with atomic blocked refusal and save/load.
   Bounded disposable previews pass; Philip acceptance remains pending.
+  Stationery-room follow-up extends the same path to all encoded paper bundles,
+  preserving design/quantity, hidden storage and atomic refusal. Source review
+  and bounded disposable checks pass; acceptance/evidence in stationery-room.md.
   See backlog/migrate-rustimal-modules.md and docs/rustimal-migration-inventory.md.
   Philip's directive: the rustimal modules were built to end up here.
 
