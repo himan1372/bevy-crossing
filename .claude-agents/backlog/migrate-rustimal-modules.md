@@ -300,3 +300,10 @@ Storage contents stay hidden. Check/lint/fmt/capture and disposable GUI evidence
 are in room-loose-diary.md; no tests added/run, final builds recorded there.
 Other loose families, placement/writing UI and exact pickup presentation remain
 open; no migration batch or M4 closure, Philip acceptance pending.
+
+2026-10-18: diary-placement.md follows Philip authorization: existing pocket
+action places normal diaries on source-eligible front surfaces or empty floor,
+using the existing surface kernel and original local search order. Blocked
+placement is atomic; disposable surface/floor/F5/F9 and refusal checks pass.
+Exact throw/wall-ray/slope fidelity and other loose families remain open. No
+tests added/run or new module migration batch; Philip acceptance pending.

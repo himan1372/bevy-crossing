@@ -117,6 +117,12 @@ fn goods_lists(disc: &GameDisc, item: u16) -> Option<(Vec<u32>, Vec<u32>)> {
     })
 }
 
+/// Whether the runtime goods table supplies any display lists for this item.
+pub(crate) fn has_goods_model(disc: &GameDisc, item: u16) -> bool {
+    goods_lists(disc, item)
+        .is_some_and(|(opaque, translucent)| !opaque.is_empty() || !translucent.is_empty())
+}
+
 /// Lays the stock out whenever it changes.
 #[allow(clippy::too_many_arguments)]
 fn show_goods(

@@ -183,7 +183,7 @@ impl PocketsUi {
             } else {
                 vec!["Quit"]
             }
-        } else if self.home && condition == 0 && items::is_furniture(item) {
+        } else if self.home && condition == 0 && crate::player_room::can_place_in_room(item) {
             vec!["Place in room", "Grab"]
         } else {
             item_actions(item, condition)
@@ -301,7 +301,7 @@ fn pockets_input(
         if ui.home
             && choice == 0
             && inventory.pockets.item_cond(slot) == 0
-            && items::is_furniture(item)
+            && crate::player_room::can_place_in_room(item)
         {
             ui.room_request = Some(crate::player_room::PocketRequest::Place { slot, item });
             ui.open = false;

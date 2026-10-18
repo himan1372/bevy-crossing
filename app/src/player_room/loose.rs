@@ -38,6 +38,75 @@ fn visible(room: &PlayerRoom) -> Vec<Piece> {
     pieces
 }
 
+/// mTG_room_put_proc: front surface first, then current floor cell and the
+/// eight adjacent units in alternating facing order. Commit only after choosing.
+pub(super) fn place(
+    room: &mut PlayerRoom,
+    item: u16,
+    pos: Vec3,
+    facing: Vec3,
+    disc: &GameDisc,
+) -> Result<(), &'static str> {
+    if !crate::shop_display::has_goods_model(disc, item) {
+        return Err("That diary isn't available on the selected disc.");
+    }
+    let offsets = [
+        (0, 1),
+        (1, 1),
+        (1, 0),
+        (1, -1),
+        (0, -1),
+        (-1, -1),
+        (-1, 0),
+        (-1, 1),
+    ];
+    // Original eight-way half-sector thresholds: (-22.5,22.5] faces south.
+    let sector = ((facing.x.atan2(facing.z) / std::f32::consts::FRAC_PI_4 - 0.5).ceil() as i32)
+        .rem_euclid(8) as usize;
+    let (cx, cz) = player_cell(pos);
+    let (dx, dz) = offsets[sector];
+    let (x, z) = (cx + dx, cz + dz);
+    let in_room = |x: i32, z: i32| (1..=4).contains(&x) && (1..=4).contains(&z);
+    if in_room(x, z) {
+        let below = room.runtime.occupancy[0][z as usize][x as usize]
+            .and_then(|id| room.runtime.actors[id as usize].as_ref())
+            .and_then(|a| room.profiles.get(&a.name));
+        if ftr::judge_place_2nd_layer(
+            below.is_some_and(|p| {
+                p.set_type == SetType::Surface && !ftr::is_storage(p.interaction_type)
+            }),
+            room.layers[1].get(x, z) == Some(0)
+                && room.runtime.occupancy[1][z as usize][x as usize].is_none(),
+        ) {
+            room.layers[1].set(x, z, item);
+            room.dirty = true;
+            return Ok(());
+        }
+    }
+    let clear = |x: i32, z: i32| {
+        in_room(x, z)
+            && room.layers[0].get(x, z) == Some(0)
+            && room.layers[1].get(x, z) == Some(0)
+            && room
+                .runtime
+                .occupancy
+                .iter()
+                .all(|layer| layer[z as usize][x as usize].is_none())
+    };
+    let chosen = std::iter::once((cx, cz))
+        .chain([0, 1, -1, 2, -2, 3, -3, 4].into_iter().filter_map(|turn| {
+            let (dx, dz) = offsets[(sector as i32 + turn).rem_euclid(8) as usize];
+            // No placing through a diagonal corner blocked on both routes.
+            (dx == 0 || dz == 0 || clear(cx + dx, cz) || clear(cx, cz + dz))
+                .then_some((cx + dx, cz + dz))
+        }))
+        .find(|&(x, z)| clear(x, z));
+    let (x, z) = chosen.ok_or("There's no room to put that here.")?;
+    room.layers[0].set(x, z, item);
+    room.dirty = true;
+    Ok(())
+}
+
 pub(super) fn target(room: &PlayerRoom, pos: Vec3, facing: Vec3) -> Option<Piece> {
     visible(room)
         .into_iter()

@@ -452,6 +452,9 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   and restores the source starter diary only for default rooms. Backspace recovers
   visible diaries atomically; storage contents stay hidden. Evidence/limits and
   pending acceptance: backlog/room-loose-diary.md. Other loose families remain open.
+  Authorized follow-up diary-placement.md connects normal-condition pocket
+  diaries to front surfaces/floor with atomic blocked refusal and save/load.
+  Bounded disposable previews pass; Philip acceptance remains pending.
   See backlog/migrate-rustimal-modules.md and docs/rustimal-migration-inventory.md.
   Philip's directive: the rustimal modules were built to end up here.
 

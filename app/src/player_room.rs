@@ -460,6 +460,10 @@ pub(crate) fn can_store(item: u16, condition: u32) -> bool {
         && !(0x2F00..=0x2FFF).contains(&item)
 }
 
+pub(crate) fn can_place_in_room(item: u16) -> bool {
+    crate::items::is_furniture(item) || (0x2B00..=0x2B0F).contains(&item)
+}
+
 fn setup(
     mut room: ResMut<PlayerRoom>,
     disc: Option<Res<GameDisc>>,
@@ -553,14 +557,24 @@ fn interact(
                 if inventory.pockets.pockets.get(slot) == Some(&item)
                     && inventory.pockets.item_cond(slot) == 0 =>
             {
-                let result = room.place(item, transform.translation, facing.dir, &disc);
+                let result = if (0x2B00..=0x2B0F).contains(&item) {
+                    loose::place(&mut room, item, transform.translation, facing.dir, &disc)
+                        .map(|()| None)
+                } else {
+                    room.place(item, transform.translation, facing.dir, &disc)
+                        .map(Some)
+                };
                 if result.is_ok() {
                     inventory.pockets.pockets[slot] = 0;
                     inventory.pockets.set_item_cond(slot, 0);
                 }
                 result.map(|slot| {
-                    let actor = room.runtime.actors[slot].as_ref().cloned();
-                    if let Some(actor) = actor {
+                    if let Some((slot, actor)) = slot.and_then(|slot| {
+                        room.runtime.actors[slot]
+                            .as_ref()
+                            .cloned()
+                            .map(|a| (slot, a))
+                    }) {
                         let at = presentation::actor_center(&room, &actor);
                         room.presentation
                             .birth(slot, item, at, transform.translation, facing.dir);
