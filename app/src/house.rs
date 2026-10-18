@@ -409,6 +409,14 @@ struct RoomBounds {
     walk_half: f32,
     door_z: f32,
     spawn_z: f32,
+    entrance: Option<Entrance>,
+}
+
+#[derive(Clone, Copy)]
+struct Entrance {
+    half_width: f32,
+    start_z: f32,
+    end_z: f32,
 }
 
 impl Default for RoomBounds {
@@ -417,14 +425,28 @@ impl Default for RoomBounds {
             walk_half: WALK_HALF,
             door_z: INTERIOR_DOOR_Z,
             spawn_z: 2.6,
+            // The no-disc room has a wooden floor up to its south door.
+            entrance: Some(Entrance {
+                half_width: INTERIOR_DOOR_HALF_W,
+                start_z: 2.6,
+                end_z: INTERIOR_DOOR_Z,
+            }),
         }
     }
 }
 
 impl RoomBounds {
-    /// The disc's 4x4-cell room: the door is in the middle of the south wall.
+    /// The disc's 4x4-cell room and its wooden south entrance landing.
     fn disc_room() -> Self {
-        Self::square(crate::interior::ROOM_HALF)
+        Self {
+            entrance: Some(Entrance {
+                half_width: crate::interior::ENTRANCE_HALF_WIDTH,
+                start_z: crate::interior::ROOM_HALF,
+                end_z: crate::interior::ENTRANCE_END_Z,
+            }),
+            door_z: crate::interior::ENTRANCE_END_Z,
+            ..Self::square(crate::interior::ROOM_HALF)
+        }
     }
 
     /// A square room `half` cells across each way, door mid-south.
@@ -433,8 +455,33 @@ impl RoomBounds {
             walk_half: half - PLAYER_RADIUS,
             door_z: half,
             spawn_z: half - 0.6,
+            entrance: None,
         }
     }
+
+    fn walkable(&self, local: Vec3, radius: f32) -> bool {
+        let half = self.walk_half + PLAYER_RADIUS - radius;
+        (local.x.abs() <= half && local.z.abs() <= half)
+            || self.entrance.is_some_and(|e| {
+                local.x.abs() <= e.half_width - radius
+                    && local.z >= half
+                    && local.z <= e.end_z - radius
+            })
+    }
+
+    fn on_entrance(&self, local: Vec3) -> bool {
+        self.entrance.is_some_and(|e| {
+            local.x.abs() <= e.half_width - PLAYER_RADIUS
+                && local.z >= e.start_z
+                && local.z <= e.end_z - PLAYER_RADIUS
+        })
+    }
+}
+
+/// Furniture push/pull uses the same player-room floor/landing boundary, with
+/// its existing small contact tolerance supplied as the radius by its caller.
+pub(crate) fn player_room_walkable(pos: Vec3, radius: f32) -> bool {
+    RoomBounds::disc_room().walkable(pos - INTERIOR_ORIGIN, radius)
 }
 
 /// E at the exterior house door: teleport into the interior.
@@ -545,9 +592,14 @@ fn house_exit(
         face_z: room.0.z + bounds.door_z,
         into_z: 1.0,
     };
-    if !door.faced_by(transform.translation, facing.dir, DOOR_RANGE_IN, 0.5)
-        || !actions.consume(Action::Interact)
-    {
+    let can_exit = if bounds.entrance.is_some() {
+        bounds.on_entrance(transform.translation - room.0)
+            && facing.dir.normalize_or_zero().z >= 0.9
+            && door.aimed_at(transform.translation, facing.dir, 2.25)
+    } else {
+        door.faced_by(transform.translation, facing.dir, DOOR_RANGE_IN, 0.5)
+    };
+    if !can_exit || !actions.consume(Action::Interact) {
         return;
     }
     transform.translation = return_pos.map(|r| r.0).unwrap_or(Vec3::new(0.0, 1.0, 5.0));
@@ -578,14 +630,18 @@ fn interior_movement(
     let movement = locomotion::step(&actions, time.delta().as_secs_f32(), &mut facing, &mut loco);
     if movement != Vec3::ZERO {
         let nx = transform.translation.x + movement.x;
-        if (nx - room.0.x).abs() <= bounds.walk_half
-            && !hits_obstacle(nx, transform.translation.z, &obstacles)
+        if bounds.walkable(
+            Vec3::new(nx - room.0.x, 0.0, transform.translation.z - room.0.z),
+            PLAYER_RADIUS,
+        ) && !hits_obstacle(nx, transform.translation.z, &obstacles)
         {
             transform.translation.x = nx;
         }
         let nz = transform.translation.z + movement.z;
-        if (nz - room.0.z).abs() <= bounds.walk_half
-            && !hits_obstacle(transform.translation.x, nz, &obstacles)
+        if bounds.walkable(
+            Vec3::new(transform.translation.x - room.0.x, 0.0, nz - room.0.z),
+            PLAYER_RADIUS,
+        ) && !hits_obstacle(transform.translation.x, nz, &obstacles)
         {
             transform.translation.z = nz;
         }

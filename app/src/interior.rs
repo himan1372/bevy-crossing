@@ -25,6 +25,10 @@ const ROOM_SCALE: f32 = 0.0625 / 40.0;
 const ROOM_CENTRE: Vec3 = Vec3::new(3.0, 1.0, 3.0);
 /// Half the room's inside width, in cells.
 pub const ROOM_HALF: f32 = 2.0;
+/// rom_myhome1_wall_v[0..6], drawn with rom_myhome_enter2_tex:
+/// after ROOM_SCALE / ROOM_CENTRE, the wooden landing is x[-1,1], z[2,4].
+pub(crate) const ENTRANCE_HALF_WIDTH: f32 = 1.0;
+pub(crate) const ENTRANCE_END_Z: f32 = 4.0;
 
 const FLOOR_BLOCK: usize = 0x2020;
 const WALL_BLOCK: usize = 0x1020;

@@ -142,9 +142,7 @@ fn blocked(runtime: &MyRoomRuntime, profiles: &HashMap<u16, FurnitureProfile>, p
     // fractionally inside house collision's contact boundary (0.08 game units).
     const RADIUS: f32 = 0.398;
     let p = pos - corner();
-    if (pos.x - INTERIOR_ORIGIN.x).abs() > crate::interior::ROOM_HALF - 0.4
-        || (pos.z - INTERIOR_ORIGIN.z).abs() > crate::interior::ROOM_HALF - 0.4
-    {
+    if !crate::house::player_room_walkable(pos, RADIUS) {
         return true;
     }
     runtime
