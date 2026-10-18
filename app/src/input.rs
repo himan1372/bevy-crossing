@@ -68,6 +68,8 @@ pub enum Action {
     DebugVoice,
     /// Playtest aid: add an original wardrobe to an empty pocket in your room.
     DebugFurniture,
+    /// Playtest aid: add original wide drawers to an empty pocket in your room.
+    DebugDrawers,
 }
 
 /// Keys for each action. Several actions may share a key: they are read in
@@ -110,6 +112,7 @@ impl Default for KeyBindings {
             (DebugTalk, vec![K::F7]),
             (DebugVoice, vec![K::F8]),
             (DebugFurniture, vec![K::F4]),
+            (DebugDrawers, vec![K::F3]),
         ];
         Self(map.into_iter().collect())
     }

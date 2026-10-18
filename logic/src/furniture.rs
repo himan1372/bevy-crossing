@@ -274,6 +274,35 @@ pub fn is_storage(interaction_type: u16) -> bool {
         != 0
 }
 
+/// `aMR_JudgeDemoStart` / `aMR_CheckHikidashi`: single-cell drawers skip the
+/// obstruction check; wide drawers check the two MAIN foreground cells in front.
+/// Retail rejects furniture banks and RSV_FE1F, not loose goods or arbitrary
+/// collision-profile bits. `front` is the contacted front normal's cardinal.
+pub fn drawer_front_clear(
+    shape: ShapeType,
+    cell: (i32, i32),
+    front: Direction,
+    foreground: &RoomLayer,
+) -> bool {
+    if shape == ShapeType::TypeA {
+        return true;
+    }
+    if shape.unit_count() != 2 {
+        return false;
+    }
+    let (fx, fz) = match front {
+        Direction::South => (0, 1),
+        Direction::East => (1, 0),
+        Direction::North => (0, -1),
+        Direction::West => (-1, 0),
+    };
+    shape.unit_offsets()[..2].iter().all(|&(dx, dz)| {
+        foreground
+            .get(cell.0 + dx + fx, cell.1 + dz + fz)
+            .is_some_and(|item| ftr_item_no_2_idx_dir(item).is_none() && item != RSV_FE1F)
+    })
+}
+
 /// Static furniture definition (`aFTR_PROFILE`, `include/ac_furniture.h`).
 ///
 /// `unique_behavior` stands in for the C `aFTR_vtable_c*`: set when the

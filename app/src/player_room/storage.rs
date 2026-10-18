@@ -1,5 +1,5 @@
-//! Transient wardrobe/closet demo: open -> wait for storage UI -> close.
-//! Source: aMR_OpenCloseCommonMove and player kagu_{open,wait,close}_{d,k}1.
+//! Transient storage demo: open -> wait for storage UI -> close.
+//! Source: aMR_OpenCloseCommonMove and player kagu_{open,wait,close}_{d,k,h}1.
 use super::*;
 use crate::furniture::storage::StorageRig;
 use crate::skeleton::{Animation, Skeleton};
@@ -8,6 +8,13 @@ struct Clips {
     open: Animation,
     wait: Animation,
     close: Animation,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Kind {
+    Closet,
+    Wardrobe,
+    Drawers,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -20,7 +27,7 @@ enum Phase {
 
 struct Demo {
     owner: usize,
-    kind: usize,
+    kind: Kind,
     phase: Phase,
     ticks: f32,
     end: f32,
@@ -31,13 +38,13 @@ struct Demo {
 
 #[derive(Default)]
 pub(super) struct Storage {
-    clips: [Option<Clips>; 2], // closet d1, wardrobe k1; drawers h1 separate
+    clips: [Option<Clips>; 3], // closet d1, wardrobe k1, drawers h1
     active: Option<Demo>,
 }
 
 impl Storage {
     pub(super) fn load(&mut self, disc: Option<&GameDisc>) {
-        self.clips = ["d1", "k1"].map(|suffix| {
+        self.clips = ["d1", "k1", "h1"].map(|suffix| {
             let disc = disc?;
             let n = disc
                 .catalog
@@ -81,13 +88,12 @@ impl Storage {
     pub(super) fn begin(
         &mut self,
         owner: usize,
-        wardrobe: bool,
+        kind: Kind,
         end: f32,
         at: Vec3,
         facing: Vec3,
     ) -> bool {
-        let kind = usize::from(wardrobe);
-        if self.clips[kind].is_none() {
+        if self.clips[kind as usize].is_none() {
             return false;
         }
         self.active = Some(Demo {
@@ -100,13 +106,14 @@ impl Storage {
             facing,
             shut_sound: false,
         });
-        crate::sound::se_at(0x42C, at); // NA_SE_FTR_DOOR_OPEN
+        // NA_SE_DRAWER_OPEN / NA_SE_FTR_DOOR_OPEN.
+        crate::sound::se_at(if kind == Kind::Drawers { 0x42E } else { 0x42C }, at);
         true
     }
 
     pub(super) fn animation(&self) -> Option<(&Animation, f32, u8)> {
         let demo = self.active.as_ref()?;
-        let clips = self.clips[demo.kind].as_ref()?;
+        let clips = self.clips[demo.kind as usize].as_ref()?;
         let (clip, looping, phase) = match demo.phase {
             Phase::Opening => (&clips.open, false, 6),
             Phase::Waiting | Phase::ClosingWait => (&clips.wait, true, 7),
@@ -150,10 +157,18 @@ pub(super) fn advance(
     }
     demo.ticks += time.delta_secs() * 60.0;
     if demo.phase == Phase::Closing && !demo.shut_sound && demo.ticks >= demo.end + 1.0 {
-        crate::sound::se_at(0x42D, demo.at); // NA_SE_FTR_DOOR_CLOSE when the furniture stops
+        // NA_SE_DRAWER_SHUT / NA_SE_FTR_DOOR_CLOSE at the furniture stop.
+        crate::sound::se_at(
+            if demo.kind == Kind::Drawers {
+                0x3A
+            } else {
+                0x42D
+            },
+            demo.at,
+        );
         demo.shut_sound = true;
     }
-    let Some(clips) = storage.clips[demo.kind].as_ref() else {
+    let Some(clips) = storage.clips[demo.kind as usize].as_ref() else {
         storage.reset();
         return;
     };
@@ -171,6 +186,9 @@ pub(super) fn advance(
         Phase::ClosingWait if !ui.open && pockets.as_ref().is_none_or(|p| p.world_ready()) => {
             demo.phase = Phase::Closing;
             demo.ticks = 0.0;
+            if demo.kind == Kind::Drawers {
+                crate::sound::se_at(0x42F, demo.at); // NA_SE_DRAWER_CLOSE at closing start
+            }
         }
         Phase::Closing
             if demo.ticks

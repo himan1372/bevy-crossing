@@ -435,10 +435,19 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   19 audited original wardrobe/closet rigs, original player clips and safe
   storage UI completion/cancel/load handling. Check/lint/format/builds and bounded
   disposable previews pass; Philip acceptance is pending. See
-  backlog/furniture-storage-animation.md. Drawers/special constructors remain open.
+  backlog/furniture-storage-animation.md. Special constructors remain open.
   Philip lacked a wardrobe to check it; furniture-playtest-access.md adds F4 in
   his house to put an original blue cabinet in an empty pocket, then normal
   I -> Place in room / E at its front. Storage animation acceptance still pending.
+  Player-home landing now permits walking on the original brown entrance strip;
+  exit requires standing there and facing the doorway. See player-home-entrance.md.
+  The next bounded drawer slice adds 16 audited common rigs, original h1 player
+  clips/sounds and source wide-drawer front-cell obstruction checks. F3 supplies
+  a blue bureau for playtest. Runtime dynamic skin bounds fix its hidden model;
+  classic drawers use their source rig alias. Check/lint/format, capture/default
+  builds, final release build and bounded disposable interactions pass; pending
+  Philip acceptance is recorded in furniture-drawer-animation.md. No new tests
+  or module batch; exact source fidelity, M4 and migration remain open.
   See backlog/migrate-rustimal-modules.md and docs/rustimal-migration-inventory.md.
   Philip's directive: the rustimal modules were built to end up here.
 

@@ -41,5 +41,5 @@ comparison confirmed original home_furniture and pockets unchanged after save
 (an initial string comparison differed only in object key order).
 Own previews13296/11260/11120 closed. Synthetic saves/logs/screenshots stay Temp.
 Actual save hash remains DD89745CCFEDDEAEA619A1C931FEE5233EC533C1860E3B5A910A00B8121E5721.
-Settings/.gitignore preserved; no handoff edit. Default/release builds will be
-checked after the following drawer slice; Philip acceptance remains separate.
+Settings/.gitignore preserved; no handoff edit. Final default workspace and
+release builds pass after the drawer slice; Philip acceptance remains separate.

@@ -713,13 +713,24 @@ fn interact(
         }
         return;
     }
-    if focus.is_world() && actions.consume(Action::DebugFurniture) {
-        let message = match crate::furniture::playtest_wardrobe(&disc) {
+    let grant = if focus.is_world() && actions.consume(Action::DebugDrawers) {
+        Some(true)
+    } else if focus.is_world() && actions.consume(Action::DebugFurniture) {
+        Some(false)
+    } else {
+        None
+    };
+    if let Some(drawers) = grant {
+        let message = match crate::furniture::playtest_storage(&disc, drawers) {
             Some(item) if inventory.add(item) => {
-                "Blue cabinet added.\nI: select it > Place in room.\nFace its front; E: open."
+                if drawers {
+                    "Drawers added.\nI: select leaf > Place in room.\nFace its front; E: open."
+                } else {
+                    "Blue cabinet added.\nI: select it > Place in room.\nFace its front; E: open."
+                }
             }
-            Some(_) => "Your pockets are full.\nFree a pocket and press F4 again.",
-            None => "Blue cabinet unavailable.\nCheck the selected disc.",
+            Some(_) => "Your pockets are full.\nFree a pocket and try again.",
+            None => "Storage furniture unavailable.\nCheck the selected disc.",
         };
         notice(&mut dialogue, &mut room, &mut focus, message);
         return;
@@ -791,16 +802,37 @@ fn interact(
             if let Some(actor) = actor {
                 let front = Quat::from_rotation_y(actor.angle_y.to_radians()) * Vec3::Z;
                 let at = presentation::actor_center(&room, &actor);
-                // Original wardrobes/closets require front contact. Side/back
+                // Original storage requires front contact. Side/back
                 // attempts leave storage and inventory untouched.
                 if facing.dir.dot(front) > -0.9 || (transform.translation - at).dot(front) <= 0.0 {
                     return;
                 }
-                let wardrobe = room
+                let interaction = room
                     .profiles
                     .get(&actor.name)
-                    .is_some_and(|p| p.interaction_type & ftr::interaction::STORAGE_WARDROBE != 0);
-                if room.storage.begin(slot, wardrobe, rig.end, at, -front) {
+                    .map_or(0, |p| p.interaction_type);
+                let kind = if interaction & ftr::interaction::STORAGE_DRAWERS != 0 {
+                    if !ftr::drawer_front_clear(
+                        actor.shape_type,
+                        (actor.cell_x, actor.cell_z),
+                        direction((actor.angle_y / 90.0).round() as u8),
+                        &room.layers[0],
+                    ) {
+                        notice(
+                            &mut dialogue,
+                            &mut room,
+                            &mut focus,
+                            "Something is blocking\nthe drawers.",
+                        );
+                        return;
+                    }
+                    storage::Kind::Drawers
+                } else if interaction & ftr::interaction::STORAGE_WARDROBE != 0 {
+                    storage::Kind::Wardrobe
+                } else {
+                    storage::Kind::Closet
+                };
+                if room.storage.begin(slot, kind, rig.end, at, -front) {
                     room.flow = StorageFlow::Opening(slot);
                     *focus = InputFocus::Furniture;
                     return;

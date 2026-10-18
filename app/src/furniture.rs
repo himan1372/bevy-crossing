@@ -57,10 +57,14 @@ pub fn furniture_index(item: u16) -> Option<u32> {
     }
 }
 
-/// Playtest wardrobe, resolved from the runtime profile table rather than a
+/// Playtest storage, resolved from the runtime profile table rather than a
 /// second hardcoded numeric item mapping. Requires its original animated rig.
-pub(crate) fn playtest_wardrobe(disc: &GameDisc) -> Option<u16> {
-    let wanted = disc.catalog.get("iam_sum_blue_cab01")?;
+pub(crate) fn playtest_storage(disc: &GameDisc, drawers: bool) -> Option<u16> {
+    let wanted = disc.catalog.get(if drawers {
+        "iam_sum_blue_lowchest01"
+    } else {
+        "iam_sum_blue_cab01"
+    })?;
     let table = disc.catalog.get("furniture_quality")?;
     let index = (0..table.size / 4).find(|&i| {
         matches!(disc.rom.pointer_at(RomSource::Rel, table.offset + i * 4),
@@ -190,6 +194,10 @@ fn profile_skeleton(disc: &GameDisc, profile: &Profile) -> Option<(Skeleton, Opt
         Some(rig) => (rel(rig)?, rel(rig + 4)),
         None => {
             let mut base = profile.name.strip_prefix("iam_")?.to_string();
+            // ac_sum_classicchest01's ctor/draw explicitly use clchest01.
+            if base == "sum_classicchest01" {
+                base = "sum_clchest01".to_string();
+            }
             // Gyroids share one profile; `aHnwCommon_ct` picks the
             // skeleton from `hnw_cKF_bs_r_table` by furniture index.
             if base == "hnw_common" {

@@ -270,3 +270,18 @@ slice acceptance was followed by separate movement acceptance ("works, next").
 - [x] Philip playtest acceptance of the current first playable furniture slice
 - [ ] Remaining furniture gameplay/source fidelity
 - [ ] Remaining 193 source-module reviews (not 193 new imports)
+
+2026-10-17 continuation: Philip authorized a walkable brown home entrance and a
+smaller exit area requiring doorway facing, then original drawer animations and
+obstruction. Entrance source geometry/bounds and finite facing-required door are
+implemented; disposable disc/no-disc checks cover walk/edge stops, carpet and
+wrong-facing refusal, correct-facing exit and numeric preservation. Drawer slice
+adds 16 audited common constructors, original h1 clips/sounds and aMR_CheckHikidashi
+two-front-cell checks (TypeA bypass). F3 provides a blue bureau without replacing
+occupied pockets. Per-joint dynamic skin bounds fix the bureau's original offset
+rig culling; classic drawer rig alias follows C. Check/all-target lint/fmt,
+capture/default builds and bounded disposable placement, transactions, blockers,
+rotations, capacity, cancel and pause/load pass. No tests added/run. Final release
+build passes in2m32s; detailed limits are in furniture-drawer-animation.md. Philip
+acceptance remains pending for these slices; no module batch, M4/migration closure
+or codex-handoff update. Existing accepted movement/birth/pickup scope preserved.

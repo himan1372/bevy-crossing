@@ -188,3 +188,5 @@
 {"action":"release","task":"compiler-memory-failure","agent":"codex","timestamp":"2026-10-18T01:31:05Z"}
 {"action":"claim","task":"player-home-entrance","agent":"codex","timestamp":"2026-10-18T02:19:23Z"}
 {"action":"release","task":"player-home-entrance","agent":"codex","timestamp":"2026-10-18T02:32:46Z"}
+{"action":"claim","task":"furniture-drawer-animation","agent":"codex","timestamp":"2026-10-18T02:33:22Z"}
+{"action":"release","task":"furniture-drawer-animation","agent":"codex","timestamp":"2026-10-18T03:07:17Z"}
