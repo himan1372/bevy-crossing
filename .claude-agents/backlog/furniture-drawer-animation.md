@@ -96,3 +96,15 @@ blocked-action effect is represented by a brief blocking notice; exact source
 feedback, contact/root snapping, per-type constructors outside the audited common
 family, full scripts, long-piece pivots, birth dust and loose-item rendering
 (including starter diary) remain open. This does not complete M4 or migration.
+
+## Philip feedback and source follow-up
+
+Philip reports that only the blue bureau's bottom drawer opens and is content
+with that if original behavior. Checked original int_sum_blue_lowchest01.c:
+one base display-list joint plus one door_1 drawer joint; the base includes the
+remaining drawer fronts, and the sole drawer joint is animated. Its constructor
+uses exactly this animation/common1..10 flow, with no drawer-selection callbacks.
+The observed single bottom drawer is expected; do not add independent upper
+drawer controls. This feedback does not certify every storage transaction or
+drawer family. Proposed next bounded slice: source-backed loose-item rendering,
+starting with the omitted starter diary, preserving furniture/storage layering.

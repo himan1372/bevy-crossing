@@ -43,3 +43,7 @@ Own previews13296/11260/11120 closed. Synthetic saves/logs/screenshots stay Temp
 Actual save hash remains DD89745CCFEDDEAEA619A1C931FEE5233EC533C1860E3B5A910A00B8121E5721.
 Settings/.gitignore preserved; no handoff edit. Final default workspace and
 release builds pass after the drawer slice; Philip acceptance remains separate.
+
+Philip playtest feedback: "walkable area is good." Accept the entrance walking
+area on that basis; this statement does not independently certify every exit
+facing/edge condition.

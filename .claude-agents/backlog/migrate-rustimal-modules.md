@@ -285,3 +285,9 @@ rotations, capacity, cancel and pause/load pass. No tests added/run. Final relea
 build passes in2m32s; detailed limits are in furniture-drawer-animation.md. Philip
 acceptance remains pending for these slices; no module batch, M4/migration closure
 or codex-handoff update. Existing accepted movement/birth/pickup scope preserved.
+
+Philip subsequently accepts the walkable entrance area and observes only the
+blue bureau bottom drawer opening. Original model has one animated drawer joint;
+upper fronts belong to the base, so this is expected. Next proposed bounded
+source review is loose-item rendering, starting with the omitted starter diary;
+not yet claimed/implemented. M4 and migration remain open.
