@@ -478,4 +478,10 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   save/reload have bounded disposable evidence. Exact player contact/root/slip
   and conservative player sweep remain open; Philip acceptance is pending.
   See backlog/furniture-turn-long.md. M4/migration remain open.
+  room-loose-animation now adds source idle-player throw/growth/bounce and
+  distinct floor pickup1/surface clear_table1 clips for supported diary, paper,
+  fruit and shells. Original goods approach the rendered hand; atomic numeric
+  transfers, bundle quantity, hidden storage and pause/save/reload remain intact.
+  Bounded disposable previews pass; Philip acceptance and broader fidelity remain
+  open. See backlog/room-loose-animation.md; M4/migration remain open.
 

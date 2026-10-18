@@ -25,6 +25,28 @@ pub(super) struct Piece {
     pub rotates: bool,
 }
 
+pub(super) fn position(room: &PlayerRoom, piece: Piece) -> Vec3 {
+    let height = if piece.layer == 1 {
+        room.runtime.occupancy[0][piece.z as usize][piece.x as usize]
+            .and_then(|id| room.runtime.actors[id as usize].as_ref())
+            .and_then(|a| room.profiles.get(&a.name))
+            .map_or(0.0, |p| p.height / 40.0)
+    } else {
+        0.0
+    };
+    corner() + Vec3::new(piece.x as f32 + 0.5, height, piece.z as f32 + 0.5)
+}
+
+fn placed(item: u16, layer: usize, x: i32, z: i32) -> Piece {
+    Piece {
+        item,
+        layer,
+        x,
+        z,
+        rotates: false,
+    }
+}
+
 fn visible(room: &PlayerRoom) -> Vec<Piece> {
     let mut pieces = Vec::new();
     for layer in 0..2 {
@@ -62,7 +84,7 @@ pub(super) fn place(
     pos: Vec3,
     facing: Vec3,
     disc: &GameDisc,
-) -> Result<(), &'static str> {
+) -> Result<Piece, &'static str> {
     if !crate::shop_display::has_goods_model(disc, item) {
         return Err("That item isn't available on the selected disc.");
     }
@@ -97,7 +119,7 @@ pub(super) fn place(
             room.layers[1].set(x, z, item);
             room.loose_angles[z as usize][x as usize] = 0;
             room.dirty = true;
-            return Ok(());
+            return Ok(placed(item, 1, x, z));
         }
     }
     let clear = |x: i32, z: i32| {
@@ -121,7 +143,7 @@ pub(super) fn place(
     let (x, z) = chosen.ok_or("There's no room to put that here.")?;
     room.layers[0].set(x, z, item);
     room.dirty = true;
-    Ok(())
+    Ok(placed(item, 0, x, z))
 }
 
 pub(super) fn target(room: &PlayerRoom, pos: Vec3, facing: Vec3) -> Option<Piece> {

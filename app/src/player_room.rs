@@ -25,6 +25,7 @@ use crate::pockets::PocketsUi;
 use crate::states::GameplaySet;
 
 mod loose;
+mod loose_presentation;
 mod movement;
 mod presentation;
 mod storage;
@@ -88,6 +89,7 @@ pub(crate) struct PlayerRoom {
     loose_angles: loose::Angles,
     movement: movement::Movement,
     presentation: presentation::Presentation,
+    loose_presentation: loose_presentation::Presentation,
     storage: storage::Storage,
     layers: [RoomLayer; 4],
     runtime: MyRoomRuntime,
@@ -106,6 +108,7 @@ impl Default for PlayerRoom {
             loose_angles: [[0; 16]; 16],
             movement: movement::Movement::default(),
             presentation: presentation::Presentation::default(),
+            loose_presentation: loose_presentation::Presentation::default(),
             storage: storage::Storage::default(),
             layers: std::array::from_fn(|_| RoomLayer::default()),
             runtime: MyRoomRuntime::new(32), // aMR_GetSceneFurnitureMax: small room
@@ -127,6 +130,7 @@ fn layer_views(layers: &mut [RoomLayer; 4]) -> [Option<&mut RoomLayer>; 4] {
 impl PlayerRoom {
     pub(crate) fn manipulating(&self) -> bool {
         self.presentation.busy()
+            || self.loose_presentation.busy()
             || self.storage.busy()
             || self.movement.grip.is_some()
             || self.movement.active.is_some()
@@ -135,6 +139,7 @@ impl PlayerRoom {
     pub(crate) fn animation(&self) -> Option<(&crate::skeleton::Animation, f32, u8)> {
         self.presentation
             .animation()
+            .or_else(|| self.loose_presentation.animation())
             .or_else(|| self.storage.animation())
             .or_else(|| self.movement.animation())
     }
@@ -158,6 +163,7 @@ impl PlayerRoom {
         self.loose_angles = [[0; 16]; 16];
         self.movement.reset();
         self.presentation.reset();
+        self.loose_presentation.reset();
         self.storage.reset();
         self.layers = std::array::from_fn(|_| RoomLayer::default());
         self.original = saved.cloned();
@@ -487,6 +493,7 @@ fn setup(
     );
     room.movement.load(disc.as_deref());
     room.presentation.load(disc.as_deref());
+    room.loose_presentation.load(disc.as_deref());
     room.storage.load(disc.as_deref());
     info!(
         "player furniture: {} profiles, {} placed actors",
@@ -561,8 +568,14 @@ fn interact(
                     && inventory.pockets.item_cond(slot) == 0 =>
             {
                 let result = if loose::supports(item) {
-                    loose::place(&mut room, item, transform.translation, facing.dir, &disc)
-                        .map(|()| None)
+                    loose::place(&mut room, item, transform.translation, facing.dir, &disc).map(
+                        |piece| {
+                            let at = loose::position(&room, piece);
+                            room.loose_presentation
+                                .drop(piece, at, transform.translation);
+                            None
+                        },
+                    )
                 } else {
                     room.place(item, transform.translation, facing.dir, &disc)
                         .map(Some)
@@ -613,7 +626,10 @@ fn interact(
         if let Err(message) = result {
             notice(&mut dialogue, &mut room, &mut focus, message);
         } else {
-            *focus = if room.presentation.busy() || room.storage.busy() {
+            *focus = if room.presentation.busy()
+                || room.loose_presentation.busy()
+                || room.storage.busy()
+            {
                 InputFocus::Furniture
             } else {
                 InputFocus::World
@@ -765,12 +781,24 @@ fn interact(
         if let Some(piece) = loose::target(&room, transform.translation, facing.dir) {
             actions.consume(Action::Back);
             if inventory.add(piece.item) {
+                let at = loose::position(&room, piece);
+                let yaw = if piece.layer == 1
+                    && crate::shop_display::goods_rotates_on_surface(&disc, piece.item)
+                {
+                    room.loose_angles[piece.z as usize][piece.x as usize] as f32
+                        * std::f32::consts::FRAC_PI_2
+                } else {
+                    0.0
+                };
                 room.layers[piece.layer].set(piece.x, piece.z, 0);
                 if piece.layer == 1 {
                     room.loose_angles[piece.z as usize][piece.x as usize] = 0;
                 }
                 room.dirty = true;
-                crate::sound::se(crate::sound::se_id::CHOICE_CONFIRM);
+                room.loose_presentation.pickup(piece, at, yaw);
+                if room.loose_presentation.busy() {
+                    *focus = InputFocus::Furniture;
+                }
             } else {
                 notice(
                     &mut dialogue,
@@ -1032,6 +1060,20 @@ impl Plugin for PlayerRoomPlugin {
                     .in_set(GameplaySet),
             )
             .add_systems(Update, storage::render.after(refresh).in_set(GameplaySet))
+            .add_systems(
+                Update,
+                loose_presentation::advance
+                    .after(crate::save::LoadSet)
+                    .before(movement::advance)
+                    .in_set(GameplaySet),
+            )
+            .add_systems(
+                Update,
+                loose_presentation::render
+                    .after(movement::animate_roots)
+                    .after(crate::character::CharacterAnimationSet)
+                    .in_set(GameplaySet),
+            )
             .add_systems(
                 Update,
                 presentation::advance

@@ -305,7 +305,7 @@ pub(super) fn advance(
         return;
     };
     let ticks = time.delta_secs() * 60.0;
-    if room.presentation.busy() || room.storage.busy() {
+    if room.presentation.busy() || room.loose_presentation.busy() || room.storage.busy() {
         *loco = crate::locomotion::Locomotion::default();
         *focus = InputFocus::Furniture;
         return;
