@@ -85,6 +85,7 @@ enum StorageFlow {
 
 #[derive(Resource)]
 pub(crate) struct PlayerRoom {
+    loose_angles: loose::Angles,
     movement: movement::Movement,
     presentation: presentation::Presentation,
     storage: storage::Storage,
@@ -102,6 +103,7 @@ pub(crate) struct PlayerRoom {
 impl Default for PlayerRoom {
     fn default() -> Self {
         Self {
+            loose_angles: [[0; 16]; 16],
             movement: movement::Movement::default(),
             presentation: presentation::Presentation::default(),
             storage: storage::Storage::default(),
@@ -153,6 +155,7 @@ impl PlayerRoom {
     }
 
     pub(crate) fn restore(&mut self, saved: Option<&RoomSave>, disc: Option<&GameDisc>) {
+        self.loose_angles = [[0; 16]; 16];
         self.movement.reset();
         self.presentation.reset();
         self.storage.reset();
@@ -763,6 +766,9 @@ fn interact(
             actions.consume(Action::Back);
             if inventory.add(piece.item) {
                 room.layers[piece.layer].set(piece.x, piece.z, 0);
+                if piece.layer == 1 {
+                    room.loose_angles[piece.z as usize][piece.x as usize] = 0;
+                }
                 room.dirty = true;
                 crate::sound::se(crate::sound::se_id::CHOICE_CONFIRM);
             } else {

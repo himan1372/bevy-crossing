@@ -465,6 +465,10 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   synchronized visuals and atomic destination validation. Mixed stacks and
   save/load/refusal previews pass; loaded turns remain safely refused and Philip
   acceptance remains pending.
+  Furniture-turn-loose.md adds loaded TypeA/TypeC turns with source-relative item
+  offsets and goods yaw flags. Numeric positions save; runtime loose-facing resets
+  on reload. Long loose-loaded turns remain refused. Bounded previews pass;
+  Philip acceptance and broader movement fidelity remain open.
   See backlog/migrate-rustimal-modules.md and docs/rustimal-migration-inventory.md.
   Philip's directive: the rustimal modules were built to end up here.
 

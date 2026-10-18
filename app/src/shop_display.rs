@@ -92,29 +92,36 @@ pub(crate) struct ShopDisplay {
     pub position: Vec3,
 }
 
-/// The `l_shop_goods_dsp_table` lists (mode 0) for an item or sign:
-/// (opaque, translucent).
-fn goods_lists(disc: &GameDisc, item: u16) -> Option<(Vec<u32>, Vec<u32>)> {
+/// The `l_shop_goods_dsp_table` entry for an item or sign.
+fn goods_entry(disc: &GameDisc, item: u16) -> Option<u32> {
     let table = disc.catalog.get("l_shop_goods_dsp_table")?;
+    (0..table.size / DSP_ENTRY).find_map(|i| {
+        let e = table.offset + i * DSP_ENTRY;
+        let b = disc.rom.slice(RomSource::Rel, e, 4)?;
+        let start = u16::from_be_bytes([b[0], b[1]]);
+        let end = u16::from_be_bytes([b[2], b[3]]);
+        (start..=end).contains(&item).then_some(e)
+    })
+}
+
+/// aSG_DATA_ROTATE_Y_FLAG applies only to goods on the secondary layer.
+pub(crate) fn goods_rotates_on_surface(disc: &GameDisc, item: u16) -> bool {
+    goods_entry(disc, item)
+        .and_then(|e| disc.rom.slice(RomSource::Rel, e + 36, 4))
+        .is_some_and(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]) & 1 != 0)
+}
+
+fn goods_lists(disc: &GameDisc, item: u16) -> Option<(Vec<u32>, Vec<u32>)> {
+    let e = goods_entry(disc, item)?;
     let rom = &disc.rom;
     let rel = |o: u32| match rom.pointer_at(RomSource::Rel, o) {
         Some(Target::File(RomSource::Rel, p)) => Some(p),
         _ => None,
     };
-    (0..table.size / DSP_ENTRY).find_map(|i| {
-        let e = table.offset + i * DSP_ENTRY;
-        let b = rom.slice(RomSource::Rel, e, 4)?;
-        let (start, end) = (
-            u16::from_be_bytes([b[0], b[1]]),
-            u16::from_be_bytes([b[2], b[3]]),
-        );
-        (start..=end).contains(&item).then(|| {
-            (
-                [4, 12].iter().filter_map(|&o| rel(e + o)).collect(),
-                [20, 28].iter().filter_map(|&o| rel(e + o)).collect(),
-            )
-        })
-    })
+    Some((
+        [4, 12].iter().filter_map(|&o| rel(e + o)).collect(),
+        [20, 28].iter().filter_map(|&o| rel(e + o)).collect(),
+    ))
 }
 
 /// Whether the runtime goods table supplies any display lists for this item.

@@ -35,6 +35,8 @@ struct Carried {
     z: i32,
     from: Vec3,
     to: Vec3,
+    yaw: f32,
+    angle: u8,
 }
 
 pub(super) struct Active {
@@ -180,7 +182,13 @@ fn blocked(runtime: &MyRoomRuntime, profiles: &HashMap<u16, FurnitureProfile>, p
         })
 }
 
-type Relocation = (MyRoomRuntime, [RoomLayer; 4], Vec<usize>, Vec<Carried>);
+type Relocation = (
+    MyRoomRuntime,
+    [RoomLayer; 4],
+    Vec<usize>,
+    Vec<Carried>,
+    loose::Angles,
+);
 
 /// aMR_RequestItemToFitFurniture / UnFit: collect relative surface cells on
 /// copies, reuse the native actor move, then restore goods at the destination.
@@ -195,7 +203,13 @@ fn relocate(
         .ok_or("That furniture is gone.")?;
     let mut layers = room.layers.clone();
     let mut carried = Vec::new();
-    let delta = (target.0 - actor.cell_x, target.1 - actor.cell_z);
+    let mut angles = room.loose_angles;
+    let turns = (target.2 as i32 - (actor.angle_y / 90.0).round() as i32).rem_euclid(4) as u8;
+    let pivot = if actor.original_shape_type == ShapeType::TypeC {
+        1.0
+    } else {
+        0.5
+    };
     for &(dx, dz) in actor
         .shape_type
         .unit_offsets()
@@ -207,7 +221,11 @@ fn relocate(
         if item == 0 || room.runtime.occupancy[1][z as usize][x as usize].is_some() {
             continue;
         }
-        if rotating
+        if (rotating
+            && !matches!(
+                actor.original_shape_type,
+                ShapeType::TypeA | ShapeType::TypeC
+            ))
             || !loose::supports(item)
             || !room.profiles.get(&actor.name).is_some_and(|p| {
                 p.set_type == SetType::Surface && !ftr::is_storage(p.interaction_type)
@@ -216,13 +234,26 @@ fn relocate(
             return Err("Clear the top first.");
         }
         layers[1].set(x, z, 0);
+        angles[z as usize][x as usize] = 0;
         let from = corner() + Vec3::new(x as f32 + 0.5, 0.0, z as f32 + 0.5);
+        let mut offset = Vec2::new(dx as f32 + 0.5 - pivot, dz as f32 + 0.5 - pivot);
+        for _ in 0..turns {
+            offset = Vec2::new(offset.y, -offset.x);
+        }
+        let (x, z) = (
+            target.0 + (offset.x + pivot - 0.5).round() as i32,
+            target.1 + (offset.y + pivot - 0.5).round() as i32,
+        );
+        let old_angle =
+            room.loose_angles[(actor.cell_z + dz) as usize][(actor.cell_x + dx) as usize];
         carried.push(Carried {
             item,
-            x: x + delta.0,
-            z: z + delta.1,
+            x,
+            z,
             from,
-            to: from + Vec3::new(delta.0 as f32, 0.0, delta.1 as f32),
+            to: corner() + Vec3::new(x as f32 + 0.5, 0.0, z as f32 + 0.5),
+            yaw: old_angle as f32 * std::f32::consts::FRAC_PI_2,
+            angle: (old_angle + turns) & 3,
         });
     }
     let (next, mut layers, ids) = rustimal_logic::furniture_motion::relocate(
@@ -241,8 +272,9 @@ fn relocate(
             return Err("There's no room to move.");
         }
         layers[1].set(piece.x, piece.z, piece.item);
+        angles[piece.z as usize][piece.x as usize] = piece.angle;
     }
-    Ok((next, layers, ids, carried))
+    Ok((next, layers, ids, carried, angles))
 }
 
 #[allow(clippy::too_many_arguments)] // One atomic room/player/input transaction.
@@ -433,7 +465,7 @@ pub(super) fn advance(
         )
     };
     let result = relocate(&room, slot, target, rotating);
-    let result = result.and_then(|(next, layers, ids, carried)| {
+    let result = result.and_then(|(next, layers, ids, carried, angles)| {
         let destination = transform.translation + if rotating { Vec3::ZERO } else { dir };
         // Check the complete player path against all non-moving actors and the
         // room walls; check the destination against the committed furniture.
@@ -506,6 +538,7 @@ pub(super) fn advance(
             .collect();
         room.runtime = next;
         room.layers = layers;
+        room.loose_angles = angles;
         room.dirty = true;
         room.movement.active = Some(Active {
             kind,
@@ -562,7 +595,7 @@ pub(super) fn animate_roots(
     }
     for (piece, mut transform) in &mut goods {
         let target = corner() + Vec3::new(piece.x as f32 + 0.5, 0.0, piece.z as f32 + 0.5);
-        let position = room
+        let (position, yaw) = room
             .movement
             .active
             .as_ref()
@@ -570,10 +603,23 @@ pub(super) fn animate_roots(
                 let carried = active.carried.iter().find(|v| {
                     piece.layer == 1 && v.item == piece.item && v.x == piece.x && v.z == piece.z
                 })?;
-                Some(carried.from.lerp(carried.to, progress))
+                let parent = active.visuals.first()?;
+                let position = if parent.turn != 0.0 {
+                    parent.from.lerp(parent.to, progress)
+                        + Quat::from_rotation_y(parent.turn * progress)
+                            * (carried.from - parent.from)
+                } else {
+                    carried.from.lerp(carried.to, progress)
+                };
+                Some((position, carried.yaw + parent.turn * progress))
             })
-            .unwrap_or(target);
+            .unwrap_or((
+                target,
+                room.loose_angles[piece.z as usize][piece.x as usize] as f32
+                    * std::f32::consts::FRAC_PI_2,
+            ));
         transform.translation.x = position.x;
         transform.translation.z = position.z;
+        transform.rotation = Quat::from_rotation_y(if piece.rotates { yaw } else { 0.0 });
     }
 }

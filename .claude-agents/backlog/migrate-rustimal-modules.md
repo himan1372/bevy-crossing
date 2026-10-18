@@ -328,3 +328,11 @@ and single-cell, mixed top furniture/goods, switches, mid-motion save/load and
 blocked/unsupported/turn refusal evidence recorded; no tests added/run. Loaded
 rotation/source pivots remain open. Philip acceptance pending; no M4/migration
 closure or broader module import batch.
+
+Furniture-turn-loose.md: Philip authorized single-cell/square loaded rotation.
+TypeA/TypeC goods now orbit with the base, respecting original goods yaw flags;
+fruit keeps model facing. Copied transient angle state and numeric cells commit
+atomically. Saved positions persist; loose-facing is runtime-only/reset on F9 or
+fresh process, no DTO extension. Long loose-loaded turns still refuse. Bounded
+left/right, push/pull-after-turn, mixed stack, placement reset and refusal evidence
+in task note; no tests added/run. Philip acceptance/M4/migration remain open.

@@ -2,6 +2,9 @@
 //! Audited loose goods; storage contents are never displayed as room goods.
 use super::*;
 
+/// Original SG_angle_y is runtime-only; quarter turns suffice for this adapter.
+pub(super) type Angles = [[u8; 16]; 16];
+
 /// ITM_PAPER_START..END includes all 64 designs and four encoded quantities.
 /// Keep the complete item number: placing/picking up a bundle moves it intact.
 /// Fruit excludes the adjacent mushroom/candy codes; shells include coral.
@@ -19,6 +22,7 @@ pub(super) struct Piece {
     pub layer: usize,
     pub x: i32,
     pub z: i32,
+    pub rotates: bool,
 }
 
 fn visible(room: &PlayerRoom) -> Vec<Piece> {
@@ -42,6 +46,7 @@ fn visible(room: &PlayerRoom) -> Vec<Piece> {
                     layer,
                     x: x as i32,
                     z: z as i32,
+                    rotates: false,
                 });
             }
         }
@@ -90,6 +95,7 @@ pub(super) fn place(
                 && room.runtime.occupancy[1][z as usize][x as usize].is_none(),
         ) {
             room.layers[1].set(x, z, item);
+            room.loose_angles[z as usize][x as usize] = 0;
             room.dirty = true;
             return Ok(());
         }
@@ -149,7 +155,9 @@ pub(super) fn refresh(
     for entity in existing {
         commands.entity(entity).despawn();
     }
-    for piece in visible(room) {
+    for mut piece in visible(room) {
+        piece.rotates =
+            piece.layer == 1 && crate::shop_display::goods_rotates_on_surface(disc, piece.item);
         let lift = if piece.layer == 1 {
             room.runtime.occupancy[0][piece.z as usize][piece.x as usize]
                 .and_then(|id| room.runtime.actors[id as usize].as_ref())
