@@ -24,6 +24,7 @@ use crate::player::Player;
 use crate::pockets::PocketsUi;
 use crate::states::GameplaySet;
 
+mod loose;
 mod movement;
 mod presentation;
 mod storage;
@@ -191,8 +192,9 @@ impl PlayerRoom {
                     );
                 }
             }
-            // The pre-existing room did not draw the loose starter diary.
-            // Loose item rendering/placement is outside this furniture slice.
+            // mHm_SetDefaultPlayerRoomData: diary on the orange box. Only new
+            // default rooms receive it; saved/explicitly empty rooms stay exact.
+            self.layers[1].set(1, 1, 0x2B00);
         }
         self.rebuild();
     }
@@ -742,6 +744,24 @@ fn interact(
         return;
     }
     // Source pickup range is 50 units on layer 0, 56 on layer 1.
+    if actions.just_pressed(Action::Back) {
+        if let Some(piece) = loose::target(&room, transform.translation, facing.dir) {
+            actions.consume(Action::Back);
+            if inventory.add(piece.item) {
+                room.layers[piece.layer].set(piece.x, piece.z, 0);
+                room.dirty = true;
+                crate::sound::se(crate::sound::se_id::CHOICE_CONFIRM);
+            } else {
+                notice(
+                    &mut dialogue,
+                    &mut room,
+                    &mut focus,
+                    "Your pockets are full.",
+                );
+            }
+            return;
+        }
+    }
     let target = room
         .runtime
         .actors
@@ -858,6 +878,7 @@ fn refresh(
     mut room: ResMut<PlayerRoom>,
     disc: Option<Res<GameDisc>>,
     mut existing: Query<(Entity, &mut RoomPiece, &mut Transform)>,
+    loose_pieces: Query<Entity, With<loose::Piece>>,
     mut obstacles: ResMut<InteriorObstacles>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<crate::n64_material::N64Material>>,
@@ -868,6 +889,13 @@ fn refresh(
     }
     room.dirty = false;
     let Some(disc) = disc else { return };
+    loose::refresh(
+        &mut commands,
+        &room,
+        &disc,
+        &loose_pieces,
+        (&mut meshes, &mut materials, &mut images),
+    );
     let wanted: Vec<RoomPiece> = room
         .runtime
         .actors

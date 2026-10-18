@@ -291,3 +291,12 @@ blue bureau bottom drawer opening. Original model has one animated drawer joint;
 upper fronts belong to the base, so this is expected. Next proposed bounded
 source review is loose-item rendering, starting with the omitted starter diary;
 not yet claimed/implemented. M4 and migration remain open.
+
+Philip authorized that bounded diary slice, requesting usage efficiency. Runtime
+diary00..15 now reuse existing shop goods models for saved floor/surface layers;
+source starter diary applies only to default rooms. Existing Backspace handles
+visible diary recovery/full-pocket refusal without taking its supporting box.
+Storage contents stay hidden. Check/lint/fmt/capture and disposable GUI evidence
+are in room-loose-diary.md; no tests added/run, final builds recorded there.
+Other loose families, placement/writing UI and exact pickup presentation remain
+open; no migration batch or M4 closure, Philip acceptance pending.

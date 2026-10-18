@@ -448,6 +448,10 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   builds, final release build and bounded disposable interactions pass; pending
   Philip acceptance is recorded in furniture-drawer-animation.md. No new tests
   or module batch; exact source fidelity, M4 and migration remain open.
+  Bounded diary follow-up now renders original diary00..15 goods on floor/surfaces
+  and restores the source starter diary only for default rooms. Backspace recovers
+  visible diaries atomically; storage contents stay hidden. Evidence/limits and
+  pending acceptance: backlog/room-loose-diary.md. Other loose families remain open.
   See backlog/migrate-rustimal-modules.md and docs/rustimal-migration-inventory.md.
   Philip's directive: the rustimal modules were built to end up here.
 

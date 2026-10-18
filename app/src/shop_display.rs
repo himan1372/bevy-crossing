@@ -198,7 +198,7 @@ fn show_goods(
 }
 
 /// One good (or sold-out sign) standing on unit `ut`.
-fn spawn_goods(
+pub(crate) fn spawn_goods(
     commands: &mut Commands,
     disc: &GameDisc,
     item: ItemId,
