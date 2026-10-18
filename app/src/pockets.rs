@@ -26,6 +26,7 @@ pub struct PocketsUi {
     pub(crate) sell_slot: Option<usize>,
     pub(crate) home: bool,
     pub(crate) storing: Option<usize>,
+    pub(crate) registering: bool,
     pub(crate) room_request: Option<crate::player_room::PocketRequest>,
 }
 
@@ -178,7 +179,9 @@ impl PocketsUi {
                 vec!["Quit"]
             }
         } else if self.storing.is_some() {
-            if crate::player_room::can_store(item, condition) {
+            if condition == 0 && self.registering && (0x2A00..=0x2A36).contains(&item) {
+                vec!["Register", "Quit"]
+            } else if !self.registering && crate::player_room::can_store(item, condition) {
                 vec!["Put in", "Quit"]
             } else {
                 vec!["Quit"]
@@ -290,7 +293,17 @@ fn pockets_input(
             return;
         }
         if let Some(owner) = ui.storing {
-            if choice == 0 && crate::player_room::can_store(item, inventory.pockets.item_cond(slot))
+            if choice == 0
+                && ui.registering
+                && inventory.pockets.item_cond(slot) == 0
+                && (0x2A00..=0x2A36).contains(&item)
+            {
+                ui.room_request =
+                    Some(crate::player_room::PocketRequest::Register { owner, slot, item });
+                ui.open = false;
+            } else if choice == 0
+                && !ui.registering
+                && crate::player_room::can_store(item, inventory.pockets.item_cond(slot))
             {
                 ui.room_request =
                     Some(crate::player_room::PocketRequest::Store { owner, slot, item });

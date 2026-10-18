@@ -107,7 +107,7 @@ Each milestone ends with a Philip playtest.
 ### M4 — UI, audio, feel — OPEN
 
 - [x] **ui-from-disc** — completed scope: disc font, dialogue/name plate and choice windows with a no-disc fallback. The retail pockets/mail follow-ups below extend that foundation; this does not mean every HUD/menu has been recreated from the disc.
-- [ ] **net-render-fidelity** — Philip reports the held net does not look retail. Audit source asset selection, textures/materials, mesh skinning, scale and pose against retail; correct the demonstrated mismatch before net visual sign-off. See backlog/net-render-fidelity.md.
+- [ ] **net-render-fidelity** — Deferred by Philip (2026-10-18). Held-net appearance mismatch remains recorded; revisit asset selection, textures/materials, skinning, scale and pose when requested. See backlog/net-render-fidelity.md.
 - [~] **retail-pockets-ui** — original inventory frame, runtime icons/font, animated player/hand, slide, 15-slot selection, Grab/swap and supported net/rod Hold. Corrections cover shared up-left cloth scrolling (Philip's latest direction), source perspective/menu lighting, close/release, grid alignment and held-item rim exposure. Added saved phi/woponese labels and source-scaled bells. Static layout previously looked much better; final retail comparison acceptance remains open. Full retail tags/actions, mail integration and remaining hand/morph/recessed-slot fidelity stay named follow-ups; introduction/rename remains deferred. See backlog/retail-pockets-ui.md.
 - [~] **retail-mail-ui** — ten disc envelope slots, original stationery/font, paged reading and existing compose/send. Philip accepts UI/paper appearance. Follow-up fixes world camera query regression and adds compact Read/Grab/Throw Away/Quit menus, confirmed discard, slot-preserving move/swap and save compatibility. Corrected camera/menu/actions await Philip comparison; separate mail transfer/storage, broader retail tags/keyboard, attachments and paper effects remain open. See backlog/retail-mail-ui.md.
 - [ ] **retail-shop-ui** — first Cranny flow implemented: display-linked purchases, source zone-follow/facing, original Nook dialogue/voice/choices, pockets Sell/Quit and offer confirmation. Disposable purchase/refusal/full-pocket/funds/per-slot sale/cancel and table collision reviewed; Philip acceptance pending. Category previews, paint, tickets, multi-sale/special item flows, services and other layouts remain open; see backlog/retail-shop-ui.md.
@@ -501,4 +501,16 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   save/reload have bounded evidence. Music registration/playback, toy use and
   Philip acceptance remain separate/open. See backlog/music-fan-pinwheel-room.md;
   M4/migration remain open.
+  Room music-player follow-up implements shared 55-song home registration,
+  duplicate refusal, selection/stop/single-title take-out, exclusive device
+  switches, source BGM_MD0+index sequences and save/F9 collection persistence.
+  Current pockets/dialogue menus are reused; F2 grants K.K. Love Song inside
+  the home for playtesting. Original music grid, device/player open-close clips,
+  speaker effects/positioning and exact placement/toggle details remain open.
+  See backlog/room-music-player.md. Philip listening/visual acceptance is pending;
+  this does not close M4, audio or migration.
+  docs/roadmap.html now separates implemented work from acceptance and has
+  search/status filters. Codex proposes music presentation, toy holding/use,
+  remaining item conversions, then decorating/special furniture actions. Those
+  follow-ups are planned, not started; broader M4 acceptance precedes M5.
 

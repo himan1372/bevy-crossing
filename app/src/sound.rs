@@ -556,6 +556,10 @@ fn update_music(
     shop_data: Res<crate::shop::ShopData>,
     focus: Res<crate::input::InputFocus>,
     time: Res<Time<Real>>,
+    (room, current): (
+        Res<crate::player_room::PlayerRoom>,
+        Res<crate::house::CurrentRoom>,
+    ),
 ) {
     let (Some(sound), Some(mut bgm)) = (sound, bgm) else {
         return;
@@ -593,7 +597,13 @@ fn update_music(
         scene,
         crate::clock::now().day_secs,
         music_policy::FieldWeather::Fine,
-    );
+    )
+    .or_else(|| {
+        (scene == music_policy::Scene::PlayerHouse
+            && crate::house::is_player_room(&current, &house))
+        .then(|| room.music_track())
+        .flatten()
+    });
     let changed = next != bgm.playing;
     let mut commands = Vec::new();
     if changed {
@@ -611,6 +621,7 @@ fn update_music(
             // uses the original 0x168 duration; fade both songs to suit this
             // port's immediate door transitions (retail has a scene wipe).
             let fade = match (bgm.playing, scene) {
+                (_, music_policy::Scene::PlayerHouse) if track.id >= 128 => 0,
                 (None, _) => 0,
                 (Some(previous), music_policy::Scene::Town) if (1..=24).contains(&previous.id) => {
                     60
@@ -630,7 +641,11 @@ fn update_music(
             info!("music {} (sequence {seq}) on group {new}", track.id);
         } else {
             // Also stop a previous crossfade tail when entering a quiet room.
-            let fade = if matches!(scene, music_policy::Scene::Shop(_)) {
+            let fade = if scene == music_policy::Scene::PlayerHouse
+                && bgm.playing.is_some_and(|track| track.id >= 128)
+            {
+                0
+            } else if matches!(scene, music_policy::Scene::Shop(_)) {
                 music_policy::SHOP_CLOSING_FADE_UPDATES
             } else {
                 music_policy::SCENE_FADE_UPDATES

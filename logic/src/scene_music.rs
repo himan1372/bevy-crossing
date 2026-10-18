@@ -2,8 +2,9 @@
 //!
 //! Source: m_bgm.c (mBGMRoom_make_scene_bgm[_shop_get], volume_talk,
 //! volume_pause, main_req_volume), m_shop.c (GetShopCloseTime_Bgm), and
-//! game64.c_inc (Sou_BgmTenkiConv). House furniture players and event
-//! arbitration require gameplay state that is not available here.
+//! game64.c_inc (Sou_BgmTenkiConv). The app supplies the player's active
+//! furniture song after this policy's quiet-house result. Event arbitration
+//! remains a follow-up.
 
 use crate::audio::{BgmWeather, BGM_MUTE_TABLE_FINE, BGM_MUTE_TABLE_SAKURA, BGM_MUTE_TABLE_SNOW};
 use crate::shop::ShopTier;

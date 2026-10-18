@@ -27,6 +27,7 @@ use crate::states::GameplaySet;
 mod loose;
 mod loose_presentation;
 mod movement;
+mod music;
 mod presentation;
 mod storage;
 
@@ -37,12 +38,15 @@ mod storage;
 pub(crate) struct RoomSave {
     layers: [Vec<u16>; 4],
     switches: [u64; 4],
+    music_box: [u32; 2],
 }
 
 #[derive(Deserialize)]
 struct RoomSaveData {
     layers: [Vec<u16>; 4],
     switches: [u64; 4],
+    #[serde(default)]
+    music_box: [u32; 2],
 }
 
 impl TryFrom<RoomSaveData> for RoomSave {
@@ -54,6 +58,7 @@ impl TryFrom<RoomSaveData> for RoomSave {
         Ok(Self {
             layers: data.layers,
             switches: data.switches,
+            music_box: data.music_box,
         })
     }
 }
@@ -64,6 +69,11 @@ pub(crate) enum PocketRequest {
         item: u16,
     },
     Store {
+        owner: usize,
+        slot: usize,
+        item: u16,
+    },
+    Register {
         owner: usize,
         slot: usize,
         item: u16,
@@ -82,10 +92,12 @@ enum StorageFlow {
     },
     Pockets,
     Notice,
+    Music(music::Flow),
 }
 
 #[derive(Resource)]
 pub(crate) struct PlayerRoom {
+    music_box: [u32; 2],
     loose_angles: loose::Angles,
     movement: movement::Movement,
     presentation: presentation::Presentation,
@@ -105,6 +117,7 @@ pub(crate) struct PlayerRoom {
 impl Default for PlayerRoom {
     fn default() -> Self {
         Self {
+            music_box: [0; 2],
             loose_angles: [[0; 16]; 16],
             movement: movement::Movement::default(),
             presentation: presentation::Presentation::default(),
@@ -156,6 +169,7 @@ impl PlayerRoom {
         Some(RoomSave {
             layers: std::array::from_fn(|i| layers[i].items.iter().flatten().copied().collect()),
             switches: std::array::from_fn(|i| layers[i].ftr_switch),
+            music_box: self.music_box,
         })
     }
 
@@ -167,6 +181,7 @@ impl PlayerRoom {
         self.storage.reset();
         self.layers = std::array::from_fn(|_| RoomLayer::default());
         self.original = saved.cloned();
+        self.music_box = saved.map_or([0; 2], |s| s.music_box);
         self.initialized = saved.is_some() || disc.is_some();
         self.flow = StorageFlow::Idle;
         if let Some(saved) = saved {
@@ -375,7 +390,22 @@ impl PlayerRoom {
             return Err("Take the things off the top first.");
         }
         let mut received = vec![ftr::ftr_idx_2_item_no(actor.name, Direction::South)];
-        received.extend(actor.items.iter().copied().filter(|i| *i != 0));
+        // A music player's selected title refers to the shared collection;
+        // it is not another owned copy to return with the furniture leaf.
+        received.extend(
+            actor
+                .items
+                .iter()
+                .copied()
+                .enumerate()
+                .filter_map(|(i, item)| {
+                    (item != 0
+                        && !(i == 0
+                            && music::is_player(self, slot)
+                            && music::registered(self, item)))
+                    .then_some(item)
+                }),
+        );
         let mut pockets = inventory.pockets.clone();
         for item in received {
             if pockets.put(item, 0).is_none() {
@@ -553,6 +583,7 @@ fn interact(
     if !room.available {
         ui.home = false;
         ui.storing = None;
+        ui.registering = false;
         room.flow = StorageFlow::Idle;
         room.storage.reset();
         return;
@@ -563,6 +594,9 @@ fn interact(
     };
     if let Some(request) = request {
         let result = match request {
+            PocketRequest::Register { owner, slot, item } => {
+                music::register(&mut room, &mut inventory, owner, slot, item)
+            }
             PocketRequest::Place { slot, item }
                 if inventory.pockets.pockets.get(slot) == Some(&item)
                     && inventory.pockets.item_cond(slot) == 0 =>
@@ -622,6 +656,7 @@ fn interact(
             _ => Err("That item is no longer available."),
         };
         ui.storing = None;
+        ui.registering = false;
         room.flow = StorageFlow::Idle;
         if let Err(message) = result {
             notice(&mut dialogue, &mut room, &mut focus, message);
@@ -641,6 +676,7 @@ fn interact(
     if let StorageFlow::Pockets = room.flow {
         if !ui.open {
             ui.storing = None;
+            ui.registering = false;
             room.flow = StorageFlow::Idle;
             *focus = if room.storage.busy() {
                 InputFocus::Furniture
@@ -663,6 +699,15 @@ fn interact(
         let flow = std::mem::take(&mut room.flow);
         *focus = InputFocus::World;
         match flow {
+            StorageFlow::Music(flow) => music::answer(
+                &mut room,
+                &mut inventory,
+                &mut ui,
+                &mut dialogue,
+                &mut focus,
+                flow,
+                choice,
+            ),
             StorageFlow::Choose(owner) if choice == 0 => {
                 let full = room
                     .runtime
@@ -682,6 +727,7 @@ fn interact(
                 ui.open = true;
                 ui.selling = false;
                 ui.storing = Some(owner);
+                ui.registering = false;
                 ui.menu = None;
                 ui.grabbed = None;
                 ui.mail_slot = None;
@@ -746,6 +792,15 @@ fn interact(
         if room.storage.busy() && matches!(room.flow, StorageFlow::Idle) {
             *focus = InputFocus::Furniture;
         }
+        return;
+    }
+    if focus.is_world() && actions.consume(Action::DebugMusic) {
+        let message = if inventory.add(0x2A23) {
+            "K.K. Love Song added.\nFace a music player; E: open.\nChoose Register a song."
+        } else {
+            "Your pockets are full."
+        };
+        notice(&mut dialogue, &mut room, &mut focus, message);
         return;
     }
     let grant = if focus.is_world() && actions.consume(Action::DebugDrawers) {
@@ -853,6 +908,8 @@ fn interact(
                 .pickup(slot, ftr::ftr_idx_2_item_no(old.name, Direction::South), at);
             *focus = InputFocus::Furniture;
         }
+    } else if music::is_player(&room, slot) && actions.consume(Action::Interact) {
+        music::begin(&mut room, &mut dialogue, &mut focus, slot);
     } else if room.runtime.actors[slot]
         .as_ref()
         .and_then(|a| room.profiles.get(&a.name))

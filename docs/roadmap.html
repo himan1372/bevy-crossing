@@ -49,6 +49,14 @@
   li.item.done .it{color:var(--muted)} li.item.doing .it{color:var(--ink)} li.item.planned .it{color:var(--muted)}
   li.item .det{display:block;font-size:.83rem;color:var(--faint);margin-top:.25rem}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .controls{display:flex;gap:.7rem;flex-wrap:wrap;margin:2rem 0 1rem;align-items:center}
+  .controls input,.controls select{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:.6rem}
+  .controls input{flex:1;min-width:180px}
+  .controls label{color:var(--muted);font-size:.9rem}
+  [hidden]{display:none!important}
+  .focus{border:1px solid var(--line);border-radius:12px;background:var(--panel2);padding:1.3rem;margin-top:1.5rem}
+  .focus h2{font-size:1.25rem;margin-bottom:.7rem}.focus p{margin:.5rem 0;color:var(--muted)}
+  .focus ol{padding-left:1.4rem;color:var(--muted)}.focus li{margin:.45rem 0}.focus strong{color:var(--ink)}
   footer{margin-top:5rem;text-align:center;color:var(--faint);font-size:.85rem}
   footer a{color:var(--accent)}
   @media(max-width:560px){.sec-head .tag{display:none}}
@@ -63,22 +71,43 @@
   <p class="sub">What works in development builds today, what is being built, and what comes next.
   Bevy Crossing rebuilds the engine in Bevy; all game content loads at runtime from your own Animal Crossing GameCube disc.</p>
   <div class="progress">
-    <div class="bar" aria-label="Overall progress">
-      <span class="d" style="width:48%"></span><span class="p2" style="width:10%"></span><span class="pl" style="width:42%"></span>
+    <div class="bar" aria-label="Roadmap item status distribution">
+      <span class="d" style="width:50.7%"></span><span class="p2" style="width:8.5%"></span><span class="pl" style="width:40.8%"></span>
     </div>
     <div class="counts">
-      <span><b style="color:var(--done)">32</b>done</span>
-      <span><b style="color:var(--doing)">7</b>in progress</span>
-      <span><b style="color:var(--plan)">28</b>planned</span>
+      <span><b id="count-done" style="color:var(--done)">36</b>implemented</span>
+      <span><b id="count-doing" style="color:var(--doing)">6</b>in progress</span>
+      <span><b id="count-planned" style="color:var(--plan)">29</b>planned</span>
     </div>
     <div class="legend">
-      <span><span class="dot d-d"></span>Done</span>
+      <span><span class="dot d-d"></span>Implemented</span>
       <span><span class="dot d-p"></span>In progress</span>
       <span><span class="dot d-pl"></span>Planned</span>
     </div>
-    <p class="note">&ldquo;Done&rdquo; means working in development builds, not released. Progress counts roadmap items, not effort. Updated 2026-10-18.</p>
+    <p class="note">&ldquo;Implemented&rdquo; means working in development builds; Philip acceptance can still be pending. This is not a full-game completion percentage. Progress counts roadmap items, not effort. Updated 2026-10-18.</p>
   </div>
 </header>
+
+<aside class="focus" aria-labelledby="current-work">
+  <h2 id="current-work">Latest work and next steps</h2>
+  <p><strong>Implemented: room music players.</strong> Register pocket songs, choose any registered title, stop playback, and take songs back out. The collection is shared across home players; one player plays at a time. Songs, device selections and switches survive save/reload. Duplicate registration and full-pocket take-out refuse safely.</p>
+  <p><strong>Try it:</strong> inside your house, F2 adds K.K. Love Song to an empty pocket. Face your tape deck or another music player and press E. Register a song opens pockets; select the song and choose Register. Choose a song browses the collection.</p>
+  <p><strong>Awaiting Philip:</strong> listening/menu acceptance for music players, plus the recent loose placement, pickup and loaded-furniture movement work. Development checks do not close retail fidelity or M4.</p>
+  <p><strong>Codex proposes this order next</strong> (planned, not started):</p>
+  <ol>
+    <li><strong>Music-player presentation:</strong> original 55-song grid, device open/close and player clips, speaker positioning/device sound character, and source placement/toggle details.</li>
+    <li><strong>Fan and pinwheel use:</strong> equip/hold and original player actions; room display already works.</li>
+    <li><strong>Remaining room item families:</strong> audit clothing, umbrellas and tools before adding their original furniture conversions and actions.</li>
+    <li><strong>Room decorating:</strong> wallpaper/carpet changes, followed by remaining special furniture behaviors and diary writing.</li>
+    <li><strong>Finish M4 acceptance:</strong> remaining pockets/mail/shop/pause/HUD and audio/render checks, then M5 playtest, fixes and Windows release.</li>
+  </ol>
+  <p><strong>Deferred by Philip:</strong> held-net appearance, title screen and rename work. No new completion date is implied.</p>
+</aside>
+<div class="controls">
+  <label for="roadmap-search">Find work</label><input id="roadmap-search" type="search" placeholder="Search songs, furniture, mail...">
+  <label for="roadmap-status">Show</label><select id="roadmap-status"><option value="all">All items</option><option value="open">Remaining work</option><option value="done">Implemented</option><option value="doing">In progress</option><option value="planned">Planned / deferred</option></select>
+  <span id="visible-count" role="status" aria-live="polite"></span>
+</div>
 
 <section>
   <div class="sec-head"><span class="num">01</span><h2>Main loop &amp; town</h2><span class="tag done">Complete</span></div>
@@ -93,7 +122,7 @@
     <li class="item done"><span class="it">F5 quick-save, F9 quick-load, savegame.json restore at startup</span><span class="det">Auto-save removed per Philip's preference.</span></li>
     <li class="item done"><span class="it">Ecology: fishing and bug catching with rod/net, seasonal tables, persistent counters</span></li>
     <li class="item done"><span class="it">Enterable player-house interior</span></li>
-    <li class="item planned"><span class="it">Game clock should use local time instead of UTC</span><span class="det">Noted on the board; F6 debug hour works, production clock still UTC.</span></li>
+    <li class="item done"><span class="it">Game clock uses local time</span><span class="det">app/src/clock.rs reads the local hardware clock; the earlier UTC follow-up was stale.</span></li>
   </ul>
 </section>
 
@@ -134,7 +163,7 @@
     <li class="item doing"><span class="it">Retail pockets UI — original frame, runtime icons/font, 15-slot grab/swap</span><span class="det">First implementation done; final retail comparison acceptance remains open.</span></li>
     <li class="item doing"><span class="it">Retail mail UI — ten envelope slots, stationery/paper, paged reading, compose/send</span><span class="det">Philip accepts the look; camera fix and Read/Grab/Throw Away menus landed, menu polish pending.</span></li>
     <li class="item doing"><span class="it">Retail shop UI — Nook follows the display floor, describes goods in dialogue, pockets-based selling</span><span class="det">First Cranny flow done; Philip acceptance pending.</span></li>
-    <li class="item doing"><span class="it">Net render fidelity — held net doesn't look retail</span><span class="det">Asset/mesh/pose audit before visual sign-off.</span></li>
+    <li class="item planned"><span class="it">Net render fidelity: held-net appearance</span><span class="det">Deferred by Philip on 2026-10-18. Revisit asset/mesh/pose comparison when requested.</span></li>
     <li class="item planned"><span class="it">Pause/save flow matching the original presentation</span></li>
     <li class="item planned"><span class="it">HUD from disc: clock/date, bells, context prompts replacing the dev overlay</span></li>
     <li class="item planned"><span class="it">Mail attachments, letter move/transfer and mail-storage actions; pockets–mail integration</span><span class="det">Read/Grab/Throw Away menus landed; attachments, transfer and paper effects still open.</span></li>
@@ -159,16 +188,20 @@
 
 <section>
   <div class="sec-head"><span class="num">06</span><h2>Rustimal migration</h2><span class="tag open">In progress</span></div>
-  <p class="sec-sub">The 194 Rust research modules were always built to end up here. Furniture was the pilot — verified against the decomp and playtested by Philip — and now the pattern scales.</p>
+  <p class="sec-sub">The migration inventory audits 194 module paths: 90 overlapping and 104 source-only. Furniture was the first reviewed update; the full migration remains open. New slices require source and caller review.</p>
   <ul class="items">
     <li class="item done"><span class="it">Furniture pilot migrated: placement, pickup, three-item storage, save/F9 restore on disc rendering</span><span class="det">Carries the save_angle bitflag fix; Codex-verified, Philip playtested.</span></li>
     <li class="item done"><span class="it">Furniture movement: hold G to push/pull/turn pieces, original clips, atomic save</span><span class="det">Philip: &ldquo;works.&rdquo;</span></li>
     <li class="item done"><span class="it">Storage animation: 19 audited wardrobe/closet rigs, drawer rigs with source obstruction rules</span></li>
-    <li class="item done"><span class="it">Loose-item system: diaries, stationery, fruit, shells, mushrooms, candy, money, turnips, music discs, pinwheels, fans</span><span class="det">Original models, IDs, placement/pickup/save/refusal rules.</span></li>
-    <li class="item planned"><span class="it">Music disc registration and playback in player furniture; pinwheel/fan holding and use</span><span class="det">Room display support done; toys can't be held or played yet.</span></li>
-    <li class="item planned"><span class="it">Music disc registration and playback in player furniture; pinwheel/fan holding and use</span><span class="det">Room display support done; toys can't be held or played yet.</span></li>
-<li class="item planned"><span class="it">Merge the 81 diverged modules — rustimal versions carry the bugfixes and new tests</span><span class="det">Per-module review; ~4–6 week estimate for the full migration.</span></li>
-    <li class="item planned"><span class="it">Port the 113 rustimal-only modules (actors, systems, holidays, mini-games)</span><span class="det">Mostly mechanical: strip C ABI, adapt to Bevy-native types.</span></li>
+    <li class="item done"><span class="it">Loaded furniture carries loose tops through pushes, pulls and turns</span><span class="det">Mixed stacks and long-piece endpoint pivots implemented with atomic clearance refusal and save support. Recent turn/carry slices await Philip acceptance.</span></li>
+    <li class="item done"><span class="it">Loose-item throw, bounce and floor/surface pickup presentation</span><span class="det">Original goods/player assets and source timing; transient cleanup on reload. Philip acceptance pending.</span></li>
+    <li class="item done"><span class="it">Loose-item system: diaries, stationery, fruit, shells, mushrooms, candy, money, turnips, music discs, pinwheels, fans</span><span class="det">Original models, IDs, placement/pickup/save/refusal rules. Recent additions await Philip acceptance.</span></li>
+    <li class="item done"><span class="it">Room music-player registration, selection, stop and song take-out</span><span class="det">Shared 55-title home collection; original disc sequences; per-device selection/switch save, atomic duplicate/full-pocket refusal. Current menus implemented; Philip listening/visual acceptance pending.</span></li>
+    <li class="item planned"><span class="it">Original music grid and device presentation</span><span class="det">Codex proposed next: retail song grid, original open/close/player clips, device sound character/positioning, placement and toggle details.</span></li>
+    <li class="item planned"><span class="it">Pinwheel/fan holding and use</span><span class="det">Codex proposed after music presentation. All 16 toys already support room display and movement.</span></li>
+    <li class="item planned"><span class="it">Remaining room item conversions, decorating and special furniture actions</span><span class="det">Codex proposed: audit clothing/umbrella/tool families, wallpaper/carpet, then diary writing and remaining per-type behavior.</span></li>
+    <li class="item planned"><span class="it">Review 90 overlapping Rustimal modules individually</span><span class="det">Inventory snapshot: 88 differ, two match. Compare callers and original C against pinned source 122867f; no wholesale merge or schedule estimate.</span></li>
+    <li class="item planned"><span class="it">Review and port 104 source-only Rustimal modules</span><span class="det">194 audited module paths total. Preserve 27 Bevy-only paths; choose bounded gameplay tasks with source review.</span></li>
   </ul>
 </section>
 
@@ -176,9 +209,9 @@
   <div class="sec-head"><span class="num">07</span><h2>Platform &amp; tooling</h2><span class="tag done">Complete</span></div>
   <p class="sec-sub">Build health and developer workflows that keep five agents shipping on one repo without stepping on each other.</p>
   <ul class="items">
-    <li class="item done"><span class="it">CI gate runs the full check on every push to main; clippy and rustfmt clean (475 tests pass)</span></li>
+    <li class="item done"><span class="it">Workspace build checks, clippy and rustfmt workflow</span><span class="det">Each gameplay slice has its own build checks, runtime evidence and Philip playtest. Historical test counts do not establish current acceptance.</span></li>
     <li class="item done"><span class="it">Task claims board and append-only comms protocol for claude, muse, cosmo, codex and Philip</span></li>
-    <li class="item done"><span class="it">Blender → .glb asset pipeline for Bevy 0.19</span></li>
+    <li class="item done"><span class="it">Runtime disc asset pipeline: original display lists, textures, rigs and audio</span><span class="det">Content loads from the owner's disc. No GLB conversion or extracted game assets in the repository.</span></li>
     <li class="item doing"><span class="it">grok-bevy MCP: live BRP agent loop (query/mutate/screenshot the running game, port 15702)</span><span class="det">grok-bevy v0.2.0 installed on Philip's PC; Bevy 0.19 upgrade landed to make BRP work.</span></li>
   </ul>
 </section>
@@ -208,5 +241,30 @@
 </footer>
 
 </div>
+<script>
+(() => {
+  const items = [...document.querySelectorAll('li.item')];
+  const search = document.getElementById('roadmap-search');
+  const status = document.getElementById('roadmap-status');
+  const barClasses = {done:'d', doing:'p2', planned:'pl'};
+  for (const name of Object.keys(barClasses)) {
+    const count = items.filter(item => item.classList.contains(name)).length;
+    document.getElementById('count-' + name).textContent = count;
+    document.querySelector('.bar .' + barClasses[name]).style.width = (count / items.length * 100) + '%';
+  }
+  function filter() {
+    const query = search.value.trim().toLowerCase();
+    for (const item of items) {
+      const match = status.value === 'all' || (status.value === 'open' ? !item.classList.contains('done') : item.classList.contains(status.value));
+      item.hidden = !match || !item.textContent.toLowerCase().includes(query);
+    }
+    for (const section of document.querySelectorAll('section')) section.hidden = ![...section.querySelectorAll('li.item')].some(item => !item.hidden);
+    document.getElementById('visible-count').textContent = items.filter(item => !item.hidden).length + ' of ' + items.length + ' items';
+  }
+  search.addEventListener('input', filter);
+  status.addEventListener('change', filter);
+  filter();
+})();
+</script>
 </body>
 </html>
