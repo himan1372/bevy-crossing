@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bevy Crossing — Roadmap</title>
+<style>
+  :root{
+    --bg:#0b0e12; --panel:#12161c; --panel2:#161b23;
+    --ink:#e8ecf1; --muted:#9aa3ad; --faint:#5b6470;
+    --done:#4ade80; --doing:#fbbf24; --plan:#64748b;
+    --accent:#34d399; --line:#232b36;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);
+    font-family:"Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.55;padding:0 0 5rem}
+  .wrap{max-width:960px;margin:0 auto;padding:0 1.5rem}
+  header{padding:4.5rem 0 2rem;text-align:center}
+  .kicker{letter-spacing:.45em;font-size:.78rem;color:var(--accent);font-weight:700;margin-bottom:1rem}
+  h1{font-size:clamp(2rem,5vw,3.2rem);line-height:1.1;letter-spacing:.02em}
+  h1 .thin{font-weight:300;color:var(--muted)}
+  .sub{color:var(--muted);margin-top:1rem;max-width:640px;margin-left:auto;margin-right:auto}
+  .progress{margin:2.5rem 0 1rem}
+  .bar{height:14px;border-radius:8px;overflow:hidden;display:flex;background:#1b2230;border:1px solid var(--line)}
+  .bar span{display:block;height:100%}
+  .bar .d{background:var(--done)} .bar .p2{background:var(--doing)} .bar .pl{background:var(--plan)}
+  .counts{display:flex;gap:1.6rem;justify-content:center;margin-top:.8rem;flex-wrap:wrap;font-size:.9rem;color:var(--muted)}
+  .counts b{font-size:1.15rem;margin-right:.35rem}
+  .legend{display:flex;gap:1.4rem;justify-content:center;margin-top:1rem;font-size:.85rem;color:var(--muted);flex-wrap:wrap}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:.45rem;vertical-align:baseline}
+  .d-d{background:var(--done)} .d-p{background:var(--doing)} .d-pl{background:var(--plan)}
+  .note{font-size:.8rem;color:var(--faint);text-align:center;margin-top:.6rem}
+  section{margin-top:3.5rem}
+  .sec-head{display:flex;gap:1.1rem;align-items:baseline;border-bottom:1px solid var(--line);padding-bottom:.9rem;margin-bottom:1.2rem}
+  .num{font-family:ui-monospace,Consolas,monospace;font-size:1.6rem;color:var(--faint);font-weight:600;min-width:2.6rem}
+  .sec-head h2{font-size:1.55rem;letter-spacing:.02em}
+  .sec-head .tag{margin-left:auto;font-size:.75rem;color:var(--faint);border:1px solid var(--line);border-radius:20px;padding:.15rem .8rem;white-space:nowrap}
+  .sec-head .tag.done{color:var(--done);border-color:#1f4d33}
+  .sec-head .tag.open{color:var(--doing);border-color:#5a4417}
+  .sec-sub{color:var(--muted);margin-bottom:1.1rem;font-size:.98rem;max-width:760px}
+  ul.items{list-style:none;display:grid;gap:.55rem}
+  li.item{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:.75rem 1rem .75rem 2.9rem;position:relative;font-size:.95rem}
+  li.item::before{content:"";position:absolute;left:1.05rem;top:.95rem;width:11px;height:11px;border-radius:50%}
+  li.item.done{border-left:3px solid var(--done)} li.item.done::before{background:var(--done)}
+  li.item.doing{border-left:3px solid var(--doing)} li.item.doing::before{background:var(--doing);animation:pulse 2s infinite}
+  li.item.planned{border-left:3px solid var(--plan)} li.item.planned::before{background:transparent;border:2px solid var(--plan)}
+  li.item.done .it{color:var(--muted)} li.item.doing .it{color:var(--ink)} li.item.planned .it{color:var(--muted)}
+  li.item .det{display:block;font-size:.83rem;color:var(--faint);margin-top:.25rem}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  footer{margin-top:5rem;text-align:center;color:var(--faint);font-size:.85rem}
+  footer a{color:var(--accent)}
+  @media(max-width:560px){.sec-head .tag{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">ROADMAP</div>
+  <h1>THE ROAD TO <span class="thin">THE FULL GAME.</span></h1>
+  <p class="sub">What works in development builds today, what is being built, and what comes next.
+  Bevy Crossing rebuilds the engine in Bevy; all game content loads at runtime from your own Animal Crossing GameCube disc.</p>
+  <div class="progress">
+    <div class="bar" aria-label="Overall progress">
+      <span class="d" style="width:48%"></span><span class="p2" style="width:10%"></span><span class="pl" style="width:42%"></span>
+    </div>
+    <div class="counts">
+      <span><b style="color:var(--done)">32</b>done</span>
+      <span><b style="color:var(--doing)">7</b>in progress</span>
+      <span><b style="color:var(--plan)">28</b>planned</span>
+    </div>
+    <div class="legend">
+      <span><span class="dot d-d"></span>Done</span>
+      <span><span class="dot d-p"></span>In progress</span>
+      <span><span class="dot d-pl"></span>Planned</span>
+    </div>
+    <p class="note">&ldquo;Done&rdquo; means working in development builds, not released. Progress counts roadmap items, not effort. Updated 2026-10-18.</p>
+  </div>
+</header>
+
+<section>
+  <div class="sec-head"><span class="num">01</span><h2>Main loop &amp; town</h2><span class="tag done">Complete</span></div>
+  <p class="sec-sub">The Animal Crossing core on the translated code: a generated 5×6-acre town, walk/run, talk, quests, and a 15-slot pocket inventory. Philip playtested it.</p>
+  <ul class="items">
+    <li class="item done"><span class="it">Walk and run through town (~3.9 u/s walk, 6.8 u/s run, Shift to run)</span><span class="det">logic::player_move — U-turn south-drift bug fixed and re-playtested.</span></li>
+    <li class="item done"><span class="it">5×6-acre town with collision; river renders and blocks movement; two-tone grass</span></li>
+    <li class="item done"><span class="it">Talk to villagers — Maple, Pippy, Bob and Chief with wander AI and dialogue</span><span class="det">logic::talk_request / talk_topics / dialogue_topics.</span></li>
+    <li class="item done"><span class="it">Five quest/errand types with markers, accept/turn-in, rewards and time limits</span><span class="det">logic::quest / quest_gen / request_selector.</span></li>
+    <li class="item done"><span class="it">15-slot pockets inventory on the translated logic</span></li>
+    <li class="item done"><span class="it">Game clock and calendar</span><span class="det">logic::game_time.</span></li>
+    <li class="item done"><span class="it">F5 quick-save, F9 quick-load, savegame.json restore at startup</span><span class="det">Auto-save removed per Philip's preference.</span></li>
+    <li class="item done"><span class="it">Ecology: fishing and bug catching with rod/net, seasonal tables, persistent counters</span></li>
+    <li class="item done"><span class="it">Enterable player-house interior</span></li>
+    <li class="item planned"><span class="it">Game clock should use local time instead of UTC</span><span class="det">Noted on the board; F6 debug hour works, production clock still UTC.</span></li>
+  </ul>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">02</span><h2>Reading your disc</h2><span class="tag done">Complete</span></div>
+  <p class="sec-sub">Pure-Rust disc stack, testable without a disc. No game data ever lives in the repo — tests use made-up data, and the game still starts without a disc on placeholder art.</p>
+  <ul class="items">
+    <li class="item done"><span class="it">Open ISO/GCM/CISO, check the GameCube magic number and game ID, parse the FST, read files by path</span><span class="det">Passes on Philip's disc. disc_path via --disc, settings.json, or a rom/ folder.</span></li>
+    <li class="item done"><span class="it">Yaz0 (.szs) decoder</span></li>
+    <li class="item done"><span class="it">main.dol extraction, foresta.rel.szs decompression — 72,924 REL pointers resolve</span></li>
+    <li class="item done"><span class="it">Asset table: 39,861 assets (name → ROM offset, size, source), offsets match rustimal-crossing</span></li>
+  </ul>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">03</span><h2>Original assets on screen</h2><span class="tag done">Complete</span></div>
+  <p class="sec-sub">The disc's N64-style Gfx display lists decoded through the translated interpreter and drawn by Bevy — no placeholder capsules or boxes when a disc is present.</p>
+  <ul class="items">
+    <li class="item done"><span class="it">GX backend: display lists → Bevy meshes, converted textures → images, cached per asset</span></li>
+    <li class="item done"><span class="it">TEV colour-combiner materials (custom WGSL): texture × vertex colour, alpha, blend, fog</span></li>
+    <li class="item done"><span class="it">Town from the disc: original acre/field models, seasonal textures, river mouth fixed</span></li>
+    <li class="item done"><span class="it">Trees, rocks, houses, player houses, public buildings, mailboxes, field items from the disc</span></li>
+    <li class="item done"><span class="it">Skeletal animation: cKF skeletons as Bevy skinned meshes (Hermite port)</span></li>
+    <li class="item done"><span class="it">Animated player and villagers — walk/run, blinking, talking, greeting</span></li>
+    <li class="item done"><span class="it">Model viewer: --view &lt;model&gt;, orbit/zoom, palette switching</span></li>
+    <li class="item done"><span class="it">~300 fps in release (1,704 meshes) — no instancing needed yet</span></li>
+    <li class="item doing"><span class="it">Side-by-side comparison against Philip's retail screenshots for sign-off</span><span class="det">Special-building look audit in progress; combined render-look acceptance still open.</span></li>
+    <li class="item planned"><span class="it">Retire the old placeholder town generator</span><span class="det">Remaining migration to the retail acre generator (backlog/retire-town-gen).</span></li>
+    <li class="item planned"><span class="it">Disc reads still pending: girl player banks, DOL display lists, runtime segments, wallpaper/carpet segments, TEV/fog/blend fidelity</span><span class="det">From the ISO/disc data audit (docs/need-to-read.md).</span></li>
+    <li class="item planned"><span class="it">RVZ/GCZ formats and PAL/JPN region support</span><span class="det">Deferred: NTSC-U GAFE01 first.</span></li>
+  </ul>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">04</span><h2>UI, retail look</h2><span class="tag open">In progress</span></div>
+  <p class="sec-sub">Recreating the retail menus from disc assets, in order: pockets → mail → shop → pause/save → HUD. Each needs source tracing, a no-disc fallback, and Philip's comparison sign-off.</p>
+  <ul class="items">
+    <li class="item doing"><span class="it">Retail pockets UI — original frame, runtime icons/font, 15-slot grab/swap</span><span class="det">First implementation done; final retail comparison acceptance remains open.</span></li>
+    <li class="item doing"><span class="it">Retail mail UI — ten envelope slots, stationery/paper, paged reading, compose/send</span><span class="det">Philip accepts the look; camera fix and Read/Grab/Throw Away menus landed, menu polish pending.</span></li>
+    <li class="item doing"><span class="it">Retail shop UI — Nook follows the display floor, describes goods in dialogue, pockets-based selling</span><span class="det">First Cranny flow done; Philip acceptance pending.</span></li>
+    <li class="item doing"><span class="it">Net render fidelity — held net doesn't look retail</span><span class="det">Asset/mesh/pose audit before visual sign-off.</span></li>
+    <li class="item planned"><span class="it">Pause/save flow matching the original presentation</span></li>
+    <li class="item planned"><span class="it">HUD from disc: clock/date, bells, context prompts replacing the dev overlay</span></li>
+    <li class="item planned"><span class="it">Mail attachments, letter move/transfer and mail-storage actions; pockets–mail integration</span><span class="det">Read/Grab/Throw Away menus landed; attachments, transfer and paper effects still open.</span></li>
+    <li class="item planned"><span class="it">Net swing and tool animations matched to the original source</span></li>
+    <li class="item planned"><span class="it">Title screen (back burner per Philip)</span></li>
+  </ul>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">05</span><h2>Audio from your disc</h2><span class="tag open">In progress</span></div>
+  <p class="sec-sub">Runtime banks, samples and sequences read off the disc and streamed to Bevy. Philip accepted footsteps, villager Animalese, and location music; listening checks continue.</p>
+  <ul class="items">
+    <li class="item done"><span class="it">Disc audio loading: banks, samples, sequences streamed to Bevy</span></li>
+    <li class="item done"><span class="it">Villager Animalese — three retail voices by personality; footsteps with real surface/silence rules</span><span class="det">Philip confirmed both sound good.</span></li>
+    <li class="item done"><span class="it">Scene music: hourly town themes, quiet houses, tier/closing shop themes, menu/dialogue volume ducking</span><span class="det">Philip reports it works perfectly.</span></li>
+    <li class="item done"><span class="it">Environmental audio: river/shore positions, waterfall, insect loops, distance/pan</span></li>
+    <li class="item doing"><span class="it">Trigger lifecycle — free/busy slots, priority and singleton rules</span><span class="det">Implemented; listening validation pending.</span></li>
+    <li class="item planned"><span class="it">Action sound coverage: fishing reel-fight, full catch/fanfare timing, NPC foot contacts</span></li>
+    <li class="item planned"><span class="it">Mixer depth: fixed-point DSP, filters, weather/event masks once weather exists</span></li>
+  </ul>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">06</span><h2>Rustimal migration</h2><span class="tag open">In progress</span></div>
+  <p class="sec-sub">The 194 Rust research modules were always built to end up here. Furniture was the pilot — verified against the decomp and playtested by Philip — and now the pattern scales.</p>
+  <ul class="items">
+    <li class="item done"><span class="it">Furniture pilot migrated: placement, pickup, three-item storage, save/F9 restore on disc rendering</span><span class="det">Carries the save_angle bitflag fix; Codex-verified, Philip playtested.</span></li>
+    <li class="item done"><span class="it">Furniture movement: hold G to push/pull/turn pieces, original clips, atomic save</span><span class="det">Philip: &ldquo;works.&rdquo;</span></li>
+    <li class="item done"><span class="it">Storage animation: 19 audited wardrobe/closet rigs, drawer rigs with source obstruction rules</span></li>
+    <li class="item done"><span class="it">Loose-item system: diaries, stationery, fruit, shells, mushrooms, candy, money, turnips, music discs, pinwheels, fans</span><span class="det">Original models, IDs, placement/pickup/save/refusal rules.</span></li>
+    <li class="item planned"><span class="it">Music disc registration and playback in player furniture; pinwheel/fan holding and use</span><span class="det">Room display support done; toys can't be held or played yet.</span></li>
+    <li class="item planned"><span class="it">Music disc registration and playback in player furniture; pinwheel/fan holding and use</span><span class="det">Room display support done; toys can't be held or played yet.</span></li>
+<li class="item planned"><span class="it">Merge the 81 diverged modules — rustimal versions carry the bugfixes and new tests</span><span class="det">Per-module review; ~4–6 week estimate for the full migration.</span></li>
+    <li class="item planned"><span class="it">Port the 113 rustimal-only modules (actors, systems, holidays, mini-games)</span><span class="det">Mostly mechanical: strip C ABI, adapt to Bevy-native types.</span></li>
+  </ul>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">07</span><h2>Platform &amp; tooling</h2><span class="tag done">Complete</span></div>
+  <p class="sec-sub">Build health and developer workflows that keep five agents shipping on one repo without stepping on each other.</p>
+  <ul class="items">
+    <li class="item done"><span class="it">CI gate runs the full check on every push to main; clippy and rustfmt clean (475 tests pass)</span></li>
+    <li class="item done"><span class="it">Task claims board and append-only comms protocol for claude, muse, cosmo, codex and Philip</span></li>
+    <li class="item done"><span class="it">Blender → .glb asset pipeline for Bevy 0.19</span></li>
+    <li class="item doing"><span class="it">grok-bevy MCP: live BRP agent loop (query/mutate/screenshot the running game, port 15702)</span><span class="det">grok-bevy v0.2.0 installed on Philip's PC; Bevy 0.19 upgrade landed to make BRP work.</span></li>
+  </ul>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">08</span><h2>What's ahead</h2><span class="tag open">Planned</span></div>
+  <p class="sec-sub">The rest of the original game, in roughly this order. Each milestone ends with a Philip playtest.</p>
+  <ul class="items">
+    <li class="item planned"><span class="it">Port the acre-boundary walk bug fix (block-edge walls from the decomp research)</span></li>
+    <li class="item planned"><span class="it">Weather system: rain and snow driving the already-translated seasonal/weather music masks</span><span class="det">Masks exist; need a real weather state, not a guessed condition.</span></li>
+    <li class="item planned"><span class="it">Remaining insect families (batta, kabuto and others)</span><span class="det">Fish AI and cicadas/dragonflies/butterflies done; rest follow.</span></li>
+    <li class="item planned"><span class="it">Grow the villager roster with move-in/move-out, plus special visitors (Gulliver, Wisp)</span></li>
+    <li class="item planned"><span class="it">Kapp'n boat trips and the island; train travel</span><span class="det">Ties into the GBA Island JOYBUS link work.</span></li>
+    <li class="item planned"><span class="it">Shop tier upgrades and services: paint, tickets, multi-sale and special-item flows</span></li>
+    <li class="item planned"><span class="it">Turnip stalk market with morning/afternoon prices</span></li>
+    <li class="item planned"><span class="it">Museum donations and completion tracking</span></li>
+    <li class="item planned"><span class="it">Events and holidays: visitors, festivals, countdown, fishing tourneys</span></li>
+    <li class="item planned"><span class="it">Balloon presents, pitfall seeds, fossils and digging</span></li>
+    <li class="item planned"><span class="it">Post office, bank and police station interiors</span></li>
+    <li class="item planned"><span class="it">Player rename/introduction sequence</span></li>
+    <li class="item planned"><span class="it">IP rename review before any release (deferred by Philip)</span></li>
+  </ul>
+</section>
+
+<footer>
+  <p>Bevy Crossing — built by <a href="https://github.com/himan1372">Philip</a> and crew: claude, muse, cosmo, codex, lapis.<br>Original game content © Nintendo — the repo ships no game data; it loads from your own disc.</p>
+</footer>
+
+</div>
+</body>
+</html>
