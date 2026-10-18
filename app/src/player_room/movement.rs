@@ -43,6 +43,7 @@ pub(super) struct Active {
     kind: Kind,
     ticks: f32,
     rotation: f32,
+    pivot: Option<Vec3>,
     visuals: Vec<Visual>,
     carried: Vec<Carried>,
     player_from: Vec3,
@@ -196,7 +197,7 @@ fn relocate(
     room: &PlayerRoom,
     slot: usize,
     target: (i32, i32, Direction),
-    rotating: bool,
+    long_turn: Option<&rustimal_logic::furniture_motion::LongTurn>,
 ) -> Result<Relocation, &'static str> {
     let actor = room.runtime.actors[slot]
         .as_ref()
@@ -221,12 +222,7 @@ fn relocate(
         if item == 0 || room.runtime.occupancy[1][z as usize][x as usize].is_some() {
             continue;
         }
-        if (rotating
-            && !matches!(
-                actor.original_shape_type,
-                ShapeType::TypeA | ShapeType::TypeC
-            ))
-            || !loose::supports(item)
+        if !loose::supports(item)
             || !room.profiles.get(&actor.name).is_some_and(|p| {
                 p.set_type == SetType::Surface && !ftr::is_storage(p.interaction_type)
             })
@@ -261,6 +257,7 @@ fn relocate(
         &layers,
         slot,
         target,
+        long_turn,
         4,
         &|name| room.profiles.get(&name).cloned(),
     )?;
@@ -451,7 +448,38 @@ pub(super) fn advance(
         return;
     };
     let old_dir = (old.angle_y / 90.0).round() as u8;
-    let target = if rotating {
+    let long_turn = if rotating && old.shape_type.unit_count() == 2 {
+        let outward = if front.x > 0.5 {
+            Direction::West
+        } else if front.x < -0.5 {
+            Direction::East
+        } else if front.z > 0.5 {
+            Direction::North
+        } else {
+            Direction::South
+        };
+        let (dx, dz) = old.shape_type.unit_offsets()[1];
+        let middle = corner()
+            + Vec3::new(
+                old.cell_x as f32 + 0.5 + dx as f32 * 0.5,
+                0.0,
+                old.cell_z as f32 + 0.5 + dz as f32 * 0.5,
+            );
+        // aMR_ContactRange: directed edges run W->E, S->N, E->W,
+        // N->S for outward up/left/down/right, respectively.
+        let second_half = match outward {
+            Direction::North => transform.translation.x >= middle.x,
+            Direction::West => transform.translation.z <= middle.z,
+            Direction::South => transform.translation.x <= middle.x,
+            Direction::East => transform.translation.z >= middle.z,
+        };
+        rustimal_logic::furniture_motion::long_turn(old, outward, second_half, kind == Kind::Left)
+    } else {
+        None
+    };
+    let target = if let Some(plan) = &long_turn {
+        plan.target
+    } else if rotating {
         (
             old.cell_x,
             old.cell_z,
@@ -464,7 +492,10 @@ pub(super) fn advance(
             direction(old_dir),
         )
     };
-    let result = relocate(&room, slot, target, rotating);
+    let pivot = long_turn
+        .as_ref()
+        .map(|p| corner() + Vec3::new(p.pivot.0 as f32 + 0.5, 0.0, p.pivot.1 as f32 + 0.5));
+    let result = relocate(&room, slot, target, long_turn.as_ref());
     let result = result.and_then(|(next, layers, ids, carried, angles)| {
         let destination = transform.translation + if rotating { Vec3::ZERO } else { dir };
         // Check the complete player path against all non-moving actors and the
@@ -544,6 +575,7 @@ pub(super) fn advance(
             kind,
             ticks: 0.0,
             rotation: 0.0,
+            pivot,
             visuals,
             carried,
             player_from: transform.translation,
@@ -580,9 +612,10 @@ pub(super) fn animate_roots(
                 let visual = a.visuals.iter().find(|v| v.slot == piece.slot)?;
                 let parent = a.visuals.first()?;
                 let position = if visual.turn != 0.0 {
-                    parent.from.lerp(parent.to, progress)
-                        + Quat::from_rotation_y(visual.turn * progress)
-                            * (visual.from - parent.from)
+                    let pivot = a.pivot.unwrap_or(parent.from);
+                    let pivot_to = a.pivot.unwrap_or(parent.to);
+                    pivot.lerp(pivot_to, progress)
+                        + Quat::from_rotation_y(visual.turn * progress) * (visual.from - pivot)
                 } else {
                     visual.from.lerp(visual.to, progress)
                 };
@@ -605,9 +638,10 @@ pub(super) fn animate_roots(
                 })?;
                 let parent = active.visuals.first()?;
                 let position = if parent.turn != 0.0 {
-                    parent.from.lerp(parent.to, progress)
-                        + Quat::from_rotation_y(parent.turn * progress)
-                            * (carried.from - parent.from)
+                    let pivot = active.pivot.unwrap_or(parent.from);
+                    let pivot_to = active.pivot.unwrap_or(parent.to);
+                    pivot.lerp(pivot_to, progress)
+                        + Quat::from_rotation_y(parent.turn * progress) * (carried.from - pivot)
                 } else {
                     carried.from.lerp(carried.to, progress)
                 };

@@ -4,15 +4,75 @@ use crate::furniture::{
     self as f, Direction, FurnitureProfile, MyRoomRuntime, RoomLayer, ShapeType,
 };
 
+/// Source TypeB pivot reset expressed in canonical saved-primary coordinates.
+/// C changes shape/base_position temporarily; the saved model origin instead
+/// orbits this endpoint. No transient pivot needs to enter the save format.
+pub struct LongTurn {
+    pub pivot: (i32, i32),
+    pub target: (i32, i32, Direction),
+    complete: [(i32, i32); 2],
+    friction: [(i32, i32); 2],
+}
+
+/// `type_target_table[shape][outward normal][contact_percent >= 0.5]`.
+/// Contact percent follows the directed collision edge, not model facing.
+pub fn long_turn(
+    actor: &f::FurnitureActor,
+    outward: Direction,
+    second_half: bool,
+    left: bool,
+) -> Option<LongTurn> {
+    if actor.shape_type.unit_count() != 2 {
+        return None;
+    }
+    // Rows: B90/B180/B270/B0. Columns: up/left/down/right.
+    // Each pair selects the opposite endpoint for >=half / <half.
+    const OTHER: [[[bool; 2]; 4]; 4] = [
+        [[true, true], [true, false], [false, false], [false, true]],
+        [[false, true], [true, true], [true, false], [false, false]],
+        [[false, false], [false, true], [true, true], [true, false]],
+        [[true, false], [false, false], [false, true], [true, true]],
+    ];
+    let direct = match outward {
+        Direction::North => 0,
+        Direction::West => 1,
+        Direction::South => 2,
+        Direction::East => 3,
+    };
+    let other = OTHER[actor.shape_type as usize][direct][usize::from(!second_half)];
+    let (dx, dz) = actor.shape_type.unit_offsets()[1];
+    let offset = if other { (dx, dz) } else { (0, 0) };
+    let pivot = (actor.cell_x + offset.0, actor.cell_z + offset.1);
+    let rotate = |(x, z): (i32, i32)| if left { (z, -x) } else { (-z, x) };
+    let origin = rotate((-offset.0, -offset.1));
+    let d = if other { (-dx, -dz) } else { (dx, dz) };
+    let r = rotate(d);
+    let angle = (actor.angle_y / 90.0).round() as i32;
+    let dir = match (angle + if left { 1 } else { 3 }).rem_euclid(4) {
+        1 => Direction::East,
+        2 => Direction::North,
+        3 => Direction::West,
+        _ => Direction::South,
+    };
+    Some(LongTurn {
+        pivot,
+        target: (pivot.0 + origin.0, pivot.1 + origin.1, dir),
+        // rotate_forbid_table / rotate_forbid_friction_table, expressed from
+        // the reset pivot: rotated distal cell plus the diagonal swept cell.
+        complete: [r, (d.0 + r.0, d.1 + r.1)],
+        friction: [(-d.0, -d.1), (-r.0, -r.1)],
+    })
+}
+
 /// Propose the whole move on copies. The caller validates the player's swept
 /// collision path before publishing it. Contents stay on their owning actors.
-/// The first adapter keeps the saved primary cell as the rotation pivot; C's
-/// contact-dependent TypeB pivot switching remains a separate fidelity gap.
+#[allow(clippy::too_many_arguments)] // Atomic relocation plus optional source contact-pivot plan.
 pub fn relocate(
     room: &MyRoomRuntime,
     layers: &[RoomLayer; 4],
     slot: usize,
     target: (i32, i32, Direction),
+    long_turn: Option<&LongTurn>,
     max_cell: i32,
     profile: &dyn Fn(u16) -> Option<FurnitureProfile>,
 ) -> Result<(MyRoomRuntime, [RoomLayer; 4], Vec<usize>), &'static str> {
@@ -110,27 +170,31 @@ pub fn relocate(
         );
         next.release(id as u16);
     }
-    // Conservative swept-area guard for TypeB turns. This deliberately refuses
-    // some retail contact-pivot moves rather than clipping adjacent furniture.
     if turn != 0 && actor.shape_type.unit_count() == 2 {
-        let mut cells = actor.shape_type.unit_offsets()[..2]
-            .iter()
-            .map(|&(x, z)| (actor.cell_x + x, actor.cell_z + z))
-            .collect::<Vec<_>>();
-        cells.extend(
-            shape.unit_offsets()[..2]
-                .iter()
-                .map(|&(x, z)| (target.0 + x, target.1 + z)),
-        );
-        let min_x = cells.iter().map(|p| p.0).min().unwrap_or(target.0);
-        let max_x = cells.iter().map(|p| p.0).max().unwrap_or(target.0);
-        let min_z = cells.iter().map(|p| p.1).min().unwrap_or(target.1);
-        let max_z = cells.iter().map(|p| p.1).max().unwrap_or(target.1);
-        for z in min_z..=max_z {
-            for x in min_x..=max_x {
-                if !(1..=max_cell).contains(&x)
-                    || !(1..=max_cell).contains(&z)
-                    || fg[0].get(x, z) != Some(0)
+        let plan = long_turn.ok_or("Grab the furniture before turning.")?;
+        if plan.target != target {
+            return Err("Can't turn there.");
+        }
+        for &(dx, dz) in &plan.complete {
+            let (x, z) = (plan.pivot.0 + dx, plan.pivot.1 + dz);
+            if !(1..=max_cell).contains(&x)
+                || !(1..=max_cell).contains(&z)
+                || fg[0].get(x, z) != Some(0)
+                || next.occupancy[0][z as usize][x as usize].is_some()
+            {
+                return Err("No room to turn here.");
+            }
+        }
+        if p.check_rotation != 0 {
+            for &(dx, dz) in &plan.friction {
+                let (x, z) = (plan.pivot.0 + dx, plan.pivot.1 + dz);
+                if !(0..16).contains(&x) || !(0..16).contains(&z) {
+                    return Err("No room to turn here.");
+                }
+                if next.occupancy[0][z as usize][x as usize]
+                    .and_then(|id| next.actors[id as usize].as_ref())
+                    .and_then(|a| profile(a.name))
+                    .is_some_and(|p| p.check_rotation != 0)
                 {
                     return Err("No room to turn here.");
                 }

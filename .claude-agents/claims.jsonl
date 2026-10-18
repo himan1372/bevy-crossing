@@ -204,3 +204,5 @@
 {"action":"release","task":"furniture-turn-loose","agent":"codex","timestamp":"2026-10-18T07:54:23Z"}
 {"action":"claim","task":"refresh-handoff","agent":"codex","timestamp":"2026-10-18T17:06:11Z"}
 {"action":"release","task":"refresh-handoff","agent":"codex","timestamp":"2026-10-18T17:14:04Z"}
+{"action":"claim","task":"furniture-turn-long","agent":"codex","timestamp":"2026-10-18T17:26:11Z"}
+{"action":"release","task":"furniture-turn-long","agent":"codex","timestamp":"2026-10-18T17:43:54Z"}

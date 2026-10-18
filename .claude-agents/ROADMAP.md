@@ -471,4 +471,11 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   Philip acceptance and broader movement fidelity remain open.
   See backlog/migrate-rustimal-modules.md and docs/rustimal-migration-inventory.md.
   Philip's directive: the rustimal modules were built to end up here.
+  Authorized furniture-turn-long follow-up now selects source TypeB endpoint
+  pivots from contact side/half, checks complete/friction cells and rotates
+  canonical primary/model/loaded tops about the chosen endpoint. All four
+  orientations/both endpoints, mixed tops, atomic refusals and shifted storage
+  save/reload have bounded disposable evidence. Exact player contact/root/slip
+  and conservative player sweep remain open; Philip acceptance is pending.
+  See backlog/furniture-turn-long.md. M4/migration remain open.
 
