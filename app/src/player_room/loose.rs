@@ -7,12 +7,11 @@ pub(super) type Angles = [[u8; 16]; 16];
 
 /// ITM_PAPER_START..END includes all 64 designs and four encoded quantities.
 /// Keep the complete item number: placing/picking up a bundle moves it intact.
-/// Fruit excludes the adjacent mushroom/candy codes; shells include coral.
+/// All eight source foods include mushrooms/candy; shells include coral.
 pub(super) fn supports(item: u16) -> bool {
     (0x2000..=0x20FF).contains(&item)
         || (0x2B00..=0x2B0F).contains(&item)
-        || (0x2800..=0x2804).contains(&item)
-        || item == 0x2807
+        || (0x2800..=0x2807).contains(&item)
         || (0x2514..=0x251B).contains(&item)
 }
 

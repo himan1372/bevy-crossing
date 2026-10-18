@@ -484,4 +484,9 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   transfers, bundle quantity, hidden storage and pause/save/reload remain intact.
   Bounded disposable previews pass; Philip acceptance and broader fidelity remain
   open. See backlog/room-loose-animation.md; M4/migration remain open.
+  Mushroom/candy follow-up now completes loose room support for all eight
+  source foods0x2800..2807, using original indoor models and existing transactions
+  and presentation. Bounded model/place/pickup/carry/turn/refusal/storage/save
+  previews pass; eating/seasonal acquisition and Philip acceptance remain open.
+  See backlog/mushroom-candy-room.md; M4/migration remain open.
 
