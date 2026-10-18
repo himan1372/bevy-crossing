@@ -57,6 +57,25 @@ pub fn furniture_index(item: u16) -> Option<u32> {
     }
 }
 
+/// Playtest wardrobe, resolved from the runtime profile table rather than a
+/// second hardcoded numeric item mapping. Requires its original animated rig.
+pub(crate) fn playtest_wardrobe(disc: &GameDisc) -> Option<u16> {
+    let wanted = disc.catalog.get("iam_sum_blue_cab01")?;
+    let table = disc.catalog.get("furniture_quality")?;
+    let index = (0..table.size / 4).find(|&i| {
+        matches!(disc.rom.pointer_at(RomSource::Rel, table.offset + i * 4),
+            Some(Target::File(RomSource::Rel, p)) if p == wanted.offset)
+    })?;
+    let profile = read_profile(disc, index)?;
+    let (_, animation) = profile_skeleton(disc, &profile)?;
+    animation?;
+    storage::open_end(&profile.name)?;
+    Some(rustimal_logic::furniture::ftr_idx_2_item_no(
+        index as u16,
+        rustimal_logic::furniture::Direction::South,
+    ))
+}
+
 fn shape_type(b: u8) -> ShapeType {
     match b {
         0 => ShapeType::TypeB90,

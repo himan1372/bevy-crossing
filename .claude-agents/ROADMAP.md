@@ -436,6 +436,9 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   storage UI completion/cancel/load handling. Check/lint/format/builds and bounded
   disposable previews pass; Philip acceptance is pending. See
   backlog/furniture-storage-animation.md. Drawers/special constructors remain open.
+  Philip lacked a wardrobe to check it; furniture-playtest-access.md adds F4 in
+  his house to put an original blue cabinet in an empty pocket, then normal
+  I -> Place in room / E at its front. Storage animation acceptance still pending.
   See backlog/migrate-rustimal-modules.md and docs/rustimal-migration-inventory.md.
   Philip's directive: the rustimal modules were built to end up here.
 

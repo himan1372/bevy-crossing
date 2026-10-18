@@ -182,3 +182,5 @@
 {"action":"release","task":"furniture-birth-pickup-animation","agent":"codex","timestamp":"2026-10-17T23:31:25Z"}
 {"action":"claim","task":"furniture-storage-animation","agent":"codex","timestamp":"2026-10-17T23:32:25Z"}
 {"action":"release","task":"furniture-storage-animation","agent":"codex","timestamp":"2026-10-17T23:50:12Z"}
+{"action":"claim","task":"furniture-playtest-access","agent":"codex","timestamp":"2026-10-18T00:10:31Z"}
+{"action":"release","task":"furniture-playtest-access","agent":"codex","timestamp":"2026-10-18T00:58:42Z"}

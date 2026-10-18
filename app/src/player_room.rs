@@ -713,6 +713,17 @@ fn interact(
         }
         return;
     }
+    if focus.is_world() && actions.consume(Action::DebugFurniture) {
+        let message = match crate::furniture::playtest_wardrobe(&disc) {
+            Some(item) if inventory.add(item) => {
+                "Blue cabinet added.\nI: select it > Place in room.\nFace its front; E: open."
+            }
+            Some(_) => "Your pockets are full.\nFree a pocket and press F4 again.",
+            None => "Blue cabinet unavailable.\nCheck the selected disc.",
+        };
+        notice(&mut dialogue, &mut room, &mut focus, message);
+        return;
+    }
     if !focus.is_world() || *tool != crate::ecology::EquippedTool::None {
         return;
     }

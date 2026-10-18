@@ -127,3 +127,8 @@ in Temp. Actual save current-turn
 baseline DD89745CCFEDDEAEA619A1C931FEE5233EC533C1860E3B5A910A00B8121E5721
 is unchanged at final hash check. Settings and unrelated .gitignore preserved.
 Philip's storage-animation playtest acceptance remains pending.
+
+Philip cannot check this slice without storage furniture (2026-10-17). Authorized
+access follow-up furniture-playtest-access.md adds F4 inside his house to grant
+the original blue cabinet in an empty pocket; normal I -> Place in room and
+front-facing E exercise the animation. This is playtest access, not acceptance.
