@@ -1004,6 +1004,18 @@ fn interact(
         music::begin(&mut room, &mut dialogue, &mut focus, slot);
     } else if room.runtime.actors[slot]
         .as_ref()
+        .and_then(|a| crate::furniture::television::item_kind(&disc, a.name))
+        .is_some()
+        && actions.consume(Action::Interact)
+    {
+        let at = presentation::actor_center(&room, room.runtime.actors[slot].as_ref().unwrap());
+        let room = &mut *room;
+        if let Some(actor) = room.runtime.actors[slot].as_mut() {
+            let on = ftr::toggle_switch(actor, &mut room.layers[actor.layer]);
+            crate::sound::se_at(if on { 0x16 } else { 0x17 }, at);
+        }
+    } else if room.runtime.actors[slot]
+        .as_ref()
         .and_then(|a| room.profiles.get(&a.name))
         .is_some_and(|p| {
             p.interaction_type
@@ -1061,7 +1073,7 @@ fn interact(
 }
 
 #[derive(Component, Clone, Copy, PartialEq)]
-struct RoomPiece {
+pub(crate) struct RoomPiece {
     slot: usize,
     item: u16,
     x: i32,
@@ -1197,6 +1209,31 @@ fn refresh(
 }
 
 pub(crate) struct PlayerRoomPlugin;
+
+fn render_televisions(
+    room: Res<PlayerRoom>,
+    time: Res<Time>,
+    current: Res<CurrentRoom>,
+    house: Res<State<HouseState>>,
+    mut rigs: Query<(&RoomPiece, &mut crate::furniture::television::TelevisionRig)>,
+    mut materials: ResMut<Assets<crate::n64_material::N64Material>>,
+) {
+    let inside = crate::house::is_player_room(&current, &house);
+    for (piece, mut rig) in &mut rigs {
+        let on = room
+            .runtime
+            .actors
+            .get(piece.slot)
+            .and_then(Option::as_ref)
+            .is_some_and(|a| a.switch_bit != 0);
+        rig.update(
+            on,
+            if inside { time.delta_secs() } else { 0.0 },
+            &mut materials,
+        );
+    }
+}
+
 impl Plugin for PlayerRoomPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PlayerRoom>()
@@ -1218,6 +1255,10 @@ impl Plugin for PlayerRoomPlugin {
                     .in_set(GameplaySet),
             )
             .add_systems(Update, storage::render.after(refresh).in_set(GameplaySet))
+            .add_systems(
+                Update,
+                render_televisions.after(refresh).in_set(GameplaySet),
+            )
             .add_systems(
                 Update,
                 loose_presentation::advance

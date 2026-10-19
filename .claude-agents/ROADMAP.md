@@ -592,3 +592,19 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   migration open; remaining special furniture actions proposed next. Net/title/
   rename remain deferred.
   Diary final gates pass: check/all-target clippy -D warnings/fmt/capture22.27s/default46.94s/release3m04s, no tests. Exact bytes, cancellation/rewrite, limits, access/input isolation, pickup retention, fresh process and no-disc evidence in task. Actual save unchanged; Philip acceptance pending.
+
+2026-10-19 Codex television-actions: source audit bounds power actions to
+sum_tv01, sum_tv02 and sum_fruittv01. Original US callbacks draw both model
+parts and select screen textures via segment8, with54/10/26-tick cycles and
+level sounds5/4/6, positional16/17 switch effects. Native furniture switch
+save-back and source animation kernels now drive cached disc image/material
+handles; existing four-source ambience owns loops and scene retirement.
+Power persists through room movement/turning and serialization; pickup clears
+its cell bit and new placement starts off. Secondary-layer sets remain separate
+from supporting furniture switches. Other TV callbacks, lamp interactions and
+room illumination are separate: audited lamp profiles/callbacks do not draw
+according to switch_bit, so no invented lamp toggle is exposed. See
+backlog/television-actions.md for bounded evidence/gates and remaining limits.
+Philip playtest and audible acceptance/M4/migration remain open; deferred
+held-net appearance/title/rename remain untouched.
+Television final gates pass: workspace check/all-target clippy -D warnings/fmt/capture47.74s/default43.29s/release3m08s, no tests. Three TV variants, exact state/F5-F9/fresh/no-disc, cached screen visuals, powered movement/turns, surface/pickup, independent sources and scene audio retirement checked in Temp. Actual save unchanged; Philip visual/audio acceptance pending.

@@ -1042,6 +1042,21 @@ pub fn restore_switch_bit(layer: &RoomLayer, x: i32, z: i32) -> u8 {
     }
 }
 
+/// aMR_OperateSwitchBit plus immediate native layer save-back. Devices with
+/// group ownership (music/gyroids) must apply their own selection rules instead.
+pub fn toggle_switch(actor: &mut FurnitureActor, layer: &mut RoomLayer) -> bool {
+    actor.switch_bit = u8::from(actor.switch_bit == 0);
+    actor.switch_changed = true;
+    if let Some(bit) = RoomLayer::switch_bit_index(actor.cell_x, actor.cell_z) {
+        if actor.switch_bit != 0 {
+            layer.ftr_switch |= 1u64 << bit;
+        } else {
+            layer.ftr_switch &= !(1u64 << bit);
+        }
+    }
+    actor.switch_bit != 0
+}
+
 /// `aMR_MakeFurnitureActor` / `aMR_MakeOneFurniture`: scan layer 0 then 1,
 /// row-major, filter furniture and allocate the first free slot within budget.
 /// `bank` implements `aMR_GetFurnitureBank2`: return the profile's shape only

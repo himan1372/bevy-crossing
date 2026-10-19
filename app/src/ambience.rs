@@ -23,6 +23,14 @@ pub(crate) fn update_ambience(
     focus: Res<InputFocus>,
     player: Query<&GlobalTransform, With<Player>>,
     bugs: Query<(Entity, &crate::ecology::Bug, &GlobalTransform)>,
+    televisions: Query<
+        (
+            Entity,
+            &crate::furniture::television::TelevisionRig,
+            &GlobalTransform,
+        ),
+        With<crate::player_room::RoomPiece>,
+    >,
     mut state: Local<AmbienceState>,
     (toy, room, current, disc): (
         Res<crate::player_toys::ToyAction>,
@@ -47,6 +55,15 @@ pub(crate) fn update_ambience(
             .into_iter()
             .collect();
         if crate::house::is_player_room(&current, &house) {
+            for (entity, television, at) in &televisions {
+                if television.on {
+                    sources.push(Source {
+                        key: entity.to_bits() | (1u64 << 62),
+                        id: television.kind.level_sound(),
+                        position: (at.translation() * 40.0).to_array(),
+                    });
+                }
+            }
             if let Some(((at, name), disc)) = room.music_source().zip(disc.as_ref()) {
                 if crate::furniture::music_device(disc, name).2 {
                     sources.push(Source {

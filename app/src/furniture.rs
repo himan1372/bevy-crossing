@@ -25,6 +25,7 @@ use crate::n64_material::N64Material;
 use crate::skeleton::{place_on_joints, Animation, Skeleton};
 
 pub(crate) mod storage;
+pub(crate) mod television;
 
 /// Game units per room unit (`mFI_UT_WORLDSIZE_X_F`).
 const UNIT: f32 = 40.0;
@@ -349,6 +350,12 @@ pub fn spawn_furniture(
         .id();
 
     let mut segs = Segments::default();
+    if let Some(kind) = television::kind(&profile.name) {
+        television::spawn(
+            commands, disc, parent, &profile, kind, meshes, materials, images,
+        );
+        return Some(parent);
+    }
     // `aFTR_tex_anim_c.animation[0]`: the first frame's texture.
     if let Some(Target::File(RomSource::Rel, a)) = profile
         .tex_anim
