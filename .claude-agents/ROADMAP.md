@@ -577,3 +577,18 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   separate; Philip playtest/M4/migration open. Special furniture/diary writing is
   proposed next; held-net appearance/title/rename remain deferred.
   Decorating final gates pass: check/all-target clippy -D warnings/fmt/capture12.22s/default43.54s/release2m38s; no tests. Source, transaction, visual and fresh/no-disc evidence in task. Actual save unchanged; Philip acceptance pending.
+  2026-10-19 Codex diary-writing: placed surface diaries now open the current
+  player's shared twelve monthly992-byte entries, using original diary paper/
+  font, native trim/wrap/scroll/confirmation kernels and PC month/text controls.
+  Safe partial migration from pinned Rustimal diary.rs retains bytes/newline205,
+  padding, six-line viewport and bounded edit limits; no ABI/test/card framework
+  imported. Yes commits; Rewrite retains draft; Escape cancels a draft. Optional
+  room diary data persist independently of physical diary pickup. Dedicated
+  modal input prevents movement/menu/tool/pause/save/load leaks while editing.
+  Floor/hidden/misaligned diaries do not open. Source/numeric/visual/F5-F9/fresh/
+  no-disc evidence and final gates in backlog/diary-writing.md. Full calendar,
+  month sprites/virtual keyboard/transitions, contact pose/repeat and other-player
+  locks remain separate; current PC UI is a bounded adapter. Philip playtest/M4/
+  migration open; remaining special furniture actions proposed next. Net/title/
+  rename remain deferred.
+  Diary final gates pass: check/all-target clippy -D warnings/fmt/capture22.27s/default46.94s/release3m04s, no tests. Exact bytes, cancellation/rewrite, limits, access/input isolation, pickup retention, fresh process and no-disc evidence in task. Actual save unchanged; Philip acceptance pending.

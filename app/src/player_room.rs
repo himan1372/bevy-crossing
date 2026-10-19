@@ -25,6 +25,7 @@ use crate::pockets::PocketsUi;
 use crate::states::GameplaySet;
 
 pub(crate) mod decorating;
+pub(crate) mod diary;
 mod loose;
 mod loose_presentation;
 mod movement;
@@ -43,6 +44,8 @@ pub(crate) struct RoomSave {
     music_box: [u32; 2],
     #[serde(skip_serializing_if = "Option::is_none")]
     decoration: Option<decorating::Decoration>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    diary: Option<diary::Notebook>,
 }
 
 #[derive(Deserialize)]
@@ -53,6 +56,8 @@ struct RoomSaveData {
     music_box: [u32; 2],
     #[serde(default)]
     decoration: Option<decorating::Decoration>,
+    #[serde(default)]
+    diary: Option<diary::Notebook>,
 }
 
 impl TryFrom<RoomSaveData> for RoomSave {
@@ -66,6 +71,7 @@ impl TryFrom<RoomSaveData> for RoomSave {
             switches: data.switches,
             music_box: data.music_box,
             decoration: data.decoration,
+            diary: data.diary,
         })
     }
 }
@@ -108,6 +114,8 @@ enum StorageFlow {
 
 #[derive(Resource)]
 pub(crate) struct PlayerRoom {
+    diary: Option<diary::Notebook>,
+    diary_ui: Option<diary::View>,
     decoration: Option<decorating::Decoration>,
     decoration_pending: bool,
     music_grid: Option<music_grid::Grid>,
@@ -131,6 +139,8 @@ pub(crate) struct PlayerRoom {
 impl Default for PlayerRoom {
     fn default() -> Self {
         Self {
+            diary: None,
+            diary_ui: None,
             decoration: None,
             decoration_pending: false,
             music_grid: None,
@@ -158,8 +168,12 @@ fn layer_views(layers: &mut [RoomLayer; 4]) -> [Option<&mut RoomLayer>; 4] {
 }
 
 impl PlayerRoom {
+    pub(crate) fn diary_open(&self) -> bool {
+        self.diary_ui.is_some()
+    }
     pub(crate) fn manipulating(&self) -> bool {
-        self.decoration_pending
+        self.diary_open()
+            || self.decoration_pending
             || self.music_grid.is_some()
             || self.presentation.busy()
             || self.loose_presentation.busy()
@@ -190,10 +204,13 @@ impl PlayerRoom {
             switches: std::array::from_fn(|i| layers[i].ftr_switch),
             music_box: self.music_box,
             decoration: self.decoration,
+            diary: self.diary.clone(),
         })
     }
 
     pub(crate) fn restore(&mut self, saved: Option<&RoomSave>, disc: Option<&GameDisc>) {
+        self.diary_ui = None;
+        self.diary = saved.and_then(|s| s.diary.clone());
         self.decoration_pending = false;
         self.music_grid = None;
         self.loose_angles = [[0; 16]; 16];
@@ -610,6 +627,9 @@ fn interact(
     rigs: Query<(&RoomPiece, &crate::furniture::storage::StorageRig)>,
 ) {
     room.available = disc.is_some() && crate::house::is_player_room(&current, &state);
+    if room.diary_open() {
+        return;
+    }
     if room.music_grid.is_some() {
         return;
     }
@@ -955,6 +975,14 @@ fn interact(
         .min_by(|a, b| b.1.cmp(&a.1).then_with(|| a.2.total_cmp(&b.2)))
         .map(|t| t.0);
     let Some(slot) = target else { return };
+    if actions.just_pressed(Action::Interact)
+        && diary::can_open(&room, slot, transform.translation)
+        && actions.consume(Action::Interact)
+    {
+        diary::open(&mut room);
+        *focus = InputFocus::Diary;
+        return;
+    }
     if actions.consume(Action::Back) {
         let old = room.runtime.actors[slot].as_ref().cloned();
         if let Err(message) = room.pickup(slot, &mut inventory) {
@@ -1172,6 +1200,7 @@ pub(crate) struct PlayerRoomPlugin;
 impl Plugin for PlayerRoomPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PlayerRoom>()
+            .add_plugins(diary::DiaryPlugin)
             .add_plugins(music_grid::MusicGridPlugin)
             .add_systems(Startup, setup.after(crate::house::build_interior))
             .add_systems(

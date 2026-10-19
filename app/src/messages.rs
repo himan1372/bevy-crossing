@@ -182,7 +182,7 @@ mod code {
 
 /// Latin letters and symbols from CHAR_* in m_font.h, including accented
 /// letters occupying positions otherwise associated with ASCII punctuation.
-fn char_of(c: u8) -> Option<char> {
+pub(crate) fn char_of(c: u8) -> Option<char> {
     const LOW: [char; 31] = [
         '¡', '¿', 'Ä', 'À', 'Á', 'Â', 'Ã', 'Å', 'Ç', 'È', 'É', 'Ê', 'Ë', 'Ì', 'Í', 'Î', 'Ï', 'Ð',
         'Ñ', 'Ò', 'Ó', 'Ô', 'Õ', 'Ö', 'Œ', 'Ù', 'Ú', 'Û', 'Ü', 'ß', 'Þ',

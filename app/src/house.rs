@@ -669,9 +669,10 @@ fn update_house_hud(
     mut query: Query<(&mut Visibility, &mut Text), With<HouseHudText>>,
 ) {
     for (mut vis, mut text) in query.iter_mut() {
-        *vis = match *state.get() {
-            HouseState::Inside => Visibility::Visible,
-            HouseState::Town => Visibility::Hidden,
+        *vis = match (*state.get(), room.diary_open()) {
+            (_, true) => Visibility::Hidden,
+            (HouseState::Inside, false) => Visibility::Visible,
+            (HouseState::Town, false) => Visibility::Hidden,
         };
         let hint = if room.available {
             "House - I: place | Backspace: pick up | E: furniture | G + directions: move / turn\nPlaytest - F1: toys | F2: song | F3: drawers | F4: cabinet"

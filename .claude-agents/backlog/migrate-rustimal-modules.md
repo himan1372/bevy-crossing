@@ -336,3 +336,15 @@ atomically. Saved positions persist; loose-facing is runtime-only/reset on F9 or
 fresh process, no DTO extension. Long loose-loaded turns still refuse. Bounded
 left/right, push/pull-after-turn, mixed stack, placement reset and refusal evidence
 in task note; no tests added/run. Philip acceptance/M4/migration remain open.
+
+2026-10-19 Codex diary-writing: partial native integration of source-only
+rust/src/diary.rs from pinned122867f into logic/src/diary.rs. Reconciled original
+m_diary/m_diary_ovl semantics for space-filled992-byte entries, backward text
+length, strict192px wrapping/newline205, six-line and ten-line scrolling and
+Yes/Rewrite. Safe slices replace unused unsafe ABI wrappers; no source tests or
+card/checksum/repeat/easing follow-ups imported. App wires owner monthly notebook
+read/edit/confirmation/persistence through placed surface diaries and existing
+disc frame/font/input/save paths. Full source module equivalence, retail calendar/
+keyboard graphics and other-player locks are not claimed. See diary-writing.md
+for final runtime/gates/limits. Original inventory snapshot counts remain dated
+snapshot data; this does not finish migration/M4 or establish Philip acceptance.

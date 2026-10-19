@@ -44,6 +44,7 @@ mod column_sweep;
 mod columns;
 mod decal_circles;
 pub mod dialogue_topics;
+pub mod diary;
 mod dvd;
 mod ecology;
 mod endpoint_circle;

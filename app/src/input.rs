@@ -191,6 +191,7 @@ pub enum InputFocus {
     Pockets,
     Paused,
     Furniture,
+    Diary,
 }
 
 impl InputFocus {
@@ -242,6 +243,8 @@ pub(crate) fn update_focus(
 ) {
     let next = if pause.is_some_and(|p| *p.get() == PauseState::Paused) {
         InputFocus::Paused
+    } else if room.diary_open() {
+        InputFocus::Diary
     } else if quest.open {
         InputFocus::Quest
     } else if dialogue.active
