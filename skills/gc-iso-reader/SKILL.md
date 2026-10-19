@@ -1,85 +1,63 @@
 ---
 name: gc-iso-reader
-description: Read Nintendo GameCube (GCM/ISO) disc images on Windows with a zero-dependency Python CLI: show the disc header, list files from the FST, and extract files or main.dol. Use when Claude needs to inspect the contents of a GameCube disc image (offsets, file list, extracting a file) without building anything.
+description: "Inspect raw GameCube ISO/GCM images with the local zero-dependency Python reader: locate symbols and relocated pointers, inspect bounded REL/DOL bytes, or list FST/RARC contents. Use for runtime-disc source audits; not ISO 9660 mounting or game asset conversion."
 ---
 
-# GC ISO Reader
+# GameCube disc inspection
 
-`gc_iso_reader.py` reads raw GameCube disc images (`.gcm` / `.iso`). Pure Python
-standard library — no install, no build step, works on Windows with the
-`python` or `py` launcher. Output is plain text (no ANSI codes) so it renders
-correctly in legacy PowerShell/conhost as well as Windows Terminal.
+Run `python skills/gc-iso-reader/gc_iso_reader.py` from the repo root (`py` or
+`python3` also work). Standard library only: no install, mount, build or Rust
+probe needed. For runtime implementation, use the existing Rust `disc` crate.
 
-Its offsets mirror the repo's Rust `disc` crate (`disc/src/image.rs`,
-`rom.rs`, `rarc.rs`, `yaz0.rs`), so both readers agree: header magic
-`0xC2339F3D` at `0x1C`, game code at `0x00`, maker `0x04`, disc number
-`0x06`, version `0x07`, DOL offset at `0x420`, FST offset/size at
-`0x424`/`0x428`, 12-byte FST entries.
+## Resolve the image once
 
-## Quick lookups for bevy-crossing (use these first)
+`rom` selects `BEVY_CROSSING_ISO`, otherwise the only `.iso`/`.gcm` in `./rom`.
+If ambiguous, use the intended explicit path; quote paths with spaces. Run
+`info` when the build is unknown: the supplied symbol maps target GAFE01.
 
-These answer "what bytes / which table is at symbol X" in well under a second,
-instead of compiling an ignored Rust probe. Output goes to stdout only.
-`rom` stands for the player's disc (`$BEVY_CROSSING_ISO`, else the one image
-in `./rom`).
+This reader handles raw GameCube images, not CISO or ISO 9660. A `.iso` suffix
+alone does not make the pycdlib/mounting skill appropriate.
 
-```text
-python skills/gc-iso-reader/gc_iso_reader.py sym rom aINS_displayList -x 32
-python skills/gc-iso-reader/gc_iso_reader.py sym rom 'offset_data$396' --exact -x 256
-python skills/gc-iso-reader/gc_iso_reader.py hex rom rel 0x352d74 -n 64
-python skills/gc-iso-reader/gc_iso_reader.py arc rom forest_1st.arc            # list
-python skills/gc-iso-reader/gc_iso_reader.py arc rom forest_1st.arc fgdata.bin -x 32
+## Choose a bounded lookup
+
+| Question | Arguments after the script path |
+|---|---|
+| Header/build | `info rom` |
+| Disc files in one directory | `ls rom DIRECTORY` |
+| Symbol metadata | `sym rom NAME --max 5` |
+| Exact symbol bytes | `sym rom NAME --exact -x 32` |
+| Known file offset | `hex rom rel 0xOFFSET -n 64` (or `dol`) |
+| Archive members | `arc rom forest_1st.arc` |
+| Member bytes | `arc rom forest_1st.arc fgdata.bin -x 32` |
+
+Find the name/path first; dump only needed fields. `sym` defaults to metadata
+only; `--max` caps matches, `-x` bounds bytes per match. Single-quote PowerShell
+symbol names containing dollar signs:
+
+```powershell
+python skills/gc-iso-reader/gc_iso_reader.py sym rom 'offset_data$396' --exact -x 32
 ```
 
-- `sym` searches `disc/data/foresta.sym` and `dol.sym` (substring, case-
-  insensitive; `--exact` for one name; `--max` caps matches). Offsets printed
-  are file offsets in the decompressed `foresta.rel` / `main.dol`, the same
-  values the Rust `AssetCatalog` gives (REL symbols are section-relative in
-  the map: `r` = section 4, `d` = section 5).
-- In REL dumps, relocated pointer words are named: `+4->aINS_monki_dl` means
-  the word at row+4 points at that symbol (`R_PPC_ADDR32`, as `RomImage`).
-- `arc` reads RARC archives (Yaz0-compressed or not) inside the disc.
-- The first call decompresses `foresta.rel.szs` and caches it in the temp
-  folder (outside the repo); later calls take ~0.3 s.
-- Keep `-x` small: only dump what you need to read.
+The first REL lookup caches decompressed `foresta.rel.szs` in Temp; reuse it.
+For custom Python imports, use `python -B` to avoid repository `__pycache__`.
 
-## Commands
+## Interpret and recover
 
-All commands take the image path first. On Windows run them as
-`python skills\gc-iso-reader\gc_iso_reader.py <cmd> ...` from the repo root
-(or `py ...` if `python` is not on PATH).
+- Symbol matching is case-insensitive. Even exact names can have multiple
+  entries: distinguish source/offset instead of silently taking the first.
+- `rel`/`dol` offsets are decompressed REL/main.dol **file offsets**, matching
+  `AssetCatalog`, not RAM or compressed-image offsets. `+4->name` annotates a
+  relocated pointer; BSS/unresolved targets are not readable file bytes.
+- Archive member offsets belong to decompressed RARC data, not REL/DOL.
+  Keep the source tag with each offset; decode fields big-endian unless specified.
+- No symbol match: shorten the distinctive substring and omit `--exact` once,
+  then select the intended result. Missing map coverage does not mean no data.
+- No member: list that archive and use its actual path. Invalid option: check
+  subcommand `--help`. Bad magic/truncation/corruption: report the image error;
+  unrelated flag retries will not repair it.
 
-```text
-info <image>                    header: game id/name, maker, disc#, version, DOL/FST offsets
-ls <image> [dir]                list files (optionally under one directory)
-extract <image> <path> -o <out> extract one file by disc path (case-insensitive, leading / ok)
-dol <image> -o <out>            extract main.dol (size from its 18 section headers)
-sym <image> <pattern> [-x N]    find symbols, hex-dump N bytes of each (pointers named)
-hex <image> rel|dol <off> [-n N]  hex-dump a REL/DOL file offset (pointers named)
-arc <image> <file.arc> [member] [-x N]  list a RARC archive, or dump one member
-```
+## Extraction or maintenance
 
-Examples:
-
-```text
-python skills\gc-iso-reader\gc_iso_reader.py info "C:\dumps\game.gcm"
-python skills\gc-iso-reader\gc_iso_reader.py ls "C:\dumps\game.gcm" files
-python skills\gc-iso-reader\gc_iso_reader.py extract "C:\dumps\game.gcm" opening.bnr -o out\opening.bnr
-```
-
-## Operating rules
-
-1. **Never commit a real game image, or anything extracted from one, to the
-   repo.** `extract`/`dol` must write outside it (e.g. the temp folder);
-   `sym`/`hex`/`arc` only print.
-2. **Paths with spaces** must be quoted. Output directories are created as needed.
-3. A non-zero exit with `error: ...` on stderr means: bad magic (not a GameCube
-   image), truncated file, corrupt FST, or file not found on disc. Report the
-   message; do not retry with different flags.
-4. For Rust code, prefer the in-repo `disc` crate (`Disc::open`, `read_file`,
-   `read_dol`) over shelling out to this script — the script exists for quick
-   interactive inspection on machines without a Rust toolchain.
-5. `test_gc_iso_reader.py` builds synthetic images in a temp dir (no game data)
-   and covers header parsing, nested directories, byte-exact extraction, DOL
-   sizing, and the error paths. Run it after any change:
-   `python skills\gc-iso-reader\test_gc_iso_reader.py`.
+Read [extraction and layout](references/extraction-and-layout.md) only for file
+output, header/offset internals, or helper validation. Keep real images and all
+extracted/derived game bytes outside the repository; never commit them.

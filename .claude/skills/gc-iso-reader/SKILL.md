@@ -1,18 +1,16 @@
 ---
 name: gc-iso-reader
-description: Look up GameCube disc data fast for bevy-crossing - find a symbol in foresta.rel/main.dol and hex-dump it with pointer names, list/dump RARC archives, show the disc header and file list. Use before writing an ignored Rust probe to inspect disc data; zero-dependency Python, ~0.3 s per lookup.
+description: "Inspect raw GameCube ISO/GCM symbols, relocated pointers, REL/DOL bytes, and FST/RARC contents with the repository Python reader. Not ISO 9660 mounting or asset conversion."
 ---
 
 # GC ISO Reader (pointer)
 
-The skill and script live in `skills/gc-iso-reader/` (read its `SKILL.md`).
-Quick use from the repo root:
+Read the [canonical skill](../../../skills/gc-iso-reader/SKILL.md) before use.
+The helper lives alongside it. From the repo root, start with a small lookup:
 
 ```text
-python skills/gc-iso-reader/gc_iso_reader.py sym rom <symbol-substring> -x 32
-python skills/gc-iso-reader/gc_iso_reader.py hex rom rel 0x<offset> -n 64
-python skills/gc-iso-reader/gc_iso_reader.py arc rom forest_1st.arc [member] -x 32
+python skills/gc-iso-reader/gc_iso_reader.py sym rom furniture_quality --exact -x 32
 ```
 
-`rom` = `$BEVY_CROSSING_ISO` or the one image in `./rom`. Lookups print only;
-never write disc data into the repo.
+Keep command semantics, image selection, offset interpretation and recovery
+guidance in the canonical skill. Do not duplicate them here.
