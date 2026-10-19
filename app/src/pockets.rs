@@ -195,7 +195,7 @@ impl PocketsUi {
                 vec!["Quit"]
             }
         } else if self.home && condition == 0 && crate::player_room::can_place_in_room(item) {
-            if (0x224C..=0x225B).contains(&item) {
+            if can_hold(item, condition) {
                 vec!["Place in room", "Hold", "Grab"]
             } else {
                 vec!["Place in room", "Grab"]
@@ -332,12 +332,11 @@ fn pockets_input(
             ui.open = false;
             return;
         }
-        let hold_choice = if ui.home && (0x224C..=0x225B).contains(&item) {
-            1
-        } else {
-            0
-        };
-        if can_hold(item, inventory.pockets.item_cond(slot)) && choice == hold_choice {
+        let hold_choice = ui
+            .actions(item, inventory.pockets.item_cond(slot))
+            .iter()
+            .position(|action| *action == "Hold");
+        if hold_choice == Some(choice) {
             if let Some(selected_tool) = held_tool(item) {
                 *tool = selected_tool;
             }

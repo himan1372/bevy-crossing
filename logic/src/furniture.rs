@@ -1267,6 +1267,32 @@ pub fn clothing_from_furniture(item: u16) -> Option<u16> {
         .then(|| 0x2400 + index - 0x1EB)
 }
 
+/// mRmTp_Item1ItemNo2FtrItemNo_AtPlayerRoom: standard umbrella stands.
+/// Player-designed umbrellas need their separate pattern banks.
+pub fn umbrella_to_furniture(item: u16) -> Option<u16> {
+    (0x2204..=0x2223)
+        .contains(&item)
+        .then(|| ftr_idx_2_item_no(0x342 + item - 0x2204, Direction::South))
+}
+
+/// mRmTp_FtrItemNo2Item1ItemNo: orientation does not change the umbrella.
+pub fn umbrella_from_furniture(item: u16) -> Option<u16> {
+    let (index, _) = ftr_item_no_2_idx_dir(item)?;
+    (0x342..=0x361)
+        .contains(&index)
+        .then(|| 0x2204 + index - 0x342)
+}
+
+/// Supported conversions for room placement (source no_convert_tools TRUE).
+pub fn room_item_to_furniture(item: u16) -> Option<u16> {
+    clothing_to_furniture(item).or_else(|| umbrella_to_furniture(item))
+}
+
+/// Reverse supported room conversions; tools retain their loose item IDs.
+pub fn room_item_from_furniture(item: u16) -> Option<u16> {
+    clothing_from_furniture(item).or_else(|| umbrella_from_furniture(item))
+}
+
 /// aMR_ItemNo2IconNo, using the retail item-number enum ranges. The display
 /// lists themselves come from the runtime aMR_icon_display_data table.
 pub fn furniture_icon(item: u16) -> usize {

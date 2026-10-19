@@ -551,3 +551,16 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   Philip playtest/M4/migration remain open. Roadmap proposes umbrellas/tools next,
   then wallpaper/carpet and remaining special behavior; net appearance deferred.
   Clothing final gates pass: check/all-target clippy/fmt/capture/default/release (2m38s), no tests; live source/numeric/no-disc checks and roadmap browser evidence in task. Actual save unchanged; Philip acceptance pending. Release claim and publish.
+  2026-10-19 Codex umbrella-tool-room: 32 standard umbrellas2204..2223 now
+  convert to original stands342..361; exact pickup ignores saved rotation.
+  Room source no_convert_tools TRUE retains normal/golden tools and all seven
+  worn-axe IDs as loose goods, using original models/surface yaw. Net/rod Hold
+  retained; dispatch follows the displayed choices. No new held-tool actions,
+  custom patterns, assets or save fields. Bounded Temp previews pass umbrella
+  placement/four rotations/movement/reload/pickup, tool floor/surface transactions,
+  mixed table turn/reload, atomic full/blocked refusals, hidden storage and
+  excluded/conditioned menus. Fresh no-disc preserves complete numeric state.
+  Source/evidence and final gates: backlog/umbrella-tool-room.md. Philip playtest,
+  M4 and migration remain open; wallpaper/carpet decorating is proposed next.
+  Held-net appearance, title and rename remain deferred.
+  Umbrella/tool final gates pass: check/all-target clippy/fmt/capture/default24.91s/release3m27s; no tests. Source, numeric, visual and no-disc evidence recorded in task; actual save unchanged. Philip acceptance pending.

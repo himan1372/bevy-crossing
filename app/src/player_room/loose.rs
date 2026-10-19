@@ -10,9 +10,12 @@ pub(super) type Angles = [[u8; 16]; 16];
 /// All eight source foods include mushrooms/candy; shells include coral.
 /// Money denominations and turnip bundle/spoiled IDs stay intact as items.
 /// Music discs stay loose items; fans/pinwheels use their source surface yaw flag.
+/// Room no_convert_tools TRUE keeps tools loose, including exact axe wear IDs.
 pub(super) fn supports(item: u16) -> bool {
     (0x2000..=0x20FF).contains(&item)
         || (0x2100..=0x2103).contains(&item)
+        || (0x2200..=0x2203).contains(&item)
+        || (0x2239..=0x2243).contains(&item)
         || (0x224C..=0x225B).contains(&item)
         || (0x2A00..=0x2A36).contains(&item)
         || (0x2B00..=0x2B0F).contains(&item)
