@@ -168,6 +168,13 @@ fn layer_views(layers: &mut [RoomLayer; 4]) -> [Option<&mut RoomLayer>; 4] {
 }
 
 impl PlayerRoom {
+    pub(crate) fn clock_sound_allowed(&self, piece: &RoomPiece) -> bool {
+        self.runtime
+            .actors
+            .get(piece.slot)
+            .is_some_and(Option::is_some)
+            && !self.presentation.animating(piece.slot)
+    }
     pub(crate) fn diary_open(&self) -> bool {
         self.diary_ui.is_some()
     }
@@ -1255,6 +1262,14 @@ impl Plugin for PlayerRoomPlugin {
                     .in_set(GameplaySet),
             )
             .add_systems(Update, storage::render.after(refresh).in_set(GameplaySet))
+            .add_systems(
+                Update,
+                crate::furniture::clocks::update
+                    .after(refresh)
+                    .after(movement::animate_roots)
+                    .after(crate::save::LoadSet)
+                    .in_set(GameplaySet),
+            )
             .add_systems(
                 Update,
                 render_televisions.after(refresh).in_set(GameplaySet),

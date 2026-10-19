@@ -105,6 +105,12 @@ const VILLAGER_ROOM_SPACING: f32 = 100.0;
 #[derive(Resource, Clone, Copy)]
 pub(crate) struct CurrentRoom(Vec3, RoomBounds);
 
+impl CurrentRoom {
+    pub(crate) fn origin(&self) -> Vec3 {
+        self.0
+    }
+}
+
 pub(crate) fn is_player_room(room: &CurrentRoom, state: &State<HouseState>) -> bool {
     *state.get() == HouseState::Inside && room.0 == INTERIOR_ORIGIN
 }

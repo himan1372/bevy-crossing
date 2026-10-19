@@ -52,6 +52,9 @@ impl Presentation {
     pub(super) fn busy(&self) -> bool {
         self.active.is_some()
     }
+    pub(super) fn animating(&self, slot: usize) -> bool {
+        self.active.as_ref().is_some_and(|a| a.slot == slot)
+    }
     pub(super) fn picking_up(&self, slot: usize) -> bool {
         self.active
             .as_ref()

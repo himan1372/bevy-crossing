@@ -622,3 +622,18 @@ No save schema changes. Details and bounded evidence/gates in
 backlog/snow-tv-lamp-draw.md. Philip visual/audio acceptance, M4 and migration
 remain open; net/title/rename deferrals unchanged.
 Snow-TV/lamp final gates pass: workspace check11.33s/all-target clippy -D warnings11.51s/fmt/capture23.51s/default21.18s/release2m39s, all original settings after Philip freed RAM; no tests. Exact placement/power/movement/pickup/F5-F9/fresh/no-disc and older-TV regressions, lamp/TV screenshots and audio scene retirement in task. Actual save unchanged; Philip visual/audio acceptance remains pending.
+
+2026-10-19 Codex furniture-clocks: ten original clock callbacks now drive their
+hour/minute joints from the existing local game time, including second fractions
+and signed16-bit afternoon wrap. Native furniture_clock kernels implement the
+m_time hand math, cKF half-speed repeat and shared120-tick room clock pulse.
+Cached disc-backed skinned rigs retain source parent transforms, palettes/streams
+and separately drawn short/long hands for snow/meza. Waclock has only its source
+hour adjustment. Antique ticking uses positional12D at beat15/45, animation reset0;
+scene/pause/load and owned birth/retirement gates preserve existing audio ownership.
+Room origin gains a read-only accessor for active-room sound selection. No save
+schema or alarm controls added: the audited meza callback only draws its hands.
+See backlog/furniture-clocks.md for source/joint/time-change/runtime evidence and
+final gates. Configurable alarms, room illumination, Philip visual/audio acceptance,
+M4/migration and deferred net/title/rename remain separate.
+Clock final gates pass: workspace check8.98s/all-target clippy -D warnings24.90s/fmt/capture1m01s/default1m02s/release3m25s, normal project settings, no tests. All ten F6 hour deltas about-30deg, authored motion/pause, per-variant numeric roundtrip, extra-hand close-ups, movement/hidden/surface checks, F5/F9/fresh/no-disc and sound retirement evidence in task. Actual save unchanged; Philip visual/audio acceptance remains pending.

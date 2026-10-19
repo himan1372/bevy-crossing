@@ -24,6 +24,7 @@ use crate::game_disc::GameDisc;
 use crate::n64_material::N64Material;
 use crate::skeleton::{place_on_joints, Animation, Skeleton};
 
+pub(crate) mod clocks;
 pub(crate) mod storage;
 pub(crate) mod television;
 
@@ -178,6 +179,9 @@ pub(crate) fn can_render(disc: &GameDisc, index: u16) -> bool {
     };
     if television::kind(&p.name).is_some() {
         return television::available(disc, &p);
+    }
+    if clocks::spec(&p.name).is_some() {
+        return clocks::available(disc, &p);
     }
     if !p.opaque.is_empty() || !p.translucent.is_empty() || profile_skeleton(disc, &p).is_some() {
         return true;
@@ -425,6 +429,20 @@ pub fn spawn_furniture(
             );
         }
     } else if let Some((skeleton, anim)) = skeleton {
+        if let Some((spec, animation)) = clocks::spec(&profile.name).zip(anim.as_ref()) {
+            clocks::spawn(
+                commands,
+                disc,
+                parent,
+                &profile,
+                spec,
+                skeleton,
+                animation.clone(),
+                &segs,
+                assets,
+            );
+            return Some(parent);
+        }
         // Only audited common door constructors use this animated path.
         // Other per-type furniture keeps its existing fixed-pose renderer.
         if let Some((end, animation)) = storage::open_end(&profile.name).zip(anim.as_ref()) {
