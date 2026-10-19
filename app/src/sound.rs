@@ -533,6 +533,7 @@ struct Bgm {
     ducking: music_policy::Ducking,
     volume: music_policy::VolumeRamp,
     spatial: (f32, u8),
+    filter: u8,
 }
 
 impl Default for Bgm {
@@ -543,6 +544,7 @@ impl Default for Bgm {
             ducking: music_policy::Ducking::default(),
             volume: music_policy::VolumeRamp::default(),
             spatial: (1.0, 64),
+            filter: 0,
         }
     }
 }
@@ -629,6 +631,18 @@ fn update_music(
     };
     let spatial_changed = spatial != bgm.spatial;
     bgm.spatial = spatial;
+    let filter = if next.is_some_and(|t| t.id >= 128) {
+        room.music_source()
+            .and_then(|(_, name)| {
+                disc.as_ref()
+                    .map(|d| crate::furniture::music_device(d, name).1)
+            })
+            .unwrap_or(0)
+    } else {
+        0
+    };
+    let filter_changed = filter != bgm.filter;
+    bgm.filter = filter;
     let mut commands = Vec::new();
     if changed {
         if let Some(track) = next {
@@ -681,7 +695,7 @@ fn update_music(
         }
         bgm.playing = next;
     }
-    if changed || spatial_changed || previous_volume != bgm.volume.current {
+    if changed || spatial_changed || filter_changed || previous_volume != bgm.volume.current {
         // Starting a sequence resets group gain. Reapply the current duck
         // after START_SEQ, to both handles including any outgoing tail.
         for group in [BGM0_GROUP, BGM1_GROUP] {
@@ -695,6 +709,11 @@ fn update_music(
             if changed || spatial_changed {
                 for sub in 0..16 {
                     commands.push(cmd(0x03, group, sub, 0, AudioParam::S8(spatial.1 as i8)));
+                }
+            }
+            if changed || filter_changed {
+                for sub in 0..16 {
+                    commands.push(cmd(0x13, group, sub, filter, AudioParam::U32(1)));
                 }
             }
         }

@@ -99,6 +99,10 @@ pub struct Bank {
 
 /// What the engine reads from the disc.
 pub trait SoundData: Send + Sync {
+    /// Runtime DOL coefficients selected by Nas_SetBPFilter (Q15, eight taps).
+    fn filter(&self, _status: u8) -> Option<[i16; 8]> {
+        None
+    }
     fn sequence(&self, id: usize) -> Option<Vec<u8>>;
     /// Sequence-248 fragment selected by the runtime DOL melody tables.
     fn melody(&self, _voice: usize) -> Option<Vec<u8>> {
@@ -234,6 +238,7 @@ struct Layer {
 /// A subtrack (`sub`).
 #[derive(Clone, Debug)]
 struct Sub {
+    filter: Option<[i16; 8]>,
     enabled: bool,
     finished: bool,
     stop_script: bool,
@@ -361,6 +366,8 @@ struct Params {
 /// A voice (`channel`).
 #[derive(Clone, Debug, Default)]
 struct Voice {
+    filter: Option<[i16; 8]>,
+    filter_history: [f32; 8],
     current: Option<usize>,
     previous: Option<usize>,
     wanted: Option<usize>,
@@ -418,6 +425,7 @@ pub struct Engine {
 
 fn sub_fresh(index: usize) -> Sub {
     Sub {
+        filter: None,
         enabled: false,
         finished: false,
         stop_script: false,
@@ -975,8 +983,10 @@ impl Engine {
     /// `__SetSubParam`.
     #[allow(clippy::too_many_arguments)]
     fn sub_param(&mut self, g: usize, s: usize, op: u8, arg2: u8, s32: i32, f: f32, s8: i8) {
+        let filter = (op == 0x13).then(|| self.data.filter(arg2)).flatten();
         let sub = &mut self.groups[g].subs[s];
         match op {
+            0x13 => sub.filter = filter,
             0x01 => {
                 sub.volume_scale = f;
                 sub.changes |= CHANGE_VOLUME;
@@ -2931,6 +2941,8 @@ impl Engine {
         };
         voice.volume = [0.0; 2];
         voice.wet = 0.0;
+        voice.filter = sub.filter;
+        voice.filter_history = [0.0; 8];
         voice.bus = match g {
             1 | 3 => 1,
             4 => 2,
@@ -3040,6 +3052,13 @@ impl Engine {
             let p = (pan & 0x7F) as usize;
             let (l, r) = (self.t.stereo[p], self.t.stereo[0x7F - p]);
             let voice = &mut self.voices[v];
+            if let Some(n) = voice.current.and_then(|i| self.layers[i].as_ref()) {
+                let filter = self.groups[n.sub.0].subs[n.sub.1].filter;
+                if voice.filter != filter {
+                    voice.filter_history = [0.0; 8];
+                    voice.filter = filter;
+                }
+            }
             voice.step = pitch.clamp(0.0, 3.99996) as f64;
             voice.target = [velocity * l, velocity * r];
             voice.wet_target = (reverb & 0x7f) as f32 / 128.0;
@@ -3096,7 +3115,17 @@ impl Engine {
                     p
                 };
                 let b = pcm.data[next.min(pcm.data.len() - 1)] as f32;
-                let x = (a + (b - a) * frac) / 32768.0;
+                let mut x = (a + (b - a) * frac) / 32768.0;
+                if let Some(coefficients) = voice.filter {
+                    voice.filter_history.copy_within(0..7, 1);
+                    voice.filter_history[0] = x;
+                    x = voice
+                        .filter_history
+                        .iter()
+                        .zip(coefficients)
+                        .map(|(sample, tap)| sample * tap as f32 / 32768.0)
+                        .sum();
+                }
                 let wet = voice.wet + (voice.wet_target - voice.wet) * f;
                 let frame = &mut self.mix_frames[k];
                 frame.dry[voice.bus][0] += x * vl;

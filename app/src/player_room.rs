@@ -373,6 +373,7 @@ impl PlayerRoom {
         actor.angle_y_target = actor.angle_y;
         actor.s_angle_y = ((rotation as u16) << 14) as i16;
         self.runtime.actors[slot] = Some(actor);
+        music::placed(self, slot);
         self.dirty = true;
         info!("placed furniture {item:#06x} at ({x},{z}), layer {layer}");
         Ok(slot)
@@ -928,6 +929,13 @@ fn interact(
             *focus = InputFocus::Furniture;
         }
     } else if music::is_player(&room, slot) && actions.consume(Action::Interact) {
+        if let Some(actor) = room.runtime.actors[slot].as_ref() {
+            let front = Quat::from_rotation_y(actor.angle_y.to_radians()) * Vec3::Z;
+            let at = presentation::actor_center(&room, actor);
+            if facing.dir.dot(front) > -0.9 || (transform.translation - at).dot(front) <= 0.0 {
+                return;
+            }
+        }
         music::begin(&mut room, &mut dialogue, &mut focus, slot);
     } else if room.runtime.actors[slot]
         .as_ref()

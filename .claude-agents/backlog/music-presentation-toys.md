@@ -99,3 +99,10 @@ blend and wind-driven rotation can receive further retail comparison once
 weather exists. Broader source fidelity/M4/migration remain open. Roadmap next
 proposals now prioritize remaining room item families and decorating; no automatic
 new task or bulk migration is authorized by this completion.
+## Follow-up implementation
+
+Philip subsequently chose roadmap item3. See music-source-fidelity.md for
+implemented marking/partial take-out, panel/cloth motion, placement selection,
+front access/start-stop and disc-fed CPU device filters/hiss. Its final evidence
+supersedes the corresponding remaining-work entries above. Exact hardware DSP,
+full warning/choice animation, weather wind and Philip acceptance remain open.

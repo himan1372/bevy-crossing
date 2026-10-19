@@ -53,6 +53,9 @@ pub(crate) struct PocketPattern {
     mask: Handle<Image>,
 }
 impl PocketPattern {
+    pub(crate) fn scroll(&mut self, slide: f32, phase: f32) {
+        self.offset = Vec4::new(slide * 16.0, phase, 0.0, 0.0);
+    }
     pub(crate) fn new(cloth: Handle<Image>, mask: Handle<Image>) -> Self {
         Self {
             offset: Vec4::ZERO,

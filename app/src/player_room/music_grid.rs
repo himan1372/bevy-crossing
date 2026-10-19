@@ -9,6 +9,15 @@ pub(super) struct Grid {
     selected: usize,
     menu: Option<usize>,
     take: bool,
+    marks: [u32; 2],
+    slide: f32,
+    speed: f32,
+    alternate: bool,
+    ticks: f32,
+    closing: bool,
+    exit_sign: f32,
+    cloth: f32,
+    warning: bool,
 }
 impl Grid {
     pub(super) fn new(owner: usize, selected: usize, take: bool) -> Self {
@@ -17,7 +26,65 @@ impl Grid {
             selected,
             menu: None,
             take,
+            marks: [0; 2],
+            slide: -300.0,
+            speed: 75.0,
+            alternate: false,
+            ticks: 0.0,
+            closing: false,
+            exit_sign: -1.0,
+            cloth: 0.0,
+            warning: false,
         }
+    }
+
+    fn marked(&self) -> bool {
+        self.marks[self.selected / 32] & (1 << (self.selected % 32)) != 0
+    }
+
+    fn choices(&self) -> &[&'static str] {
+        if self.marked() {
+            &["Take out marked", "Quit"]
+        } else {
+            &["Listen", "Take out", "Quit"]
+        }
+    }
+
+    /// mSM_move_menu / move_Move: alternate 60 Hz ticks change speed;
+    /// incoming slows after -120; decide exits right, cancel exits left.
+    fn advance(&mut self, seconds: f32) -> bool {
+        self.cloth = (self.cloth + seconds * 60.0 * 0.3535).rem_euclid(1024.0);
+        self.ticks += seconds * 60.0;
+        while self.ticks >= 1.0 {
+            self.ticks -= 1.0;
+            if self.closing || self.slide < 0.0 {
+                let (threshold, target, direction, multiplier) = if self.closing {
+                    (0.0, 300.0 * self.exit_sign, self.exit_sign, 2.0)
+                } else {
+                    (-120.0, 0.0, 1.0, 0.5)
+                };
+                if !self.alternate && direction * (self.slide - threshold) >= 0.0 {
+                    self.speed = (self.speed * multiplier).clamp(1.0, 75.0);
+                }
+                self.alternate = !self.alternate;
+                self.slide += self.speed * direction * 0.5;
+                if direction * (self.slide - target) > 0.0 {
+                    self.slide = target;
+                    self.alternate = false;
+                    self.ticks = 0.0;
+                    return self.closing;
+                }
+            }
+        }
+        false
+    }
+
+    fn close(&mut self, decided: bool) {
+        self.closing = true;
+        self.exit_sign = if decided { 1.0 } else { -1.0 };
+        self.alternate = false;
+        self.ticks = 0.0;
+        self.menu = None;
     }
 }
 
@@ -26,6 +93,7 @@ type Model = Vec<(Handle<Mesh>, Handle<N64Material>)>;
 struct GridAssets {
     frame: Model,
     icon: Model,
+    mark: Model,
     patterns: Vec<(
         Handle<N64Material>,
         Handle<crate::pockets_disc::PocketPattern>,
@@ -34,10 +102,12 @@ struct GridAssets {
 #[derive(Default)]
 struct Drawn {
     root: Option<Entity>,
-    key: Option<(usize, Option<usize>, [u32; 2])>,
+    key: Option<(usize, Option<usize>, [u32; 2], [u32; 2], bool)>,
     meshes: Vec<Handle<Mesh>>,
     materials: Vec<Handle<StandardMaterial>>,
 }
+#[derive(Component)]
+struct MusicPanel;
 
 fn setup(
     mut commands: Commands,
@@ -53,11 +123,28 @@ fn setup(
             .filter_map(|name| disc.catalog.get(name).map(|s| s.offset))
             .collect();
         let frame = names.contains(&"mus_win_model");
-        let sink = if frame {
+        let mut sink = if frame {
             crate::disc_gfx::run_inventory_frame(&disc.rom, &lists)
         } else {
             crate::disc_gfx::run_display_lists(&disc.rom, &lists)
         };
+        // mus_mark_before uses legacy load-block/tile-size commands rather
+        // than the Dolphin-sized tile form. Its source IA8 mark is 16x16.
+        if names.contains(&"mus_mark_model") {
+            if let Some(texture) = disc.catalog.get("mus_win_mark_tex") {
+                for part in &mut sink.parts {
+                    part.key.tex = Some(crate::disc_gfx::TexKey {
+                        img_addr: texture.offset,
+                        format: rustimal_logic::graphics::texture::GxTexFormat::IA4,
+                        width: 16,
+                        height: 16,
+                        wrap_s: 2,
+                        wrap_t: 2,
+                        tlut_addr: 0,
+                    });
+                }
+            }
+        }
         let model = crate::disc_town::sink_meshes_scaled(
             &disc,
             &sink,
@@ -67,6 +154,32 @@ fn setup(
             16.0,
             (&mut meshes, &mut materials, &mut images),
         );
+        if names.contains(&"mus_mark_model") {
+            if let Some(texture) = disc.catalog.get("mus_win_mark_tex") {
+                if let (Some(bytes), Some(key)) = (
+                    disc.rom.slice(texture.source, texture.offset, 256),
+                    sink.parts.first().and_then(|p| p.key.tex),
+                ) {
+                    // Unlike Dolphin-converted UI textures this legacy IA8
+                    // load-block stores row-major intensity/alpha nibbles.
+                    let rgba = bytes
+                        .iter()
+                        .flat_map(|v| {
+                            let i = (v >> 4) * 17;
+                            [i, i, i, (v & 15) * 17]
+                        })
+                        .collect();
+                    let image = images.add(crate::n64_material::texture_image(rgba, &key));
+                    for (_, handle) in &model {
+                        if let Some(mut material) = materials.get_mut(handle) {
+                            if let Some(old) = material.texture.replace(image.clone()) {
+                                images.remove(old.id());
+                            }
+                        }
+                    }
+                }
+            }
+        }
         (sink, model)
     };
     let (sink, mut frame) = build(&["mus_win_model_before", "mus_win_model"]);
@@ -78,6 +191,7 @@ fn setup(
     ]);
     frame.extend(overlays);
     let (_, icon) = build(&["mus_icon_model_before", "mus_icon_model"]);
+    let (_, mark) = build(&["mus_mark_before", "mus_mark_model"]);
     let mut masks = Vec::new();
     if let (Some(tex), Some(pal)) = (
         disc.catalog.get("mus_win_nuno_tex_rgb_ci4"),
@@ -127,6 +241,7 @@ fn setup(
     commands.insert_resource(GridAssets {
         frame,
         icon,
+        mark,
         patterns: masks,
     });
 }
@@ -166,6 +281,7 @@ fn input(
     mut dialogue: ResMut<DialogueState>,
     current: Res<CurrentRoom>,
     state: Res<State<HouseState>>,
+    time: Res<Time>,
 ) {
     let Some(mut grid) = room.music_grid.take() else {
         return;
@@ -178,44 +294,86 @@ fn input(
         return;
     }
     *focus = InputFocus::Furniture;
+    if grid.advance(time.delta_secs()) {
+        *focus = InputFocus::World;
+        return;
+    }
+    if grid.warning {
+        if dialogue.external_result.take().is_some() {
+            grid.warning = false;
+            actions.consume(Action::Confirm);
+            actions.consume(Action::Interact);
+            actions.consume(Action::Advance);
+            actions.consume(Action::Cancel);
+        } else {
+            *focus = InputFocus::Dialogue;
+        }
+        room.music_grid = Some(grid);
+        return;
+    }
+    if grid.closing || grid.slide < 0.0 {
+        room.music_grid = Some(grid);
+        return;
+    }
     let cancel = actions.consume(Action::Cancel) || actions.consume(Action::Back);
     let item = 0x2A00 + grid.selected as u16;
+    let many = grid.marked();
+    let choice_count = grid.choices().len();
     if let Some(menu) = &mut grid.menu {
         let before = *menu;
         if actions.consume(Action::MoveUp) || actions.consume(Action::MenuUp) {
-            *menu = (*menu + 2) % 3;
+            *menu = (*menu + choice_count - 1) % choice_count;
         }
         if actions.consume(Action::MoveDown) || actions.consume(Action::MenuDown) {
-            *menu = (*menu + 1) % 3;
+            *menu = (*menu + 1) % choice_count;
         }
         crate::sound::cursor_changed(before, *menu);
         if cancel {
             grid.menu = None;
         } else if actions.consume(Action::Confirm) || actions.consume(Action::Interact) {
-            if *menu == 0 {
+            if *menu == 0 && !many {
                 if let Some(actor) = room.runtime.actors[grid.owner].as_mut() {
                     actor.items[0] = item;
                 }
                 music::switch(&mut room, grid.owner, true);
-                *focus = InputFocus::World;
+                grid.close(true);
                 crate::sound::se(crate::sound::se_id::CHOICE_CONFIRM);
-                return;
-            } else if *menu == 1 {
-                if let Err(message) = take(&mut room, &mut inventory, item) {
-                    notice(&mut dialogue, &mut room, &mut focus, message);
+            } else if (*menu == 1 && !many) || (*menu == 0 && many) {
+                let result = if many {
+                    let mut result = Err("Your pockets are full.");
+                    for i in 0..55 {
+                        if grid.marks[i / 32] & (1 << (i % 32)) != 0
+                            && music::registered(&room, 0x2A00 + i as u16)
+                        {
+                            if take(&mut room, &mut inventory, 0x2A00 + i as u16).is_err() {
+                                break;
+                            }
+                            result = Ok(());
+                        }
+                    }
+                    result
                 } else {
-                    *focus = InputFocus::World;
+                    take(&mut room, &mut inventory, item)
+                };
+                if let Err(message) = result {
+                    dialogue.begin_furniture(message.into(), None);
+                    grid.warning = true;
+                    grid.menu = None;
+                    *focus = InputFocus::Dialogue;
+                    room.music_grid = Some(grid);
+                    return;
                 }
+                grid.close(true);
                 crate::sound::se(crate::sound::se_id::CHOICE_CONFIRM);
-                return;
             } else {
                 grid.menu = None;
             }
         }
     } else {
         if cancel {
-            *focus = InputFocus::World;
+            grid.close(false);
             crate::sound::se(crate::sound::se_id::MENU_EXIT);
+            room.music_grid = Some(grid);
             return;
         }
         let before = grid.selected;
@@ -235,10 +393,15 @@ fn input(
         }
         grid.selected = (y * 11 + x) as usize;
         crate::sound::cursor_changed(before, grid.selected);
+        if actions.consume(Action::Mark) && music::registered(&room, 0x2A00 + grid.selected as u16)
+        {
+            grid.marks[grid.selected / 32] ^= 1 << (grid.selected % 32);
+            crate::sound::se(crate::sound::se_id::CHOICE_CONFIRM);
+        }
         if (actions.consume(Action::Confirm) || actions.consume(Action::Interact))
             && music::registered(&room, 0x2A00 + grid.selected as u16)
         {
-            grid.menu = Some(usize::from(grid.take));
+            grid.menu = Some(usize::from(grid.take && !grid.marked()));
             crate::sound::se(crate::sound::se_id::CHOICE_CONFIRM);
         }
     }
@@ -262,7 +425,7 @@ fn draw(
     let key = room
         .music_grid
         .as_ref()
-        .map(|g| (g.selected, g.menu, room.music_box));
+        .map(|g| (g.selected, g.menu, room.music_box, g.marks, g.closing));
     if drawn.key == key {
         return;
     }
@@ -282,7 +445,8 @@ fn draw(
     let root = commands
         .spawn((
             Name::new("original music collection"),
-            Transform::default(),
+            MusicPanel,
+            Transform::from_xyz(grid.slide * 16.0, 0.0, 0.0),
             Visibility::default(),
             RenderLayers::layer(1),
         ))
@@ -319,6 +483,16 @@ fn draw(
                 ),
             );
         }
+        if grid.marks[i as usize / 32] & (1 << (i % 32)) != 0 {
+            model(
+                &assets.mark,
+                Vec3::new(
+                    (-100.0 + (i % 11) as f32 * 20.0) * 16.0,
+                    (28.0 - (i / 11) as f32 * 20.0) * 16.0,
+                    3.0,
+                ),
+            );
+        }
     }
     let at = Vec2::new(
         60.0 + (grid.selected % 11) as f32 * 20.0,
@@ -330,8 +504,8 @@ fn draw(
     } else {
         "?????".into()
     };
-    let choices = ["Listen", "Take out", "Quit"];
-    let (centre, scale, origin) = crate::msg_window::choice_layout(&choices, &font.widths);
+    let choices = grid.choices();
+    let (centre, scale, origin) = crate::msg_window::choice_layout(choices, &font.widths);
     if grid.menu.is_some() {
         for (mesh, material) in &font.choice_body {
             commands.spawn((
@@ -390,6 +564,7 @@ fn draw(
         Vec2::new((320.0 - text_width(&title, &font.widths)) * 0.5, 55.0),
         [255; 4],
     );
+    text("M: mark / unmark", Vec2::new(60.0, 207.0), [255; 4]);
     if let Some(menu) = grid.menu {
         for (i, label) in choices.iter().enumerate() {
             text(
@@ -425,6 +600,39 @@ fn draw(
     }
 }
 
+fn animate_panel(
+    room: Res<PlayerRoom>,
+    assets: Option<Res<GridAssets>>,
+    mut panels: Query<&mut Transform, With<MusicPanel>>,
+    mut patterns: ResMut<Assets<crate::pockets_disc::PocketPattern>>,
+    mut materials: ResMut<Assets<N64Material>>,
+) {
+    let (Some(grid), Some(assets)) = (&room.music_grid, assets) else {
+        return;
+    };
+    for mut panel in &mut panels {
+        panel.translation.x = grid.slide.trunc() * 16.0;
+        // Existing dialogue draws its warning at z=0..3 on this UI camera.
+        // Keep the collection behind it while preserving all marks/cursor.
+        panel.translation.z = if grid.warning { -20.0 } else { 0.0 };
+    }
+    for (_, pattern) in &assets.patterns {
+        if let Some(mut pattern) = patterns.get_mut(pattern) {
+            pattern.scroll(grid.slide.trunc(), grid.cloth);
+        }
+    }
+    // mMU_set_dl: triangular 20-frame green mark pulse, graph phase at 30 Hz.
+    let frame = (grid.cloth / 0.3535 * 0.5).rem_euclid(20.0).floor();
+    let frame = frame.min(20.0 - frame);
+    for (_, handle) in &assets.mark {
+        if let Some(mut material) = materials.get_mut(handle) {
+            material.combiner.prim = Vec4::new(0.0, (95.0 + frame * 9.0) / 255.0, 0.0, 1.0);
+            material.combiner.env =
+                Vec4::new(frame * 6.0, 210.0 + frame * 4.5, frame * 6.0, 255.0) / 255.0;
+        }
+    }
+}
+
 pub(super) struct MusicGridPlugin;
 impl Plugin for MusicGridPlugin {
     fn build(&self, app: &mut App) {
@@ -444,7 +652,7 @@ impl Plugin for MusicGridPlugin {
         )
         .add_systems(
             PostUpdate,
-            draw.run_if(in_state(crate::states::AppState::InGame)),
+            (draw, animate_panel.after(draw)).run_if(in_state(crate::states::AppState::InGame)),
         );
     }
 }

@@ -24,7 +24,12 @@ pub(crate) fn update_ambience(
     player: Query<&GlobalTransform, With<Player>>,
     bugs: Query<(Entity, &crate::ecology::Bug, &GlobalTransform)>,
     mut state: Local<AmbienceState>,
-    toy: Res<crate::player_toys::ToyAction>,
+    (toy, room, current, disc): (
+        Res<crate::player_toys::ToyAction>,
+        Res<crate::player_room::PlayerRoom>,
+        Res<crate::house::CurrentRoom>,
+        Option<Res<crate::game_disc::GameDisc>>,
+    ),
 ) {
     let Some(sound) = sound else { return };
     let (Some(ground), Ok(player)) = (&town.ground, player.single()) else {
@@ -33,18 +38,34 @@ pub(crate) fn update_ambience(
     };
     if *house.get() != HouseState::Town || *shop.get() != ShopLocation::Town {
         let position = player.translation();
-        let sources = (toy.pin_level > 0.0).then_some(Source {
-            key: u64::MAX,
-            id: 0x4D,
-            position: (position * 40.0).to_array(),
-        });
+        let mut sources: Vec<_> = (toy.pin_level > 0.0)
+            .then_some(Source {
+                key: u64::MAX,
+                id: 0x4D,
+                position: (position * 40.0).to_array(),
+            })
+            .into_iter()
+            .collect();
+        if crate::house::is_player_room(&current, &house) {
+            if let Some(((at, name), disc)) = room.music_source().zip(disc.as_ref()) {
+                if crate::furniture::music_device(disc, name).2 {
+                    sources.push(Source {
+                        key: u64::MAX - 1,
+                        id: 0x4E,
+                        position: (at * 40.0).to_array(),
+                    });
+                }
+            }
+        }
         let mut levels = state.mixer.update(
             sources,
             rustimal_logic::ambience::microphone((position * 40.0).to_array()),
             !focus.is_world(),
         );
         for level in levels.iter_mut().flatten() {
-            level.volume *= toy.pin_level;
+            if level.key == u64::MAX {
+                level.volume *= toy.pin_level;
+            }
         }
         sound.ambience(levels);
         return;

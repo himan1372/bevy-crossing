@@ -184,13 +184,17 @@ pub(crate) fn can_render(disc: &GameDisc, index: u16) -> bool {
 
 /// aMR_Fname2ConpoIndex / Na_MDPlayerPos's original device gain classes.
 pub(crate) fn music_boost(disc: &GameDisc, index: u16) -> f32 {
+    music_device(disc, index).0
+}
+
+pub(crate) fn music_device(disc: &GameDisc, index: u16) -> (f32, u8, bool) {
     match read_profile(disc, index as u32).map(|p| p.name).as_deref() {
         Some(
             "iam_sum_stereo01" | "iam_sum_chikuon01" | "iam_sum_chikuon02" | "iam_sum_jukebox"
             | "iam_sum_lv_stereo",
-        ) => 1.08,
-        Some("iam_sum_radio01" | "iam_sum_radio02" | "iam_sum_casse01") => 1.4,
-        _ => 1.0,
+        ) => (1.08, 0x30, true),
+        Some("iam_sum_radio01" | "iam_sum_radio02" | "iam_sum_casse01") => (1.4, 0xE3, false),
+        _ => (1.0, 0, false),
     }
 }
 

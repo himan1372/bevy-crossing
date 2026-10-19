@@ -73,6 +73,8 @@ pub enum Action {
     /// Playtest aid: add K.K. Love Song to an empty pocket in your room.
     DebugMusic,
     DebugToys,
+    /// Toggle a registered music title's take-out mark.
+    Mark,
 }
 
 /// Keys for each action. Several actions may share a key: they are read in
@@ -118,6 +120,7 @@ impl Default for KeyBindings {
             (DebugDrawers, vec![K::F3]),
             (DebugMusic, vec![K::F2]),
             (DebugToys, vec![K::F1]),
+            (Mark, vec![K::KeyM]),
         ];
         Self(map.into_iter().collect())
     }

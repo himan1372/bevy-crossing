@@ -29,6 +29,27 @@ pub(super) fn is_player(room: &PlayerRoom, owner: usize) -> bool {
         .is_some_and(|p| p.interaction_type & ftr::interaction::MUSIC_DISK != 0)
 }
 
+/// aMR_MiniDiskCommonCt(placed): select a registered ordinal, leave power off.
+pub(super) fn placed(room: &mut PlayerRoom, owner: usize) {
+    use std::hash::BuildHasher;
+    if !is_player(room, owner) {
+        return;
+    }
+    let songs: Vec<_> = (FIRST..FIRST + COUNT)
+        .filter(|&item| registered(room, item))
+        .collect();
+    if let Some(actor) = room.runtime.actors[owner].as_mut() {
+        if !songs.is_empty() {
+            let rank = std::collections::hash_map::RandomState::new().hash_one((owner, actor.name))
+                as usize
+                % songs.len();
+            actor.items[0] = songs[rank];
+        }
+        actor.switch_bit = 0;
+        actor.switch_changed = false;
+    }
+}
+
 pub(super) fn switch(room: &mut PlayerRoom, owner: usize, on: bool) {
     // aMR_AllMDSwitchOff / OneMDSwitchOn_TheOtherSwitchOff.
     for (slot, actor) in room.runtime.actors.iter_mut().enumerate() {
@@ -101,7 +122,15 @@ pub(super) fn begin(
         Some(vec![
             "Register a song".into(),
             "Choose a song".into(),
-            "Stop playing".into(),
+            if room.runtime.actors[owner]
+                .as_ref()
+                .is_some_and(|a| a.switch_bit != 0)
+            {
+                "Stop playing"
+            } else {
+                "Start playing"
+            }
+            .into(),
             "Take out a song".into(),
             "Quit".into(),
         ]),
@@ -158,11 +187,16 @@ pub(super) fn answer(
                 room.music_grid = Some(super::music_grid::Grid::new(owner, selected, choice == 3));
                 *focus = InputFocus::Furniture;
             }
-            2 if room.runtime.actors[owner]
-                .as_ref()
-                .is_some_and(|a| a.switch_bit != 0) =>
-            {
-                switch(room, owner, false)
+            2 => {
+                let actor = room.runtime.actors[owner].as_ref();
+                let on = actor.is_some_and(|a| a.switch_bit != 0);
+                let item = actor.map_or(0, |a| a.items[0]);
+                if on || registered(room, item) {
+                    switch(room, owner, !on);
+                    crate::sound::se(if on { 0x17 } else { 0x16 });
+                } else {
+                    notice(dialogue, room, focus, "Choose a registered song first.");
+                }
             }
             _ => {}
         },

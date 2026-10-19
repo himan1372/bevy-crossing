@@ -529,3 +529,14 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   awaits weather. See backlog/music-presentation-toys.md; new presentation/toy
   acceptance remains pending, while playback acceptance is recorded separately.
 
+  2026-10-18 Codex music-source-fidelity (Philip explicitly chose item3): M marking
+  and source ordered/partial take-out, original pulsing mark assets, panel motion
+  and cloth scrolling, placement-time registered selection/off state, front-only
+  home interaction and Start/Stop. Runtime DOL taps now feed source subtrack
+  filter commands and per-voice CPU convolution; old-device hiss shares existing
+  ambience with pinwheels. See backlog/music-source-fidelity.md for bounded checks
+  and final gates. Exact hardware DSP/remaining window animation and weather wind
+  remain open, along with Philip acceptance, M4 and migration. Roadmap.html now
+  records implementation separately from acceptance and proposes remaining room
+  item families/decorating next; net appearance stays deferred.
+  Final music-source-fidelity gates pass: check/clippy/fmt/capture/default/release (2m57s), no tests; disposable source/transaction/visual/audio and no-disc checks recorded in task. Actual save unchanged. New feature acceptance remains pending; release claim and publish.

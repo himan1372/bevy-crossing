@@ -19,6 +19,31 @@ const SEQ: usize = 0;
 const BANK: usize = 1;
 const WAVE: usize = 2;
 
+/// memory.c Nas_SetBPFilter: indices are signed-16 table entries, exactly as C.
+/// No generated cutoff curve or embedded disc coefficients.
+fn music_filter(rom: &RomImage, catalog: &AssetCatalog, status: u8) -> Option<[i16; 8]> {
+    let b = (status >> 4) as usize;
+    let c = (status & 15) as usize;
+    let (name, index) = if b == 0 || c == 0 {
+        ("LSF_TABLE", b.max(c) * 8)
+    } else if b != c {
+        let lo = b.min(c);
+        let k: usize = (2..=lo).map(|i| 16 - i).sum();
+        (
+            if c > b { "EL_FILTER" } else { "BP_FILTER" },
+            b.abs_diff(c) - 1 + k,
+        )
+    } else {
+        return None;
+    };
+    let asset = catalog.get(name)?;
+    let bytes = rom.slice(asset.source, asset.offset, asset.size)?;
+    let bytes = bytes.get(index * 2..index * 2 + 16)?;
+    Some(std::array::from_fn(|i| {
+        i16::from_be_bytes([bytes[i * 2], bytes[i * 2 + 1]])
+    }))
+}
+
 pub struct SoundRom {
     pub sequences: Vec<ArcEntry>,
     pub banks: Vec<ArcEntry>,
@@ -30,6 +55,7 @@ pub struct SoundRom {
     rom: Vec<u8>,
     /// Runtime DOL metadata for sequence-248 melody fragments.
     melodies: Vec<(u32, u32)>,
+    music_filters: [Option<[i16; 8]>; 2],
 }
 
 impl SoundRom {
@@ -45,6 +71,10 @@ impl SoundRom {
         let data = table("AudiodataHeaderStart")?;
         let map = catalog.get("AudiomapHeaderStart")?;
         Some(SoundRom {
+            music_filters: [
+                music_filter(rom, catalog, 0x30),
+                music_filter(rom, catalog, 0xE3),
+            ],
             sequences: table("AudioseqHeaderStart")?,
             banks: table("AudiobankHeaderStart")?,
             waves: table("AudiowaveHeaderStart")?,
@@ -257,6 +287,13 @@ impl DiscSound {
 }
 
 impl SoundData for DiscSound {
+    fn filter(&self, status: u8) -> Option<[i16; 8]> {
+        match status {
+            0x30 => self.rom.music_filters[0],
+            0xE3 => self.rom.music_filters[1],
+            _ => None,
+        }
+    }
     fn melody(&self, voice: usize) -> Option<Vec<u8>> {
         let &(offset, size) = self.rom.melodies.get(voice)?;
         let sequence = self.rom.sequence(248)?;

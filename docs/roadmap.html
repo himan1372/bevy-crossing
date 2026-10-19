@@ -75,9 +75,9 @@
       <span class="d" style="width:52.8%"></span><span class="p2" style="width:8.3%"></span><span class="pl" style="width:38.9%"></span>
     </div>
     <div class="counts">
-      <span><b id="count-done" style="color:var(--done)">38</b>implemented</span>
+      <span><b id="count-done" style="color:var(--done)">39</b>implemented</span>
       <span><b id="count-doing" style="color:var(--doing)">6</b>in progress</span>
-      <span><b id="count-planned" style="color:var(--plan)">28</b>planned</span>
+      <span><b id="count-planned" style="color:var(--plan)">27</b>planned</span>
     </div>
     <div class="legend">
       <span><span class="dot d-d"></span>Implemented</span>
@@ -93,13 +93,14 @@
   <p><strong>Music playback accepted:</strong> Philip reports &ldquo;music is good.&rdquo; The shared home collection, registration and playback remain in place.</p>
   <p><strong>Implemented: original music collection presentation.</strong> The disc's 11-by-5 song grid, masked cloth and frame, song icons, title, hand cursor and choice menu replace the paged list. Move with arrows/WASD; E or Enter opens Listen / Take out / Quit. Unregistered slots show ?????. Escape backs out. Playback now uses the source distance curve, stereo position and device gain classes.</p>
   <p><strong>Implemented: handheld fans and pinwheels.</strong> All eight fans and eight pinwheels use original handheld assets and player poses. In pockets choose Hold; hold E to fan, walk/run to spin a pinwheel, and press 3 to put it away. Held toys stay in pockets; placing/storing them clears the held view.</p>
+  <p><strong>Item 3 implemented: music source fidelity.</strong> M marks or unmarks songs. Choose a marked title to take out marked songs in title order, stopping when pockets fill; the rest stay registered. An unmarked title still acts alone. Original green marks, panel slide directions/speeds and scrolling cloth are in place. New players select a registered song and stay off; their front menu offers Start / Stop. Older devices now use disc-read filter coefficients and the original hiss sound through the existing mixer.</p>
   <p><strong>Try it:</strong> inside your house, F1 adds a fan and pinwheel if two pockets are empty. F2 adds K.K. Love Song to one empty pocket. Face a music player empty-handed and press E to register or browse songs.</p>
-  <p><strong>Awaiting Philip:</strong> the new music-grid visuals, speaker positioning and toy use, plus recent loose-item/furniture movement slices. Accepted music playback does not close all audio or M4.</p>
+  <p><strong>Awaiting Philip:</strong> music-grid visuals/transitions, speaker positioning, device filters/hiss and toy use, plus recent loose-item/furniture movement slices. Accepted music playback does not close all audio or M4. Filtering uses the original taps in the CPU mixer; exact hardware rounding/resampling and full warning/choice-window animation remain broader fidelity work.</p>
   <p><strong>Codex proposes this order next</strong> (planned, not started):</p>
   <ol>
     <li><strong>Remaining room item families:</strong> audit clothing, umbrellas and tools before adding their original furniture conversions and actions.</li>
     <li><strong>Room decorating:</strong> wallpaper/carpet changes, followed by special furniture behavior and diary writing.</li>
-    <li><strong>Source fidelity follow-ups:</strong> music multi-mark take-out and submenu transitions, source song selection on placement, hardware device filters/hiss; environmental wind once weather exists.</li>
+    <li><strong>Further retail comparison:</strong> compare the new music/toy presentation and audio; exact hardware DSP and remaining window animation remain open. Environmental pinwheel wind follows the weather system.</li>
     <li><strong>Finish M4 acceptance:</strong> remaining pockets/mail/shop/pause/HUD and audio/render checks, then M5 playtest, fixes and Windows release.</li>
   </ol>
   <p><strong>Deferred by Philip:</strong> held-net appearance, title screen and rename work.</p>
@@ -199,7 +200,7 @@
     <li class="item done"><span class="it">Loose-item system: diaries, stationery, fruit, shells, mushrooms, candy, money, turnips, music discs, pinwheels, fans</span><span class="det">Original models, IDs, placement/pickup/save/refusal rules. Recent additions await Philip acceptance.</span></li>
     <li class="item done"><span class="it">Room music-player registration, selection, stop and song take-out</span><span class="det">Shared 55-title home collection; original disc sequences; per-device selection/switch save, atomic duplicate/full-pocket refusal. Philip accepts playback. New original-grid and speaker-position presentation await comparison.</span></li>
     <li class="item done"><span class="it">Original music grid, cursor and speaker positioning</span><span class="det">11-by-5 grid, disc frame/cloth/icons/title, source hand and choice menu; original distance/pan/device gain. All 16 constructors use static menu opening (0,0), so no invented lid animation. Presentation acceptance pending.</span></li>
-    <li class="item planned"><span class="it">Music-player source fidelity follow-ups</span><span class="det">Multi-mark take-out, submenu movement/cloth timing, original placement selection and hardware device filters/hiss remain. Philip accepts music playback.</span></li>
+    <li class="item done"><span class="it">Music-player source fidelity follow-ups</span><span class="det">M marking, ordered partial take-out with leftovers preserved, original mark assets, panel slides/cloth, placement song selection with power off, front contact and Start / Stop. Source 0x30/0xE3 filters read their taps from the disc; source 0x4E hiss shares the existing mixer. New behavior awaits Philip; exact DSP and full warning/choice-window animation remain open.</span></li>
     <li class="item done"><span class="it">Eight fans and eight pinwheels: holding and use</span><span class="det">Original handheld models/player poses. Hold E to fan; movement spins pinwheels with coasting and source sounds. 3 puts away. F1 home-only playtest grant; ownership/reload cleanup checked. Philip acceptance pending; weather-driven wind separate.</span></li>
     <li class="item planned"><span class="it">Remaining room item conversions, decorating and special furniture actions</span><span class="det">Codex proposed: audit clothing/umbrella/tool families, wallpaper/carpet, then diary writing and remaining per-type behavior.</span></li>
     <li class="item planned"><span class="it">Review 90 overlapping Rustimal modules individually</span><span class="det">Inventory snapshot: 88 differ, two match. Compare callers and original C against pinned source 122867f; no wholesale merge or schedule estimate.</span></li>
