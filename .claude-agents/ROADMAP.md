@@ -682,3 +682,14 @@ G_SETTILESIZE origin. Balloons place again with original sway/switch kick.
 All G_TEXTURE_GEN lists (tank/cage glass, clocks, mirrors, cabinets, statues)
 use it; strings stay cut as in emu64 alpha_compare. Evidence in
 backlog/texgen-reflection.md; Philip visual acceptance pending.
+
+2026-10-19 Codex turkey-tv: fifth TV iam_iku_turkey_TV (index4B9/item32E4)
+uses the existing TV/E/native switch/ambience/save paths. Only TV adapter/native
+kernel changed; Claude's room-insect/audio files untouched. Original opaque
+model_b then model_a and CI4 16x16 f/g/h/i screens decoded from the disc.
+Turkey phase advances modulo24 even while off, g/h/i/h every6 ticks while on;
+other four TVs retain powered-only two-tick table timing. Level sound5E and
+switch16/17 use existing generic routing. No new UI/schema. See
+backlog/turkey-tv.md for evidence and validation limits. Existing TV roadmap
+item extended; tracked counts remain83 items50 implemented6 doing27 planned.
+Philip visual/audio acceptance and broader M4/migration remain open.

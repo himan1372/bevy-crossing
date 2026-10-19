@@ -5,6 +5,10 @@
 furniture inventory, implementation, runtime check or Philip acceptance.
 No gameplay files, builds, previews, tests or user saves were touched.
 
+Follow-up: the turkey-TV implementation is now recorded in
+[its task note](../.claude-agents/backlog/turkey-tv.md). The audit below
+retains its original source snapshot; electric fan is the next candidate.
+
 ## Source and lookup method
 
 Original C root: `C:/Users/phili/game c/shmanimal crossing/ACGC-PC-Port`.

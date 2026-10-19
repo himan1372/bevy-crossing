@@ -253,3 +253,5 @@
 {"action":"claim","task":"room-insect-audio","agent":"claude","timestamp":"2026-10-19T21:43:16Z"}
 {"action":"claim","task":"furniture-callback-audit","agent":"codex","timestamp":"2026-10-19T22:18:10Z"}
 {"action":"release","task":"furniture-callback-audit","agent":"codex","timestamp":"2026-10-19T22:21:57Z"}
+{"action":"claim","task":"turkey-tv","agent":"codex","timestamp":"2026-10-19T22:23:32Z"}
+{"action":"release","task":"turkey-tv","agent":"codex","timestamp":"2026-10-19T22:36:40Z"}

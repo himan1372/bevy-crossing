@@ -10,6 +10,7 @@ pub(crate) fn kind(profile: &str) -> Option<Television> {
         "sum_tv02" => Television::Tv02,
         "sum_fruittv01" => Television::Fruit,
         "kon_snowtv" => Television::Snow,
+        "iku_turkey_TV" => Television::Turkey,
         _ => return None,
     })
 }
@@ -20,6 +21,16 @@ pub(crate) fn kind(profile: &str) -> Option<Television> {
 fn asset_names(profile: &str) -> Option<([String; 2], Vec<String>)> {
     let kind = kind(profile)?;
     let base = profile.strip_prefix("iam_")?;
+    // fITT_dw draws the screen before the body; its four CI4 16x16
+    // textures use a different naming scheme from front*_TA and snow's07*.
+    if matches!(kind, Television::Turkey) {
+        return Some((
+            ["model_b_model", "model_a_model"].map(|suffix| format!("int_{base}_{suffix}")),
+            ["f", "g", "h", "i"]
+                .map(|frame| format!("int_{base}_{frame}_tex_txt"))
+                .into(),
+        ));
+    }
     let (models, screens) = if matches!(kind, Television::Snow) {
         (
             ["face_model", "body_model"],
@@ -77,9 +88,7 @@ pub(crate) struct TelevisionRig {
 impl TelevisionRig {
     pub(crate) fn update(&mut self, on: bool, seconds: f32, materials: &mut Assets<N64Material>) {
         self.on = on;
-        if on {
-            self.ticks = self.kind.advance(self.ticks, seconds);
-        }
+        self.ticks = self.kind.advance(self.ticks, seconds, on);
         let screen = self.kind.screen(on, self.ticks);
         if self.screen == screen {
             return;
