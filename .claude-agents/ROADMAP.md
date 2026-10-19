@@ -705,3 +705,17 @@ catch-up capped4 as existing adapters. See backlog/electric-fan.md for source,
 Temp behavioral evidence and gate limitations. Fan item added:84 tracked items,
 51 implemented6 in progress27 planned; not overall completion. Philip visual/
 audio acceptance/M4/migration and Claude's insect task remain open.
+
+2026-10-19 Codex gong-actions: source iam_nog_gong (boxing bell,index4EE,
+item33B8) now has stopped-only E strike174 and exact double-play cKF control
+order, using the shared skinned builder. Ringside wall65 adds singleton817E
+and source FLASHC240/FLASH5 timing, back-wall random camera sprites and upward
+diffuse light. Cached disc sparkle mesh and scoped classic IA8 row conversion/
+tile metadata leave the global texture decoder unchanged. New effect uniform
+is zero outside this room effect. Flash light registration's source parameter
+order retained, including early reset; adapter uses its own cosmetic random
+stream/100-slot gong cap, not retail's global effect pool. Retail shadow-alpha
+response remains a fidelity limit. Pause freezes effects; load/scene exit clear
+them; no effect state serialized. Temp checks in backlog/gong-actions.md.
+New tracked bell item:85 total52 implemented6 doing27 planned; Philip visual/
+audio acceptance, M4/migration and Claude's insect task remain open.

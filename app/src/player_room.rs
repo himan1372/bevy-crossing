@@ -188,6 +188,9 @@ impl PlayerRoom {
             .is_some_and(Option::is_some)
             && !self.presentation.animating(piece.slot)
     }
+    pub(crate) fn ringside_wall(&self) -> bool {
+        self.decoration.is_some_and(|d| d.wall == 65)
+    }
     pub(crate) fn diary_open(&self) -> bool {
         self.diary_ui.is_some()
     }
@@ -1035,12 +1038,13 @@ fn interact(
             crate::sound::se_at(if on { 0x16 } else { 0x17 }, at);
         }
     } else if room.runtime.actors[slot].as_ref().is_some_and(|a| {
-        (ftr::special_furniture::BALLOON_COMMON0..=ftr::special_furniture::BALLOON_COMMON7)
-            .contains(&a.name)
+        crate::furniture::gong::is_gong(a.name)
+            || (ftr::special_furniture::BALLOON_COMMON0..=ftr::special_furniture::BALLOON_COMMON7)
+                .contains(&a.name)
     }) && actions.consume(Action::Interact)
     {
         // aMR_FtrIdx2ChangeFtrSwitch's generic branch: toggle the bit
-        // silently; fNBC_mv reacts to the change by speeding up.
+        // silently; the balloon/gong callback supplies its own reaction.
         let room = &mut *room;
         if let Some(actor) = room.runtime.actors[slot].as_mut() {
             ftr::toggle_switch(actor, &mut room.layers[actor.layer]);
@@ -1268,8 +1272,18 @@ fn render_televisions(
 impl Plugin for PlayerRoomPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PlayerRoom>()
+            .init_resource::<crate::furniture::gong::Effects>()
             .add_plugins(diary::DiaryPlugin)
             .add_plugins(music_grid::MusicGridPlugin)
+            .add_systems(
+                Update,
+                crate::furniture::gong::update
+                    .after(refresh)
+                    .after(movement::animate_roots)
+                    .after(crate::save::LoadSet)
+                    .before(lighting::render)
+                    .in_set(GameplaySet),
+            )
             .add_systems(
                 Update,
                 crate::furniture::fan::update

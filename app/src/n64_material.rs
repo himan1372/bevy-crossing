@@ -182,6 +182,8 @@ pub struct EnvUniform {
     pub fog: Vec4,
     pub point_dir: Vec4,
     pub point_color: Vec4,
+    /// ef_flash's additional upward-facing diffuse light; black elsewhere.
+    pub effect_color: Vec4,
 }
 
 impl Default for EnvUniform {
@@ -197,6 +199,7 @@ impl Default for EnvUniform {
             fog: Vec4::new(1000.0, 1000.0, 0.0, 0.0),
             point_dir: Vec4::Y,
             point_color: Vec4::ZERO,
+            effect_color: Vec4::ZERO,
         }
     }
 }

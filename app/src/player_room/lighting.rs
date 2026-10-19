@@ -138,6 +138,7 @@ pub(super) fn advance(
 #[allow(clippy::too_many_arguments)]
 pub(super) fn render(
     room: Res<PlayerRoom>,
+    effects: Res<crate::furniture::gong::Effects>,
     current: Res<CurrentRoom>,
     house: Res<State<HouseState>>,
     table: Option<Res<LightTable>>,
@@ -162,7 +163,8 @@ pub(super) fn render(
     let light = &room.lighting.light;
     let now = crate::clock::now();
     let period = table.at(now.day_secs);
-    let base = period.switch_room_uniform(light.celestial_adjust());
+    let mut base = period.switch_room_uniform(light.celestial_adjust());
+    base.effect_color = Vec3::splat(effects.light()).extend(0.0);
     let point = light.point_light(MY_ROOM_S_POINT_LIGHT);
     let room_color = period.room.map(|c| c as u8);
     let prim = light.room_prim(room_color, MY_ROOM_S_POINT_LIGHT.color);
