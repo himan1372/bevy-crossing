@@ -665,3 +665,12 @@ RoomLight.percent. Native logic::room_sunshine. No save schema change; no-disc
 fallback unchanged. Weather dimming (x0.6) waits for weather simulation; other
 room scenes' sunshine variants not covered. Evidence/gates in
 backlog/room-sunshine.md; Philip visual acceptance, M4 and migration remain open.
+
+2026-10-19 claude room-critters-balloons (branch claude/focused-mayer-edf6d2,
+not merged): fish 0x2300..0x2327 -> aquariums 0x31A+n and insects 0x2D00..0x2D27
+-> cages 0x2F2+n per mRmTp, exact reverse pickup; native logic::furniture_rig
+(repeat frame, fNBC balloon speed) and app furniture::rigs shared skinned builder
+(clocks moved onto it). Callback critters stay in pockets (room-insect audio).
+Balloons deferred: G_TEXTURE_GEN reflection mapping is not rendered; their
+conversion/sway/switch logic is kept. Evidence in backlog/room-critters-balloons.md.
+Philip playtest, M4 and migration remain open.
