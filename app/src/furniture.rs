@@ -25,6 +25,7 @@ use crate::n64_material::N64Material;
 use crate::skeleton::{place_on_joints, Animation, Skeleton};
 
 pub(crate) mod clocks;
+pub(crate) mod fan;
 pub(crate) mod rigs;
 pub(crate) mod storage;
 pub(crate) mod television;
@@ -180,6 +181,9 @@ pub(crate) fn can_render(disc: &GameDisc, index: u16) -> bool {
     };
     if television::kind(&p.name).is_some() {
         return television::available(disc, &p);
+    }
+    if fan::is_fan(index) {
+        return fan::available(disc, &p);
     }
     if clocks::spec(&p.name).is_some() {
         return clocks::available(disc, &p);
@@ -378,6 +382,16 @@ pub fn spawn_furniture(
         .id();
 
     let mut segs = Segments::default();
+    if fan::is_fan(profile.index as u16) {
+        fan::spawn(
+            commands,
+            disc,
+            parent,
+            &profile,
+            (meshes, materials, images),
+        );
+        return Some(parent);
+    }
     if let Some(kind) = television::kind(&profile.name) {
         television::spawn(
             commands, disc, parent, &profile, kind, meshes, materials, images,

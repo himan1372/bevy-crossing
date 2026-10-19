@@ -693,3 +693,15 @@ switch16/17 use existing generic routing. No new UI/schema. See
 backlog/turkey-tv.md for evidence and validation limits. Existing TV roadmap
 item extended; tracked counts remain83 items50 implemented6 doing27 planned.
 Philip visual/audio acceptance and broader M4/migration remain open.
+
+2026-10-19 Codex electric-fan: iam_nog_fan01 (index22/item1088) now uses a
+native motor/delay kernel, source nog_fan skeleton alias and full decoded asset
+preflight. Three cached blade textures follow the six-frame US delay counter;
+skinned joints oscillate at eased speed0..0.5. E uses native saved switches and
+16/17 sounds; level1 motor routes through the existing four-source ambience
+mixer, with room/birth/pickup lifecycle gates. No save schema/UI changes.
+Source CALC_EASE(0.05) and US stopped signed-counter semantics retained; 60Hz
+catch-up capped4 as existing adapters. See backlog/electric-fan.md for source,
+Temp behavioral evidence and gate limitations. Fan item added:84 tracked items,
+51 implemented6 in progress27 planned; not overall completion. Philip visual/
+audio acceptance/M4/migration and Claude's insect task remain open.

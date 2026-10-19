@@ -7,7 +7,8 @@ No gameplay files, builds, previews, tests or user saves were touched.
 
 Follow-up: the turkey-TV implementation is now recorded in
 [its task note](../.claude-agents/backlog/turkey-tv.md). The audit below
-retains its original source snapshot; electric fan is the next candidate.
+retains its original source snapshot. The [electric fan](../.claude-agents/backlog/electric-fan.md)
+follow-up is also implemented; gong/slot are the next candidates.
 
 ## Source and lookup method
 

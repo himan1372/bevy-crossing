@@ -1023,11 +1023,10 @@ fn interact(
             }
         }
         music::begin(&mut room, &mut dialogue, &mut focus, slot);
-    } else if room.runtime.actors[slot]
-        .as_ref()
-        .and_then(|a| crate::furniture::television::item_kind(&disc, a.name))
-        .is_some()
-        && actions.consume(Action::Interact)
+    } else if room.runtime.actors[slot].as_ref().is_some_and(|a| {
+        crate::furniture::fan::is_fan(a.name)
+            || crate::furniture::television::item_kind(&disc, a.name).is_some()
+    }) && actions.consume(Action::Interact)
     {
         let at = presentation::actor_center(&room, room.runtime.actors[slot].as_ref().unwrap());
         let room = &mut *room;
@@ -1271,6 +1270,14 @@ impl Plugin for PlayerRoomPlugin {
         app.init_resource::<PlayerRoom>()
             .add_plugins(diary::DiaryPlugin)
             .add_plugins(music_grid::MusicGridPlugin)
+            .add_systems(
+                Update,
+                crate::furniture::fan::update
+                    .after(refresh)
+                    .after(movement::animate_roots)
+                    .after(crate::save::LoadSet)
+                    .in_set(GameplaySet),
+            )
             .add_systems(Startup, setup.after(crate::house::build_interior))
             .add_systems(Startup, sunshine::spawn.after(crate::house::build_interior))
             .add_systems(

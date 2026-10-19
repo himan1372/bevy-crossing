@@ -62,6 +62,7 @@ mod force_call;
 mod frame_loops;
 pub mod furniture;
 pub mod furniture_clock;
+pub mod furniture_fan;
 pub mod furniture_motion;
 pub mod furniture_rig;
 pub mod game_time;
