@@ -5,10 +5,19 @@ Continue in `C:/Users/phili/game c/bevy-crossing`, Windows PowerShell, branch
 never force push. His latest message controls the task. This file preserves
 continuity; it does not authorize starting every proposal below.
 
-Latest gameplay commit: `5cac5459` (clothing-to-mannequin room conversion).
+Latest gameplay commit: `2fae13d2` (ten furniture clocks and antique ticking).
 Latest skill updates: `d9117594` (top-level pair) and `c163b42f` (eight new project
 skills). Those commits are pushed. This handoff update is documentation only;
 there is no interrupted gameplay edit to resume.
+
+**NEXT INSTANCE: actually read the relevant `SKILL.md` files before implementation.**
+Reading this handoff or a skill catalog does not replace reading the skills.
+Finish the selected authorized task, required validation, task/comms/roadmap
+updates, claim release, commit and push before telling Philip what is next.
+If asked only to read this handoff, read the context and report the next proposal;
+a subsequent "le go" authorizes that bounded proposal. Do not silently begin
+every remaining roadmap item. All previous owned previews and Cargo processes
+are closed; historical task-note PIDs are not current process targets.
 
 ## Read before continuing
 
@@ -81,6 +90,12 @@ These entries describe implementation, not comprehensive Philip acceptance.
 | `c548e88b` | [Original music grid and handheld toys](../.claude-agents/backlog/music-presentation-toys.md), disc frame/font/cloth, fan use and pinwheel motion/sound. |
 | `79250311` | [Music source-fidelity follow-up](../.claude-agents/backlog/music-source-fidelity.md): M marking, ordered/partial take-out, panel/cloth motion, placement selection/off, front access/Start-Stop and disc-fed device filters/hiss. |
 | `5cac5459` | [Standard-shirt room conversion](../.claude-agents/backlog/clothing-room-conversion.md): `0x2400..0x24FE` to original mannequin indices `0x1EB..0x2E9`, exact shirt pickup after rotation. Reserved `0x24FF` and custom designs excluded. |
+| `6c405ca2` | [Umbrellas/tools](../.claude-agents/backlog/umbrella-tool-room.md): 32 standard umbrellas become original stands with exact reverse pickup. Normal/golden tools and worn axes remain loose with exact IDs; existing net/rod Hold retained. Custom designs/new tool actions excluded. |
+| `db6e3301` | [Room decorating](../.claude-agents/backlog/room-decorating.md): 71 standard wallpapers/carpets per bank, atomic slot swaps even with full pockets, original room textures and floor footsteps, optional saved decoration. Loose rolls support indices 0..66; shop patterns 67..70 decorate but unsupported loose models refuse. |
+| `8dcd0039` | [Monthly diary](../.claude-agents/backlog/diary-writing.md): shared 12-month notebook, original paper/font, bounded editing, Yes/Rewrite and optional saved diary independent of physical item pickup. Partial native port; full retail calendar/editor/locks remain open. |
+| `de9a704a` | [Three TVs](../.claude-agents/backlog/television-actions.md): E power, cached original screen cycles, positional audio and native saved switches for `sum_tv01`, `sum_tv02`, `sum_fruittv01`. Movement, turning and pickup preserve ownership/lifecycle. |
+| `76ba1b4a` | [Snowman TV and four lamps](../.claude-agents/backlog/snow-tv-lamp-draw.md): fourth TV power/screens/audio, full TV placement asset preflight and missing original opaque model parts for bla/whi/gre/hal lamps. Lamp callbacks are static; no lamp switch or illumination invented. |
+| `2fae13d2` | [Ten clocks](../.claude-agents/backlog/furniture-clocks.md): native local-time hand math, original half-speed cKF animation, extra snow/meza hand lists and antique positional ticking with room/presentation/pause/load gates. No configurable alarm or power action found in audited callbacks. |
 
 Earlier foundation remains: walkable home landing/facing-required exit, original
 wardrobe/drawer rigs, atomic diary/stationery/fruit/shell placement and pickup,
@@ -89,8 +104,14 @@ paths. The original blue bureau opens its bottom drawer only; this was verified
 against its model. Do not invent independent upper drawers.
 
 Recent gameplay slices passed check, warnings-denied all-target clippy, fmt and
-capture/default/release builds. The latest clothing slice also has disposable
-numeric, visual, refusal, F5/F9 and missing-disc evidence. No tests were added/run
+capture/default/release builds. The latest clock slice passed check (8.98s),
+clippy (24.90s), fmt, capture (1m01s), default (1m02s) and release (3m25s).
+Disposable checks cover all ten clock variants, F6 hour changes, minute
+continuity, authored motion, exact pause, F5/F9, placement/pickup, hidden/surface
+items, mixed powered-TV state, fresh launch and missing-disc numeric retention.
+Clear screenshots were inspected after repeating initially obscured views.
+Audio diagnostics settled to zero voices/nonfinite samples; this does not
+establish audible acceptance. No tests were added/run
 for these slices. Do not rerun builds for this documentation-only handoff or
 substitute old furniture-pilot test counts for current behavioral evidence.
 
@@ -99,8 +120,9 @@ audio report exactly: **"there is absolutely zero audio overlap."** Voices,
 accents and music-note playback also received positive feedback. No town tune
 is configured. These reports do not close all audio fidelity/lifecycle work.
 
-Clothing, recent loose-item/long-turn behavior, new music presentation/device
-effects and toy use still await the corresponding playtest acceptance. Earlier
+Clothing, umbrellas/tools, decorating, diary, TVs, lamp appearance, clocks,
+recent loose-item/long-turn behavior, new music presentation/device effects and
+toy use still await the corresponding playtest acceptance. Earlier
 placement/storage, bounded movement and birth/pickup presentation were accepted;
 entrance feedback was specifically that the walkable area is good. Repeated
 "next" authorizes progress, not blanket retail acceptance. M4 and migration
@@ -111,9 +133,13 @@ remain open; M5 follows acceptance/playtest, fixes and release work.
 Follow Philip's current request and prioritize reported defects. The current
 proposal in `docs/roadmap.html`, **planned and not started**, is:
 
-1. Audit umbrellas/tools and custom-design limits, then implement a bounded
-   source-correct room conversion/action slice using existing native kernels.
-2. Wallpaper/carpet decorating, then special furniture behavior and diary writing.
+1. Audit original room-light controls/illumination and remaining special furniture
+   callbacks, then select a bounded source-correct slice using native kernels.
+   Static lamp callbacks and on/off model names alone do not establish a power
+   action or a Bevy light. Audited clocks do not expose configurable alarms.
+2. Remaining fish/insects/balloons require source audits; custom designs require
+   player-pattern support. Further held-tool actions and full diary calendar,
+   editor presentation/contact pose and other-player locks are separate work.
 3. Further retail comparison of music/toys: exact hardware DSP/rounding/resampling
    and full warning/choice-window animation remain open. Pinwheel environmental
    wind depends on weather.
@@ -129,6 +155,10 @@ per-type furniture behavior still have fidelity limits described in task notes.
 Keep both roadmaps, the relevant task and comms current for gameplay changes.
 The HTML distinguishes implemented work from acceptance and proposed work;
 internal skill/handoff maintenance must not inflate gameplay progress counts.
+Current roadmap counts are 79 items: 46 implemented, 6 in progress, 27 planned.
+These are tracked-item counts, not a game completion percentage. Umbrellas,
+decorating, the bounded diary, four TVs and ten clocks are already implemented;
+do not restart those slices from the previous handoff's obsolete proposals.
 
 ## Architecture and invariants to preserve
 
@@ -150,7 +180,9 @@ internal skill/handoff maintenance must not inflate gameplay progress counts.
   (88 differing/2 matching), plus 27 Bevy-only paths. These are inventory counts,
   not the current remaining-work total. All nine graphics modules overlap.
 - Room save data includes four 16x16 layers, switches, owner-cell storage and
-  music collection. Missing `home_furniture` means legacy defaults; explicit
+  music collection, plus optional decoration and diary in the existing version-1
+  schema. Clock pose/phase are transient; no new clock save schema was added.
+  Missing `home_furniture` means legacy defaults; explicit
   empty means empty. Keep independent layer occupancy, bank/angle encoding,
   pocket conditions, quantities, wallet and hidden storage intact. F5 must not
   empty live actor storage. Refused transactions must not partially mutate it.
@@ -169,6 +201,10 @@ storage/music modules; `pockets.rs`, `pockets_disc.rs`, `save.rs`, `input.rs`,
 `sound_rom.rs`. Core native furniture paths: `logic/src/furniture.rs` and
 `logic/src/furniture_motion.rs`. Source authority and deeper per-task functions
 are documented in the skills/task notes; read the affected callers before edits.
+Recent entry points include `app/src/player_room/decorating.rs`,
+`app/src/player_room/diary.rs`, `app/src/furniture/television.rs`,
+`app/src/furniture/clocks.rs`, and the native `logic/src/diary.rs`,
+`logic/src/television.rs`, `logic/src/furniture_clock.rs` kernels.
 
 ## Working safely and efficiently
 
@@ -176,6 +212,7 @@ Claim one task through the **root** script, using your own identity:
 
 ```powershell
 & "C:/Program Files/Git/bin/bash.exe" task-claimer.sh my-task codex
+& "C:/Program Files/Git/bin/bash.exe" task-claimer.sh list-claimed
 & "C:/Program Files/Git/bin/bash.exe" task-claimer.sh claim <slug> codex
 & "C:/Program Files/Git/bin/bash.exe" task-claimer.sh release <slug> codex
 ```
@@ -203,6 +240,8 @@ BRP uses localhost:15702 and current `world.query`, `world.get_components`,
 `world.insert_components` methods plus `brp_extras/send_keys` and screenshot.
 Identify an existing listener before attaching. Query fresh entities after scene/
 reload; input calls schedule holds, so wait for settled state and modal dismissal.
+Preserve exact 64-bit entity IDs (for example, Python integers); do not round
+them through JavaScript numbers. Dismiss modals before using F9 in scenario setup.
 Inspect screenshots before claiming visual success; check numeric transactions
 separately. Keep evidence/helpers in Temp. Close only owned, verified processes;
 old task-note PIDs are historical evidence, never current stop targets.
@@ -222,6 +261,12 @@ need link/metadata/diff checks, not Cargo. Inspect actual build errors before
 changing profiles/toolchains or deleting caches. Earlier Windows failures were
 PDB/linker and unrelated capture-service memory pressure; old PID permissions do
 not authorize stopping new processes or changing services/page files.
+During the snow-TV work, metadata/OOM failures occurred under low available RAM
+and commit. Philip freed RAM and explicitly requested the original build plan;
+normal check/clippy/capture/default/release builds then passed. Clocks also passed
+with normal settings. No permanent profile/toolchain/dependency changes were
+needed. Preserve that preference; do not preemptively disable debug info or
+incremental compilation, delete caches, or stop user applications.
 
 Use tool escalation when the sandbox blocks required Git/Git Bash/GUI actions;
 standing commit/push authorization persists. Stage explicit task files, preserving
@@ -233,3 +278,6 @@ This handoff was updated at Philip's request. Keep implementation turns focused
 on the selected task; rewrite this file again when requested or when an actual
 handoff needs it. Finish with current evidence, remaining limits and ownership
 released; do not invent acceptance or silently start the next proposal.
+Complete all authorized repository work and confirm publication/status first,
+then tell Philip the next concrete step. At this handoff the next proposal is
+the original room-light control/illumination audit, not another clock alarm UI.
