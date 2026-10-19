@@ -1,10 +1,11 @@
-//! US ac_sum_tv01/ac_sum_tv02/ac_sum_fruittv01 move/draw callbacks.
+//! US ac_sum_tv01/ac_sum_tv02/ac_sum_fruittv01/ac_kon_snowtv callbacks.
 //! Frames advance at 60 Hz only while powered. Each table entry lasts two ticks.
 #[derive(Clone, Copy)]
 pub enum Television {
     Tv01,
     Tv02,
     Fruit,
+    Snow,
 }
 
 impl Television {
@@ -13,6 +14,7 @@ impl Television {
             Self::Tv01 => 5,
             Self::Tv02 => 4,
             Self::Fruit => 6,
+            Self::Snow => 0x2B,
         }
     }
 
@@ -23,6 +25,10 @@ impl Television {
             ],
             Self::Tv02 => &[2, 2, 3, 3, 3],
             Self::Fruit => &[2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4],
+            Self::Snow => &[
+                2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4,
+                4, 4,
+            ],
         }
     }
 

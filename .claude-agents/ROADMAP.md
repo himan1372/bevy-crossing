@@ -608,3 +608,17 @@ backlog/television-actions.md for bounded evidence/gates and remaining limits.
 Philip playtest and audible acceptance/M4/migration remain open; deferred
 held-net appearance/title/rename remain untouched.
 Television final gates pass: workspace check/all-target clippy -D warnings/fmt/capture47.74s/default43.29s/release3m08s, no tests. Three TV variants, exact state/F5-F9/fresh/no-disc, cached screen visuals, powered movement/turns, surface/pickup, independent sources and scene audio retirement checked in Temp. Actual save unchanged; Philip visual/audio acceptance pending.
+
+2026-10-19 Codex snow-tv-lamp-draw: kon_snowtv joins the existing TV/native
+switch path with original US60 powered ticks,07a..d screens, face/body models
+and level0x2B. Complete model/screen preflight now matches the renderer for all
+four audited TVs, including the snowman's previously unsupported symbol names.
+Cached runtime images retain the existing animation/mixer/save architecture.
+Four lamps (bla/whi/gre/hal) now append omitted unique draw-callback model parts
+after registered profile lists, in original opaque stream/order. Lamp callbacks
+are static; no switch-dependent PointLight/room illumination is claimed. Source
+aMR_FurnitureLightSet reads global light data, not a per-lamp insertion path.
+No save schema changes. Details and bounded evidence/gates in
+backlog/snow-tv-lamp-draw.md. Philip visual/audio acceptance, M4 and migration
+remain open; net/title/rename deferrals unchanged.
+Snow-TV/lamp final gates pass: workspace check11.33s/all-target clippy -D warnings11.51s/fmt/capture23.51s/default21.18s/release2m39s, all original settings after Philip freed RAM; no tests. Exact placement/power/movement/pickup/F5-F9/fresh/no-disc and older-TV regressions, lamp/TV screenshots and audio scene retirement in task. Actual save unchanged; Philip visual/audio acceptance remains pending.

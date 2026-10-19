@@ -1,4 +1,4 @@
-//! Three audited US television callbacks; all assets decoded from the disc.
+//! Audited US television callbacks; all assets decoded from the disc.
 use super::*;
 use crate::disc_gfx::decode_texture;
 use crate::n64_material::{texture_image, CombinerUniform};
@@ -9,7 +9,53 @@ pub(crate) fn kind(profile: &str) -> Option<Television> {
         "sum_tv01" => Television::Tv01,
         "sum_tv02" => Television::Tv02,
         "sum_fruittv01" => Television::Fruit,
+        "kon_snowtv" => Television::Snow,
         _ => return None,
+    })
+}
+
+/// Symbol differences are explicit: the snowman uses face/body and07a..d,
+/// unlike the other sets' on/off parts and front1..4. Neither model name
+/// denotes a mutually exclusive power state; both parts are always drawn.
+fn asset_names(profile: &str) -> Option<([String; 2], Vec<String>)> {
+    let kind = kind(profile)?;
+    let base = profile.strip_prefix("iam_")?;
+    let (models, screens) = if matches!(kind, Television::Snow) {
+        (
+            ["face_model", "body_model"],
+            ["07a", "07b", "07c", "07d"].as_slice(),
+        )
+    } else if matches!(kind, Television::Tv02) {
+        (
+            ["on_model", "off_model"],
+            ["_front1", "_front2", "_front3"].as_slice(),
+        )
+    } else {
+        (
+            ["on_model", "off_model"],
+            ["_front1", "_front2", "_front3", "_front4"].as_slice(),
+        )
+    };
+    Some((
+        models.map(|suffix| format!("int_{base}_{suffix}")),
+        screens
+            .iter()
+            .map(|suffix| format!("int_{base}{suffix}_TA_tex_txt"))
+            .collect(),
+    ))
+}
+
+/// Placement and rendering use the same complete model/screen asset set.
+pub(super) fn available(disc: &GameDisc, profile: &Profile) -> bool {
+    let Some((models, screens)) = asset_names(&profile.name) else {
+        return false;
+    };
+    models.iter().chain(&screens).all(|name| {
+        disc.catalog.get(name).is_some_and(|asset| {
+            disc.rom
+                .slice(RomSource::Rel, asset.offset, asset.size)
+                .is_some()
+        })
     })
 }
 
@@ -59,34 +105,28 @@ pub(super) fn spawn(
     images: &mut Assets<Image>,
 ) {
     let base = profile.name.trim_start_matches("iam_");
-    let lists: Vec<_> = ["on_model", "off_model"]
-        .into_iter()
-        .filter_map(|suffix| {
-            disc.catalog
-                .get(&format!("int_{base}_{suffix}"))
-                .map(|a| a.offset)
-        })
-        .collect();
-    let count = if matches!(kind, Television::Tv02) {
-        3
-    } else {
-        4
+    let Some((models, screens)) = asset_names(&profile.name) else {
+        return;
     };
-    let segments: Vec<_> = (1..=count)
-        .filter_map(|frame| {
-            let asset = disc
-                .catalog
-                .get(&format!("int_{base}_front{frame}_TA_tex_txt"))?;
+    let lists: Option<Vec<_>> = models
+        .iter()
+        .map(|name| disc.catalog.get(name).map(|a| a.offset))
+        .collect();
+    let segments: Option<Vec<_>> = screens
+        .iter()
+        .map(|name| {
+            let asset = disc.catalog.get(name)?;
             let bytes = disc.rom.slice(RomSource::Rel, asset.offset, asset.size)?;
             let mut segments = Segments::default();
             segments.set_segment(8, Arc::from(bytes));
             Some(segments)
         })
         .collect();
-    if segments.len() != count {
-        warn!("incomplete television screen assets for {base}");
+    let (Some(lists), Some(segments)) = (lists, segments) else {
+        warn!("incomplete television assets for {base}");
         return;
-    }
+    };
+    let count = segments.len();
     let mut screens = Vec::new();
     for part in &run_display_lists(&disc.rom, &lists).parts {
         let frames: Vec<_> = part.key.tex.as_ref().map_or_else(Vec::new, |key| {

@@ -176,6 +176,9 @@ pub(crate) fn can_render(disc: &GameDisc, index: u16) -> bool {
     let Some(p) = read_profile(disc, u32::from(index)) else {
         return false;
     };
+    if television::kind(&p.name).is_some() {
+        return television::available(disc, &p);
+    }
     if !p.opaque.is_empty() || !p.translucent.is_empty() || profile_skeleton(disc, &p).is_some() {
         return true;
     }
@@ -297,6 +300,23 @@ fn drawn_lists(disc: &GameDisc, profile: &Profile, segs: &mut Segments) -> (Vec<
     )
 }
 
+/// aMR_DrawRegistModel is followed by the profile's unique draw callback.
+/// These four lamp callbacks append static lists to POLY_OPA_DISP, including
+/// the T-named parts. They do not branch on switch_bit or create a light.
+fn lamp_draw_extras(disc: &GameDisc, profile: &Profile) -> Vec<u32> {
+    let names: &[&str] = match profile.name.as_str() {
+        "iam_sum_bla_lanp" => &["int_sum_bla_lanp_off_model", "int_sum_bla_lanp_offT_model"],
+        "iam_sum_whi_lanp" => &["int_sum_whi_lanp_offT_model"],
+        "iam_sum_gre_lanp01" => &["int_sum_gre_lanp01_offT_model"],
+        "iam_sum_hal_lanp01" => &["int_sum_hal_lanp01_offT_model"],
+        _ => &[],
+    };
+    names
+        .iter()
+        .filter_map(|name| disc.catalog.get(name).map(|a| a.offset))
+        .collect()
+}
+
 /// How high things put on furniture `item` stand, in room units.
 pub fn top_height(disc: &GameDisc, item: u16) -> f32 {
     furniture_index(item)
@@ -379,7 +399,9 @@ pub fn spawn_furniture(
     } else if profile.opaque.is_empty() && profile.translucent.is_empty() {
         drawn_lists(disc, &profile, &mut segs)
     } else {
-        (profile.opaque.clone(), profile.translucent.clone())
+        let mut opaque = profile.opaque.clone();
+        opaque.extend(lamp_draw_extras(disc, &profile));
+        (opaque, profile.translucent.clone())
     };
     let assets = (&mut *meshes, &mut *materials, &mut *images);
     if !opaque.is_empty() || !translucent.is_empty() {
