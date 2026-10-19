@@ -540,3 +540,14 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   records implementation separately from acceptance and proposes remaining room
   item families/decorating next; net appearance stays deferred.
   Final music-source-fidelity gates pass: check/clippy/fmt/capture/default/release (2m57s), no tests; disposable source/transaction/visual/audio and no-disc checks recorded in task. Actual save unchanged. New feature acceptance remains pending; release claim and publish.
+  2026-10-19 Codex clothing-room-conversion: standard shirts2400..24FE now
+  Place in room as original mannequin furniture1EB..2E9 with disc shirt textures.
+  Native conversion helpers reverse pickup after rotation, placement/model guard
+  and cloned-pocket transactions reused; original clothing icon2 presentation,
+  movement/save and hidden storage stay intact. Reserved24FF/custom designs
+  excluded. Temp previews verify first/middle/last, rotations/live push-pull-turn,
+  F5/F9, stored/conditioned shirts and full/blocked refusals; no-disc preserves
+  numeric gallery. See backlog/clothing-room-conversion.md for final gates.
+  Philip playtest/M4/migration remain open. Roadmap proposes umbrellas/tools next,
+  then wallpaper/carpet and remaining special behavior; net appearance deferred.
+  Clothing final gates pass: check/all-target clippy/fmt/capture/default/release (2m38s), no tests; live source/numeric/no-disc checks and roadmap browser evidence in task. Actual save unchanged; Philip acceptance pending. Release claim and publish.

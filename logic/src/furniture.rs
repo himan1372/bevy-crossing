@@ -1251,6 +1251,22 @@ pub fn pickup_visual_scale(ticks: f32) -> f32 {
     }
 }
 
+/// mRmTp_Item1ItemNo2FtrItemNo_AtPlayerRoom: standard shirts only.
+/// 0x24FF is ITM_CLOTH_MANEKIN, not a wearable shirt; designs are separate.
+pub fn clothing_to_furniture(item: u16) -> Option<u16> {
+    (0x2400..0x24FF)
+        .contains(&item)
+        .then(|| ftr_idx_2_item_no(0x1EB + item - 0x2400, Direction::South))
+}
+
+/// mRmTp_FtrItemNo2Item1ItemNo: discard mannequin orientation, retain design.
+pub fn clothing_from_furniture(item: u16) -> Option<u16> {
+    let (index, _) = ftr_item_no_2_idx_dir(item)?;
+    (0x1EB..0x2EA)
+        .contains(&index)
+        .then(|| 0x2400 + index - 0x1EB)
+}
+
 /// aMR_ItemNo2IconNo, using the retail item-number enum ranges. The display
 /// lists themselves come from the runtime aMR_icon_display_data table.
 pub fn furniture_icon(item: u16) -> usize {

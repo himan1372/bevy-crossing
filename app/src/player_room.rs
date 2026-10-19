@@ -275,6 +275,7 @@ impl PlayerRoom {
         facing: Vec3,
         disc: &GameDisc,
     ) -> Result<usize, &'static str> {
+        let item = ftr::clothing_to_furniture(item).unwrap_or(item);
         let (idx, _) = ftr::ftr_item_no_2_idx_dir(item).ok_or("That isn't furniture.")?;
         let p = self
             .profiles
@@ -395,7 +396,9 @@ impl PlayerRoom {
         {
             return Err("Take the things off the top first.");
         }
-        let mut received = vec![ftr::ftr_idx_2_item_no(actor.name, Direction::South)];
+        let furniture_item = ftr::ftr_idx_2_item_no(actor.name, Direction::South);
+        let mut received =
+            vec![ftr::clothing_from_furniture(furniture_item).unwrap_or(furniture_item)];
         // A music player's selected title refers to the shared collection;
         // it is not another owned copy to return with the furniture leaf.
         received.extend(
@@ -506,7 +509,9 @@ pub(crate) fn can_store(item: u16, condition: u32) -> bool {
 }
 
 pub(crate) fn can_place_in_room(item: u16) -> bool {
-    crate::items::is_furniture(item) || loose::supports(item)
+    crate::items::is_furniture(item)
+        || ftr::clothing_to_furniture(item).is_some()
+        || loose::supports(item)
 }
 
 fn setup(
@@ -635,8 +640,13 @@ fn interact(
                             .map(|a| (slot, a))
                     }) {
                         let at = presentation::actor_center(&room, &actor);
-                        room.presentation
-                            .birth(slot, item, at, transform.translation, facing.dir);
+                        room.presentation.birth(
+                            slot,
+                            ftr::clothing_to_furniture(item).unwrap_or(item),
+                            at,
+                            transform.translation,
+                            facing.dir,
+                        );
                     }
                 })
             }
