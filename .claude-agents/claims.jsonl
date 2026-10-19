@@ -250,3 +250,6 @@
 {"action":"release","task":"room-critters-balloons","agent":"claude","timestamp":"2026-10-19T20:53:59Z"}
 {"action":"claim","task":"texgen-reflection","agent":"claude","timestamp":"2026-10-19T21:22:31Z"}
 {"action":"release","task":"texgen-reflection","agent":"claude","timestamp":"2026-10-19T21:40:41Z"}
+{"action":"claim","task":"room-insect-audio","agent":"claude","timestamp":"2026-10-19T21:43:16Z"}
+{"action":"claim","task":"furniture-callback-audit","agent":"codex","timestamp":"2026-10-19T22:18:10Z"}
+{"action":"release","task":"furniture-callback-audit","agent":"codex","timestamp":"2026-10-19T22:21:57Z"}
