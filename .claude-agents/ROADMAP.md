@@ -674,3 +674,11 @@ not merged): fish 0x2300..0x2327 -> aquariums 0x31A+n and insects 0x2D00..0x2D27
 Balloons deferred: G_TEXTURE_GEN reflection mapping is not rendered; their
 conversion/sway/switch logic is kept. Evidence in backlog/room-critters-balloons.md.
 Philip playtest, M4 and migration remain open.
+
+2026-10-19 claude texgen-reflection: emu64 texture_gen ported (world normal on
+s8 camera right/up look-at axes, gSPTexture scale/64, settile shift, size
+origin, size); decoder now records G_TEXTURE scale, settile shifts and
+G_SETTILESIZE origin. Balloons place again with original sway/switch kick.
+All G_TEXTURE_GEN lists (tank/cage glass, clocks, mirrors, cabinets, statues)
+use it; strings stay cut as in emu64 alpha_compare. Evidence in
+backlog/texgen-reflection.md; Philip visual acceptance pending.

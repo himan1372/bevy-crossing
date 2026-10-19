@@ -195,6 +195,15 @@ pub struct TexKey {
     pub tlut_addr: u32,
 }
 
+/// `emu64::texture_gen` inputs for `G_TEXTURE_GEN` reflection mapping:
+/// the `gSPTexture` scales and tile 0's shifts and size origin.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct TexGen {
+    pub scale: (u16, u16),
+    pub shift: (u8, u8),
+    pub origin: (u16, u16),
+}
+
 /// Everything a group of triangles is drawn with.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct PartKey {
@@ -211,6 +220,8 @@ pub struct PartKey {
     /// Fogged: `G_FOG` on and the blender mixes in the fog colour
     /// (emu64 turns GX fog on only then).
     pub fog: bool,
+    /// Texture coordinates come from normals (`G_TEXTURE_GEN`).
+    pub texgen: Option<TexGen>,
 }
 
 /// Triangles sharing one [`PartKey`].
@@ -310,6 +321,11 @@ impl GxBackend for TriangleSink {
             lit: state.geometry_mode & geo::G_LIGHTING != 0,
             two_cycle: state.othermode.is_2cycle(),
             fog: state.geometry_mode & geo::G_FOG != 0 && state.othermode.blends_fog(),
+            texgen: (textured && state.tex_gen).then_some(TexGen {
+                scale: state.texture_scale,
+                shift: (tile.shift_s, tile.shift_t),
+                origin: (tile.sl, tile.tl),
+            }),
         });
     }
 

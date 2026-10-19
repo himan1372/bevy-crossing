@@ -12,6 +12,8 @@ struct Combiner {
     prim: vec4<f32>,
     env: vec4<f32>,
     extra: vec4<f32>,
+    // G_TEXTURE_GEN: uv = (s', t') * xy - zw.
+    texgen: vec4<f32>,
     flags: u32,
 };
 
@@ -22,6 +24,7 @@ const FLAG_NO_COMBINER: u32 = 8u;
 const FLAG_NO_SHADE: u32 = 16u;
 const FLAG_BLEND: u32 = 32u;
 const FLAG_FOG: u32 = 64u;
+const FLAG_TEXGEN: u32 = 2048u;
 const FLAG_OPAQUE: u32 = 128u;
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> cc: Combiner;
@@ -61,6 +64,18 @@ fn fog_amount(world_pos: vec3<f32>) -> f32 {
     let depth = dot(world_pos - view.world_position, forward) * GAME_UNITS;
     let range = max(env.fog.y - env.fog.x, 1.0);
     return clamp((depth - env.fog.x) / range, 0.0, 1.0);
+}
+
+// emu64 texture_gen: the world normal (modelview here holds only model
+// matrices) projected on the look-at axes guLookAtHilite stores as s8
+// fractions: X = camera right, Y = camera up.
+fn texgen_uv(n: vec3<f32>) -> vec2<f32> {
+    // FTOFRAC8: (s8)MIN(x * 128, 127), truncating.
+    let q = 128.0;
+    let right = min(trunc(normalize(view.world_from_view[0].xyz) * q), vec3(127.0)) / q;
+    let up = min(trunc(normalize(view.world_from_view[1].xyz) * q), vec3(127.0)) / q;
+    let st = vec2(dot(right, n), dot(up, n)) * 0.5 + 0.5;
+    return st * cc.texgen.xy - cc.texgen.zw;
 }
 
 struct Inputs {
@@ -143,7 +158,11 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     var i: Inputs;
     i.texel = vec4(1.0);
     if (cc.flags & FLAG_TEXTURED) != 0u {
-        i.texel = textureSample(tex, tex_sampler, in.uv + cc.extra.yz);
+        var uv = in.uv;
+        if (cc.flags & FLAG_TEXGEN) != 0u {
+            uv = texgen_uv(normalize(in.world_normal));
+        }
+        i.texel = textureSample(tex, tex_sampler, uv + cc.extra.yz);
     }
 
     // Shade: vertex colour, or the scene's ambient + sun + moon lights.

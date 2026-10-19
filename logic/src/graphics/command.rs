@@ -99,6 +99,7 @@ pub mod op {
     pub const G_RDPHALF_2: u8 = 0xF1;
     pub const G_SETTILE: u8 = 0xF5;
     pub const G_LOADTILE: u8 = 0xF4;
+    pub const G_SETTILESIZE: u8 = 0xF2;
     pub const G_LOADBLOCK: u8 = 0xF3;
     pub const G_SETTIMG: u8 = 0xFD;
     pub const G_SETCOMBINE: u8 = 0xFC;

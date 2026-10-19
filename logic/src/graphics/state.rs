@@ -98,6 +98,12 @@ pub struct TileState {
     pub wrap_t: u8,
     pub tlut: u8,
     pub img_addr: u32,
+    /// `settile_cmds[tile].shifts/shiftt` (Dolphin tiles copy theirs in).
+    pub shift_s: u8,
+    pub shift_t: u8,
+    /// `settilesize_dolphin_cmds[tile].sl/tl` (texel x4, plain sizes x4 again).
+    pub sl: u16,
+    pub tl: u16,
 }
 
 impl Default for TileState {
@@ -113,6 +119,10 @@ impl Default for TileState {
             wrap_t: 0,
             tlut: 0,
             img_addr: 0,
+            shift_s: 0,
+            shift_t: 0,
+            sl: 0,
+            tl: 0,
         }
     }
 }
@@ -180,6 +190,8 @@ pub struct GbiState {
     /// Texture-generation enables.
     pub tex_gen: bool,
     pub tex_gen_linear: bool,
+    /// `gSPTexture` s/t scales (0 = emu64's default).
+    pub texture_scale: (u16, u16),
     /// Scissor in game logical coordinates (not GX register coords).
     pub scissor: (u16, u16, u16, u16),
     pub dirty: DirtySet,
@@ -209,6 +221,7 @@ impl GbiState {
             tluts: [TlutState::default(); NUM_TLUTS],
             tex_gen: false,
             tex_gen_linear: false,
+            texture_scale: (0, 0),
             scissor: (0, 0, 640, 480),
             dirty: DirtySet::default(),
         }

@@ -369,6 +369,7 @@ impl Emu64 {
             }
             op::G_SETTIMG => self.h_settimg(gfx, pc),
             op::G_SETTILE => self.h_settile(gfx, pc),
+            op::G_SETTILESIZE => self.h_settilesize(gfx, pc),
             op::G_LOADTLUT => {
                 // The TLUT name is 4 bits (NUM_TLUTS = 16): retail data loads
                 // e.g. `f08f4010` (name 15) for tiles set with `tlut` 15.
@@ -384,7 +385,8 @@ impl Emu64 {
                 *pc += 1;
             }
             op::G_TEXTURE => {
-                // on/off + texel density; affects tile state only.
+                // on/off + texel density (emu64 keeps s/t for texture_gen).
+                self.state.texture_scale = ((gfx.w1 >> 16) as u16, gfx.w1 as u16);
                 self.state.dirty.mark(Dirty::Texture);
                 *pc += 1;
             }
@@ -675,7 +677,27 @@ impl Emu64 {
             let t = &mut self.state.tiles[tile];
             t.is_dolphin = false;
             t.img_addr = self.state.tex_image_addr;
+            // Gsettile w1: shiftS bits 0-3, shiftT bits 10-13.
+            t.shift_s = (gfx.w1 & 0xF) as u8;
+            t.shift_t = ((gfx.w1 >> 10) & 0xF) as u8;
             self.state.dirty.mark(Dirty::Texture);
+        }
+        *pc += 1;
+    }
+
+    /// `dl_G_SETTILESIZE`: the tile origin `texture_gen` subtracts. Dolphin
+    /// form (w1 bit 31) stores sl/tl as given; the N64 form multiplies by 4.
+    fn h_settilesize(&mut self, gfx: Gfx, pc: &mut usize) {
+        let tile = ((gfx.w1 >> 24) & 0x7) as usize;
+        if tile < self.state.tiles.len() {
+            let t = &mut self.state.tiles[tile];
+            if (gfx.w1 >> 31) & 1 != 0 {
+                t.sl = ((gfx.w0 >> 10) & 0x3FFF) as u16;
+                t.tl = ((gfx.w1 >> 10) & 0x3FFF) as u16;
+            } else {
+                t.sl = (((gfx.w0 >> 12) & 0xFFF) * 4) as u16;
+                t.tl = ((gfx.w0 & 0xFFF) * 4) as u16;
+            }
         }
         *pc += 1;
     }
@@ -698,6 +720,11 @@ impl Emu64 {
             t.wrap_t = ((w0 >> 8) & 0x3) as u8;
             t.tlut = ((w0 >> 12) & 0xF) as u8;
             t.img_addr = self.state.tex_image_addr;
+            t.shift_s = ((w0 >> 4) & 0xF) as u8;
+            t.shift_t = (w0 & 0xF) as u8;
+            // dl_G_SETTILE_DOLPHIN resets the tile size origin.
+            t.sl = 0;
+            t.tl = 0;
             self.state.dirty.mark(Dirty::Texture);
         }
         *pc += 1;

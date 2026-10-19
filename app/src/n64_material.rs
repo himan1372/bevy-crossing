@@ -22,7 +22,7 @@ use bevy::render::render_resource::{
 };
 use bevy::shader::ShaderRef;
 
-use crate::disc_gfx::{Part, PartKey, TexKey};
+use crate::disc_gfx::{Part, PartKey, TexGen, TexKey};
 
 /// N64 texture coordinates are s10.5 fixed point.
 pub const ST_ONE: f32 = 32.0;
@@ -48,6 +48,8 @@ pub const FLAG_GROUND_DECAL: u32 = 256;
 pub const FLAG_CULL_BACK: u32 = 512;
 /// Submenu portrait/cursor use mSM_change_view's fixed lights, not town time.
 pub(crate) const FLAG_MENU_LIGHTING: u32 = 1024;
+/// `G_TEXTURE_GEN`: texture coordinates from normals (see [`texgen_coefficients`]).
+pub const FLAG_TEXGEN: u32 = 2048;
 
 /// Mux selectors for one cycle: colour a b c d, alpha a b c d.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -89,6 +91,8 @@ pub struct CombinerUniform {
     pub env: Vec4,
     /// x = primitive LOD fraction, yz = animated texture UV offset.
     pub extra: Vec4,
+    /// Reflection mapping: uv = (s', t') * xy - zw.
+    pub texgen: Vec4,
     pub flags: u32,
 }
 
@@ -118,6 +122,10 @@ impl CombinerUniform {
         if key.fog {
             flags |= FLAG_FOG;
         }
+        let texgen = key.tex.zip(key.texgen).map_or(Vec4::ZERO, |(tex, gen)| {
+            flags |= FLAG_TEXGEN;
+            texgen_coefficients(gen, tex.width, tex.height)
+        });
         Self {
             color0: UVec4::from(c0.color),
             alpha0: UVec4::from(c0.alpha),
@@ -126,9 +134,36 @@ impl CombinerUniform {
             prim: rgba(key.prim),
             env: rgba(key.env),
             extra: Vec4::new(key.prim_lod as f32 / 255.0, 0.0, 0.0, 0.0),
+            texgen,
             flags,
         }
     }
+}
+
+/// `emu64::texture_gen`'s matrix chain after the look-at projection
+/// s' = 0.5 + 0.5 * (lookAtX . n): scale by `32768 / texture_scale`
+/// (`texture_scale` = 32 * 65536 / gSPTexture scale, or 32 when 0), divide by
+/// the tile shift factor, subtract the size origin / 16, divide by the size.
+pub fn texgen_coefficients(gen: TexGen, width: u16, height: u16) -> Vec4 {
+    let texels = |scale: u16| {
+        if scale == 0 {
+            32768.0 / 32.0
+        } else {
+            f32::from(scale) / 64.0
+        }
+    };
+    // shift_tbl: 0..=10 divide by 2^n, 11..=15 multiply by 2^(16-n).
+    let shift = |n: u8| match n {
+        0..=10 => f32::from(1u16 << n),
+        _ => 1.0 / f32::from(1u16 << (16 - n.min(15))),
+    };
+    let (w, h) = (f32::from(width.max(1)), f32::from(height.max(1)));
+    Vec4::new(
+        texels(gen.scale.0) / shift(gen.shift.0) / w,
+        texels(gen.scale.1) / shift(gen.shift.1) / h,
+        f32::from(gen.origin.0) / 16.0 / w,
+        f32::from(gen.origin.1) / 16.0 / h,
+    )
 }
 
 /// Scene lighting and fog (`m_kankyo.c`), shared by every material and
@@ -265,7 +300,13 @@ pub fn part_mesh(part: &Part, scale: f32) -> Mesh {
             .map(|v| v.color.map(|c| c as f32 / 255.0))
             .collect();
         mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
-        mesh.compute_flat_normals();
+        if part.key.texgen.is_some() {
+            // emu64 texture_gen reads the same vertex bytes as normals.
+            let normals: Vec<[f32; 3]> = v.iter().map(|v| v.normal).collect();
+            mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+        } else {
+            mesh.compute_flat_normals();
+        }
     }
     mesh
 }

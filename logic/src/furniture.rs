@@ -1367,11 +1367,10 @@ pub fn critter_has_callback(ftr_idx: u16) -> bool {
 }
 
 /// Supported conversions for room placement (source no_convert_tools TRUE).
-/// Balloons (`balloon_to_furniture`) are not offered yet: their head model is
-/// G_TEXTURE_GEN reflection-mapped, which the app renderer does not reproduce.
 pub fn room_item_to_furniture(item: u16) -> Option<u16> {
     clothing_to_furniture(item)
         .or_else(|| umbrella_to_furniture(item))
+        .or_else(|| balloon_to_furniture(item))
         .or_else(|| {
             insect_to_furniture(item)
                 .or_else(|| fish_to_furniture(item))

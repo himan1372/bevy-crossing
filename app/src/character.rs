@@ -329,7 +329,13 @@ pub(crate) fn skinned_part_mesh(part: &Part, own: usize, matrix_joints: &[usize]
             .map(|v| v.color.map(|c| c as f32 / 255.0))
             .collect();
         mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
-        mesh.compute_flat_normals();
+        if part.key.texgen.is_some() {
+            // emu64 texture_gen reads the same vertex bytes as normals.
+            let normals: Vec<[f32; 3]> = v.iter().map(|v| v.normal).collect();
+            mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+        } else {
+            mesh.compute_flat_normals();
+        }
     }
     mesh
 }
