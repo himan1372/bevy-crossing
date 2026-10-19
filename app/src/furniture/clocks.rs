@@ -1,10 +1,6 @@
 //! Audited ac_*clock callbacks, with original skinned joint/display-list data.
 use super::*;
-use crate::disc_gfx::decode_texture;
 use crate::house::{CurrentRoom, HouseState};
-use crate::n64_material::{texture_image, CombinerUniform};
-use bevy::camera::visibility::{DynamicSkinnedMeshBounds, NoFrustumCulling};
-use bevy::mesh::skinning::{SkinnedMesh, SkinnedMeshInverseBindposes};
 use rustimal_logic::furniture_clock as native;
 
 #[derive(Clone, Copy)]
@@ -91,75 +87,25 @@ pub(super) fn spawn(
     let Some(extras) = extra_lists(disc, profile, spec) else {
         return;
     };
-    let mut joints = Vec::with_capacity(skeleton.joints.len());
-    for (i, local) in animation
-        .pose(1.0)
-        .local_transforms(&skeleton)
-        .into_iter()
-        .enumerate()
-    {
-        let parent = skeleton.parents[i].map_or(root, |p| joints[p]);
-        joints.push(
-            commands
-                .spawn((
-                    Name::new(format!("clock joint {i}")),
-                    local,
-                    Visibility::default(),
-                    ChildOf(parent),
-                ))
-                .id(),
-        );
-    }
-    let matrix_joints = skeleton.matrix_joints();
     let lists = skeleton
         .joints
         .iter()
         .enumerate()
         .filter_map(|(i, j)| Some((i, j.model?, j.flags & 1 != 0)))
-        .chain(extras.into_iter().map(|(i, list)| (i, list, false)));
-    let mut parts = Vec::new();
-    for (joint, list, blend) in lists {
-        for part in &run_display_lists(&disc.rom, &[list]).parts {
-            let texture = part.key.tex.as_ref().and_then(|key| {
-                decode_texture(&disc.rom, key, profile.palette, segments)
-                    .map(|rgba| images.add(texture_image(rgba, key)))
-            });
-            let material = materials.add(N64Material {
-                combiner: CombinerUniform::from_key(&part.key, false, blend),
-                texture,
-                env: default(),
-                blend,
-            });
-            let mut mesh = crate::character::skinned_part_mesh(part, joint, &matrix_joints);
-            let bounds = mesh.generate_skinned_mesh_bounds();
-            let mut entity = commands.spawn((
-                Mesh3d(meshes.add(mesh)),
-                MeshMaterial3d(material),
-                ChildOf(root),
-            ));
-            if bounds.is_ok() {
-                entity.insert(DynamicSkinnedMeshBounds);
-            } else {
-                entity.insert(NoFrustumCulling);
-            }
-            parts.push(entity.id());
-        }
-    }
-    let skin_joints = joints.clone();
-    commands.queue(move |world: &mut World| {
-        let inverse = world
-            .resource_mut::<Assets<SkinnedMeshInverseBindposes>>()
-            .add(SkinnedMeshInverseBindposes::from(vec![
-                Mat4::IDENTITY;
-                skin_joints.len()
-            ]));
-        for entity in parts {
-            world.entity_mut(entity).insert(SkinnedMesh {
-                inverse_bindposes: inverse.clone(),
-                joints: skin_joints.clone(),
-            });
-        }
-    });
+        .chain(extras.into_iter().map(|(i, list)| (i, list, false)))
+        .collect();
+    let joints = super::rigs::spawn_skinned(
+        commands,
+        disc,
+        root,
+        "clock joint",
+        &skeleton,
+        &animation,
+        lists,
+        profile.palette,
+        segments,
+        (meshes, materials, images),
+    );
     commands.entity(root).insert(ClockRig {
         spec,
         skeleton,

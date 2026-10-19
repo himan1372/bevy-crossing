@@ -1298,14 +1298,96 @@ pub fn umbrella_from_furniture(item: u16) -> Option<u16> {
         .then(|| 0x2204 + index - 0x342)
 }
 
-/// Supported conversions for room placement (source no_convert_tools TRUE).
-pub fn room_item_to_furniture(item: u16) -> Option<u16> {
-    clothing_to_furniture(item).or_else(|| umbrella_to_furniture(item))
+/// First insect furniture index (`FTR_SUM_MONSHIRO`), one per ITM_INSECT.
+pub const INSECT_FIRST: u16 = 0x2F2;
+/// First fish furniture index (`FTR_SUM_FUNA`), one per ITM_FISH.
+pub const FISH_FIRST: u16 = 0x31A;
+
+/// mRmTp_Item1ItemNo2FtrItemNo_AtPlayerRoom: ITM_INSECT_START..ITM_INSECT_END.
+/// Spirits (0x2D28..) follow the range and stay items.
+pub fn insect_to_furniture(item: u16) -> Option<u16> {
+    (0x2D00..0x2D28)
+        .contains(&item)
+        .then(|| ftr_idx_2_item_no(INSECT_FIRST + item - 0x2D00, Direction::South))
 }
 
-/// Reverse supported room conversions; tools retain their loose item IDs.
+/// mRmTp_FtrItemNo2Item1ItemNo: orientation does not change the insect.
+pub fn insect_from_furniture(item: u16) -> Option<u16> {
+    let (index, _) = ftr_item_no_2_idx_dir(item)?;
+    (INSECT_FIRST..FISH_FIRST)
+        .contains(&index)
+        .then(|| 0x2D00 + index - INSECT_FIRST)
+}
+
+/// mRmTp_Item1ItemNo2FtrItemNo_AtPlayerRoom fish branch. Its inclusive
+/// `<= ITM_FISH_END` would send the non-fish 0x2328 to the first umbrella
+/// stand; only the forty real fish convert here.
+pub fn fish_to_furniture(item: u16) -> Option<u16> {
+    (0x2300..0x2328)
+        .contains(&item)
+        .then(|| ftr_idx_2_item_no(FISH_FIRST + item - 0x2300, Direction::South))
+}
+
+/// mRmTp_FtrItemNo2Item1ItemNo via mNT_FishIdx2FishItemNo.
+pub fn fish_from_furniture(item: u16) -> Option<u16> {
+    let (index, _) = ftr_item_no_2_idx_dir(item)?;
+    (FISH_FIRST..FISH_FIRST + 40)
+        .contains(&index)
+        .then(|| 0x2300 + index - FISH_FIRST)
+}
+
+/// mRmTp_Item1ItemNo2FtrItemNo_AtPlayerRoom: balloons stand facing south as
+/// FTR_NOG_BALLOON_COMMON0..7 (furniture indices 1020..1027, across banks).
+pub fn balloon_to_furniture(item: u16) -> Option<u16> {
+    (0x2244..=0x224B).contains(&item).then(|| {
+        ftr_idx_2_item_no(
+            special_furniture::BALLOON_COMMON0 + ((item - 0x2244) & 7),
+            Direction::South,
+        )
+    })
+}
+
+/// mRmTp_FtrItemNo2Item1ItemNo balloon branch (index 0x3FC..=0x403).
+pub fn balloon_from_furniture(item: u16) -> Option<u16> {
+    let (index, _) = ftr_item_no_2_idx_dir(item)?;
+    (special_furniture::BALLOON_COMMON0..=special_furniture::BALLOON_COMMON7)
+        .contains(&index)
+        .then(|| 0x2244 + ((index - special_furniture::BALLOON_COMMON0) & 7))
+}
+
+/// Fish/insect furniture whose profile carries an aFTR_vtable_c: cicadas and
+/// grasshoppers/crickets start stopped and play only with sAdo_RoomIncectPos,
+/// fireflies glow, and the mole cricket, mosquito and frog call room-insect
+/// sound. Those callbacks are not ported, so these stay in pockets.
+pub fn critter_has_callback(ftr_idx: u16) -> bool {
+    matches!(
+        ftr_idx,
+        0x2F6..=0x2F9 | 0x2FF..=0x304 | 0x30D | 0x313 | 0x319 | 0x33B
+    )
+}
+
+/// Supported conversions for room placement (source no_convert_tools TRUE).
+/// Balloons (`balloon_to_furniture`) are not offered yet: their head model is
+/// G_TEXTURE_GEN reflection-mapped, which the app renderer does not reproduce.
+pub fn room_item_to_furniture(item: u16) -> Option<u16> {
+    clothing_to_furniture(item)
+        .or_else(|| umbrella_to_furniture(item))
+        .or_else(|| {
+            insect_to_furniture(item)
+                .or_else(|| fish_to_furniture(item))
+                .filter(|&f| {
+                    !ftr_item_no_2_idx_dir(f).is_some_and(|(i, _)| critter_has_callback(i))
+                })
+        })
+}
+
+/// Reverse room conversions; tools retain their loose item IDs.
 pub fn room_item_from_furniture(item: u16) -> Option<u16> {
-    clothing_from_furniture(item).or_else(|| umbrella_from_furniture(item))
+    clothing_from_furniture(item)
+        .or_else(|| umbrella_from_furniture(item))
+        .or_else(|| insect_from_furniture(item))
+        .or_else(|| fish_from_furniture(item))
+        .or_else(|| balloon_from_furniture(item))
 }
 
 /// aMR_ItemNo2IconNo, using the retail item-number enum ranges. The display

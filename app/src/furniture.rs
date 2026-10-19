@@ -25,6 +25,7 @@ use crate::n64_material::N64Material;
 use crate::skeleton::{place_on_joints, Animation, Skeleton};
 
 pub(crate) mod clocks;
+pub(crate) mod rigs;
 pub(crate) mod storage;
 pub(crate) mod television;
 
@@ -218,6 +219,9 @@ fn profile_skeleton(disc: &GameDisc, profile: &Profile) -> Option<(Skeleton, Opt
         Some(rig) => (rel(rig)?, rel(rig + 4)),
         None => {
             let mut base = profile.name.strip_prefix("iam_")?.to_string();
+            if let Some(balloon) = rigs::balloon_base(profile.index) {
+                base = balloon;
+            }
             // ac_sum_classicchest01's ctor/draw explicitly use clchest01.
             if base == "sum_classicchest01" {
                 base = "sum_clchest01".to_string();
@@ -436,6 +440,19 @@ pub fn spawn_furniture(
                 parent,
                 &profile,
                 spec,
+                skeleton,
+                animation.clone(),
+                &segs,
+                assets,
+            );
+            return Some(parent);
+        }
+        if let Some(animation) = anim.as_ref().filter(|_| rigs::animated(&profile)) {
+            rigs::spawn(
+                commands,
+                disc,
+                parent,
+                &profile,
                 skeleton,
                 animation.clone(),
                 &segs,

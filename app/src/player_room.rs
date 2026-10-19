@@ -172,6 +172,15 @@ fn layer_views(layers: &mut [RoomLayer; 4]) -> [Option<&mut RoomLayer>; 4] {
 }
 
 impl PlayerRoom {
+    /// The placed actor's switch bit, while this piece still names it.
+    pub(crate) fn switch_bit(&self, piece: &RoomPiece) -> Option<u8> {
+        self.runtime
+            .actors
+            .get(piece.slot)
+            .and_then(Option::as_ref)
+            .filter(|a| a.name == ftr::ftr_item_no_2_idx_dir(piece.item).map_or(u16::MAX, |f| f.0))
+            .map(|a| a.switch_bit)
+    }
     pub(crate) fn clock_sound_allowed(&self, piece: &RoomPiece) -> bool {
         self.runtime
             .actors
@@ -1026,6 +1035,17 @@ fn interact(
             let on = ftr::toggle_switch(actor, &mut room.layers[actor.layer]);
             crate::sound::se_at(if on { 0x16 } else { 0x17 }, at);
         }
+    } else if room.runtime.actors[slot].as_ref().is_some_and(|a| {
+        (ftr::special_furniture::BALLOON_COMMON0..=ftr::special_furniture::BALLOON_COMMON7)
+            .contains(&a.name)
+    }) && actions.consume(Action::Interact)
+    {
+        // aMR_FtrIdx2ChangeFtrSwitch's generic branch: toggle the bit
+        // silently; fNBC_mv reacts to the change by speeding up.
+        let room = &mut *room;
+        if let Some(actor) = room.runtime.actors[slot].as_mut() {
+            ftr::toggle_switch(actor, &mut room.layers[actor.layer]);
+        }
     } else if room.runtime.actors[slot]
         .as_ref()
         .and_then(|a| room.profiles.get(&a.name))
@@ -1279,6 +1299,14 @@ impl Plugin for PlayerRoomPlugin {
             .add_systems(
                 Update,
                 render_televisions.after(refresh).in_set(GameplaySet),
+            )
+            .add_systems(
+                Update,
+                crate::furniture::rigs::update
+                    .after(refresh)
+                    .after(movement::animate_roots)
+                    .after(crate::save::LoadSet)
+                    .in_set(GameplaySet),
             )
             .add_systems(
                 Update,
