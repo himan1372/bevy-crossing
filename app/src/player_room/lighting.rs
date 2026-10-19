@@ -11,9 +11,11 @@
 //! `ac_my_indoor` control actor at the origin for the floor and walls. The
 //! floor and wall lists keep the inherited primitive colour, which
 //! `Global_kankyo_set_room_prim` sets to the switch-dependent room colour.
-//! Window sunshine (`ef_room_sunshine`) is not drawn by this port yet.
+//! The window light alpha (`mEnv_MakeWindowLightAlpha`) follows the level
+//! and the clock; the sunshine patches (`sunshine.rs`) draw with it.
 
 use bevy::prelude::*;
+use rustimal_logic::kankyo_env;
 use rustimal_logic::lights::LightsN;
 use rustimal_logic::room_light::{self, RoomLight, MY_ROOM_S_POINT_LIGHT};
 
@@ -30,6 +32,8 @@ const MAX_TICKS: u32 = 4;
 
 pub(super) struct Lighting {
     light: RoomLight,
+    /// `l_mEnv_electric_light.windowlight_alpha`.
+    window_alpha: f32,
     /// The room is entered (its level set) once per visit.
     inside: bool,
     accum: f32,
@@ -40,6 +44,7 @@ impl Default for Lighting {
     fn default() -> Self {
         Self {
             light: RoomLight::new(false),
+            window_alpha: 0.0,
             inside: false,
             accum: 0.0,
             pending_z: false,
@@ -55,6 +60,24 @@ impl Lighting {
             light: RoomLight::new(room_light::default_on(now.day_secs, true)),
             ..Self::default()
         };
+    }
+
+    /// `mKK_windowlight_alpha_get`.
+    pub(super) fn window_alpha(&self) -> f32 {
+        self.window_alpha
+    }
+
+    /// Whether the window alpha has reached its current target.
+    pub(super) fn window_settled(&self) -> bool {
+        let now = crate::clock::now().day_secs as i32;
+        self.window_alpha == kankyo_env::window_light_target(now, Some(self.light.percent))
+    }
+
+    /// `mEnv_MakeWindowLightAlpha` in this light-switch room.
+    fn step_window(&mut self, enabled: bool) {
+        let now = crate::clock::now().day_secs as i32;
+        let target = kankyo_env::window_light_target(now, Some(self.light.percent));
+        kankyo_env::window_light_step(&mut self.window_alpha, target, enabled);
     }
 }
 
@@ -81,6 +104,9 @@ pub(super) fn advance(
     }
     if !lighting.inside {
         lighting.light.enter();
+        // Global_kankyo_ct: the level is set first, then the window alpha
+        // restarts from 0.
+        lighting.step_window(false);
         info!(
             "player room light {} on entry",
             if lighting.light.on { "on" } else { "off" }
@@ -104,6 +130,8 @@ pub(super) fn advance(
                 if lighting.light.on { "on" } else { "off" }
             );
         }
+        // Global_kankyo_set runs after mEnv_ManagePointLight.
+        lighting.step_window(true);
     }
 }
 

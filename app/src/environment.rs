@@ -44,6 +44,10 @@ pub struct BaseLight {
     pub fog_far: f32,
     /// Light in rooms (`room_color`, `mEnv_GetRoomPrimColor`).
     pub room: [f32; 3],
+    /// Window sunshine colours (`sun_color_window` / `moon_color_window`,
+    /// `ef_room_sunshine`).
+    pub sun_window: [f32; 3],
+    pub moon_window: [f32; 3],
     pub background: [f32; 3],
 }
 
@@ -73,6 +77,8 @@ impl BaseLight {
             fog_near: (s16(18) & 0x3FF) as f32,
             fog_far: s16(20) as f32,
             room: rgb(25),
+            sun_window: rgb(28),
+            moon_window: rgb(31),
             background: rgb(34),
         })
     }
@@ -91,6 +97,8 @@ impl BaseLight {
             fog_near: self.fog_near + (next.fog_near - self.fog_near) * t,
             fog_far: self.fog_far + (next.fog_far - self.fog_far) * t,
             room: l3(self.room, next.room),
+            sun_window: l3(self.sun_window, next.sun_window),
+            moon_window: l3(self.moon_window, next.moon_window),
             background: l3(self.background, next.background),
         }
     }

@@ -651,3 +651,17 @@ prim). Native logic::room_light plus ported subset of pinned 122867f lights.rs
 schema change. Window sunshine (ef_room_sunshine), villager-room schedules,
 basements/cottage remain follow-ups. Evidence/gates in backlog/room-light-switch.md;
 Philip visual/audio acceptance, M4 and migration remain open.
+
+2026-10-19 claude room-sunshine: player-room window sunshine from ef_room_sunshine
+and m_kankyo mEnv_MakeWindowLightAlpha (ACGC-PC-Port, identical to ac-decomp apart
+from dt scaling). SCENE_MY_ROOM_S actors ct2 (40,0,120) / ct3 (200,0,120) with
+their ct offsets and disc floor height -> L (38,41,120), R (200,41,120);
+light_floor/light_shine lists and row-major I4 light_window read from the disc at
+runtime; time-of-day scale ramps; prim = period sun/moon window colour with alpha
+(u8)calc_alpha x window alpha. Window alpha: pinned 122867f kankyo_env subset
+(window_light_target, s16 quirk) plus source easing add_calc(1-sqrt(0.8), 0.005)
+after each light tick and the 0-reset (0.5 steps) on entry/load, using the live
+RoomLight.percent. Native logic::room_sunshine. No save schema change; no-disc
+fallback unchanged. Weather dimming (x0.6) waits for weather simulation; other
+room scenes' sunshine variants not covered. Evidence/gates in
+backlog/room-sunshine.md; Philip visual acceptance, M4 and migration remain open.

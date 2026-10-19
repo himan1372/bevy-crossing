@@ -34,6 +34,7 @@ mod music;
 mod music_grid;
 mod presentation;
 mod storage;
+mod sunshine;
 
 /// Four 16x16 source layers, including owner-cell storage save-back.
 /// An absent field means an old save's default room; an empty room is explicit.
@@ -1251,6 +1252,7 @@ impl Plugin for PlayerRoomPlugin {
             .add_plugins(diary::DiaryPlugin)
             .add_plugins(music_grid::MusicGridPlugin)
             .add_systems(Startup, setup.after(crate::house::build_interior))
+            .add_systems(Startup, sunshine::spawn.after(crate::house::build_interior))
             .add_systems(
                 Update,
                 decorating::render
@@ -1291,6 +1293,13 @@ impl Plugin for PlayerRoomPlugin {
                     .after(lighting::advance)
                     .after(refresh)
                     .after(decorating::render)
+                    .after(crate::environment::update_environment)
+                    .in_set(GameplaySet),
+            )
+            .add_systems(
+                Update,
+                sunshine::render
+                    .after(lighting::advance)
                     .after(crate::environment::update_environment)
                     .in_set(GameplaySet),
             )
