@@ -17,6 +17,7 @@ use disc::RomSource;
 use crate::disc_gfx::{decode_texture, run_display_lists, Segments};
 use crate::game_disc::GameDisc;
 use crate::n64_material::{part_mesh, texture_image, CombinerUniform, N64Material};
+use crate::player_room::decorating::Decoration;
 
 /// `aMI` draws the room at scale 0.0625; 40 game units per cell.
 const ROOM_SCALE: f32 = 0.0625 / 40.0;
@@ -35,9 +36,9 @@ const WALL_BLOCK: usize = 0x1020;
 const PALETTE: usize = 0x20;
 const TEXTURE: usize = 0x800;
 
-/// `mHm_player_room_default_data_c`: wall u8, floor u8, item ut_x i32,
-/// ut_z i32, item u16 (0x10 bytes).
-const DEFAULT_SIZE: u32 = 0x10;
+/// Only the player shell changes when decorating; other interiors stay intact.
+#[derive(Component)]
+pub(crate) struct PlayerRoomShell(pub Decoration);
 
 /// A piece of furniture in the room: (centre relative to the room
 /// centre, half extents x/z) for collisions.
@@ -60,16 +61,31 @@ pub fn spawn_player_room(
     materials: &mut Assets<N64Material>,
     images: &mut Assets<Image>,
 ) -> Option<Vec<RoomFurniture>> {
+    let decoration = Decoration::defaults(disc)?;
+    spawn_decorated_player_room(
+        commands,
+        disc,
+        origin,
+        decoration,
+        (meshes, materials, images),
+    )?;
+    Some(Vec::new())
+}
+
+pub(crate) fn spawn_decorated_player_room(
+    commands: &mut Commands,
+    disc: &GameDisc,
+    origin: Vec3,
+    decoration: Decoration,
+    assets: RoomAssets,
+) -> Option<Entity> {
+    if !decoration.available(disc) {
+        return None;
+    }
     let floor_list = disc.catalog.get("rom_myhome1_floor_model")?.offset;
     let wall_list = disc.catalog.get("rom_myhome1_wall_model")?.offset;
-    // House 0's starting wallpaper and carpet, and its furniture spot.
-    let defaults = disc.catalog.get("l_mHm_player_room_default_data")?;
-    let d = disc
-        .rom
-        .slice(RomSource::Rel, defaults.offset, DEFAULT_SIZE)?;
-    let (wall, floor) = (d[0] as usize, d[1] as usize);
-    let assets = (&mut *meshes, &mut *materials, &mut *images);
-    spawn_shell(
+    let (wall, floor) = (usize::from(decoration.wall), usize::from(decoration.floor));
+    let shell = spawn_shell(
         commands,
         disc,
         "player room",
@@ -82,9 +98,9 @@ pub fn spawn_player_room(
         wall,
         assets,
     );
-
+    commands.entity(shell).insert(PlayerRoomShell(decoration));
     info!("player room from the disc: wallpaper {wall}, carpet {floor}");
-    Some(Vec::new())
+    Some(shell)
 }
 
 /// Floor segments (`aMI` / `aSI` draw): textures in 8-B, palette in C.
@@ -140,7 +156,7 @@ fn spawn_shell(
     floor: usize,
     wall: usize,
     (meshes, materials, images): RoomAssets,
-) {
+) -> Entity {
     let room = commands
         .spawn((
             Name::new(name.to_string()),
@@ -185,6 +201,7 @@ fn spawn_shell(
     for &(l, blend) in other_lists {
         spawn_blend_lists(commands, disc, room, l, blend, meshes, materials, images);
     }
+    room
 }
 
 /// The shop's floor spans model cells 0.875..7.125: centre (4, 1, 4).

@@ -306,6 +306,7 @@ pub(super) fn advance(
     };
     let ticks = time.delta_secs() * 60.0;
     if room.music_menu_open()
+        || room.decoration_pending
         || room.presentation.busy()
         || room.loose_presentation.busy()
         || room.storage.busy()

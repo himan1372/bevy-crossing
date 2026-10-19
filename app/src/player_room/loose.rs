@@ -16,6 +16,8 @@ pub(super) fn supports(item: u16) -> bool {
         || (0x2100..=0x2103).contains(&item)
         || (0x2200..=0x2203).contains(&item)
         || (0x2239..=0x2243).contains(&item)
+        || (0x2600..=0x2646).contains(&item)
+        || (0x2700..=0x2746).contains(&item)
         || (0x224C..=0x225B).contains(&item)
         || (0x2A00..=0x2A36).contains(&item)
         || (0x2B00..=0x2B0F).contains(&item)

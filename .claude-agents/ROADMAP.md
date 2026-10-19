@@ -564,3 +564,16 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   M4 and migration remain open; wallpaper/carpet decorating is proposed next.
   Held-net appearance, title and rename remain deferred.
   Umbrella/tool final gates pass: check/all-target clippy/fmt/capture/default24.91s/release3m27s; no tests. Source, numeric, visual and no-disc evidence recorded in task; actual save unchanged. Philip acceptance pending.
+  2026-10-19 Codex room-decorating: standard wallpaper/carpet pocket actions swap
+  previous installed pattern into the selected slot, including full pockets.
+  Original71-pattern banks/geometry and0x11B sound reused, shell waits for menu
+  closure, IndoorFloor index follows carpet for existing footstep lookup.
+  Compatible optional home_furniture.decoration retains version1; legacy defaults,
+  explicit empty furniture and no-disc numeric preservation stay distinct.
+  Supported loose rolls reuse existing transactions/presentation. Temp source,
+  numeric, visual, first/middle/last, full/same/cancel/conditioned/reserved refusal,
+  hidden storage/music, F5/F9/fresh-start and no-disc checks recorded in
+  backlog/room-decorating.md. Custom designs, expanded rooms and basements stay
+  separate; Philip playtest/M4/migration open. Special furniture/diary writing is
+  proposed next; held-net appearance/title/rename remain deferred.
+  Decorating final gates pass: check/all-target clippy -D warnings/fmt/capture12.22s/default43.54s/release2m38s; no tests. Source, transaction, visual and fresh/no-disc evidence in task. Actual save unchanged; Philip acceptance pending.

@@ -24,6 +24,7 @@ use crate::player::Player;
 use crate::pockets::PocketsUi;
 use crate::states::GameplaySet;
 
+pub(crate) mod decorating;
 mod loose;
 mod loose_presentation;
 mod movement;
@@ -40,6 +41,8 @@ pub(crate) struct RoomSave {
     layers: [Vec<u16>; 4],
     switches: [u64; 4],
     music_box: [u32; 2],
+    #[serde(skip_serializing_if = "Option::is_none")]
+    decoration: Option<decorating::Decoration>,
 }
 
 #[derive(Deserialize)]
@@ -48,6 +51,8 @@ struct RoomSaveData {
     switches: [u64; 4],
     #[serde(default)]
     music_box: [u32; 2],
+    #[serde(default)]
+    decoration: Option<decorating::Decoration>,
 }
 
 impl TryFrom<RoomSaveData> for RoomSave {
@@ -60,11 +65,16 @@ impl TryFrom<RoomSaveData> for RoomSave {
             layers: data.layers,
             switches: data.switches,
             music_box: data.music_box,
+            decoration: data.decoration,
         })
     }
 }
 
 pub(crate) enum PocketRequest {
+    Decorate {
+        slot: usize,
+        item: u16,
+    },
     Place {
         slot: usize,
         item: u16,
@@ -98,6 +108,8 @@ enum StorageFlow {
 
 #[derive(Resource)]
 pub(crate) struct PlayerRoom {
+    decoration: Option<decorating::Decoration>,
+    decoration_pending: bool,
     music_grid: Option<music_grid::Grid>,
     music_box: [u32; 2],
     loose_angles: loose::Angles,
@@ -119,6 +131,8 @@ pub(crate) struct PlayerRoom {
 impl Default for PlayerRoom {
     fn default() -> Self {
         Self {
+            decoration: None,
+            decoration_pending: false,
             music_grid: None,
             music_box: [0; 2],
             loose_angles: [[0; 16]; 16],
@@ -145,7 +159,8 @@ fn layer_views(layers: &mut [RoomLayer; 4]) -> [Option<&mut RoomLayer>; 4] {
 
 impl PlayerRoom {
     pub(crate) fn manipulating(&self) -> bool {
-        self.music_grid.is_some()
+        self.decoration_pending
+            || self.music_grid.is_some()
             || self.presentation.busy()
             || self.loose_presentation.busy()
             || self.storage.busy()
@@ -174,10 +189,12 @@ impl PlayerRoom {
             layers: std::array::from_fn(|i| layers[i].items.iter().flatten().copied().collect()),
             switches: std::array::from_fn(|i| layers[i].ftr_switch),
             music_box: self.music_box,
+            decoration: self.decoration,
         })
     }
 
     pub(crate) fn restore(&mut self, saved: Option<&RoomSave>, disc: Option<&GameDisc>) {
+        self.decoration_pending = false;
         self.music_grid = None;
         self.loose_angles = [[0; 16]; 16];
         self.movement.reset();
@@ -187,6 +204,9 @@ impl PlayerRoom {
         self.layers = std::array::from_fn(|_| RoomLayer::default());
         self.original = saved.cloned();
         self.music_box = saved.map_or([0; 2], |s| s.music_box);
+        self.decoration = saved
+            .and_then(|s| s.decoration)
+            .or_else(|| disc.and_then(decorating::Decoration::defaults));
         self.initialized = saved.is_some() || disc.is_some();
         self.flow = StorageFlow::Idle;
         if let Some(saved) = saved {
@@ -608,6 +628,12 @@ fn interact(
     };
     if let Some(request) = request {
         let result = match request {
+            PocketRequest::Decorate { slot, item }
+                if inventory.pockets.pockets.get(slot) == Some(&item)
+                    && inventory.pockets.item_cond(slot) == 0 =>
+            {
+                decorating::apply(&mut room, &mut inventory, slot, item, &disc)
+            }
             PocketRequest::Register { owner, slot, item } => {
                 music::register(&mut room, &mut inventory, owner, slot, item)
             }
@@ -681,6 +707,7 @@ fn interact(
             notice(&mut dialogue, &mut room, &mut focus, message);
         } else {
             *focus = if room.presentation.busy()
+                || room.decoration_pending
                 || room.loose_presentation.busy()
                 || room.storage.busy()
             {
@@ -1147,6 +1174,13 @@ impl Plugin for PlayerRoomPlugin {
         app.init_resource::<PlayerRoom>()
             .add_plugins(music_grid::MusicGridPlugin)
             .add_systems(Startup, setup.after(crate::house::build_interior))
+            .add_systems(
+                Update,
+                decorating::render
+                    .after(interact)
+                    .after(crate::save::LoadSet)
+                    .in_set(GameplaySet),
+            )
             .add_systems(
                 Update,
                 storage::advance

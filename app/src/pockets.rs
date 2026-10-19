@@ -195,7 +195,9 @@ impl PocketsUi {
                 vec!["Quit"]
             }
         } else if self.home && condition == 0 && crate::player_room::can_place_in_room(item) {
-            if can_hold(item, condition) {
+            if let Some(action) = crate::player_room::decorating::action(item) {
+                vec!["Place in room", action, "Grab"]
+            } else if can_hold(item, condition) {
                 vec!["Place in room", "Hold", "Grab"]
             } else {
                 vec!["Place in room", "Grab"]
@@ -321,6 +323,15 @@ fn pockets_input(
                     Some(crate::player_room::PocketRequest::Store { owner, slot, item });
                 ui.open = false;
             }
+            return;
+        }
+        if ui.home
+            && choice == 1
+            && inventory.pockets.item_cond(slot) == 0
+            && crate::player_room::decorating::action(item).is_some()
+        {
+            ui.room_request = Some(crate::player_room::PocketRequest::Decorate { slot, item });
+            ui.open = false;
             return;
         }
         if ui.home
