@@ -4,15 +4,9 @@ use super::*;
 
 const FIRST: u16 = 0x2A00;
 const COUNT: u16 = 55;
-const PAGE: usize = 3;
 
 pub(super) enum Flow {
     Choose(usize),
-    Songs {
-        owner: usize,
-        page: usize,
-        take: bool,
-    },
 }
 
 pub(super) fn is_song(item: u16) -> bool {
@@ -35,7 +29,7 @@ pub(super) fn is_player(room: &PlayerRoom, owner: usize) -> bool {
         .is_some_and(|p| p.interaction_type & ftr::interaction::MUSIC_DISK != 0)
 }
 
-fn switch(room: &mut PlayerRoom, owner: usize, on: bool) {
+pub(super) fn switch(room: &mut PlayerRoom, owner: usize, on: bool) {
     // aMR_AllMDSwitchOff / OneMDSwitchOn_TheOtherSwitchOff.
     for (slot, actor) in room.runtime.actors.iter_mut().enumerate() {
         let Some(actor) = actor else { continue };
@@ -116,57 +110,6 @@ pub(super) fn begin(
     *focus = InputFocus::Dialogue;
 }
 
-fn songs(room: &PlayerRoom) -> Vec<u16> {
-    (FIRST..FIRST + COUNT)
-        .filter(|&item| registered(room, item))
-        .collect()
-}
-
-fn show_songs(
-    room: &mut PlayerRoom,
-    dialogue: &mut DialogueState,
-    focus: &mut InputFocus,
-    owner: usize,
-    page: usize,
-    take: bool,
-) {
-    let songs = songs(room);
-    if songs.is_empty() {
-        notice(dialogue, room, focus, "There are no registered songs.");
-        return;
-    }
-    let pages = songs.len().div_ceil(PAGE);
-    let page = page.min(pages - 1);
-    let mut choices: Vec<String> = songs
-        .iter()
-        .skip(page * PAGE)
-        .take(PAGE)
-        .map(|&item| crate::items::name(item))
-        .collect();
-    if page + 1 < pages {
-        choices.push("Next page".into());
-    }
-    if page > 0 {
-        choices.push("Previous page".into());
-    }
-    choices.push("Quit".into());
-    dialogue.begin_furniture(
-        format!(
-            "{} ({}/{})",
-            if take {
-                "Take out a song"
-            } else {
-                "Choose a song"
-            },
-            page + 1,
-            pages
-        ),
-        Some(choices),
-    );
-    room.flow = StorageFlow::Music(Flow::Songs { owner, page, take });
-    *focus = InputFocus::Dialogue;
-}
-
 pub(super) fn answer(
     room: &mut PlayerRoom,
     inventory: &mut PlayerInventory,
@@ -176,9 +119,7 @@ pub(super) fn answer(
     flow: Flow,
     choice: usize,
 ) {
-    let owner = match flow {
-        Flow::Choose(owner) | Flow::Songs { owner, .. } => owner,
-    };
+    let Flow::Choose(owner) = flow;
     if !is_player(room, owner) {
         return;
     }
@@ -205,7 +146,18 @@ pub(super) fn answer(
                 room.flow = StorageFlow::Pockets;
                 *focus = InputFocus::Pockets;
             }
-            1 | 3 => show_songs(room, dialogue, focus, owner, 0, choice == 3),
+            1 | 3 => {
+                if room.music_box == [0, 0] {
+                    notice(dialogue, room, focus, "There are no registered songs.");
+                    return;
+                }
+                let selected = room.runtime.actors[owner]
+                    .as_ref()
+                    .map_or(0, |a| a.items[0].saturating_sub(FIRST).min(COUNT - 1))
+                    as usize;
+                room.music_grid = Some(super::music_grid::Grid::new(owner, selected, choice == 3));
+                *focus = InputFocus::Furniture;
+            }
             2 if room.runtime.actors[owner]
                 .as_ref()
                 .is_some_and(|a| a.switch_bit != 0) =>
@@ -214,58 +166,26 @@ pub(super) fn answer(
             }
             _ => {}
         },
-        Flow::Songs { page, take, .. } => {
-            let songs = songs(room);
-            let visible: Vec<u16> = songs.iter().copied().skip(page * PAGE).take(PAGE).collect();
-            if let Some(&item) = visible.get(choice) {
-                if take {
-                    if !inventory.add(item) {
-                        notice(dialogue, room, focus, "Your pockets are full.");
-                        return;
-                    }
-                    let i = (item - FIRST) as usize;
-                    room.music_box[i / 32] &= !(1 << (i % 32));
-                    // Every player's reference to a removed title is cleared.
-                    for slot in 0..room.runtime.actors.len() {
-                        if is_player(room, slot) {
-                            if let Some(actor) = room.runtime.actors[slot].as_mut() {
-                                if actor.items[0] == item {
-                                    actor.items[0] = 0;
-                                    actor.switch_bit = 0;
-                                    actor.switch_changed = true;
-                                    if let Some(bit) =
-                                        RoomLayer::switch_bit_index(actor.cell_x, actor.cell_z)
-                                    {
-                                        room.layers[actor.layer].ftr_switch &= !(1u64 << bit);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    if let Some(actor) = room.runtime.actors[owner].as_mut() {
-                        actor.items[0] = item;
-                    }
-                    switch(room, owner, true);
-                }
-            } else {
-                let mut index = visible.len();
-                if (page + 1) * PAGE < songs.len() {
-                    if choice == index {
-                        show_songs(room, dialogue, focus, owner, page + 1, take);
-                        return;
-                    }
-                    index += 1;
-                }
-                if page > 0 && choice == index {
-                    show_songs(room, dialogue, focus, owner, page - 1, take);
-                }
-            }
-        }
     }
 }
 
 impl PlayerRoom {
+    pub(crate) fn music_source(&self) -> Option<(Vec3, u16)> {
+        self.runtime
+            .actors
+            .iter()
+            .enumerate()
+            .find_map(|(owner, actor)| {
+                let actor = actor.as_ref()?;
+                (is_player(self, owner)
+                    && actor.switch_bit != 0
+                    && registered(self, actor.items[0]))
+                .then(|| (super::presentation::actor_center(self, actor), actor.name))
+            })
+    }
+    pub(crate) fn music_menu_open(&self) -> bool {
+        self.music_grid.is_some()
+    }
     pub(crate) fn music_track(&self) -> Option<rustimal_logic::scene_music::Track> {
         self.runtime
             .actors

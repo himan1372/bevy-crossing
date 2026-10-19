@@ -28,6 +28,22 @@ pub fn spatial(position: [f32; 3], microphone: [f32; 3]) -> Option<(f32, u8)> {
     ))
 }
 
+/// Na_MDPlayerPos: native minidisc attenuation and stereo pan for a small home.
+pub fn music_spatial(position: [f32; 3], microphone: [f32; 3]) -> (f32, u8) {
+    let distance = position
+        .iter()
+        .zip(microphone)
+        .map(|(p, m)| (p - m).powi(2))
+        .sum::<f32>()
+        .sqrt();
+    let angle = crate::gyo_ai::angle_to([microphone[0], microphone[2]], [position[0], position[2]]);
+    let area2 = crate::audio::na_room_type(1, (540.0, 545.0)).1;
+    (
+        crate::audio::distance2vol_md(distance, area2),
+        crate::audio::angle2pan(angle as u16, 1),
+    )
+}
+
 /// mRF_block_info entries carrying mRF_BLOCKKIND_MARINE (m_random_field.c).
 pub fn marine_block_type(kind: u8) -> bool {
     matches!(kind, 63 | 64 | 80..=82 | 85 | 94..=104)

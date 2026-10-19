@@ -275,7 +275,7 @@ pub(crate) fn quad_mesh(at: Vec2, size: Vec2) -> Mesh {
 /// `mChoice_Set_DisplayScaleAndDisplayPos`: the window's centre (after
 /// it slides in), its x/y scale, and where the first answer starts (all
 /// screen pixels).
-fn choice_layout(answers: &[&str], widths: &[u8; 256]) -> (Vec2, Vec2, Vec2) {
+pub(crate) fn choice_layout(answers: &[&str], widths: &[u8; 256]) -> (Vec2, Vec2, Vec2) {
     let n = answers.len() as f32;
     let dw = answers
         .iter()

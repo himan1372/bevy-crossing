@@ -618,6 +618,7 @@ fn interior_movement(
     obstacles: Res<InteriorObstacles>,
     time: Res<Time>,
     room: Res<CurrentRoom>,
+    toys: Res<crate::player_toys::ToyAction>,
 ) {
     let bounds = room.1;
     if *state != HouseState::Inside || !focus.is_world() {
@@ -627,6 +628,10 @@ fn interior_movement(
         return;
     };
 
+    if toys.blocks_movement() {
+        *loco = Locomotion::default();
+        return;
+    }
     let movement = locomotion::step(&actions, time.delta().as_secs_f32(), &mut facing, &mut loco);
     if movement != Vec3::ZERO {
         let nx = transform.translation.x + movement.x;
@@ -669,7 +674,7 @@ fn update_house_hud(
             HouseState::Town => Visibility::Hidden,
         };
         let hint = if room.available {
-            "House - I: place | Backspace: pick up | E: furniture | G + directions: move / turn\nPlaytest - F2: add song | F3: add drawers | F4: add blue cabinet"
+            "House - I: place | Backspace: pick up | E: furniture | G + directions: move / turn\nPlaytest - F1: toys | F2: song | F3: drawers | F4: cabinet"
         } else {
             "House — press E at the door to exit"
         };

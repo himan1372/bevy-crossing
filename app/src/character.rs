@@ -250,6 +250,7 @@ pub struct CharacterRig {
     net_active: bool,
     net_held: bool,
     furniture_phase: Option<u8>,
+    toy_phase: Option<(u16, bool)>,
     pose_morph: f32,
 }
 
@@ -458,6 +459,7 @@ fn spawn_rig(
         net_active: false,
         net_held: false,
         furniture_phase: None,
+        toy_phase: None,
         pose_morph: 0.0,
     });
     debug!("{} face parts", face_parts.len());
@@ -781,6 +783,7 @@ fn animate_characters(
     net: Res<crate::player_tools::NetAction>,
     net_models: Option<Res<crate::player_tools::NetModels>>,
     room: Res<crate::player_room::PlayerRoom>,
+    toys: Res<crate::player_toys::ToyAction>,
 ) {
     let dt = time.delta_secs();
     let ticks = dt * 60.0;
@@ -845,6 +848,10 @@ fn animate_characters(
                 rig.last_pos = transforms.get(owner).ok().map(|t| t.translation);
                 continue;
             }
+            if rig.toy_phase != toys.phase() {
+                rig.toy_phase = toys.phase();
+                rig.pose_morph = 5.0;
+            }
             let previous_pose = (rig.pose_morph > 0.0).then(|| {
                 rig.joints
                     .iter()
@@ -867,6 +874,16 @@ fn animate_characters(
                 let hold = models.player_hold.pose(1.0).local_transforms(&rig.skeleton);
                 for ((&joint, local), &mask) in rig.joints.iter().zip(hold).zip(&models.hold_mask) {
                     if mask == 1 {
+                        if let Ok(mut t) = transforms.get_mut(joint) {
+                            t.rotation = local.rotation;
+                        }
+                    }
+                }
+            }
+            if let Some((clip, frame, mask)) = toys.pose() {
+                let locals = clip.pose(frame).local_transforms(&rig.skeleton);
+                for ((&joint, local), &part) in rig.joints.iter().zip(locals).zip(mask) {
+                    if part == 0 {
                         if let Ok(mut t) = transforms.get_mut(joint) {
                             t.rotation = local.rotation;
                         }

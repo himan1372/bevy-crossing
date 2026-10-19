@@ -156,16 +156,24 @@ pub(crate) fn held_tool(item: u16) -> Option<crate::ecology::EquippedTool> {
     match item {
         0x2200 => Some(crate::ecology::EquippedTool::Net),
         0x2203 => Some(crate::ecology::EquippedTool::Rod),
+        0x224C..=0x2253 => Some(crate::ecology::EquippedTool::Pinwheel(item)),
+        0x2254..=0x225B => Some(crate::ecology::EquippedTool::Fan(item)),
         _ => None,
     }
 }
 
 pub(crate) fn item_actions(item: u16, condition: u32) -> Vec<&'static str> {
-    if condition & 1 == 0 && held_tool(item).is_some() {
+    if can_hold(item, condition) {
         vec!["Hold", "Grab"]
     } else {
         vec!["Grab"]
     }
+}
+
+fn can_hold(item: u16, condition: u32) -> bool {
+    held_tool(item).is_some()
+        && condition & 1 == 0
+        && (!(0x224C..=0x225B).contains(&item) || condition == 0)
 }
 
 impl PocketsUi {
@@ -187,7 +195,11 @@ impl PocketsUi {
                 vec!["Quit"]
             }
         } else if self.home && condition == 0 && crate::player_room::can_place_in_room(item) {
-            vec!["Place in room", "Grab"]
+            if (0x224C..=0x225B).contains(&item) {
+                vec!["Place in room", "Hold", "Grab"]
+            } else {
+                vec!["Place in room", "Grab"]
+            }
         } else {
             item_actions(item, condition)
         }
@@ -320,7 +332,12 @@ fn pockets_input(
             ui.open = false;
             return;
         }
-        if inventory.pockets.item_cond(slot) & 1 == 0 && held_tool(item).is_some() && choice == 0 {
+        let hold_choice = if ui.home && (0x224C..=0x225B).contains(&item) {
+            1
+        } else {
+            0
+        };
+        if can_hold(item, inventory.pockets.item_cond(slot)) && choice == hold_choice {
             if let Some(selected_tool) = held_tool(item) {
                 *tool = selected_tool;
             }

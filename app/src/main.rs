@@ -39,6 +39,7 @@ mod pause_menu;
 mod player;
 mod player_room;
 mod player_tools;
+mod player_toys;
 mod pockets;
 mod pockets_disc;
 mod quest;
@@ -129,6 +130,7 @@ fn main() {
         .add_plugins(environment::EnvironmentPlugin)
         .add_plugins(character::CharacterPlugin)
         .add_plugins(player_tools::PlayerToolsPlugin)
+        .add_plugins(player_toys::PlayerToysPlugin)
         .add_plugins(face::FacePlugin)
         .add_plugins(roster::RosterPlugin)
         .add_systems(Startup, setup_light)

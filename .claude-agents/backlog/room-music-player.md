@@ -82,3 +82,8 @@ requested registration/playback behavior now. Multi-mark take-out and source
 special storage scripts remain separate. Philip listening/visual acceptance,
 M4/audio/migration remain open. Codex proposes music presentation, toy use,
 remaining item conversions, then room decorating/special actions; not started.
+
+2026-10-18 follow-up: Philip explicitly accepts music playback ("music is good")
+and authorizes the presentation/toys task. See music-presentation-toys.md for the
+new original grid and source device/player audit; this historical note does not
+supersede that later implementation or imply all audio/M4 acceptance.

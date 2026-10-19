@@ -532,6 +532,7 @@ struct Bgm {
     handle: u8,
     ducking: music_policy::Ducking,
     volume: music_policy::VolumeRamp,
+    spatial: (f32, u8),
 }
 
 impl Default for Bgm {
@@ -541,6 +542,7 @@ impl Default for Bgm {
             handle: BGM1_GROUP,
             ducking: music_policy::Ducking::default(),
             volume: music_policy::VolumeRamp::default(),
+            spatial: (1.0, 64),
         }
     }
 }
@@ -556,9 +558,11 @@ fn update_music(
     shop_data: Res<crate::shop::ShopData>,
     focus: Res<crate::input::InputFocus>,
     time: Res<Time<Real>>,
-    (room, current): (
+    (room, current, disc, player): (
         Res<crate::player_room::PlayerRoom>,
         Res<crate::house::CurrentRoom>,
+        Option<Res<crate::game_disc::GameDisc>>,
+        Query<&GlobalTransform, With<crate::player::Player>>,
     ),
 ) {
     let (Some(sound), Some(mut bgm)) = (sound, bgm) else {
@@ -566,10 +570,11 @@ fn update_music(
     };
     use crate::input::InputFocus;
     let ducking = music_policy::Ducking {
-        menu: matches!(
-            *focus,
-            InputFocus::Pockets | InputFocus::Mail | InputFocus::Paused
-        ),
+        menu: room.music_menu_open()
+            || matches!(
+                *focus,
+                InputFocus::Pockets | InputFocus::Mail | InputFocus::Paused
+            ),
         // Shop transactions and quests currently use modal text panels.
         talking: matches!(
             *focus,
@@ -605,6 +610,25 @@ fn update_music(
         .flatten()
     });
     let changed = next != bgm.playing;
+    let spatial = if next.is_some_and(|t| t.id >= 128) {
+        room.music_source()
+            .zip(player.single().ok())
+            .map_or((1.0, 64), |((at, name), player)| {
+                let mic =
+                    rustimal_logic::ambience::microphone((player.translation() * 40.0).to_array());
+                let (gain, pan) =
+                    rustimal_logic::ambience::music_spatial((at * 40.0).to_array(), mic);
+                let gain = gain
+                    * disc
+                        .as_ref()
+                        .map_or(1.0, |d| crate::furniture::music_boost(d, name));
+                (gain, pan)
+            })
+    } else {
+        (1.0, 64)
+    };
+    let spatial_changed = spatial != bgm.spatial;
+    bgm.spatial = spatial;
     let mut commands = Vec::new();
     if changed {
         if let Some(track) = next {
@@ -657,11 +681,22 @@ fn update_music(
         }
         bgm.playing = next;
     }
-    if changed || previous_volume != bgm.volume.current {
+    if changed || spatial_changed || previous_volume != bgm.volume.current {
         // Starting a sequence resets group gain. Reapply the current duck
         // after START_SEQ, to both handles including any outgoing tail.
         for group in [BGM0_GROUP, BGM1_GROUP] {
-            commands.push(cmd(0x41, group, 0, 0, AudioParam::F32(bgm.volume.current)));
+            commands.push(cmd(
+                0x41,
+                group,
+                0,
+                0,
+                AudioParam::F32(bgm.volume.current * spatial.0),
+            ));
+            if changed || spatial_changed {
+                for sub in 0..16 {
+                    commands.push(cmd(0x03, group, sub, 0, AudioParam::S8(spatial.1 as i8)));
+                }
+            }
         }
     }
     if !commands.is_empty() {
@@ -798,6 +833,7 @@ impl Plugin for SoundPlugin {
                     report_mix,
                 )
                     .after(crate::footsteps::play_footsteps)
+                    .after(crate::player_toys::ToyVisualSet)
                     .after(bevy::transform::TransformSystems::Propagate)
                     .run_if(in_state(AppState::InGame)),
             )

@@ -513,4 +513,19 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   search/status filters. Codex proposes music presentation, toy holding/use,
   remaining item conversions, then decorating/special furniture actions. Those
   follow-ups are planned, not started; broader M4 acceptance precedes M5.
+  Philip subsequently accepts music playback ("music is good") and authorizes
+  music presentation plus fan/pinwheel use. The new original11x5 collection UI
+  uses disc frame/cloth masks/icons/font, the source hand view and choice menu;
+  includes title/unknown slots, wrapped navigation, listen/single-title take-out,
+  full-pocket refusal, exclusive focus and reload cleanup. Native MD distance,
+  pan and original device gain classes now feed existing BGM groups.
+  All16 audited constructors pass start/end0,0 to MiniDiskCommonMove: no invented
+  lids or kagu clips. Hardware filters/hiss, menu transitions/cloth timing,
+  multi-mark take-out and source placement selection remain fidelity follow-ups.
+  Eight fans/eight pinwheels now Hold from pockets using original hand assets,
+  player poses/part table, fan E repeat/sound and movement-driven rotor/coasting
+  with source level sound. 3 puts away; ownership/reload/placement stay atomic.
+  F1 in the home grants two toys only with two free pockets. Environmental wind
+  awaits weather. See backlog/music-presentation-toys.md; new presentation/toy
+  acceptance remains pending, while playback acceptance is recorded separately.
 

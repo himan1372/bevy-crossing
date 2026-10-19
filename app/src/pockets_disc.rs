@@ -42,7 +42,7 @@ struct PatternTile {
 
 /// One continuous screen-space cloth tile, independently masked per part.
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
-struct PocketPattern {
+pub(crate) struct PocketPattern {
     #[uniform(0)]
     offset: Vec4,
     #[texture(1)]
@@ -51,6 +51,15 @@ struct PocketPattern {
     #[texture(3)]
     #[sampler(4)]
     mask: Handle<Image>,
+}
+impl PocketPattern {
+    pub(crate) fn new(cloth: Handle<Image>, mask: Handle<Image>) -> Self {
+        Self {
+            offset: Vec4::ZERO,
+            cloth,
+            mask,
+        }
+    }
 }
 impl Material for PocketPattern {
     fn fragment_shader() -> ShaderRef {
@@ -88,6 +97,9 @@ pub(crate) struct PocketAssets {
     white: Handle<Image>,
 }
 impl PocketAssets {
+    pub(crate) fn hand_image(&self) -> Handle<Image> {
+        self.hand_image.clone()
+    }
     /// aMR_SetReserveFurniture waits for the submenu to finish closing.
     pub(crate) fn world_ready(&self) -> bool {
         !self.was_open && self.slide >= 300.0
@@ -527,13 +539,15 @@ fn make_view(
         }),
         Transform::from_translation(eye).looking_at(look, Vec3::Y),
         RenderLayers::layer(layer),
-        PocketView,
+        PocketView { hand: !player },
     ));
     image
 }
 
 #[derive(Component)]
-struct PocketView;
+struct PocketView {
+    hand: bool,
+}
 
 /// mTG_item_col_pos / line_pos, matching the inv_mwin pocket-quad centers.
 /// Both frame and icons share this orthographic view: applying mSM's separate
@@ -599,10 +613,11 @@ fn animate(
     mut transforms: Query<&mut Transform>,
     hands: Query<Entity, With<PocketHand>>,
     carries: Query<(Entity, &PocketCarry)>,
-    mut cameras: Query<&mut Camera, With<PocketView>>,
+    mut cameras: Query<(&mut Camera, &PocketView)>,
+    room: Res<crate::player_room::PlayerRoom>,
 ) {
-    for mut camera in &mut cameras {
-        camera.is_active = assets.root.is_some();
+    for (mut camera, view) in &mut cameras {
+        camera.is_active = assets.root.is_some() || (view.hand && room.music_menu_open());
     }
     let ticks = time.delta_secs() * 60.0;
     if ticks <= 0.0 || assets.root.is_none() {

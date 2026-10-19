@@ -24,6 +24,7 @@ pub(crate) fn update_ambience(
     player: Query<&GlobalTransform, With<Player>>,
     bugs: Query<(Entity, &crate::ecology::Bug, &GlobalTransform)>,
     mut state: Local<AmbienceState>,
+    toy: Res<crate::player_toys::ToyAction>,
 ) {
     let Some(sound) = sound else { return };
     let (Some(ground), Ok(player)) = (&town.ground, player.single()) else {
@@ -31,7 +32,21 @@ pub(crate) fn update_ambience(
         return;
     };
     if *house.get() != HouseState::Town || *shop.get() != ShopLocation::Town {
-        sound.ambience(state.mixer.clear());
+        let position = player.translation();
+        let sources = (toy.pin_level > 0.0).then_some(Source {
+            key: u64::MAX,
+            id: 0x4D,
+            position: (position * 40.0).to_array(),
+        });
+        let mut levels = state.mixer.update(
+            sources,
+            rustimal_logic::ambience::microphone((position * 40.0).to_array()),
+            !focus.is_world(),
+        );
+        for level in levels.iter_mut().flatten() {
+            level.volume *= toy.pin_level;
+        }
+        sound.ambience(levels);
         return;
     }
     let position = player.translation();
@@ -84,6 +99,13 @@ pub(crate) fn update_ambience(
         }
     }
     sources.extend(water.into_iter().flatten().map(|(_, s)| s));
+    if toy.pin_level > 0.0 {
+        sources.push(Source {
+            key: u64::MAX,
+            id: 0x4D,
+            position: (position * 40.0).to_array(),
+        });
+    }
     for (entity, bug, transform) in &bugs {
         if let Some(id) = bug.ai.as_ref().and_then(|ai| ai.level_sound(false)) {
             sources.push(Source {
@@ -100,9 +122,13 @@ pub(crate) fn update_ambience(
         *focus,
         InputFocus::Paused | InputFocus::Pockets | InputFocus::Mail
     );
-    sound.ambience(
-        state
-            .mixer
-            .update(sources.iter().copied(), microphone, quiet),
-    );
+    let mut levels = state
+        .mixer
+        .update(sources.iter().copied(), microphone, quiet);
+    for level in levels.iter_mut().flatten() {
+        if level.key == u64::MAX {
+            level.volume *= toy.pin_level;
+        }
+    }
+    sound.ambience(levels);
 }

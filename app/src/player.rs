@@ -63,6 +63,7 @@ pub fn player_movement(
     mut player_query: Query<(&mut Transform, &mut Facing, &mut Locomotion), With<Player>>,
     town: Res<Town>,
     net: Res<crate::player_tools::NetAction>,
+    toys: Res<crate::player_toys::ToyAction>,
     time: Res<Time>,
 ) {
     if *state != HouseState::Town || *shop_loc != crate::shop::ShopLocation::Town {
@@ -74,7 +75,7 @@ pub fn player_movement(
     let Ok((mut transform, mut facing, mut loco)) = player_query.single_mut() else {
         return;
     };
-    if net.busy() {
+    if net.busy() || toys.blocks_movement() {
         *loco = Locomotion::default();
         return;
     }

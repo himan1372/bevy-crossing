@@ -182,6 +182,18 @@ pub(crate) fn can_render(disc: &GameDisc, index: u16) -> bool {
     !opaque.is_empty() || !translucent.is_empty()
 }
 
+/// aMR_Fname2ConpoIndex / Na_MDPlayerPos's original device gain classes.
+pub(crate) fn music_boost(disc: &GameDisc, index: u16) -> f32 {
+    match read_profile(disc, index as u32).map(|p| p.name).as_deref() {
+        Some(
+            "iam_sum_stereo01" | "iam_sum_chikuon01" | "iam_sum_chikuon02" | "iam_sum_jukebox"
+            | "iam_sum_lv_stereo",
+        ) => 1.08,
+        Some("iam_sum_radio01" | "iam_sum_radio02" | "iam_sum_casse01") => 1.4,
+        _ => 1.0,
+    }
+}
+
 /// The skeleton a profile draws: its rig's, or the `cKF_bs_r_int_*` one
 /// its draw function names (`iam_<name>` -> `cKF_bs_r_int_<name>`).
 fn profile_skeleton(disc: &GameDisc, profile: &Profile) -> Option<(Skeleton, Option<Animation>)> {

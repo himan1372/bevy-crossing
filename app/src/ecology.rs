@@ -49,6 +49,8 @@ pub enum EquippedTool {
     None,
     Rod,
     Net,
+    Fan(u16),
+    Pinwheel(u16),
 }
 
 /// A fish shadow drifting on the river.
@@ -571,6 +573,8 @@ fn update_tool_hud(tool: Res<EquippedTool>, mut query: Query<&mut Text, With<Too
         EquippedTool::None => "Tool: none (1=rod 2=net)",
         EquippedTool::Rod => "Tool: Fishing Rod (E to cast near water)",
         EquippedTool::Net => "Tool: Bug Net (E to swing at bugs)",
+        EquippedTool::Fan(_) => "Fan: hold E to fan | 3: put away",
+        EquippedTool::Pinwheel(_) => "Pinwheel: walk or run to spin | 3: put away",
     };
     if let Ok(mut text) = query.single_mut() {
         text.0 = label.to_string();
@@ -1039,7 +1043,7 @@ fn tool_interact(
                 }
             }
         }
-        EquippedTool::None => {}
+        EquippedTool::None | EquippedTool::Fan(_) | EquippedTool::Pinwheel(_) => {}
     }
 }
 

@@ -28,6 +28,7 @@ mod loose;
 mod loose_presentation;
 mod movement;
 mod music;
+mod music_grid;
 mod presentation;
 mod storage;
 
@@ -97,6 +98,7 @@ enum StorageFlow {
 
 #[derive(Resource)]
 pub(crate) struct PlayerRoom {
+    music_grid: Option<music_grid::Grid>,
     music_box: [u32; 2],
     loose_angles: loose::Angles,
     movement: movement::Movement,
@@ -117,6 +119,7 @@ pub(crate) struct PlayerRoom {
 impl Default for PlayerRoom {
     fn default() -> Self {
         Self {
+            music_grid: None,
             music_box: [0; 2],
             loose_angles: [[0; 16]; 16],
             movement: movement::Movement::default(),
@@ -142,7 +145,8 @@ fn layer_views(layers: &mut [RoomLayer; 4]) -> [Option<&mut RoomLayer>; 4] {
 
 impl PlayerRoom {
     pub(crate) fn manipulating(&self) -> bool {
-        self.presentation.busy()
+        self.music_grid.is_some()
+            || self.presentation.busy()
             || self.loose_presentation.busy()
             || self.storage.busy()
             || self.movement.grip.is_some()
@@ -174,6 +178,7 @@ impl PlayerRoom {
     }
 
     pub(crate) fn restore(&mut self, saved: Option<&RoomSave>, disc: Option<&GameDisc>) {
+        self.music_grid = None;
         self.loose_angles = [[0; 16]; 16];
         self.movement.reset();
         self.presentation.reset();
@@ -579,6 +584,9 @@ fn interact(
     rigs: Query<(&RoomPiece, &crate::furniture::storage::StorageRig)>,
 ) {
     room.available = disc.is_some() && crate::house::is_player_room(&current, &state);
+    if room.music_grid.is_some() {
+        return;
+    }
     let request = ui.room_request.take();
     if !room.available {
         ui.home = false;
@@ -792,6 +800,17 @@ fn interact(
         if room.storage.busy() && matches!(room.flow, StorageFlow::Idle) {
             *focus = InputFocus::Furniture;
         }
+        return;
+    }
+    if focus.is_world() && actions.consume(Action::DebugToys) {
+        let mut pockets = inventory.pockets.clone();
+        let message = if pockets.put(0x224C, 0).is_some() && pockets.put(0x2254, 0).is_some() {
+            inventory.pockets = pockets;
+            "Fan and pinwheel added.\nI: select toy > Hold.\nE: fan; walk/run: spin; 3: put away."
+        } else {
+            "You need two empty pockets."
+        };
+        notice(&mut dialogue, &mut room, &mut focus, message);
         return;
     }
     if focus.is_world() && actions.consume(Action::DebugMusic) {
@@ -1108,6 +1127,7 @@ pub(crate) struct PlayerRoomPlugin;
 impl Plugin for PlayerRoomPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PlayerRoom>()
+            .add_plugins(music_grid::MusicGridPlugin)
             .add_systems(Startup, setup.after(crate::house::build_interior))
             .add_systems(
                 Update,
