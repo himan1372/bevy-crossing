@@ -107,6 +107,27 @@ impl BaseLight {
             moon_color: Vec4::ZERO,
             fog_color: Vec4::ZERO,
             fog: Vec4::new(1000.0, 1000.0, 0.0, 0.0),
+            ..default()
+        }
+    }
+
+    /// A player room with a light switch: the period's ambient, with sun and
+    /// moon scaled by `mEnv_ChangeDiffuseLight`'s switch factor and truncated
+    /// to bytes like the source colours. No fog away from the field. The
+    /// room point light is added per object by `player_room::lighting`.
+    pub fn switch_room_uniform(&self, celestial: f32) -> EnvUniform {
+        let c = |v: [f32; 3]| Vec4::new(v[0].floor(), v[1].floor(), v[2].floor(), 0.0) / 255.0;
+        let dim = |v: [f32; 3]| c(v.map(|x| x.floor() * celestial));
+        let d = |v: [f32; 3]| Vec3::from(v).normalize_or_zero().extend(0.0);
+        EnvUniform {
+            ambient: c(self.ambient),
+            sun_dir: d(self.sun_dir),
+            sun_color: dim(self.sun_color),
+            moon_dir: d(self.moon_dir),
+            moon_color: dim(self.moon_color),
+            fog_color: Vec4::ZERO,
+            fog: Vec4::new(1000.0, 1000.0, 0.0, 0.0),
+            ..default()
         }
     }
 
@@ -125,6 +146,7 @@ impl BaseLight {
                 let (start, end) = gx_fog_range(self.fog_near.min(996.0), self.fog_far.min(1600.0));
                 Vec4::new(start, end, 1.0, 0.0)
             },
+            ..default()
         }
     }
 }
@@ -221,7 +243,7 @@ fn load_light_table(mut commands: Commands, disc: Option<Res<GameDisc>>, mut don
 
 /// Updates every N64 material's light and fog, and the background colour,
 /// once per game minute.
-fn update_environment(
+pub(crate) fn update_environment(
     table: Option<Res<LightTable>>,
     mut materials: ResMut<Assets<N64Material>>,
     mut clear: ResMut<ClearColor>,

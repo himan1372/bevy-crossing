@@ -26,6 +26,7 @@ use crate::states::GameplaySet;
 
 pub(crate) mod decorating;
 pub(crate) mod diary;
+mod lighting;
 mod loose;
 mod loose_presentation;
 mod movement;
@@ -121,6 +122,7 @@ pub(crate) struct PlayerRoom {
     music_grid: Option<music_grid::Grid>,
     music_box: [u32; 2],
     loose_angles: loose::Angles,
+    lighting: lighting::Lighting,
     movement: movement::Movement,
     presentation: presentation::Presentation,
     loose_presentation: loose_presentation::Presentation,
@@ -146,6 +148,7 @@ impl Default for PlayerRoom {
             music_grid: None,
             music_box: [0; 2],
             loose_angles: [[0; 16]; 16],
+            lighting: lighting::Lighting::default(),
             movement: movement::Movement::default(),
             presentation: presentation::Presentation::default(),
             loose_presentation: loose_presentation::Presentation::default(),
@@ -221,6 +224,7 @@ impl PlayerRoom {
         self.decoration_pending = false;
         self.music_grid = None;
         self.loose_angles = [[0; 16]; 16];
+        self.lighting.reset();
         self.movement.reset();
         self.presentation.reset();
         self.loose_presentation.reset();
@@ -1273,6 +1277,22 @@ impl Plugin for PlayerRoomPlugin {
             .add_systems(
                 Update,
                 render_televisions.after(refresh).in_set(GameplaySet),
+            )
+            .add_systems(
+                Update,
+                lighting::advance
+                    .after(crate::save::LoadSet)
+                    .after(InteractSet::Ui)
+                    .in_set(GameplaySet),
+            )
+            .add_systems(
+                Update,
+                lighting::render
+                    .after(lighting::advance)
+                    .after(refresh)
+                    .after(decorating::render)
+                    .after(crate::environment::update_environment)
+                    .in_set(GameplaySet),
             )
             .add_systems(
                 Update,

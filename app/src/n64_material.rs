@@ -134,7 +134,9 @@ impl CombinerUniform {
 /// Scene lighting and fog (`m_kankyo.c`), shared by every material and
 /// updated by `environment`. Colours 0..1; directions point at the light;
 /// `fog` = (near, far) in the N64 depth range 0..1000, enabled, unused.
-#[derive(Clone, Copy, Debug, ShaderType)]
+/// `point_*` is a room point light already turned into a directional light
+/// for this object (`LightsN__point_proc`); black elsewhere.
+#[derive(Clone, Copy, Debug, PartialEq, ShaderType)]
 pub struct EnvUniform {
     pub ambient: Vec4,
     pub sun_dir: Vec4,
@@ -143,6 +145,8 @@ pub struct EnvUniform {
     pub moon_color: Vec4,
     pub fog_color: Vec4,
     pub fog: Vec4,
+    pub point_dir: Vec4,
+    pub point_color: Vec4,
 }
 
 impl Default for EnvUniform {
@@ -156,6 +160,8 @@ impl Default for EnvUniform {
             moon_color: Vec4::ZERO,
             fog_color: Vec4::ZERO,
             fog: Vec4::new(1000.0, 1000.0, 0.0, 0.0),
+            point_dir: Vec4::Y,
+            point_color: Vec4::ZERO,
         }
     }
 }

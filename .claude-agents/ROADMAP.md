@@ -637,3 +637,17 @@ See backlog/furniture-clocks.md for source/joint/time-change/runtime evidence an
 final gates. Configurable alarms, room illumination, Philip visual/audio acceptance,
 M4/migration and deferred net/title/rename remain separate.
 Clock final gates pass: workspace check8.98s/all-target clippy -D warnings24.90s/fmt/capture1m01s/default1m02s/release3m25s, normal project settings, no tests. All ten F6 hour deltas about-30deg, authored motion/pause, per-variant numeric roundtrip, extra-hand close-ups, movement/hidden/surface checks, F5/F9/fresh/no-disc and sound retirement evidence in task. Actual save unchanged; Philip visual/audio acceptance remains pending.
+
+2026-10-19 claude room-light-switch: player-house Z light switch and switch-driven
+room lighting from ac-decomp m_kankyo/m_room_type/m_lights (identical in ACGC-PC-Port
+apart from dt scaling). Session switch bits with game-start 18:00-05:00 default,
+reset on load, not saved; Z toggle with SE0x16/0x17, 20-frame switch-on flicker
+(Z ignored meanwhile) and retail add_calc fades; room-S point light (120,180,180)
+r1000 turned into per-object directional light for furniture/loose/retiring pieces,
+the player and the room shell (control-actor origin); sun/moon x(1-0.6 level);
+switch-dependent room prim on the floor/wall lists (disc lists verified to inherit
+prim). Native logic::room_light plus ported subset of pinned 122867f lights.rs
+(add_point_relative only). EnvUniform/shader gain one directional point slot. No save
+schema change. Window sunshine (ef_room_sunshine), villager-room schedules,
+basements/cottage remain follow-ups. Evidence/gates in backlog/room-light-switch.md;
+Philip visual/audio acceptance, M4 and migration remain open.

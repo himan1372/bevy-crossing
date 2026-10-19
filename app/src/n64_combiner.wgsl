@@ -37,6 +37,9 @@ struct Env {
     fog_color: vec4<f32>,
     // GX fog start and end eye depths (game units), enabled, unused
     fog: vec4<f32>,
+    // Room point light as a per-object directional light; black elsewhere.
+    point_dir: vec4<f32>,
+    point_color: vec4<f32>,
 };
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(3) var<uniform> env: Env;
@@ -152,7 +155,8 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         let n = normalize(in.world_normal);
         let lit = env.ambient.rgb
             + env.sun_color.rgb * max(dot(n, env.sun_dir.xyz), 0.0)
-            + env.moon_color.rgb * max(dot(n, env.moon_dir.xyz), 0.0);
+            + env.moon_color.rgb * max(dot(n, env.moon_dir.xyz), 0.0)
+            + env.point_color.rgb * max(dot(n, env.point_dir.xyz), 0.0);
         i.shade = vec4(clamp(lit, vec3(0.0), vec3(1.0)), 1.0);
     }
     if (cc.flags & FLAG_NO_SHADE) != 0u {

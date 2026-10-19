@@ -77,6 +77,7 @@ pub mod inventory;
 pub mod item_prefs;
 mod leaflet;
 pub mod letter_score;
+pub mod lights;
 mod mail;
 mod mck_key_tables;
 mod mother_mail;
@@ -95,6 +96,7 @@ pub use player_tools::{chase_net_angle, net_swing_outcome, net_walk_angle, NetSw
 pub mod quest;
 pub mod quest_gen;
 pub mod request_selector;
+pub mod room_light;
 mod save;
 mod save_format;
 mod scene;

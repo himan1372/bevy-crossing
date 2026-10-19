@@ -75,6 +75,8 @@ pub enum Action {
     DebugToys,
     /// Toggle a registered music title's take-out mark.
     Mark,
+    /// The GameCube Z button: the room light switch in the player's house.
+    LightSwitch,
 }
 
 /// Keys for each action. Several actions may share a key: they are read in
@@ -121,6 +123,7 @@ impl Default for KeyBindings {
             (DebugMusic, vec![K::F2]),
             (DebugToys, vec![K::F1]),
             (Mark, vec![K::KeyM]),
+            (LightSwitch, vec![K::KeyZ]),
         ];
         Self(map.into_iter().collect())
     }
