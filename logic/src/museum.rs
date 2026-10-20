@@ -257,6 +257,73 @@ const FISH_TALK: [usize; FISH_NUM] = [
     0x3A6D, 0x3A7A, 0x3A7B, 0x3A78,
 ];
 
+/// mMsm_REMAIL_KIND_*: what became of something mailed to the museum.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Mailed {
+    CannotDonate = 1,
+    Donated = 2,
+    AlreadyDonated = 3,
+}
+
+impl Mailed {
+    /// remail_no_table: the museum's letter about it.
+    pub fn mail_no(self) -> usize {
+        [0x22D, 0x22B, 0x22C][self as usize - 1]
+    }
+
+    pub fn from_u8(kind: u8) -> Option<Self> {
+        match kind {
+            1 => Some(Self::CannotDonate),
+            2 => Some(Self::Donated),
+            3 => Some(Self::AlreadyDonated),
+            _ => None,
+        }
+    }
+}
+
+/// mMsm_REMAIL_SLOTS: answers (and unidentified fossils) kept for a player.
+pub const REMAIL_SLOTS: usize = 30;
+/// mMsm_MAX_MAIL: the museum's letters to one player a day.
+pub const MAX_MAIL: usize = 3;
+/// mMl_MUSEUM_INFO_MAIL_NO: the letter giving the museum's address.
+pub const INFO_MAIL_NO: usize = 189;
+/// mMsm_SendCompMail: the letter for a finished museum, and its gift
+/// (FTR_START(FTR_NOG_MUSEUM)).
+pub const COMPLETE_MAIL_NO: usize = 0x22F;
+pub const MUSEUM_MODEL: u16 = 0x3030;
+/// ITM_PAPER24: the museum's stationery.
+pub const MUSEUM_PAPER: u8 = 24;
+
+impl Collection {
+    /// mMsm_SetRemailInfo for an item mailed by `player`
+    /// (mMmd_GetDisplayInfo: by mail any exhibit not yet shown is kept,
+    /// paintings included).
+    pub fn mailed(&mut self, item: u16, player: u8) -> Mailed {
+        let Some((cat, idx)) = exhibit(item) else {
+            return Mailed::CannotDonate;
+        };
+        if self.donor(cat, idx) != 0 {
+            return Mailed::AlreadyDonated;
+        }
+        if let Some(slot) = self.slot(cat, idx) {
+            *slot = player;
+        }
+        Mailed::Donated
+    }
+}
+
+/// mMsm_GetFossilMailNo: the museum's letter naming an identified fossil.
+pub fn fossil_mail_no(fossil: u16) -> usize {
+    const MAIL_NO: [usize; 25] = [
+        0x10E, 0x110, 0x10F, 0x111, 0x113, 0x112, 0x114, 0x116, 0x115, 0x117, 0x119, 0x118, 0x11A,
+        0x11B, 0x11C, 0x11D, 0x11E, 0x11F, 0x120, 0x121, 0x126, 0x125, 0x123, 0x124, 0x122,
+    ];
+    match exhibit(fossil) {
+        Some((Category::Fossil, idx)) => MAIL_NO[idx],
+        _ => MAIL_NO[0],
+    }
+}
+
 /// aCR_check_sleep_time: Blathers sleeps from 06:00 to 18:00.
 pub fn asleep(day_secs: u32) -> bool {
     (6 * 3600..18 * 3600).contains(&(day_secs % 86400))

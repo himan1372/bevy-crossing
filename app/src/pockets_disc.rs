@@ -994,7 +994,10 @@ fn draw(
         mailbox
             .letter_index(slot)
             .and_then(|index| mailbox.letters.get(index))
-            .map(|l| format!("From {}", l.sender))
+            .map(|l| match &l.to {
+                Some(to) => format!("To {}", to.name()),
+                None => format!("From {}", l.sender),
+            })
             .unwrap_or_default()
     } else if labelled == 0 {
         String::new()
@@ -1065,8 +1068,12 @@ fn draw(
             );
         }
         let centre = Vec2::new(224.0, 166.0);
-        let compact =
-            mail.menu.is_some() || ui.selling || ui.donating || ui.storing.is_some() || ui.home;
+        let compact = mail.menu.is_some()
+            || ui.selling
+            || ui.donating
+            || ui.mailing
+            || ui.storing.is_some()
+            || ui.home;
         let (menu_min, menu_max) = font.choice_bounds;
         for (mesh, material) in &font.choice_body {
             let transform = if compact && menu_min.is_finite() && menu_max.is_finite() {

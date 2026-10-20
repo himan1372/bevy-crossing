@@ -52,6 +52,7 @@ mod player_toys;
 mod pockets;
 mod pockets_disc;
 mod police_box;
+mod post;
 mod post_office;
 mod quest;
 mod remote;
@@ -147,6 +148,7 @@ fn main() {
         .add_plugins(museum_fish::MuseumFishPlugin)
         .add_plugins(museum_insect::MuseumInsectPlugin)
         .add_plugins(copper::CopperPlugin)
+        .add_plugins(post::PostPlugin)
         .add_plugins(home::HomePlugin)
         .add_plugins(statue::StatuePlugin)
         .add_plugins(furniture::house_clock::HouseClockPlugin)

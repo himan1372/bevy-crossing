@@ -7,25 +7,25 @@
 //! storage, delivery, and the UI are Bevy-native; nothing from
 //! `logic::mail` is called here.
 //!
-//! Simplifications vs. retail:
-//! - No Post Office transit queue or twice-daily delivery schedule —
-//!   letters land in the mailbox immediately.
-//! - Retail dialogue text lives in ARAM message scripts; all letter text
-//!   here is original writing.
-//! - A villager's "thank you" for a sent letter arrives as a reply letter
-//!   (scored through the real `LetterRank` tiers) rather than in person.
+//! Letters are written on stationery from the pockets ("Write"), may carry
+//! a present (an item carried onto the letter), and are posted at the post
+//! office counter (post.rs delivers, villagers reply, the museum answers).
+//! Letters from others are the disc's own (`GameText::letter`).
+//!
+//! Simplification vs. retail: the pockets' ten letters and the house
+//! mailbox's ten are one store here.
 
 use bevy::ecs::message::MessageReader;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::input::ButtonState;
 use bevy::prelude::*;
 use bevy::text::FontSize;
-use rustimal_logic::letter_score::{score_letter, LetterRank, TrigramMode, MAIL_BODY_LEN};
+use rustimal_logic::letter_score::MAIL_BODY_LEN;
 use serde::{Deserialize, Serialize};
 
 use crate::house::{HouseState, PlayerHouse};
 use crate::input::{Action, Actions, InputFocus, InteractSet};
-use crate::interaction::{Facing, TalkEvent};
+use crate::interaction::Facing;
 use crate::npc::Villager;
 use crate::player::Player;
 use crate::states::GameplaySet;
@@ -37,15 +37,31 @@ pub const MAILBOX_CAP: usize = 10;
 const MAILBOX_RANGE: f32 = 2.2;
 /// Facing-cone cosine threshold (~60° either side).
 const MAILBOX_DOT: f32 = 0.5;
-/// Chance a talked-to villager sends a letter afterwards.
-const VILLAGER_LETTER_CHANCE: f32 = 0.15;
 /// Max characters in a player-written letter.
 const MAX_LETTER_LEN: usize = 200;
-/// "You have mail!" notification duration.
-const NOTIFY_DURATION: f32 = 3.0;
+
+/// Whom a written letter is for (Mail_nm_c type PLAYER / NPC / MUSEUM).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Recipient {
+    Villager(String),
+    Museum,
+}
+
+impl Recipient {
+    pub fn name(&self) -> &str {
+        match self {
+            Recipient::Villager(name) => name,
+            Recipient::Museum => crate::post::MUSEUM_NAME,
+        }
+    }
+}
+
+fn is_zero(v: &u16) -> bool {
+    *v == 0
+}
 
 /// A single letter. Serializable so the save file can persist it.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Letter {
     pub sender: String,
     pub subject: String,
@@ -57,6 +73,22 @@ pub struct Letter {
     /// Stable position in the ten-slot letter grid; absent in older saves.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub slot: Option<u8>,
+    /// The header and footer of a letter from the disc (the recipient's
+    /// name already in place); None: the plain "To" / "From" lines.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub header: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub footer: Option<String>,
+    /// The present inside (0: none).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub present: u16,
+    /// The player put the present in (mMl_check_set_present_myself): it
+    /// comes back out unwrapped.
+    #[serde(default)]
+    pub present_mine: bool,
+    /// A letter the player wrote (mMl_FONT_SEND), and whom it is for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<Recipient>,
 }
 
 /// The player's mailbox: received letters plus sent ones.
@@ -67,6 +99,15 @@ pub struct Mailbox {
 }
 
 impl Mailbox {
+    pub(crate) fn has_room(&self) -> bool {
+        self.letters.len() < MAILBOX_CAP
+    }
+
+    /// Puts a letter in the first free slot; false when full.
+    pub(crate) fn push(&mut self, letter: Letter) -> bool {
+        push_letter(self, letter)
+    }
+
     pub(crate) fn slots(&self) -> [Option<usize>; MAILBOX_CAP] {
         let mut slots = [None; MAILBOX_CAP];
         let mut placed = vec![false; self.letters.len()];
@@ -136,6 +177,15 @@ pub struct MailUi {
     pub(crate) menu: Option<usize>,
     pub(crate) discard: bool,
     pub(crate) grabbed: Option<usize>,
+    /// The letter the menu is for: (written by the player, has a present).
+    pub(crate) menu_letter: (bool, bool),
+    /// Writing on the stationery in this pocket slot (its paper index).
+    pub(crate) write_paper: Option<(usize, u8)>,
+    /// Rewriting this letter (by index) rather than a new one.
+    pub(crate) rewriting: Option<usize>,
+    /// Who the letter may go to (mAD: villagers, and the museum once its
+    /// address is known).
+    pub(crate) write_recipients: Vec<Recipient>,
 }
 
 impl MailUi {
@@ -146,12 +196,18 @@ impl MailUi {
         crate::sound::se(crate::sound::se_id::MENU_EXIT);
     }
 
-    pub(crate) fn action_options(&self) -> &'static [&'static str] {
+    /// mTG_def_rmail / _rmail_pre / _smail / _smail_pre.
+    pub(crate) fn action_options(&self) -> Vec<&'static str> {
+        let (written, present) = self.menu_letter;
         if self.discard {
-            &["Yes", "No"]
-        } else {
-            &["Read", "Grab", "Throw Away", "Quit"]
+            return vec!["Yes", "No"];
         }
+        vec![
+            if written { "Rewrite" } else { "Read" },
+            "Grab",
+            if present { "Present" } else { "Throw Away" },
+            "Quit",
+        ]
     }
 
     /// mTG_def_rmail and dump confirmation; mHD-style grab/drop swaps whole mail.
@@ -161,6 +217,7 @@ impl MailUi {
         mailbox: &mut Mailbox,
         slot: usize,
         from_pockets: bool,
+        inventory: &mut crate::interaction::PlayerInventory,
     ) -> bool {
         if (self.menu.is_some() || self.grabbed.is_some())
             && (actions.consume(Action::Cancel) || actions.consume(Action::Back))
@@ -189,15 +246,42 @@ impl MailUi {
                     }
                     self.discard = false;
                 } else {
-                    match choice {
-                        0 => {
-                            if let Some(index) = mailbox.letter_index(slot) {
-                                self.read_from_pockets(index);
-                                self.from_pockets = from_pockets;
+                    let label = self.action_options().get(choice).copied().unwrap_or("Quit");
+                    let index = mailbox.letter_index(slot);
+                    match (label, index) {
+                        ("Read", Some(index)) => {
+                            self.read_from_pockets(index);
+                            self.from_pockets = from_pockets;
+                        }
+                        ("Rewrite", Some(index)) => {
+                            let letter = &mailbox.letters[index];
+                            self.open = true;
+                            self.writing = true;
+                            self.from_pockets = from_pockets;
+                            self.rewriting = Some(index);
+                            self.write_paper = None;
+                            self.write_text = letter.body.clone();
+                            self.write_recipients.clear();
+                            self.write_recipient = 0;
+                        }
+                        ("Grab", _) => self.grabbed = Some(slot),
+                        ("Present", Some(index)) => {
+                            // mTG_present_proc: into the pockets, wrapped
+                            // unless the player put it there.
+                            let letter = &mut mailbox.letters[index];
+                            let free = inventory.pockets.pockets.iter().position(|&i| i == 0);
+                            if let Some(free) = free {
+                                inventory.pockets.pockets[free] = letter.present;
+                                inventory
+                                    .pockets
+                                    .set_item_cond(free, u32::from(!letter.present_mine));
+                                letter.present = 0;
+                                letter.present_mine = false;
+                            } else {
+                                crate::sound::se(crate::sound::se_id::MENU_EXIT);
                             }
                         }
-                        1 => self.grabbed = Some(slot),
-                        2 => {
+                        ("Throw Away", _) => {
                             self.discard = true;
                             self.menu = Some(1);
                         }
@@ -211,7 +295,9 @@ impl MailUi {
         if actions.consume(Action::Confirm) || actions.consume(Action::Interact) {
             if let Some(from) = self.grabbed.take() {
                 mailbox.swap_slots(from, slot);
-            } else if mailbox.letter_index(slot).is_some() {
+            } else if let Some(index) = mailbox.letter_index(slot) {
+                let letter = &mailbox.letters[index];
+                self.menu_letter = (letter.to.is_some(), letter.present != 0);
                 self.menu = Some(0);
                 self.from_pockets = from_pockets;
             }
@@ -252,105 +338,6 @@ struct MailNotifyText;
 #[derive(Resource, Default)]
 struct MailNotifyTimer(f32);
 
-/// Simple xorshift RNG (same pattern as npc.rs).
-#[derive(Resource)]
-struct MailRng(u64);
-impl MailRng {
-    fn next_u32(&mut self) -> u32 {
-        let mut x = self.0;
-        x ^= x << 13;
-        x ^= x >> 7;
-        x ^= x << 17;
-        self.0 = x;
-        (x >> 32) as u32
-    }
-    fn chance(&mut self, p: f32) -> bool {
-        (self.next_u32() as f32 / u32::MAX as f32) < p
-    }
-}
-
-/// Starter letters (original writing).
-fn starter_letters() -> Vec<Letter> {
-    vec![
-        Letter {
-            sender: "Mom".to_string(),
-            subject: "Thinking of you".to_string(),
-            body: "Hi sweetie! I hope you're settling into your new town. \
-                I packed some extra cookies in the cupboard — the chocolate chip \
-                ones, your favorite. Don't stay up too late, and remember to \
-                write! Love, Mom"
-                .to_string(),
-            read: false,
-            paper: 0,
-            slot: None,
-        },
-        Letter {
-            sender: "Mom".to_string(),
-            subject: "Don't forget!".to_string(),
-            body: "It's me again! Your father says hi. He wanted me to remind \
-                you to water any flowers you plant. A little water goes a long \
-                way, just like a little kindness. Take care of yourself out \
-                there! Love, Mom"
-                .to_string(),
-            read: false,
-            paper: 0,
-            slot: None,
-        },
-        Letter {
-            sender: "Tom Nook".to_string(),
-            subject: "Welcome!".to_string(),
-            body: "Welcome to town! This is Tom Nook, your friendly \
-                shopkeeper. My store is open every day with everything a new \
-                homeowner needs. And speaking of homes — do come by when you're \
-                ready to talk about your mortgage! No rush. Well... a little \
-                rush. Your friend, Tom Nook"
-                .to_string(),
-            read: false,
-            paper: 0,
-            slot: None,
-        },
-    ]
-}
-
-/// A letter a villager sends after talking (original writing).
-fn villager_letter(name: &str) -> Letter {
-    Letter {
-        sender: name.to_string(),
-        subject: "Hi hi!".to_string(),
-        body: format!(
-            "It's {name}! I had such a nice time chatting with you today. \
-            We should do it again soon — maybe by the river? Anyway, just \
-            wanted to say hi! — {name}"
-        ),
-        read: false,
-        paper: 0,
-        slot: None,
-    }
-}
-
-/// Reply to a player-sent letter, tiered by the real `LetterRank`.
-fn reply_letter(recipient: &str, rank: LetterRank) -> Letter {
-    let body = match rank {
-        LetterRank::Ok => format!(
-            "Your letter made my whole day! You write the nicest things. \
-            Let's hang out soon — I'll bring snacks! — {recipient}"
-        ),
-        _ => format!(
-            "Thanks for the letter... I think? I read it three times and I'm \
-            still not quite sure what it said. Maybe we should just talk in \
-            person next time! — {recipient}"
-        ),
-    };
-    Letter {
-        sender: recipient.to_string(),
-        subject: "Re: your letter".to_string(),
-        body,
-        read: false,
-        paper: 0,
-        slot: None,
-    }
-}
-
 /// Push a letter, respecting the mailbox cap. Returns false when full.
 fn push_letter(mailbox: &mut Mailbox, mut letter: Letter) -> bool {
     if mailbox.letters.len() >= MAILBOX_CAP {
@@ -368,7 +355,7 @@ fn push_letter(mailbox: &mut Mailbox, mut letter: Letter) -> bool {
 
 /// Pack typed text into the fixed-size body the scorer expects
 /// (space-padded, like the decomp's `CHAR_SPACE` fill).
-fn letter_body_bytes(text: &str) -> [u8; MAIL_BODY_LEN] {
+pub(crate) fn letter_body_bytes(text: &str) -> [u8; MAIL_BODY_LEN] {
     let mut body = [0x20u8; MAIL_BODY_LEN];
     for (i, b) in text.bytes().take(MAIL_BODY_LEN).enumerate() {
         body[i] = b;
@@ -470,9 +457,6 @@ fn spawn_mailbox(
         mailbox.letters = save.letters.clone();
         mailbox.sent = save.sent_letters.clone();
         println!("Restored {} letters from save", mailbox.letters.len());
-    } else {
-        mailbox.letters = starter_letters();
-        println!("Seeded starter letters");
     }
     // The disc town draws the real mailbox at the layout's MAILBOX0.
     if let Some(cell) = town.retail.as_ref().and_then(|r| r.mailboxes[0]) {
@@ -567,19 +551,6 @@ fn mailbox_interact(
     println!("Mailbox opened");
 }
 
-/// Show the "you have mail" notification.
-fn show_mail_notify(
-    text: &str,
-    timer: &mut ResMut<MailNotifyTimer>,
-    query: &mut Query<(&mut Text, &mut Visibility), (With<MailNotifyText>, Without<MailPanel>)>,
-) {
-    if let Ok((mut t, mut vis)) = query.single_mut() {
-        t.0 = text.to_string();
-        *vis = Visibility::Visible;
-    }
-    timer.0 = NOTIFY_DURATION;
-}
-
 /// Fade the notification out.
 fn tick_mail_notify(
     time: Res<Time>,
@@ -597,77 +568,42 @@ fn tick_mail_notify(
     }
 }
 
-/// Send the composed letter: score it with the decomp-verified scorer and
-/// queue a tiered reply (middle tier sends no reply, per `sends_reply`).
-#[allow(clippy::too_many_arguments)]
-fn send_letter(
+/// Finish writing: a new letter on the stationery (one sheet used) or the
+/// rewritten one, kept in the letters until posted (mMl_FONT_SEND).
+fn finish_letter(
     ui: &mut MailUi,
     mailbox: &mut Mailbox,
-    names: &[String],
-    timer: &mut ResMut<MailNotifyTimer>,
-    notify_query: &mut Query<
-        (&mut Text, &mut Visibility),
-        (With<MailNotifyText>, Without<MailPanel>),
-    >,
+    inventory: &mut crate::interaction::PlayerInventory,
+    player: &str,
 ) {
-    let recipient = names
-        .get(ui.write_recipient)
-        .cloned()
-        .unwrap_or_else(|| "???".to_string());
-    let text = ui.write_text.trim().to_string();
+    let Some(to) = ui.write_recipients.get(ui.write_recipient).cloned() else {
+        return;
+    };
+    let text = ui.write_text.trim_end().to_string();
     ui.writing = false;
     ui.write_text.clear();
-    if text.is_empty() {
-        crate::sound::se(crate::sound::se_id::MENU_EXIT);
-        show_mail_notify("Blank letter discarded.", timer, notify_query);
-        if ui.from_pockets {
-            ui.open = false;
+    if let Some(index) = ui.rewriting.take() {
+        if let Some(letter) = mailbox.letters.get_mut(index) {
+            letter.body = text;
+            letter.to = Some(to);
         }
-        return;
+    } else if let Some((slot, paper)) = ui.write_paper.take() {
+        // A stack of stationery is ITM_PAPER + (count - 1) * 64.
+        let sheet = inventory.pockets.pockets[slot];
+        inventory.pockets.pockets[slot] = if sheet >= 0x2040 { sheet - 0x40 } else { 0 };
+        push_letter(
+            mailbox,
+            Letter {
+                sender: player.to_string(),
+                body: text,
+                read: true,
+                paper,
+                to: Some(to),
+                ..default()
+            },
+        );
     }
     crate::sound::se(crate::sound::se_id::CHOICE_CONFIRM);
-    let total = score_letter(&letter_body_bytes(&text), TrigramMode::Intended).total();
-    let rank = LetterRank::of_score(total);
-    mailbox.sent.push(Letter {
-        sender: "You".to_string(),
-        subject: format!("To {recipient}"),
-        body: text,
-        read: true,
-        paper: 0,
-        slot: None,
-    });
-    match rank {
-        LetterRank::Ok => {
-            if push_letter(mailbox, reply_letter(&recipient, rank)) {
-                show_mail_notify(
-                    &format!("{recipient} loved your letter! (score {total})"),
-                    timer,
-                    notify_query,
-                );
-            } else {
-                show_mail_notify("Mailbox full!", timer, notify_query);
-            }
-        }
-        LetterRank::Bad => {
-            if push_letter(mailbox, reply_letter(&recipient, rank)) {
-                show_mail_notify(
-                    &format!("{recipient} seemed confused... (score {total})"),
-                    timer,
-                    notify_query,
-                );
-            } else {
-                show_mail_notify("Mailbox full!", timer, notify_query);
-            }
-        }
-        LetterRank::Middle => {
-            show_mail_notify(
-                &format!("Letter sent! (score {total} — no reply)"),
-                timer,
-                notify_query,
-            );
-        }
-    }
-    println!("Sent letter to {recipient} (score {total}, rank {rank:?})");
     if ui.from_pockets {
         ui.open = false;
     }
@@ -682,11 +618,11 @@ fn mail_ui_input(
     mut ui: ResMut<MailUi>,
     mut mailbox: ResMut<Mailbox>,
     villagers: Query<&Villager>,
-    mut timer: ResMut<MailNotifyTimer>,
-    mut notify_query: Query<
-        (&mut Text, &mut Visibility),
-        (With<MailNotifyText>, Without<MailPanel>),
-    >,
+    (mut inventory, post, identity): (
+        ResMut<crate::interaction::PlayerInventory>,
+        Res<crate::post::Post>,
+        Res<crate::save::PlayerIdentity>,
+    ),
     mut panel_query: Query<&mut Visibility, (With<MailPanel>, Without<MailNotifyText>)>,
     font: Option<Res<crate::msg_window::MsgAssets>>,
     renderer: Option<Res<crate::pockets_disc::PocketAssets>>,
@@ -737,10 +673,31 @@ fn mail_ui_input(
                 }
             }
         }
-        let mut names: Vec<String> = villagers.iter().map(|v| v.name.to_string()).collect();
-        names.sort_unstable();
+        if ui.write_recipients.is_empty() {
+            let mut names: Vec<String> = villagers.iter().map(|v| v.name.to_string()).collect();
+            names.sort_unstable();
+            ui.write_recipients = names.into_iter().map(Recipient::Villager).collect();
+            if post.museum.contacted {
+                ui.write_recipients.push(Recipient::Museum);
+            }
+            // Rewriting keeps the letter's addressee.
+            if let Some(to) = ui
+                .rewriting
+                .and_then(|i| mailbox.letters.get(i))
+                .and_then(|l| l.to.clone())
+            {
+                ui.write_recipient = ui
+                    .write_recipients
+                    .iter()
+                    .position(|r| *r == to)
+                    .unwrap_or(0);
+            }
+        }
+        let names = &ui.write_recipients;
         if actions.just_pressed(Action::Cancel) {
             ui.writing = false;
+            ui.write_paper = None;
+            ui.rewriting = None;
             ui.write_text.clear();
             if ui.from_pockets {
                 ui.open = false;
@@ -749,6 +706,7 @@ fn mail_ui_input(
             return;
         }
         if !names.is_empty() {
+            let count = names.len();
             if actions.just_pressed(Action::MenuUp) {
                 let before = ui.write_recipient;
                 ui.write_recipient = ui.write_recipient.saturating_sub(1);
@@ -757,7 +715,7 @@ fn mail_ui_input(
             }
             if actions.just_pressed(Action::MenuDown) {
                 let before = ui.write_recipient;
-                ui.write_recipient = (ui.write_recipient + 1).min(names.len() - 1);
+                ui.write_recipient = (ui.write_recipient + 1).min(count - 1);
                 crate::sound::cursor_changed(before, ui.write_recipient);
                 return;
             }
@@ -769,7 +727,7 @@ fn mail_ui_input(
             return;
         }
         if actions.just_pressed(Action::Confirm) {
-            send_letter(&mut ui, &mut mailbox, &names, &mut timer, &mut notify_query);
+            finish_letter(&mut ui, &mut mailbox, &mut inventory, &identity.player);
         }
         return;
     }
@@ -784,7 +742,7 @@ fn mail_ui_input(
         return;
     }
     let slot = ui.selected;
-    if ui.letter_actions(&mut actions, &mut mailbox, slot, false) {
+    if ui.letter_actions(&mut actions, &mut mailbox, slot, false, &mut inventory) {
         return;
     }
     if actions.just_pressed(Action::Cancel) {
@@ -827,16 +785,6 @@ fn mail_ui_input(
         let before = ui.selected;
         ui.selected = (ui.selected + 1).min(MAILBOX_CAP - 1);
         crate::sound::cursor_changed(before, ui.selected);
-        return;
-    }
-    if actions.just_pressed(Action::Compose) {
-        if ui.grabbed.is_some() {
-            return;
-        }
-        ui.writing = true;
-        crate::sound::se(crate::sound::se_id::CHOICE_OPEN);
-        ui.write_recipient = 0;
-        ui.write_text.clear();
     }
 }
 
@@ -953,38 +901,8 @@ fn refresh_mail_ui(
         } else if ui.grabbed.is_some() {
             "[Up/Down] move   [Enter] place/swap   [Esc] cancel".into()
         } else {
-            "[Up/Down] select   [Enter] actions   [N] write   [Esc] close".into()
+            "[Up/Down] select   [Enter] actions   [Esc] close".into()
         };
-    }
-}
-
-/// After talking to a villager, there's a small chance they send a letter.
-fn on_talk_maybe_letter(
-    mut events: MessageReader<TalkEvent>,
-    villagers: Query<&Villager>,
-    mut mailbox: ResMut<Mailbox>,
-    mut rng: ResMut<MailRng>,
-    mut timer: ResMut<MailNotifyTimer>,
-    mut notify_query: Query<
-        (&mut Text, &mut Visibility),
-        (With<MailNotifyText>, Without<MailPanel>),
-    >,
-) {
-    for event in events.read() {
-        let Ok(v) = villagers.get(event.villager) else {
-            continue;
-        };
-        if !rng.chance(VILLAGER_LETTER_CHANCE) {
-            continue;
-        }
-        if push_letter(&mut mailbox, villager_letter(v.name)) {
-            show_mail_notify(
-                &format!("{} sent you a letter!", v.name),
-                &mut timer,
-                &mut notify_query,
-            );
-            println!("{} sent a letter", v.name);
-        }
     }
 }
 
@@ -995,7 +913,6 @@ impl Plugin for MailPlugin {
         app.insert_resource(Mailbox::default())
             .insert_resource(MailUi::default())
             .insert_resource(MailNotifyTimer::default())
-            .insert_resource(MailRng(0x5EED1234))
             .add_systems(Startup, setup_mail_ui)
             .add_plugins(crate::mail_disc::MailDiscPlugin)
             .add_systems(
@@ -1014,7 +931,7 @@ impl Plugin for MailPlugin {
             )
             .add_systems(
                 Update,
-                (refresh_mail_ui, on_talk_maybe_letter, tick_mail_notify).in_set(GameplaySet),
+                (refresh_mail_ui, tick_mail_notify).in_set(GameplaySet),
             );
     }
 }

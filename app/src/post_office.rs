@@ -88,6 +88,12 @@ enum Step {
     },
     /// The result line; then the question again.
     Result,
+    /// The pockets are open to pick a letter to post.
+    Mailing,
+    /// A question about letters is up (0x8E3 / 0x8BD), by its message.
+    Asked(usize),
+    /// A line about the letter; then aPG_office_space_check.
+    ThenSpaceCheck,
     Finish,
 }
 
@@ -320,10 +326,10 @@ fn context(identity: &crate::save::PlayerIdentity, night: bool, loan: u32) -> Ms
     }
 }
 
-/// aPG_set_post_status for the port: no counter letters, the first job is
-/// over, no savings account yet.
-fn status(loan: u32) -> u8 {
-    native::status(false, loan, true, false)
+/// aPG_set_post_status for the port: the first job is over, no savings
+/// account yet; the desk is full with five letters waiting.
+fn status(loan: u32, desk_full: bool) -> u8 {
+    native::status(desk_full, loan, true, false)
 }
 
 /// Ask the business question: only working answers are shown.
@@ -334,9 +340,9 @@ fn ask(
     night: bool,
     talk: &mut Talk,
     msg: usize,
-    loan: u32,
+    (loan, desk_full): (u32, bool),
 ) {
-    let status = status(loan);
+    let status = status(loan, desk_full);
     let choice = say(disc, dialogue, clerk, night, &talk.context, msg);
     let Some(choice) = choice else {
         talk.step = Step::Finish;
@@ -346,7 +352,7 @@ fn ask(
         .filter(|&i| {
             matches!(
                 native::business(status, i),
-                Business::Repay | Business::Quit
+                Business::SendLetter | Business::DeskFull | Business::Repay | Business::Quit
             )
         })
         .collect();
@@ -373,6 +379,13 @@ fn talk(
     mut inventory: ResMut<PlayerInventory>,
     identity: Res<crate::save::PlayerIdentity>,
     font: Option<Res<crate::msg_window::MsgAssets>>,
+    (mut pockets, mut mailbox, mut post, mut collection, mut villagers): (
+        ResMut<crate::pockets::PocketsUi>,
+        ResMut<crate::mail::Mailbox>,
+        ResMut<crate::post::Post>,
+        ResMut<crate::museum::MuseumCollection>,
+        Query<(&crate::npc::Villager, &mut crate::dialogue::VillagerTalk)>,
+    ),
     (mut meshes, mut materials, mut n64, mut images): (
         ResMut<Assets<Mesh>>,
         ResMut<Assets<StandardMaterial>>,
@@ -444,7 +457,7 @@ fn talk(
                     if let Some(e) = ui.take() {
                         commands.entity(e).despawn();
                     }
-                    let after = status(inventory.loan);
+                    let after = status(inventory.loan, post.desk_full());
                     flow.context = context(&identity, night, inventory.loan);
                     let msg = clerk_msg(native::repay_result(before, inventory.loan, after));
                     *focus = InputFocus::Dialogue;
@@ -471,9 +484,132 @@ fn talk(
         return;
     }
 
+    let open_mailing =
+        |pockets: &mut crate::pockets::PocketsUi, focus: &mut InputFocus, d: &mut DialogueState| {
+            // aPG_receive_menu_close_wait_init: mSM_IV_OPEN_SEND_MAIL.
+            *pockets = crate::pockets::PocketsUi {
+                open: true,
+                mailing: true,
+                mail_slot: Some(0),
+                ..default()
+            };
+            *d = DialogueState::default();
+            *focus = InputFocus::Pockets;
+            crate::sound::se(crate::sound::se_id::MENU_PAUSE);
+        };
+
+    // aPG_receive_menu_close_wait: the letter picked (or not).
+    if matches!(flow.step, Step::Mailing) {
+        if pockets.open {
+            return;
+        }
+        pockets.mailing = false;
+        *focus = InputFocus::Dialogue;
+        let Some(index) = pockets
+            .mail_pick
+            .take()
+            .filter(|&i| i < mailbox.letters.len())
+        else {
+            let asked = say(
+                &disc,
+                &mut dialogue,
+                clerk,
+                night,
+                &flow.context,
+                clerk_msg(0x8E3),
+            );
+            flow.step = if asked.is_some() {
+                Step::Asked(0x8E3)
+            } else {
+                Step::Finish
+            };
+            return;
+        };
+        // aPG_check_destination: a villager who has moved away can't get it.
+        let to = mailbox.letters[index].to.clone();
+        let looks = match &to {
+            Some(crate::mail::Recipient::Villager(name)) => villagers
+                .iter()
+                .find(|(v, _)| v.name == name)
+                .map(|(v, _)| Some(v.looks)),
+            Some(crate::mail::Recipient::Museum) => Some(None),
+            None => None,
+        };
+        let msg = if let Some(looks) = looks {
+            let letter = mailbox.letters.remove(index);
+            let name = letter.to.as_ref().map(|t| t.name().to_string());
+            if let Some(delta) = post.receive(letter, looks, &mut collection.0) {
+                for (v, mut talk) in &mut villagers {
+                    if Some(v.name) == name.as_deref() {
+                        talk.friendship += delta;
+                    }
+                }
+            }
+            0x8B9
+        } else {
+            0x8E1
+        };
+        let asked = say(
+            &disc,
+            &mut dialogue,
+            clerk,
+            night,
+            &flow.context,
+            clerk_msg(msg),
+        );
+        flow.step = asked.map_or(Step::ThenSpaceCheck, |_| Step::Asked(clerk_msg(msg)));
+        return;
+    }
+
+    // aPG_office_space_check, once the line about the letter is read.
+    if matches!(flow.step, Step::ThenSpaceCheck) {
+        if dialogue.active {
+            return;
+        }
+        *focus = InputFocus::Dialogue;
+        if post.desk_full() {
+            say(
+                &disc,
+                &mut dialogue,
+                clerk,
+                night,
+                &flow.context,
+                clerk_msg(0x8BB),
+            );
+            flow.step = Step::Finish;
+        } else {
+            let asked = say(
+                &disc,
+                &mut dialogue,
+                clerk,
+                night,
+                &flow.context,
+                clerk_msg(0x8BD),
+            );
+            flow.step = asked.map_or(Step::Finish, |_| Step::Asked(0x8BD));
+        }
+        return;
+    }
+
     if let Some(choice) = dialogue.external_result.take() {
         *focus = InputFocus::Dialogue;
         match std::mem::take(&mut flow.step) {
+            // aPG_check_receive_after / aPG_loop_check: another letter?
+            Step::Asked(0x8E3 | 0x8BD) if choice == 0 => {
+                open_mailing(&mut pockets, &mut focus, &mut dialogue);
+                flow.step = Step::Mailing;
+            }
+            Step::Asked(0x8BD) => {
+                say(
+                    &disc,
+                    &mut dialogue,
+                    clerk,
+                    night,
+                    &flow.context,
+                    clerk_msg(0x8B3),
+                );
+                flow.step = Step::Finish;
+            }
             Step::Menu {
                 status,
                 offered,
@@ -481,6 +617,11 @@ fn talk(
             } => {
                 let original = offered.get(choice).copied().unwrap_or(usize::MAX);
                 match native::business(status, original) {
+                    // aPG_ACTION_21: the pockets, to pick a letter.
+                    Business::SendLetter => {
+                        open_mailing(&mut pockets, &mut focus, &mut dialogue);
+                        flow.step = Step::Mailing;
+                    }
                     Business::Repay => {
                         let msg = next
                             .get(original)
@@ -512,7 +653,10 @@ fn talk(
             Step::Result => {
                 // aPG_repay_after: the question again.
                 flow.context = context(&identity, night, inventory.loan);
-                let msg = clerk_msg(native::after_repay(status(inventory.loan)));
+                let msg = clerk_msg(native::after_repay(status(
+                    inventory.loan,
+                    post.desk_full(),
+                )));
                 ask(
                     &disc,
                     &mut dialogue,
@@ -520,7 +664,7 @@ fn talk(
                     night,
                     &mut flow,
                     msg,
-                    inventory.loan,
+                    (inventory.loan, post.desk_full()),
                 );
             }
             _ => {
@@ -548,7 +692,7 @@ fn talk(
     actions.consume(Action::Interact);
     *focus = InputFocus::Dialogue;
     flow.context = context(&identity, night, inventory.loan);
-    let msg = native::greeting(status(inventory.loan), index);
+    let msg = native::greeting(status(inventory.loan, post.desk_full()), index);
     ask(
         &disc,
         &mut dialogue,
@@ -556,7 +700,7 @@ fn talk(
         night,
         &mut flow,
         msg,
-        inventory.loan,
+        (inventory.loan, post.desk_full()),
     );
 }
 

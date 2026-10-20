@@ -136,7 +136,6 @@ fn draw(
     mailbox: Res<Mailbox>,
     identity: Res<crate::save::PlayerIdentity>,
     focus: Res<crate::input::InputFocus>,
-    villagers: Query<&crate::npc::Villager>,
     mut assets: ResMut<MailAssets>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -188,20 +187,18 @@ fn draw(
         materials: &mut materials,
         root,
     };
-    let mut names: Vec<_> = villagers.iter().map(|v| v.name).collect();
-    names.sort_unstable();
     let recipient = if ui.writing {
-        names.get(ui.write_recipient).copied().unwrap_or("?")
+        ui.write_recipients
+            .get(ui.write_recipient)
+            .map_or("?", |r| r.name())
     } else {
         &identity.player
     };
-    paint.text(
-        &font,
-        &format!("To {recipient}"),
-        Vec2::new(64.0, 36.0),
-        *color,
-        230.0,
-    );
+    // A disc letter's own header (mMl: header with the name in place).
+    let header = letter
+        .and_then(|l| l.header.clone())
+        .unwrap_or_else(|| format!("To {recipient}"));
+    paint.text(&font, &header, Vec2::new(64.0, 36.0), *color, 230.0);
     let draft = format!("{}_", ui.write_text);
     let body = letter.map_or(draft.as_str(), |l| l.body.as_str());
     let wrapped = lines(body, &font.widths);
@@ -221,7 +218,9 @@ fn draw(
         );
     }
     let sender = letter.map_or(identity.player.as_str(), |l| l.sender.as_str());
-    let from = format!("From {sender}");
+    let from = letter
+        .and_then(|l| l.footer.clone())
+        .unwrap_or_else(|| format!("From {sender}"));
     paint.text(
         &font,
         &from,
@@ -229,7 +228,7 @@ fn draw(
         *color,
         230.0,
     );
-    if let Some(letter) = letter {
+    if let Some(letter) = letter.filter(|l| l.header.is_none() && !l.subject.is_empty()) {
         let subject = format!(
             "{}{}{}",
             crate::messages::markup::LINE_SCALE,
@@ -239,7 +238,7 @@ fn draw(
         paint.text(&font, &subject, Vec2::new(64.0, 52.0), *color, 230.0);
     }
     let hint = if ui.writing {
-        "Up/Down: recipient  Enter: send  Esc: cancel".to_string()
+        "Up/Down: recipient  Enter: done  Esc: cancel".to_string()
     } else {
         format!("{}/{}  Left/Right: page  Esc: back", page + 1, count)
     };

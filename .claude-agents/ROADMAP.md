@@ -793,3 +793,5 @@ completed/shop-wall-clock.md.
 2026-10-20 claude museum: lobby, wings, Blathers, donating, fossil and painting displays. Fish/insect displays next. See completed/museum.md.
 
 2026-10-20 claude police-officers: Copper outside (schedule, talk, menu), Booker follows, lost-and-found daily growth. See completed/police-officers.md.
+
+2026-10-20 claude post-office-mail: real letters, counter sending, delivery, villager replies, museum appraisal. See completed/post-office-mail.md.

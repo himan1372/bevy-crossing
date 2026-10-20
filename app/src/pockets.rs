@@ -26,6 +26,10 @@ pub struct PocketsUi {
     /// Inventory mode for the museum (mSM_IV_OPEN_CURATOR): pick an item
     /// to offer Blathers; the slot comes back in `sell_slot`.
     pub(crate) donating: bool,
+    /// Inventory mode for the post office counter (mSM_IV_OPEN_SEND_MAIL):
+    /// pick a written letter; its index comes back in `mail_pick`.
+    pub(crate) mailing: bool,
+    pub(crate) mail_pick: Option<usize>,
     pub(crate) sell_slot: Option<usize>,
     pub(crate) home: bool,
     pub(crate) storing: Option<usize>,
@@ -165,8 +169,18 @@ pub(crate) fn held_tool(item: u16) -> Option<crate::ecology::EquippedTool> {
     }
 }
 
+/// ITM_PAPER_START .. ITM_PAPER_END: stationery.
+fn is_paper(item: u16) -> bool {
+    (0x2000..0x2100).contains(&item)
+}
+
 pub(crate) fn item_actions(item: u16, condition: u32) -> Vec<&'static str> {
-    if can_hold(item, condition) {
+    // mTG_present_item: a wrapped present.
+    if condition & 1 != 0 {
+        vec!["Grab", "Open", "Quit"]
+    } else if is_paper(item) && condition == 0 {
+        vec!["Write", "Grab"]
+    } else if can_hold(item, condition) {
         vec!["Hold", "Grab"]
     } else {
         vec!["Grab"]
@@ -244,8 +258,53 @@ fn pockets_input(
     let dy = i32::from(actions.just_pressed(Action::MoveDown))
         - i32::from(actions.just_pressed(Action::MoveUp));
     if let Some(slot) = ui.mail_slot {
+        let confirm =
+            actions.just_pressed(Action::Confirm) || actions.just_pressed(Action::Interact);
+        // At the counter: a written letter to post (mSM_IV_OPEN_SEND_MAIL).
+        if ui.mailing {
+            if dx != 0 || dy != 0 {
+                ui.mail_slot = Some(
+                    ((slot as i32 / 2 + dy).rem_euclid(5) * 2
+                        + (slot as i32 % 2 + dx).rem_euclid(2)) as usize,
+                );
+                crate::sound::se(crate::sound::se_id::CURSOR);
+            } else if confirm {
+                actions.consume(Action::Confirm);
+                actions.consume(Action::Interact);
+                match mailbox.letter_index(slot) {
+                    Some(index) if mailbox.letters[index].to.is_some() => {
+                        ui.mail_pick = Some(index);
+                        ui.open = false;
+                        crate::sound::se(crate::sound::se_id::CHOICE_CONFIRM);
+                    }
+                    _ => crate::sound::se(crate::sound::se_id::MENU_EXIT),
+                }
+            }
+            return;
+        }
+        // m_hand_ovl: an item carried onto a written letter goes inside.
+        if let (Some(from), true) = (ui.grabbed, confirm && mail.menu.is_none()) {
+            actions.consume(Action::Confirm);
+            actions.consume(Action::Interact);
+            let item = inventory.pockets.pockets[from];
+            let letter = mailbox
+                .letter_index(slot)
+                .map(|i| &mut mailbox.letters[i])
+                .filter(|l| l.to.is_some() && l.present == 0);
+            if let Some(letter) = letter {
+                letter.present = item;
+                letter.present_mine = inventory.pockets.item_cond(from) & 1 == 0;
+                inventory.pockets.pockets[from] = EMPTY_NO;
+                inventory.pockets.set_item_cond(from, 0);
+                ui.grabbed = None;
+                crate::sound::se(crate::sound::se_id::CHOICE_CONFIRM);
+            } else {
+                crate::sound::se(crate::sound::se_id::MENU_EXIT);
+            }
+            return;
+        }
         if mail.menu.is_some() {
-            mail.letter_actions(&mut actions, &mut mailbox, slot, true);
+            mail.letter_actions(&mut actions, &mut mailbox, slot, true, &mut inventory);
             return;
         }
         if dx < 0 && slot % 2 == 0 && mail.grabbed.is_none() {
@@ -261,7 +320,7 @@ fn pockets_input(
             crate::sound::se(crate::sound::se_id::CURSOR);
             return;
         }
-        mail.letter_actions(&mut actions, &mut mailbox, slot, true);
+        mail.letter_actions(&mut actions, &mut mailbox, slot, true, &mut inventory);
         return;
     }
     if dx != 0 || dy != 0 {
@@ -276,7 +335,6 @@ fn pockets_input(
         } else {
             if dx > 0
                 && ui.selected % 5 == 4
-                && ui.grabbed.is_none()
                 && renderer.is_some()
                 && !ui.selling
                 && ui.storing.is_none()
@@ -364,10 +422,35 @@ fn pockets_input(
             ui.open = false;
             return;
         }
-        let hold_choice = ui
-            .actions(item, inventory.pockets.item_cond(slot))
-            .iter()
-            .position(|action| *action == "Hold");
+        let labels = ui.actions(item, inventory.pockets.item_cond(slot));
+        // mTG_present_open_proc: unwrapped where it lies.
+        if labels.get(choice) == Some(&"Open") {
+            let cond = inventory.pockets.item_cond(slot);
+            inventory.pockets.set_item_cond(slot, cond & !1);
+            crate::sound::se(0x436);
+            return;
+        }
+        if labels.get(choice) == Some(&"Quit") {
+            return;
+        }
+        // Writing on stationery needs a free letter slot.
+        if labels.get(choice) == Some(&"Write") {
+            if mailbox.has_room() {
+                mail.open = true;
+                mail.writing = true;
+                mail.from_pockets = true;
+                mail.write_paper = Some((slot, ((item - 0x2000) % 64) as u8));
+                mail.rewriting = None;
+                mail.write_text.clear();
+                mail.write_recipients.clear();
+                mail.write_recipient = 0;
+                crate::sound::se(crate::sound::se_id::CHOICE_OPEN);
+            } else {
+                crate::sound::se(crate::sound::se_id::MENU_EXIT);
+            }
+            return;
+        }
+        let hold_choice = labels.iter().position(|action| *action == "Hold");
         if hold_choice == Some(choice) {
             if let Some(selected_tool) = held_tool(item) {
                 *tool = selected_tool;

@@ -381,8 +381,35 @@ pub struct GameText {
     pub messages: TextBank,
     pub strings: TextBank,
     pub choices: TextBank,
+    /// Letters (`forest_1st.arc`): headers (`super_data`), bodies
+    /// (`mail_data`) and footers (`ps_data`) by mail number, and the pieces
+    /// villagers' replies are put together from (`superz`, `maila`-`c`,
+    /// `psz`; mHandbillz_load).
+    pub mail: MailBanks,
     /// `mFont_cont_info_tbl[code].size`: bytes including 0x7F and the code.
     code_size: Vec<u8>,
+}
+
+/// The letter banks (see [`GameText::mail`]).
+#[derive(Clone, Default)]
+pub struct MailBanks {
+    pub header: TextBank,
+    pub body: TextBank,
+    pub footer: TextBank,
+    pub header_z: TextBank,
+    pub body_a: TextBank,
+    pub body_b: TextBank,
+    pub body_c: TextBank,
+    pub footer_z: TextBank,
+}
+
+/// A letter's text as the board shows it: the header with the recipient's
+/// name at `header_back_start`, the body, the footer.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct LetterText {
+    pub header: String,
+    pub body: String,
+    pub footer: String,
 }
 
 /// Messages followed through `SET_NEXT_MESSAGE` before giving up.
@@ -410,6 +437,16 @@ impl GameText {
             messages: bank(&second, "message_data")?,
             strings: bank(&first, "string_data")?,
             choices: bank(&first, "select_data")?,
+            mail: MailBanks {
+                header: bank(&first, "super_data").unwrap_or_default(),
+                body: bank(&first, "mail_data").unwrap_or_default(),
+                footer: bank(&first, "ps_data").unwrap_or_default(),
+                header_z: bank(&first, "superz_data").unwrap_or_default(),
+                body_a: bank(&first, "maila_data").unwrap_or_default(),
+                body_b: bank(&first, "mailb_data").unwrap_or_default(),
+                body_c: bank(&first, "mailc_data").unwrap_or_default(),
+                footer_z: bank(&first, "psz_data").unwrap_or_default(),
+            },
             code_size: raw.chunks(2).map(|e| e[0]).collect(),
         })
     }
@@ -418,6 +455,54 @@ impl GameText {
         self.code_size
             .get(code as usize)
             .map_or(2, |&s| (s as usize).max(2))
+    }
+
+    /// Letter bytes with their control codes filled in, as plain text with
+    /// line breaks (mHandbill_Change_ControlCode).
+    fn letter_part(&self, bytes: &[u8], ctx: &MsgContext) -> String {
+        let mut pages = vec![String::new()];
+        self.render(bytes, ctx, &mut pages, &mut |_| 0);
+        markup::strip(&pages.join("\n")).trim_end().to_string()
+    }
+
+    /// mHandbill_CheckSuperStringBorderAndCopy: one line break in the header
+    /// marks where the recipient's name goes; otherwise it follows.
+    fn letter_header(&self, bytes: &[u8], ctx: &MsgContext) -> String {
+        let text = self.letter_part(bytes, ctx);
+        match text.split_once('\n') {
+            Some((front, back)) if !back.contains('\n') => {
+                format!("{front}{}{back}", ctx.player_name)
+            }
+            _ => format!("{}{}", text.replace('\n', ""), ctx.player_name),
+        }
+    }
+
+    /// mHandbill_Load_HandbillFromRom: letter `mail_no` for `ctx`'s player.
+    pub fn letter(&self, mail_no: usize, ctx: &MsgContext) -> Option<LetterText> {
+        let banks = &self.mail;
+        Some(LetterText {
+            header: self.letter_header(banks.header.get(mail_no)?, ctx),
+            body: self.letter_part(banks.body.get(mail_no)?, ctx),
+            footer: self.letter_part(banks.footer.get(mail_no)?, ctx),
+        })
+    }
+
+    /// mHandbillz_load: a header, three body pieces and a footer.
+    pub fn letter_z(
+        &self,
+        (header, a, b, c, footer): (usize, usize, usize, usize, usize),
+        ctx: &MsgContext,
+    ) -> Option<LetterText> {
+        let banks = &self.mail;
+        let mut body = Vec::new();
+        for (bank, i) in [(&banks.body_a, a), (&banks.body_b, b), (&banks.body_c, c)] {
+            body.extend_from_slice(bank.get(i)?);
+        }
+        Some(LetterText {
+            header: self.letter_header(banks.header_z.get(header)?, ctx),
+            body: self.letter_part(&body, ctx),
+            footer: self.letter_part(banks.footer_z.get(footer)?, ctx),
+        })
     }
 
     /// String-bank entry as plain text.
@@ -716,6 +801,7 @@ mod tests {
             messages: bank(messages),
             strings: bank(&[b"hmm"]),
             choices: bank(&[b"Yes", b"No"]),
+            mail: MailBanks::default(),
             code_size: sizes,
         }
     }

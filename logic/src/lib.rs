@@ -85,7 +85,7 @@ pub mod kankyo_env;
 mod leaflet;
 pub mod letter_score;
 pub mod lights;
-mod mail;
+pub mod mail;
 mod mck_key_tables;
 mod mother_mail;
 mod move_bg;
