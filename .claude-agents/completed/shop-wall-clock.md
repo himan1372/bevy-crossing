@@ -41,3 +41,5 @@ Verified in Temp previews (real save unchanged): clock decodes 64x64 CI4
 (3598 opaque texels), shows 10:18 PM correctly; town grid, house and shop
 otherwise identical. Tick sound not audibly checked (same kernel as the
 antique clock). Gates: clippy, fmt, capture, default, release 3m03s.
+
+Philip 2026-10-20: "clock works" (accepted).
