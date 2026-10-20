@@ -775,3 +775,5 @@ completed/shop-wall-clock.md.
 2026-10-20 claude: Philip accepted special-building-look ("good now") and the audio trigger lifecycle ("fine"); both completed. New reports: idle clock/date display missing, July bunting in the shop out of season, black lines above the town name in pockets.
 
 2026-10-20 claude retail-idle-clock: m_banti idle clock ported (logic banti + app idle_clock); shop raffle (fukubiki) room only on the last day of the month; font glyph UV inset fixes marks above pockets text. See completed/retail-idle-clock.md.
+
+2026-10-20 claude: Philip accepted room music player and music-source fidelity ("i was listening to all the play tests").
