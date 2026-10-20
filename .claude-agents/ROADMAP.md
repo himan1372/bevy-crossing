@@ -740,3 +740,8 @@ group callback 1 is never registered, so room insects stay mostly quiet as in
 the original. Stopped cicada/cricket clips replay per chirp; frog/mosquito/
 mole cricket repeat; firefly pulses its segment-8 prim alpha. Evidence and the
 callback finding in completed/room-insect-audio.md; Philip acceptance pending.
+
+2026-10-19 claude cuckoo-clock: ac_sum_log_hatoclk ported (native call state
+machine with exact cKF stop timing and frame-2 sound 0x133, hands at joints
+7/8 by yaw and 90deg minus angle). 12 calls observed at 00:00; Philip
+confirmed the 21:00 call. See completed/cuckoo-clock.md.

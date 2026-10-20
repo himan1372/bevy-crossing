@@ -25,6 +25,7 @@ use crate::n64_material::N64Material;
 use crate::skeleton::{place_on_joints, Animation, Skeleton};
 
 pub(crate) mod clocks;
+pub(crate) mod cuckoo;
 pub(crate) mod fan;
 pub(crate) mod gong;
 pub(crate) mod rigs;
@@ -192,6 +193,9 @@ pub(crate) fn can_render(disc: &GameDisc, index: u16) -> bool {
     }
     if gong::is_gong(index) {
         return gong::available(disc, &p);
+    }
+    if cuckoo::is_cuckoo(index) {
+        return cuckoo::available(disc, &p);
     }
     if clocks::spec(&p.name).is_some() {
         return clocks::available(disc, &p);
@@ -392,6 +396,16 @@ pub fn spawn_furniture(
     let mut segs = Segments::default();
     if slot::is_slot(profile.index as u16) {
         slot::spawn(
+            commands,
+            disc,
+            parent,
+            &profile,
+            (meshes, materials, images),
+        );
+        return Some(parent);
+    }
+    if cuckoo::is_cuckoo(profile.index as u16) {
+        cuckoo::spawn(
             commands,
             disc,
             parent,

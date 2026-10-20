@@ -1324,6 +1324,14 @@ impl Plugin for PlayerRoomPlugin {
             .add_systems(Update, storage::render.after(refresh).in_set(GameplaySet))
             .add_systems(
                 Update,
+                crate::furniture::cuckoo::update
+                    .after(refresh)
+                    .after(movement::animate_roots)
+                    .after(crate::save::LoadSet)
+                    .in_set(GameplaySet),
+            )
+            .add_systems(
+                Update,
                 crate::furniture::clocks::update
                     .after(refresh)
                     .after(movement::animate_roots)

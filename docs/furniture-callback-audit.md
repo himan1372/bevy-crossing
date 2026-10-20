@@ -10,7 +10,7 @@ Follow-up: the turkey-TV implementation is now recorded in
 retains its original source snapshot. The [electric fan](../.claude-agents/completed/electric-fan.md)
 follow-up is also implemented, as is the [gong/boxing bell](../.claude-agents/completed/gong-actions.md).
 The [slot machine](../.claude-agents/completed/slot-machine.md) follow-up is also implemented.
-Remaining candidates include sprinkler, cuckoo clock and lawnmower callbacks.
+The [cuckoo clock](../.claude-agents/completed/cuckoo-clock.md) is implemented. Remaining candidates: sprinkler and lawnmower callbacks.
 
 ## Source and lookup method
 
