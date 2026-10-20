@@ -854,7 +854,7 @@ pub fn player_home_placement(
 const FG_ENTRY_SIZE: usize = 518;
 
 /// `fg_id` to the acre's 256 item ids (`mActor_name_t`).
-fn read_fg_layouts(fgdata: &[u8]) -> HashMap<u16, [u16; 256]> {
+pub(crate) fn read_fg_layouts(fgdata: &[u8]) -> HashMap<u16, [u16; 256]> {
     fgdata
         .as_chunks::<FG_ENTRY_SIZE>()
         .0

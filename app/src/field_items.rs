@@ -383,6 +383,19 @@ fn item_model(
     Some((model, flags & 2 != 0, draw))
 }
 
+/// An item's ground model (as `bg_item` / `bg_police_item` draw it).
+pub(crate) fn item_meshes(
+    disc: &GameDisc,
+    item: u16,
+    assets: (
+        &mut Assets<Mesh>,
+        &mut Assets<N64Material>,
+        &mut Assets<Image>,
+    ),
+) -> Option<Model> {
+    item_model(disc, item, assets).map(|(model, ..)| model)
+}
+
 /// Keeps the drawn items in step with the grid.
 #[allow(clippy::too_many_arguments)]
 fn draw_field_items(

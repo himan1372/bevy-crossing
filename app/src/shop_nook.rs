@@ -128,7 +128,7 @@ fn context(identity: &crate::save::PlayerIdentity) -> MsgContext {
 
 /// mIN_get_item_article: read the disc tables rather than guessing from
 /// the spelling ("an hourglass", "some paper", furniture exceptions).
-fn item_article(disc: &GameDisc, item: u16) -> u8 {
+pub(crate) fn item_article(disc: &GameDisc, item: u16) -> u8 {
     const TABLES: [&str; 16] = [
         "itemArt_Paper",
         "itemArt_Money",

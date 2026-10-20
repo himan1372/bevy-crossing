@@ -787,3 +787,5 @@ completed/shop-wall-clock.md.
 2026-10-20 claude house-upgrades stage 3: basement and upstairs floors with stairs and per-floor saves. Next: statue (stage 4).
 
 2026-10-20 claude house-upgrades complete: statue (stage 4) added. See completed/house-upgrades.md.
+
+2026-10-20 claude police-box: interior, Booker, lost and found. See completed/police-box.md.

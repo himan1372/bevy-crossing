@@ -25,6 +25,7 @@ mod gyroid;
 mod home;
 mod house;
 mod idle_clock;
+mod indoor_room;
 mod input;
 mod interaction;
 mod interior;
@@ -45,6 +46,7 @@ mod player_tools;
 mod player_toys;
 mod pockets;
 mod pockets_disc;
+mod police_box;
 mod post_office;
 mod quest;
 mod remote;
@@ -135,6 +137,7 @@ fn main() {
         .add_plugins(ClockPlugin)
         .add_plugins(idle_clock::IdleClockPlugin)
         .add_plugins(post_office::PostOfficePlugin)
+        .add_plugins(police_box::PoliceBoxPlugin)
         .add_plugins(home::HomePlugin)
         .add_plugins(statue::StatuePlugin)
         .add_plugins(furniture::house_clock::HouseClockPlugin)

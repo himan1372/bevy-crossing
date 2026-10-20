@@ -14,7 +14,7 @@ use bevy::prelude::*;
 use rustimal_logic::post_office::{self as native, Business, RepayEvent, RepayInput, RepayMenu};
 
 use crate::dialogue::DialogueState;
-use crate::disc_gfx::{run_display_lists_with_colors, run_ground_lists, Segments};
+use crate::disc_gfx::{run_display_lists_with_colors, Segments};
 use crate::game_disc::GameDisc;
 use crate::input::{Action, Actions, InputFocus, InteractSet};
 use crate::interaction::{Facing, PlayerInventory};
@@ -24,15 +24,12 @@ use crate::n64_material::N64Material;
 use crate::player::Player;
 use crate::shop::{ShopLocation, ShopReturnPos};
 use crate::states::GameplaySet;
-use crate::town::{Town, CELL_SIZE};
+use crate::town::Town;
 
 /// Where the interior is built, away from the town and the other rooms.
 pub const POST_ORIGIN: Vec3 = Vec3::new(-3000.0, 0.0, -3000.0);
 /// Game units per cell.
 const UNIT: f32 = 40.0;
-/// Field BG models are 16x game units; the floor tier sits at y = 640.
-const GROUND_SCALE: f32 = CELL_SIZE / 16.0 / UNIT;
-const GROUND_BASE_Y: f32 = 640.0;
 /// post_office door data: the player arrives at (160, 0, 300).
 const ENTRY: Vec2 = Vec2::new(160.0, 300.0);
 /// mvactor post_office: the clerk at unit (4, 2), moved 20 units left.
@@ -44,7 +41,6 @@ const PELLY: u32 = 238 + 3;
 const PHYLLIS: u32 = 238 + 18;
 /// l_sp_actor_name: both sisters use sound id 4.
 const CLERK_SOUND: u8 = 4;
-const PLAYER_RADIUS: f32 = 0.35;
 
 /// Phyllis is on duty now.
 pub fn night_clerk() -> bool {
@@ -62,31 +58,7 @@ struct PostBuilding {
 #[derive(Resource, Default)]
 struct PostRoom {
     built: bool,
-    /// Walkable floor, local to [`POST_ORIGIN`].
-    min: Vec2,
-    max: Vec2,
-    /// Raised parts of the room (counter, desks), local.
-    blocked: Vec<Rect>,
-    /// Where the model has floor at floor height, every 1/8 cell from
-    /// `min` (row-major, `columns` wide): the doorway's dark sides have none.
-    floor: Vec<bool>,
-    columns: usize,
-}
-
-impl PostRoom {
-    fn floor_at(&self, p: Vec2) -> bool {
-        let cell = (p - self.min) * 8.0;
-        if cell.x < 0.0 || cell.y < 0.0 {
-            return false;
-        }
-        let (x, z) = (cell.x as usize, cell.y as usize);
-        x < self.columns
-            && self
-                .floor
-                .get(z * self.columns + x)
-                .copied()
-                .unwrap_or(false)
-    }
+    room: Option<crate::indoor_room::IndoorRoom>,
 }
 
 /// The repay window (mSM_OVL_REPAY) is open: it owns the controls.
@@ -161,95 +133,17 @@ fn build_room(
         return;
     }
     room.built = true;
-    let list = |name: &str| disc.catalog.get(name).map(|a| a.offset);
-    let (Some(opaque), translucent) = (
-        list("grd_post_office_model"),
-        list("grd_post_office_modelT"),
-    ) else {
-        warn!("post office room missing from the disc");
-        return;
-    };
-    let root = commands
-        .spawn((
-            Name::new("post office room"),
-            Transform::from_translation(POST_ORIGIN - Vec3::Y * GROUND_BASE_Y * GROUND_SCALE)
-                .with_scale(Vec3::splat(GROUND_SCALE)),
-            Visibility::default(),
-        ))
-        .id();
-    let segs = Segments::default();
-    for (l, blend) in [(Some(opaque), false), (translucent, true)] {
-        let Some(l) = l else { continue };
-        let sink = run_ground_lists(&disc.rom, &[l]);
-        for (mesh, material) in crate::disc_town::sink_meshes_scaled(
-            &disc,
-            &sink,
-            None,
-            blend,
-            &segs,
-            1.0,
-            (&mut meshes, &mut materials, &mut images),
-        ) {
-            commands.spawn((Mesh3d(mesh), MeshMaterial3d(material), ChildOf(root)));
-        }
-    }
-    // Walkable floor and raised furniture from the model's own surface,
-    // sampled every 1/8 cell (as the shop's room).
-    let surface = run_ground_lists(&disc.rom, &[opaque]);
-    let points: Vec<[f32; 3]> = surface
-        .parts
-        .iter()
-        .flat_map(|p| p.vertices.iter().map(|v| v.pos))
-        .collect();
-    let floor: Vec<&[f32; 3]> = points
-        .iter()
-        .filter(|p| (p[1] - GROUND_BASE_Y).abs() < 1.0)
-        .collect();
-    if floor.is_empty() {
-        return;
-    }
-    let lo = floor
-        .iter()
-        .fold(Vec2::splat(f32::MAX), |m, p| m.min(Vec2::new(p[0], p[2])));
-    let hi = floor
-        .iter()
-        .fold(Vec2::splat(f32::MIN), |m, p| m.max(Vec2::new(p[0], p[2])));
-    let cell = 16.0 * UNIT;
-    room.min = lo / cell;
-    room.max = hi / cell;
-    let step = cell / 8.0;
-    let (nx, nz) = (((hi.x - lo.x) / step) as i32, ((hi.y - lo.y) / step) as i32);
-    room.columns = nx.max(0) as usize;
-    room.floor = vec![false; (nx.max(0) * nz.max(0)) as usize];
-    for z in 0..nz {
-        let mut start = None;
-        for x in 0..=nx {
-            let sx = lo.x + (x as f32 + 0.5) * step;
-            let sz = lo.y + (z as f32 + 0.5) * step;
-            let height = (x < nx).then(|| surface.height_at(sx, sz)).flatten();
-            // Floor, rugs and the doorway mat; the counter rises higher.
-            if height.is_some_and(|y| ((y - GROUND_BASE_Y) / cell).abs() <= 0.4) {
-                room.floor[(z * nx + x) as usize] = true;
-            }
-            let raised = height.is_some_and(|y| (y - GROUND_BASE_Y) / cell > 0.4);
-            if raised {
-                start.get_or_insert(x);
-            } else if let Some(first) = start.take() {
-                room.blocked.push(Rect::new(
-                    (lo.x + first as f32 * step) / cell,
-                    (lo.y + z as f32 * step) / cell,
-                    (lo.x + x as f32 * step) / cell,
-                    (lo.y + (z + 1) as f32 * step) / cell,
-                ));
-            }
-        }
-    }
-    info!(
-        "post office room: floor {:?}..{:?}, {} raised rows",
-        room.min,
-        room.max,
-        room.blocked.len()
+    room.room = crate::indoor_room::IndoorRoom::build(
+        &mut commands,
+        &disc,
+        "post office room",
+        POST_ORIGIN,
+        ("grd_post_office_model", Some("grd_post_office_modelT")),
+        (&mut meshes, &mut materials, &mut images),
     );
+    if room.room.is_none() {
+        warn!("post office room missing from the disc");
+    }
 }
 
 fn spawn_clerk(commands: &mut Commands, meshes: &mut Assets<Mesh>, night: bool) {
@@ -362,39 +256,16 @@ fn movement(
     if *state != ShopLocation::PostOffice || !focus.is_world() {
         return;
     }
-    let Ok((mut transform, mut facing, mut loco)) = player.single_mut() else {
+    let (Ok((mut transform, mut facing, mut loco)), Some(room)) =
+        (player.single_mut(), room.room.as_ref())
+    else {
         return;
     };
-    let delta = locomotion::step(&actions, time.delta_secs(), &mut facing, &mut loco);
-    if delta == Vec3::ZERO {
-        return;
-    }
-    // The player's circle must stand on floor all round.
-    let free = |p: Vec2| {
-        [Vec2::ZERO, Vec2::X, Vec2::NEG_X, Vec2::Y, Vec2::NEG_Y]
-            .iter()
-            .all(|d| room.floor_at(p + *d * PLAYER_RADIUS))
-            && !room.blocked.iter().any(|r| {
-                p.x + PLAYER_RADIUS > r.min.x
-                    && p.x - PLAYER_RADIUS < r.max.x
-                    && p.y + PLAYER_RADIUS > r.min.y
-                    && p.y - PLAYER_RADIUS < r.max.y
-            })
-    };
-    let at = |t: &Transform| {
-        Vec2::new(
-            t.translation.x - POST_ORIGIN.x,
-            t.translation.z - POST_ORIGIN.z,
-        )
-    };
-    let here = at(&transform);
-    if free(here + Vec2::new(delta.x, 0.0)) {
-        transform.translation.x += delta.x;
-    }
-    let here = at(&transform);
-    if free(here + Vec2::new(0.0, delta.z)) {
-        transform.translation.z += delta.z;
-    }
+    room.walk(
+        &actions,
+        time.delta_secs(),
+        (&mut transform, &mut facing, &mut loco),
+    );
 }
 
 fn clerk_info(night: bool) -> (u8, &'static str, u32) {
