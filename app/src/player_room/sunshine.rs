@@ -35,7 +35,7 @@ pub(super) struct Sunshine {
 /// Game units to the room-local Bevy position (inverse of
 /// `lighting::game_units`).
 fn world(p: [f32; 3]) -> Vec3 {
-    Vec3::from(p) / 40.0 - Vec3::new(3.0, 1.0, 3.0) + INTERIOR_ORIGIN
+    Vec3::from(p) / 40.0 - crate::home::room_centre() + INTERIOR_ORIGIN
 }
 
 /// Legacy load-block I4 (`gsDPLoadBlock`, not Dolphin-converted): row-major
@@ -66,7 +66,8 @@ pub(super) fn spawn(
         return;
     };
     // mCoBG_GetBgY_OnlyCenter_FromWpos: the room floor list's surface.
-    let floor = list("rom_myhome1_floor_model").map(|l| run_display_lists(&disc.rom, &[l]));
+    let floor = list(&format!("{}_floor_model", crate::home::room_model()))
+        .map(|l| run_display_lists(&disc.rom, &[l]));
     let bg_y = |x: f32, z: f32| {
         floor
             .as_ref()

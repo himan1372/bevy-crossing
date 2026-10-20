@@ -35,3 +35,13 @@ Verified in Temp previews (real save unchanged): offer 0x107B -> colour
 different house keeps the town model until restart.
 Next: stage 2 (room model/area per size: rom_myhome1/2B/3/4_1, usable
 6/8/10/8 units, mHm_RehouseWallDoor).
+
+## Stage 2 (claude, 2026-10-20) - done
+
+home.rs room helpers (room_model/room_centre/room_half/room_last_unit by
+size: rom_myhome1 6, 2B 8, 3 10, 4_1 10 units); interior.rs, house.rs
+bounds/entrance, player_room corner and unit ranges (placement, loose
+items), lighting/sunshine coordinates and floor list, decorating checks use
+them. Verified Medium room (8x8) renders with saved patterns; furniture at
+(1,1) and (6,6); walking reaches the new walls. Not checked: window
+sunshine spots in bigger rooms, _new/_new2 (stair) variants (stage 3).

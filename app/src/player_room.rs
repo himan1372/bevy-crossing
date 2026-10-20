@@ -395,16 +395,18 @@ impl PlayerRoom {
         let mut occupied = [[false; 16]; 16];
         for (z, row) in occupied.iter_mut().enumerate() {
             for (x, taken) in row.iter_mut().enumerate() {
-                *taken = !(1..=4).contains(&x)
-                    || !(1..=4).contains(&z)
+                let last = crate::home::room_last_unit() as usize;
+                *taken = !(1..=last).contains(&x)
+                    || !(1..=last).contains(&z)
                     || self.runtime.occupancy[0][z][x].is_some();
             }
         }
         // Keep the player's collision circle clear, including across a cell
         // boundary; this also prevents placement from trapping the player.
         let local = pos - corner();
-        for z in 1..=4 {
-            for x in 1..=4 {
+        let last = crate::home::room_last_unit() as usize;
+        for z in 1..=last {
+            for x in 1..=last {
                 if local.x + 0.4 > x as f32
                     && local.x - 0.4 < (x + 1) as f32
                     && local.z + 0.4 > z as f32
@@ -425,7 +427,9 @@ impl PlayerRoom {
         'search: for rotation in rotations {
             for n in 0..5 {
                 let (x, z) = look_at(cell, angle, n);
-                if !(1..=4).contains(&x) || !(1..=4).contains(&z) {
+                if !(1..=crate::home::room_last_unit()).contains(&x)
+                    || !(1..=crate::home::room_last_unit()).contains(&z)
+                {
                     continue;
                 }
                 if p.set_type == SetType::OnSurface
@@ -555,7 +559,7 @@ fn rotated(shape: ShapeType, dir: Direction) -> ShapeType {
     }
 }
 fn corner() -> Vec3 {
-    INTERIOR_ORIGIN - Vec3::new(3.0, 0.0, 3.0)
+    INTERIOR_ORIGIN - crate::home::room_centre().with_y(0.0)
 }
 fn player_cell(pos: Vec3) -> (i32, i32) {
     let p = pos - corner();

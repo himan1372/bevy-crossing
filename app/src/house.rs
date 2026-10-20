@@ -448,11 +448,11 @@ impl RoomBounds {
         Self {
             entrance: Some(Entrance {
                 half_width: crate::interior::ENTRANCE_HALF_WIDTH,
-                start_z: crate::interior::ROOM_HALF,
-                end_z: crate::interior::ENTRANCE_END_Z,
+                start_z: crate::home::room_half(),
+                end_z: crate::interior::entrance_end_z(),
             }),
-            door_z: crate::interior::ENTRANCE_END_Z,
-            ..Self::square(crate::interior::ROOM_HALF)
+            door_z: crate::interior::entrance_end_z(),
+            ..Self::square(crate::home::room_half())
         }
     }
 

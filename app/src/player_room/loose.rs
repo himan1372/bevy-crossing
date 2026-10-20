@@ -114,7 +114,8 @@ pub(super) fn place(
     let (cx, cz) = player_cell(pos);
     let (dx, dz) = offsets[sector];
     let (x, z) = (cx + dx, cz + dz);
-    let in_room = |x: i32, z: i32| (1..=4).contains(&x) && (1..=4).contains(&z);
+    let last = crate::home::room_last_unit();
+    let in_room = |x: i32, z: i32| (1..=last).contains(&x) && (1..=last).contains(&z);
     if in_room(x, z) {
         let below = room.runtime.occupancy[0][z as usize][x as usize]
             .and_then(|id| room.runtime.actors[id as usize].as_ref())

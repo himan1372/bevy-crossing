@@ -27,8 +27,14 @@ impl Decoration {
         self.standard()
             && disc.player_room_floors.len() >= (usize::from(self.floor) + 1) * 0x2020
             && disc.player_room_walls.len() >= (usize::from(self.wall) + 1) * 0x1020
-            && disc.catalog.get("rom_myhome1_floor_model").is_some()
-            && disc.catalog.get("rom_myhome1_wall_model").is_some()
+            && disc
+                .catalog
+                .get(&format!("{}_floor_model", crate::home::room_model()))
+                .is_some()
+            && disc
+                .catalog
+                .get(&format!("{}_wall_model", crate::home::room_model()))
+                .is_some()
     }
 }
 

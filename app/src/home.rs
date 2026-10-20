@@ -188,6 +188,40 @@ fn set_look(house: &HouseSave) {
     );
 }
 
+/// The main floor's room by house size (aMI_size_dsp_table; floor widths
+/// 240/320/400/400 game units): model prefix and width in units.
+const ROOMS: [(&str, f32); 4] = [
+    ("rom_myhome1", 6.0),
+    ("rom_myhome2B", 8.0),
+    ("rom_myhome3", 10.0),
+    ("rom_myhome4_1", 10.0),
+];
+
+fn room() -> (&'static str, f32) {
+    ROOMS[(look().0 as usize).min(3)]
+}
+
+/// The main room's floor and wall lists (`<prefix>_floor_model` ...).
+pub fn room_model() -> &'static str {
+    room().0
+}
+
+/// The room's unit (0, 0) corner to its centre, at floor height 1.
+pub fn room_centre() -> Vec3 {
+    let half = room().1 / 2.0;
+    Vec3::new(half, 1.0, half)
+}
+
+/// Half the walkable inside, in cells (the walls take one unit each side).
+pub fn room_half() -> f32 {
+    room().1 / 2.0 - 1.0
+}
+
+/// The last furniture unit inside the walls (units 1..=this).
+pub fn room_last_unit() -> i32 {
+    room().1 as i32 - 2
+}
+
 pub fn today() -> (u16, u8, u8) {
     let now = crate::clock::now();
     (now.year, now.month, now.day)

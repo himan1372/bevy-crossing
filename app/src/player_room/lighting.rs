@@ -81,11 +81,11 @@ impl Lighting {
     }
 }
 
-/// Room-local Bevy position (cells) to the source's game units: the small
-/// room's unit (0, 0) corner is 3 cells from the interior origin and its
+/// Room-local Bevy position (cells) to the source's game units: the room's
+/// unit (0, 0) corner is half its width from the interior origin and its
 /// floor stands at game height 40.
 fn game_units(world: Vec3) -> [f32; 3] {
-    let p = (world - INTERIOR_ORIGIN + Vec3::new(3.0, 1.0, 3.0)) * 40.0;
+    let p = (world - INTERIOR_ORIGIN + crate::home::room_centre()) * 40.0;
     p.to_array()
 }
 

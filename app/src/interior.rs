@@ -21,15 +21,13 @@ use crate::player_room::decorating::Decoration;
 
 /// `aMI` draws the room at scale 0.0625; 40 game units per cell.
 const ROOM_SCALE: f32 = 0.0625 / 40.0;
-/// The small room's floor spans model cells 1..5 in x and z at height 1:
-/// its centre goes on the interior origin.
-const ROOM_CENTRE: Vec3 = Vec3::new(3.0, 1.0, 3.0);
-/// Half the room's inside width, in cells.
-pub const ROOM_HALF: f32 = 2.0;
-/// rom_myhome1_wall_v[0..6], drawn with rom_myhome_enter2_tex:
-/// after ROOM_SCALE / ROOM_CENTRE, the wooden landing is x[-1,1], z[2,4].
+/// rom_myhome1_wall_v[0..6], drawn with rom_myhome_enter2_tex: the wooden
+/// landing is two cells wide and two deep past the south wall (the house's
+/// size sets the room, [`crate::home::room_centre`]).
 pub(crate) const ENTRANCE_HALF_WIDTH: f32 = 1.0;
-pub(crate) const ENTRANCE_END_Z: f32 = 4.0;
+pub(crate) fn entrance_end_z() -> f32 {
+    crate::home::room_half() + 2.0
+}
 
 const FLOOR_BLOCK: usize = 0x2020;
 const WALL_BLOCK: usize = 0x1020;
@@ -82,15 +80,16 @@ pub(crate) fn spawn_decorated_player_room(
     if !decoration.available(disc) {
         return None;
     }
-    let floor_list = disc.catalog.get("rom_myhome1_floor_model")?.offset;
-    let wall_list = disc.catalog.get("rom_myhome1_wall_model")?.offset;
+    let prefix = crate::home::room_model();
+    let floor_list = disc.catalog.get(&format!("{prefix}_floor_model"))?.offset;
+    let wall_list = disc.catalog.get(&format!("{prefix}_wall_model"))?.offset;
     let (wall, floor) = (usize::from(decoration.wall), usize::from(decoration.floor));
     let shell = spawn_shell(
         commands,
         disc,
         "player room",
         origin,
-        ROOM_CENTRE,
+        crate::home::room_centre(),
         &[(floor_list, false)],
         &[(wall_list, false)],
         &[],

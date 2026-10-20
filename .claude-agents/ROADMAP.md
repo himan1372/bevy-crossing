@@ -781,3 +781,5 @@ completed/shop-wall-clock.md.
 2026-10-20 claude post-office-repay: post office interior, Pelly/Phyllis, loan repay (m_repay_ovl) and saved loan. See completed/post-office-repay.md. Next: house-upgrades.
 
 2026-10-20 claude house-upgrades stage 1: saved house record, Nook offers/orders/billing, construction at load, exterior per size and roof colour. Interiors next. See backlog/house-upgrades.md.
+
+2026-10-20 claude house-upgrades stage 2: player room size follows the house (6/8/10/10 units). Next: basement and upstairs.
