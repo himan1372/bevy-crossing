@@ -6,10 +6,10 @@ furniture inventory, implementation, runtime check or Philip acceptance.
 No gameplay files, builds, previews, tests or user saves were touched.
 
 Follow-up: the turkey-TV implementation is now recorded in
-[its task note](../.claude-agents/backlog/turkey-tv.md). The audit below
-retains its original source snapshot. The [electric fan](../.claude-agents/backlog/electric-fan.md)
-follow-up is also implemented, as is the [gong/boxing bell](../.claude-agents/backlog/gong-actions.md).
-The [slot machine](../.claude-agents/backlog/slot-machine.md) follow-up is also implemented.
+[its task note](../.claude-agents/completed/turkey-tv.md). The audit below
+retains its original source snapshot. The [electric fan](../.claude-agents/completed/electric-fan.md)
+follow-up is also implemented, as is the [gong/boxing bell](../.claude-agents/completed/gong-actions.md).
+The [slot machine](../.claude-agents/completed/slot-machine.md) follow-up is also implemented.
 Remaining candidates include sprinkler, cuckoo clock and lawnmower callbacks.
 
 ## Source and lookup method

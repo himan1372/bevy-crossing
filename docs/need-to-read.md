@@ -200,7 +200,7 @@ disc files — except where noted.
   only town source (migrate remaining `town.plan`/`river_tiles` readers to
   `RetailLayout`/`GroundMap`/`FieldItems`).
 - `.claude-agents/backlog/audio-from-disc.md` — M4 audio triggering/polish.
-- `.claude-agents/backlog/dialogue-polish.md` — dialogue fidelity (no new
+- `.claude-agents/completed/dialogue-polish.md` — dialogue fidelity (no new
   reads).
 
 ---

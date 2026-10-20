@@ -80,22 +80,22 @@ These entries describe implementation, not comprehensive Philip acceptance.
 
 | Commit | Implemented slice / task evidence |
 |---|---|
-| `686a09db` | [Single-cell/square turns with loose tops](../.claude-agents/backlog/furniture-turn-loose.md), following push/pull carry. |
-| `2edebb0a` | [Long furniture endpoint turns](../.claude-agents/backlog/furniture-turn-long.md), all four orientations/both endpoints, mixed tops and shifted owner storage. |
-| `ecffb7d5` | [Loose-room placement/pickup animation](../.claude-agents/backlog/room-loose-animation.md), original throw/growth/bounce and floor/surface pickup clips. |
-| `59c548fe` | [Mushroom/candy room goods](../.claude-agents/backlog/mushroom-candy-room.md), completing loose food IDs `0x2800..0x2807`. |
-| `83bd9604` | [Money bags/turnip bundles](../.claude-agents/backlog/money-turnip-room.md), exact denomination/bundle IDs and shared room transactions. |
-| `ed49741b` | [Music items, fans and pinwheels in rooms](../.claude-agents/backlog/music-fan-pinwheel-room.md). |
-| `63bc0caa` | [Home music registration/playback](../.claude-agents/backlog/room-music-player.md), 55-song collection and persistence. |
-| `c548e88b` | [Original music grid and handheld toys](../.claude-agents/backlog/music-presentation-toys.md), disc frame/font/cloth, fan use and pinwheel motion/sound. |
-| `79250311` | [Music source-fidelity follow-up](../.claude-agents/backlog/music-source-fidelity.md): M marking, ordered/partial take-out, panel/cloth motion, placement selection/off, front access/Start-Stop and disc-fed device filters/hiss. |
-| `5cac5459` | [Standard-shirt room conversion](../.claude-agents/backlog/clothing-room-conversion.md): `0x2400..0x24FE` to original mannequin indices `0x1EB..0x2E9`, exact shirt pickup after rotation. Reserved `0x24FF` and custom designs excluded. |
-| `6c405ca2` | [Umbrellas/tools](../.claude-agents/backlog/umbrella-tool-room.md): 32 standard umbrellas become original stands with exact reverse pickup. Normal/golden tools and worn axes remain loose with exact IDs; existing net/rod Hold retained. Custom designs/new tool actions excluded. |
-| `db6e3301` | [Room decorating](../.claude-agents/backlog/room-decorating.md): 71 standard wallpapers/carpets per bank, atomic slot swaps even with full pockets, original room textures and floor footsteps, optional saved decoration. Loose rolls support indices 0..66; shop patterns 67..70 decorate but unsupported loose models refuse. |
-| `8dcd0039` | [Monthly diary](../.claude-agents/backlog/diary-writing.md): shared 12-month notebook, original paper/font, bounded editing, Yes/Rewrite and optional saved diary independent of physical item pickup. Partial native port; full retail calendar/editor/locks remain open. |
-| `de9a704a` | [Three TVs](../.claude-agents/backlog/television-actions.md): E power, cached original screen cycles, positional audio and native saved switches for `sum_tv01`, `sum_tv02`, `sum_fruittv01`. Movement, turning and pickup preserve ownership/lifecycle. |
-| `76ba1b4a` | [Snowman TV and four lamps](../.claude-agents/backlog/snow-tv-lamp-draw.md): fourth TV power/screens/audio, full TV placement asset preflight and missing original opaque model parts for bla/whi/gre/hal lamps. Lamp callbacks are static; no lamp switch or illumination invented. |
-| `2fae13d2` | [Ten clocks](../.claude-agents/backlog/furniture-clocks.md): native local-time hand math, original half-speed cKF animation, extra snow/meza hand lists and antique positional ticking with room/presentation/pause/load gates. No configurable alarm or power action found in audited callbacks. |
+| `686a09db` | [Single-cell/square turns with loose tops](../.claude-agents/completed/furniture-turn-loose.md), following push/pull carry. |
+| `2edebb0a` | [Long furniture endpoint turns](../.claude-agents/completed/furniture-turn-long.md), all four orientations/both endpoints, mixed tops and shifted owner storage. |
+| `ecffb7d5` | [Loose-room placement/pickup animation](../.claude-agents/completed/room-loose-animation.md), original throw/growth/bounce and floor/surface pickup clips. |
+| `59c548fe` | [Mushroom/candy room goods](../.claude-agents/completed/mushroom-candy-room.md), completing loose food IDs `0x2800..0x2807`. |
+| `83bd9604` | [Money bags/turnip bundles](../.claude-agents/completed/money-turnip-room.md), exact denomination/bundle IDs and shared room transactions. |
+| `ed49741b` | [Music items, fans and pinwheels in rooms](../.claude-agents/completed/music-fan-pinwheel-room.md). |
+| `63bc0caa` | [Home music registration/playback](../.claude-agents/completed/room-music-player.md), 55-song collection and persistence. |
+| `c548e88b` | [Original music grid and handheld toys](../.claude-agents/completed/music-presentation-toys.md), disc frame/font/cloth, fan use and pinwheel motion/sound. |
+| `79250311` | [Music source-fidelity follow-up](../.claude-agents/completed/music-source-fidelity.md): M marking, ordered/partial take-out, panel/cloth motion, placement selection/off, front access/Start-Stop and disc-fed device filters/hiss. |
+| `5cac5459` | [Standard-shirt room conversion](../.claude-agents/completed/clothing-room-conversion.md): `0x2400..0x24FE` to original mannequin indices `0x1EB..0x2E9`, exact shirt pickup after rotation. Reserved `0x24FF` and custom designs excluded. |
+| `6c405ca2` | [Umbrellas/tools](../.claude-agents/completed/umbrella-tool-room.md): 32 standard umbrellas become original stands with exact reverse pickup. Normal/golden tools and worn axes remain loose with exact IDs; existing net/rod Hold retained. Custom designs/new tool actions excluded. |
+| `db6e3301` | [Room decorating](../.claude-agents/completed/room-decorating.md): 71 standard wallpapers/carpets per bank, atomic slot swaps even with full pockets, original room textures and floor footsteps, optional saved decoration. Loose rolls support indices 0..66; shop patterns 67..70 decorate but unsupported loose models refuse. |
+| `8dcd0039` | [Monthly diary](../.claude-agents/completed/diary-writing.md): shared 12-month notebook, original paper/font, bounded editing, Yes/Rewrite and optional saved diary independent of physical item pickup. Partial native port; full retail calendar/editor/locks remain open. |
+| `de9a704a` | [Three TVs](../.claude-agents/completed/television-actions.md): E power, cached original screen cycles, positional audio and native saved switches for `sum_tv01`, `sum_tv02`, `sum_fruittv01`. Movement, turning and pickup preserve ownership/lifecycle. |
+| `76ba1b4a` | [Snowman TV and four lamps](../.claude-agents/completed/snow-tv-lamp-draw.md): fourth TV power/screens/audio, full TV placement asset preflight and missing original opaque model parts for bla/whi/gre/hal lamps. Lamp callbacks are static; no lamp switch or illumination invented. |
+| `2fae13d2` | [Ten clocks](../.claude-agents/completed/furniture-clocks.md): native local-time hand math, original half-speed cKF animation, extra snow/meza hand lists and antique positional ticking with room/presentation/pause/load gates. No configurable alarm or power action found in audited callbacks. |
 
 Earlier foundation remains: walkable home landing/facing-required exit, original
 wardrobe/drawer rigs, atomic diary/stationery/fruit/shell placement and pickup,

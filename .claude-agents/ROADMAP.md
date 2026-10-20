@@ -248,7 +248,7 @@ commits/pushes for future work; see Git history/upstream for publication state.
    Original filtered aResample and reserve-list allocation were audited;
    current linear interpolation/shared pool remain explicit gaps alongside
    fixed-point/filter/Haas/surround and special unplayable scene echo.
-   See backlog/audio-mix-and-fidelity.md for sources and listening checklist.
+   See completed/audio-mix-and-fidelity.md for sources and listening checklist.
    No tests/probes added or run; compile/lint/format/build gate recorded there.
 
 7. **audio-voice-edge-cases — current villager paths playtested; town tune remains a follow-up.**
@@ -267,7 +267,7 @@ commits/pushes for future work; see Git history/upstream for publication state.
    original SE slot 6 and safely owned SFX-state macros. Page/close cancels old
    pending syllables. Game-frame and melody handoff timing adapt to this port.
    No new special-NPC conversation or click/silent settings are implied.
-   See backlog/audio-voice-edge-cases.md for sources, gaps and listening steps.
+   See completed/audio-voice-edge-cases.md for sources, gaps and listening steps.
    Compile/lint/format/build status is recorded there; no tests/probes added/run.
    Philip accepts ordinary voices, emotion/size, pause/page behavior and the
    requested F8 accented-text examples. Both music-note examples produce sound;
@@ -300,7 +300,7 @@ roof colors are not the concern. **villager-house-glass** marks opaque panels in
 the shared window builder so zero combiner alpha cannot discard them. Body/frame
 cutouts and blended glow retain their existing paths. All ten variants were
 visually inspected in daytime and at night in a disposable Temp town; original
-save untouched. See backlog/villager-house-glass.md for source/evidence and
+save untouched. See completed/villager-house-glass.md for source/evidence and
 Philip's provisional acceptance: "looks fine for now." This does not close full render-look or M4.
 
 **house-board-collision** follows Philip's report that player homes, the bulletin
@@ -309,12 +309,12 @@ footprints and the real door position; both units of each board are blocked,
 including save/load field edits. Revised home bounds exclude the yard fence/step,
 follow the front wall and include body clearance. Philip accepts the revised
 180-degree door approach ("looks good"). Evidence and limits are tracked in
-backlog/house-board-collision.md. **ground-light-flicker** adds targeted decal depth
+completed/house-board-collision.md. **ground-light-flicker** adds targeted decal depth
 bias to coplanar window-light patches; Philip reports "that looked good".
-Evidence/scope: backlog/ground-light-flicker.md. **mailbox-flicker** restores
+Evidence/scope: completed/ground-light-flicker.md. **mailbox-flicker** restores
 source back-face culling for summer/winter body and lid surfaces; thin waving
 flags stay double-sided. All four mailboxes reviewed in both seasons in a
-Temp-only town. Philip acceptance pending; see backlog/mailbox-flicker.md.
+Temp-only town. Philip acceptance pending; see completed/mailbox-flicker.md.
 **player-door-interaction** narrows player-home entry to a short ray aimed at
 the finite door panel. Left mailbox opens from street and left edge in preview;
 direct door entry works. Philip acceptance pending. Gyroid conversation handler
@@ -322,7 +322,7 @@ is not implemented (render/animation exist). **wishing-fountain** restores the
 original layout actor, summer/winter meshes, foliage, translucent water layers
 and first-tile scrolling with basin collision. Seasonal preview evidence and
 remaining two-tile water/shadow/rating-conversation limits are recorded in
-backlog/wishing-fountain.md. Philip visual acceptance pending.
+completed/wishing-fountain.md. Philip visual acceptance pending.
 
 #### Special-building comparison fixes (2026-10-15)
 
@@ -341,7 +341,7 @@ Model-research/report.md and index.html corroborate the existing runtime
 display-list/cKF pipeline; no new fundamental rendering defect was established.
 Next bounded model task: **model-actions-net-swing**, a held normal net with one
 complete empty swing, procedural tool-joint adjustment and stop/recovery.
-See backlog/model-actions-net-swing.md for source references, relevant files,
+See completed/model-actions-net-swing.md for source references, relevant files,
 acceptance and research-access limits. First slice implemented: runtime held
 normal net, source hand/held-arm mask, independent procedural bend, shared
 swing/recovery clock, movement/input gating and load/tool/scene cancellation.
@@ -427,15 +427,15 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   bounded movement adapter now adds G + directions for push/pull/turn, original
   clips, atomic storage/stack/switch preservation and save/load focus. Philip
   reports this adapter works (2026-10-17). Exact long-piece retail pivots stay
-  open; see backlog/furniture-movement-animation.md. Next bounded slice:
-  backlog/furniture-birth-pickup-animation.md now implements original leaf
+  open; see completed/furniture-movement-animation.md. Next bounded slice:
+  completed/furniture-birth-pickup-animation.md now implements original leaf
   display lists, birth pop and pickup clip/shrink with atomic save/load reset.
   Philip accepts this bounded presentation slice (2026-10-17). Exact dust and
   remaining furniture fidelity stay open. Storage opening/closing now connects
   19 audited original wardrobe/closet rigs, original player clips and safe
   storage UI completion/cancel/load handling. Check/lint/format/builds and bounded
   disposable previews pass; Philip acceptance is pending. See
-  backlog/furniture-storage-animation.md. Special constructors remain open.
+  completed/furniture-storage-animation.md. Special constructors remain open.
   Philip lacked a wardrobe to check it; furniture-playtest-access.md adds F4 in
   his house to put an original blue cabinet in an empty pocket, then normal
   I -> Place in room / E at its front. Storage animation acceptance still pending.
@@ -451,7 +451,7 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   Bounded diary follow-up now renders original diary00..15 goods on floor/surfaces
   and restores the source starter diary only for default rooms. Backspace recovers
   visible diaries atomically; storage contents stay hidden. Evidence/limits and
-  pending acceptance: backlog/room-loose-diary.md. Other loose families remain open.
+  pending acceptance: completed/room-loose-diary.md. Other loose families remain open.
   Authorized follow-up diary-placement.md connects normal-condition pocket
   diaries to front surfaces/floor with atomic blocked refusal and save/load.
   Bounded disposable previews pass; Philip acceptance remains pending.
@@ -477,29 +477,29 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   orientations/both endpoints, mixed tops, atomic refusals and shifted storage
   save/reload have bounded disposable evidence. Exact player contact/root/slip
   and conservative player sweep remain open; Philip acceptance is pending.
-  See backlog/furniture-turn-long.md. M4/migration remain open.
+  See completed/furniture-turn-long.md. M4/migration remain open.
   room-loose-animation now adds source idle-player throw/growth/bounce and
   distinct floor pickup1/surface clear_table1 clips for supported diary, paper,
   fruit and shells. Original goods approach the rendered hand; atomic numeric
   transfers, bundle quantity, hidden storage and pause/save/reload remain intact.
   Bounded disposable previews pass; Philip acceptance and broader fidelity remain
-  open. See backlog/room-loose-animation.md; M4/migration remain open.
+  open. See completed/room-loose-animation.md; M4/migration remain open.
   Mushroom/candy follow-up now completes loose room support for all eight
   source foods0x2800..2807, using original indoor models and existing transactions
   and presentation. Bounded model/place/pickup/carry/turn/refusal/storage/save
   previews pass; eating/seasonal acquisition and Philip acceptance remain open.
-  See backlog/mushroom-candy-room.md; M4/migration remain open.
+  See completed/mushroom-candy-room.md; M4/migration remain open.
   Money/turnip follow-up adds original loose bag2100..2103 and turnip2F00..2F03
   models, source money landing sound, exact denomination/bundle/spoiled ID
   transfers and shared carry/turn/presentation. Bounded room/pocket/wallet and
   storage/refusal/save checks pass. Turnip storage remains excluded; redemption,
   trading/aging/acquisition and Philip acceptance remain open. See
-  backlog/money-turnip-room.md; M4/migration remain open.
+  completed/money-turnip-room.md; M4/migration remain open.
   Music/fan/pinwheel follow-up adds55 loose music-item IDs plus eight fans/eight
   pinwheels, using original indoor models and source surface-yaw flags. Mixed
   turn/carry/place/pickup, variant galleries, atomic refusal/hidden storage and
   save/reload have bounded evidence. Music registration/playback, toy use and
-  Philip acceptance remain separate/open. See backlog/music-fan-pinwheel-room.md;
+  Philip acceptance remain separate/open. See completed/music-fan-pinwheel-room.md;
   M4/migration remain open.
   Room music-player follow-up implements shared 55-song home registration,
   duplicate refusal, selection/stop/single-title take-out, exclusive device
@@ -507,7 +507,7 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   Current pockets/dialogue menus are reused; F2 grants K.K. Love Song inside
   the home for playtesting. Original music grid, device/player open-close clips,
   speaker effects/positioning and exact placement/toggle details remain open.
-  See backlog/room-music-player.md. Philip listening/visual acceptance is pending;
+  See completed/room-music-player.md. Philip listening/visual acceptance is pending;
   this does not close M4, audio or migration.
   docs/roadmap.html now separates implemented work from acceptance and has
   search/status filters. Codex proposes music presentation, toy holding/use,
@@ -526,7 +526,7 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   player poses/part table, fan E repeat/sound and movement-driven rotor/coasting
   with source level sound. 3 puts away; ownership/reload/placement stay atomic.
   F1 in the home grants two toys only with two free pockets. Environmental wind
-  awaits weather. See backlog/music-presentation-toys.md; new presentation/toy
+  awaits weather. See completed/music-presentation-toys.md; new presentation/toy
   acceptance remains pending, while playback acceptance is recorded separately.
 
   2026-10-18 Codex music-source-fidelity (Philip explicitly chose item3): M marking
@@ -534,7 +534,7 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   and cloth scrolling, placement-time registered selection/off state, front-only
   home interaction and Start/Stop. Runtime DOL taps now feed source subtrack
   filter commands and per-voice CPU convolution; old-device hiss shares existing
-  ambience with pinwheels. See backlog/music-source-fidelity.md for bounded checks
+  ambience with pinwheels. See completed/music-source-fidelity.md for bounded checks
   and final gates. Exact hardware DSP/remaining window animation and weather wind
   remain open, along with Philip acceptance, M4 and migration. Roadmap.html now
   records implementation separately from acceptance and proposes remaining room
@@ -547,7 +547,7 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   movement/save and hidden storage stay intact. Reserved24FF/custom designs
   excluded. Temp previews verify first/middle/last, rotations/live push-pull-turn,
   F5/F9, stored/conditioned shirts and full/blocked refusals; no-disc preserves
-  numeric gallery. See backlog/clothing-room-conversion.md for final gates.
+  numeric gallery. See completed/clothing-room-conversion.md for final gates.
   Philip playtest/M4/migration remain open. Roadmap proposes umbrellas/tools next,
   then wallpaper/carpet and remaining special behavior; net appearance deferred.
   Clothing final gates pass: check/all-target clippy/fmt/capture/default/release (2m38s), no tests; live source/numeric/no-disc checks and roadmap browser evidence in task. Actual save unchanged; Philip acceptance pending. Release claim and publish.
@@ -560,7 +560,7 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   placement/four rotations/movement/reload/pickup, tool floor/surface transactions,
   mixed table turn/reload, atomic full/blocked refusals, hidden storage and
   excluded/conditioned menus. Fresh no-disc preserves complete numeric state.
-  Source/evidence and final gates: backlog/umbrella-tool-room.md. Philip playtest,
+  Source/evidence and final gates: completed/umbrella-tool-room.md. Philip playtest,
   M4 and migration remain open; wallpaper/carpet decorating is proposed next.
   Held-net appearance, title and rename remain deferred.
   Umbrella/tool final gates pass: check/all-target clippy/fmt/capture/default24.91s/release3m27s; no tests. Source, numeric, visual and no-disc evidence recorded in task; actual save unchanged. Philip acceptance pending.
@@ -573,7 +573,7 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   Supported loose rolls reuse existing transactions/presentation. Temp source,
   numeric, visual, first/middle/last, full/same/cancel/conditioned/reserved refusal,
   hidden storage/music, F5/F9/fresh-start and no-disc checks recorded in
-  backlog/room-decorating.md. Custom designs, expanded rooms and basements stay
+  completed/room-decorating.md. Custom designs, expanded rooms and basements stay
   separate; Philip playtest/M4/migration open. Special furniture/diary writing is
   proposed next; held-net appearance/title/rename remain deferred.
   Decorating final gates pass: check/all-target clippy -D warnings/fmt/capture12.22s/default43.54s/release2m38s; no tests. Source, transaction, visual and fresh/no-disc evidence in task. Actual save unchanged; Philip acceptance pending.
@@ -586,7 +586,7 @@ Audio thread uses exclusive mutable access under the existing engine mutex.
   room diary data persist independently of physical diary pickup. Dedicated
   modal input prevents movement/menu/tool/pause/save/load leaks while editing.
   Floor/hidden/misaligned diaries do not open. Source/numeric/visual/F5-F9/fresh/
-  no-disc evidence and final gates in backlog/diary-writing.md. Full calendar,
+  no-disc evidence and final gates in completed/diary-writing.md. Full calendar,
   month sprites/virtual keyboard/transitions, contact pose/repeat and other-player
   locks remain separate; current PC UI is a bounded adapter. Philip playtest/M4/
   migration open; remaining special furniture actions proposed next. Net/title/
@@ -604,7 +604,7 @@ its cell bit and new placement starts off. Secondary-layer sets remain separate
 from supporting furniture switches. Other TV callbacks, lamp interactions and
 room illumination are separate: audited lamp profiles/callbacks do not draw
 according to switch_bit, so no invented lamp toggle is exposed. See
-backlog/television-actions.md for bounded evidence/gates and remaining limits.
+completed/television-actions.md for bounded evidence/gates and remaining limits.
 Philip playtest and audible acceptance/M4/migration remain open; deferred
 held-net appearance/title/rename remain untouched.
 Television final gates pass: workspace check/all-target clippy -D warnings/fmt/capture47.74s/default43.29s/release3m08s, no tests. Three TV variants, exact state/F5-F9/fresh/no-disc, cached screen visuals, powered movement/turns, surface/pickup, independent sources and scene audio retirement checked in Temp. Actual save unchanged; Philip visual/audio acceptance pending.
@@ -619,7 +619,7 @@ after registered profile lists, in original opaque stream/order. Lamp callbacks
 are static; no switch-dependent PointLight/room illumination is claimed. Source
 aMR_FurnitureLightSet reads global light data, not a per-lamp insertion path.
 No save schema changes. Details and bounded evidence/gates in
-backlog/snow-tv-lamp-draw.md. Philip visual/audio acceptance, M4 and migration
+completed/snow-tv-lamp-draw.md. Philip visual/audio acceptance, M4 and migration
 remain open; net/title/rename deferrals unchanged.
 Snow-TV/lamp final gates pass: workspace check11.33s/all-target clippy -D warnings11.51s/fmt/capture23.51s/default21.18s/release2m39s, all original settings after Philip freed RAM; no tests. Exact placement/power/movement/pickup/F5-F9/fresh/no-disc and older-TV regressions, lamp/TV screenshots and audio scene retirement in task. Actual save unchanged; Philip visual/audio acceptance remains pending.
 
@@ -633,7 +633,7 @@ hour adjustment. Antique ticking uses positional12D at beat15/45, animation rese
 scene/pause/load and owned birth/retirement gates preserve existing audio ownership.
 Room origin gains a read-only accessor for active-room sound selection. No save
 schema or alarm controls added: the audited meza callback only draws its hands.
-See backlog/furniture-clocks.md for source/joint/time-change/runtime evidence and
+See completed/furniture-clocks.md for source/joint/time-change/runtime evidence and
 final gates. Configurable alarms, room illumination, Philip visual/audio acceptance,
 M4/migration and deferred net/title/rename remain separate.
 Clock final gates pass: workspace check8.98s/all-target clippy -D warnings24.90s/fmt/capture1m01s/default1m02s/release3m25s, normal project settings, no tests. All ten F6 hour deltas about-30deg, authored motion/pause, per-variant numeric roundtrip, extra-hand close-ups, movement/hidden/surface checks, F5/F9/fresh/no-disc and sound retirement evidence in task. Actual save unchanged; Philip visual/audio acceptance remains pending.
@@ -649,7 +649,7 @@ switch-dependent room prim on the floor/wall lists (disc lists verified to inher
 prim). Native logic::room_light plus ported subset of pinned 122867f lights.rs
 (add_point_relative only). EnvUniform/shader gain one directional point slot. No save
 schema change. Window sunshine (ef_room_sunshine), villager-room schedules,
-basements/cottage remain follow-ups. Evidence/gates in backlog/room-light-switch.md;
+basements/cottage remain follow-ups. Evidence/gates in completed/room-light-switch.md;
 Philip visual/audio acceptance, M4 and migration remain open.
 
 2026-10-19 claude room-sunshine: player-room window sunshine from ef_room_sunshine
@@ -664,7 +664,7 @@ after each light tick and the 0-reset (0.5 steps) on entry/load, using the live
 RoomLight.percent. Native logic::room_sunshine. No save schema change; no-disc
 fallback unchanged. Weather dimming (x0.6) waits for weather simulation; other
 room scenes' sunshine variants not covered. Evidence/gates in
-backlog/room-sunshine.md; Philip visual acceptance, M4 and migration remain open.
+completed/room-sunshine.md; Philip visual acceptance, M4 and migration remain open.
 
 2026-10-19 claude room-critters-balloons (branch claude/focused-mayer-edf6d2,
 not merged): fish 0x2300..0x2327 -> aquariums 0x31A+n and insects 0x2D00..0x2D27
@@ -672,7 +672,7 @@ not merged): fish 0x2300..0x2327 -> aquariums 0x31A+n and insects 0x2D00..0x2D27
 (repeat frame, fNBC balloon speed) and app furniture::rigs shared skinned builder
 (clocks moved onto it). Callback critters stay in pockets (room-insect audio).
 Balloons deferred: G_TEXTURE_GEN reflection mapping is not rendered; their
-conversion/sway/switch logic is kept. Evidence in backlog/room-critters-balloons.md.
+conversion/sway/switch logic is kept. Evidence in completed/room-critters-balloons.md.
 Philip playtest, M4 and migration remain open.
 
 2026-10-19 claude texgen-reflection: emu64 texture_gen ported (world normal on
@@ -681,7 +681,7 @@ origin, size); decoder now records G_TEXTURE scale, settile shifts and
 G_SETTILESIZE origin. Balloons place again with original sway/switch kick.
 All G_TEXTURE_GEN lists (tank/cage glass, clocks, mirrors, cabinets, statues)
 use it; strings stay cut as in emu64 alpha_compare. Evidence in
-backlog/texgen-reflection.md; Philip visual acceptance pending.
+completed/texgen-reflection.md; Philip visual acceptance pending.
 
 2026-10-19 Codex turkey-tv: fifth TV iam_iku_turkey_TV (index4B9/item32E4)
 uses the existing TV/E/native switch/ambience/save paths. Only TV adapter/native
@@ -690,7 +690,7 @@ model_b then model_a and CI4 16x16 f/g/h/i screens decoded from the disc.
 Turkey phase advances modulo24 even while off, g/h/i/h every6 ticks while on;
 other four TVs retain powered-only two-tick table timing. Level sound5E and
 switch16/17 use existing generic routing. No new UI/schema. See
-backlog/turkey-tv.md for evidence and validation limits. Existing TV roadmap
+completed/turkey-tv.md for evidence and validation limits. Existing TV roadmap
 item extended; tracked counts remain83 items50 implemented6 doing27 planned.
 Philip visual/audio acceptance and broader M4/migration remain open.
 
@@ -701,7 +701,7 @@ skinned joints oscillate at eased speed0..0.5. E uses native saved switches and
 16/17 sounds; level1 motor routes through the existing four-source ambience
 mixer, with room/birth/pickup lifecycle gates. No save schema/UI changes.
 Source CALC_EASE(0.05) and US stopped signed-counter semantics retained; 60Hz
-catch-up capped4 as existing adapters. See backlog/electric-fan.md for source,
+catch-up capped4 as existing adapters. See completed/electric-fan.md for source,
 Temp behavioral evidence and gate limitations. Fan item added:84 tracked items,
 51 implemented6 in progress27 planned; not overall completion. Philip visual/
 audio acceptance/M4/migration and Claude's insect task remain open.
@@ -716,7 +716,7 @@ is zero outside this room effect. Flash light registration's source parameter
 order retained, including early reset; adapter uses its own cosmetic random
 stream/100-slot gong cap, not retail's global effect pool. Retail shadow-alpha
 response remains a fidelity limit. Pause freezes effects; load/scene exit clear
-them; no effect state serialized. Temp checks in backlog/gong-actions.md.
+them; no effect state serialized. Temp checks in completed/gong-actions.md.
 New tracked bell item:85 total52 implemented6 doing27 planned; Philip visual/
 audio acceptance, M4/migration and Claude's insect task remain open.
 
@@ -729,7 +729,7 @@ Generic E switches silently; busy changes are consumed, no queue/payout/wallet
 mutation. QuickLoad and room exit reset transient state even when refresh keeps
 the same render entity. Pause freezes it; numeric placement/switch ownership,
 movement and pickup reuse existing room logic. No schema change. Evidence and
-validation in backlog/slot-machine.md. New item:86 tracked53 implemented6 doing
+validation in completed/slot-machine.md. New item:86 tracked53 implemented6 doing
 27 planned; not game completion. Philip visual/audio acceptance/M4/migration
 and Claude's insect task remain open.
 
@@ -739,4 +739,4 @@ rooms run furniture seq 246, whose port-2 beat never advances in retail because
 group callback 1 is never registered, so room insects stay mostly quiet as in
 the original. Stopped cicada/cricket clips replay per chirp; frog/mosquito/
 mole cricket repeat; firefly pulses its segment-8 prim alpha. Evidence and the
-callback finding in backlog/room-insect-audio.md; Philip acceptance pending.
+callback finding in completed/room-insect-audio.md; Philip acceptance pending.

@@ -2,7 +2,7 @@
 
 Philip authorized ("le go") the next proposal after fish/insect placement.
 The app ignores G_TEXTURE_GEN: reflection-mapped lists sample their stored ST
-values, so balloons render as rim slivers (backlog/room-critters-balloons.md).
+values, so balloons render as rim slivers (completed/room-critters-balloons.md).
 Port emu64 texture_gen (UVs from the model-view normal projected on the
 look-at axes, then gSPTexture scale, tile shift/position and size) into the
 material/shader path, verify on balloons and other affected furniture, then
