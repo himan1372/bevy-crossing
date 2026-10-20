@@ -112,6 +112,36 @@ impl ShopTier {
     }
 }
 
+/// `mSP_TANUKI_SHOP_STATUS_*`: the shop's look and offer for the day.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TanukiShopStatus {
+    Normal,
+    Event,
+    Halloween,
+    /// The monthly raffle: rom_shop*_fuku replaces the wall and floor.
+    Fukubiki,
+    HukubukuroSale,
+}
+
+/// `mSP_SetTanukiShopStatus` for a date. `open_event` is
+/// `mSP_ShopOpen() == mSP_SHOP_STATUS_OPENEVENT` (the bargain event).
+pub fn tanuki_shop_status(year: u16, month: u8, day: u8, open_event: bool) -> TanukiShopStatus {
+    use crate::game_time::{get_days_by_month, weekly_day, THURSDAY};
+    if open_event {
+        TanukiShopStatus::Event
+    } else if get_days_by_month(year, month) == day {
+        // mSP_CheckFukubikiDay: the last day of the month.
+        TanukiShopStatus::Fukubiki
+    } else if month == 11 && weekly_day(year, 11, 4, THURSDAY) + 1 == day {
+        // mSP_Chk_HukubukuroSail: the day after the fourth Thursday.
+        TanukiShopStatus::HukubukuroSale
+    } else if month == 10 && (16..=30).contains(&day) {
+        TanukiShopStatus::Halloween
+    } else {
+        TanukiShopStatus::Normal
+    }
+}
+
 /// Days in month (non-leap; retail uses lbRTC_GetDaysByMonth).
 fn days_in_month(y: u16, m: u8) -> u8 {
     match m {

@@ -341,7 +341,11 @@ pub(crate) fn text_mesh(
         for (dx, dy) in [(0.0, 0.0), (w, 0.0), (w, CELL.y), (0.0, CELL.y)] {
             let p = screen(cursor + Vec2::new(dx, dy) * scale);
             pos.push([p.x, p.y, 0.0]);
-            uv.push([(cell.x + dx) / 192.0, (cell.y + dy) / 256.0]);
+            // Half a texel inside the cell: filtered, scaled text would
+            // otherwise pick up the neighbouring glyphs' edge rows.
+            let u = (cell.x + dx.clamp(0.5, (w - 0.5).max(0.5))) / 192.0;
+            let v = (cell.y + dy.clamp(0.5, CELL.y - 0.5)) / 256.0;
+            uv.push([u, v]);
             col.push(tint);
         }
         idx.extend([base, base + 2, base + 1, base, base + 3, base + 2]);

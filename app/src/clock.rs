@@ -44,6 +44,7 @@ const DAY_ZERO: RtcYmd = RtcYmd {
 /// A moment on the game clock.
 #[derive(Clone, Copy, Debug)]
 pub struct Now {
+    pub year: u16,
     /// 1-12.
     pub month: u8,
     /// 1-31.
@@ -77,6 +78,7 @@ fn now_from(hard: i64, debug_hours: i32) -> Now {
         .map(|i| CALENDAR_TERMS[i].season)
         .unwrap_or(Season::Winter);
     Now {
+        year: t.year,
         month: t.month,
         day: t.day,
         weekday: t.weekday,

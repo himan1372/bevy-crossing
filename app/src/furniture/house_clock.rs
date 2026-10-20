@@ -7,7 +7,7 @@
 //! own shapes; the short and long hand lists are drawn at those joints'
 //! origins turned by `90deg - rad_hour/rad_min` (no yaw, no offset). Only
 //! the first shop interior exists in this port, so only shop1 is placed;
-//! the monthly-raffle hide (tanuki_shop_status FUKUBIKI) has no state here.
+//! on the monthly raffle day (FUKUBIKI) shop.rs does not place it.
 use super::*;
 use crate::shop::ShopLocation;
 use rustimal_logic::furniture_clock as native;

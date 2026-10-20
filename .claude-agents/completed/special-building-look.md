@@ -94,3 +94,7 @@ At 10 a.m. Cranny should have its white/red sign and open entrance; F6 across
 09:00/22:00 should move its actual door without duplicates. Confirm shop entry
 still works and no textures/parts are missing. Winter post-office selection is
 source-checked; visual winter acceptance remains open.
+
+## Philip acceptance (2026-10-20)
+
+Philip: "special building look is good now". Accepted; completed by claude.

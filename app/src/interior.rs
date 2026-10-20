@@ -209,14 +209,17 @@ const SHOP_CENTRE: Vec3 = Vec3::new(4.0, 1.0, 4.0);
 /// Half the shop's inside width, in cells.
 pub const SHOP_HALF: f32 = 3.125;
 
-/// Nook's Cranny's room (`ac_shop_indoor`, shop level 1): floor, walls and
-/// the clothes rack, opaque and translucent, with the shop's default
-/// carpet and wallpaper (`aSI_floor_default_table` /
-/// `aSI_wall_default_table`). Returns false without the disc's room.
+/// Nook's Cranny's room (`ac_shop_indoor`, shop level 1): floor and walls,
+/// opaque and translucent, with the shop's default carpet and wallpaper
+/// (`aSI_floor_default_table` / `aSI_wall_default_table`). On the monthly
+/// raffle day (`fukubiki`) aSI_DrawShopIndoor draws the decorated
+/// rom_shop1_fuku room instead of them. Returns false without the disc's
+/// room.
 pub fn spawn_shop_room(
     commands: &mut Commands,
     disc: &GameDisc,
     origin: Vec3,
+    fukubiki: bool,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<N64Material>,
     images: &mut Assets<Image>,
@@ -237,13 +240,18 @@ pub fn spawn_shop_room(
     floors.extend(list("rom_shop1f_modelT").map(|l| (l, true)));
     let mut walls = vec![(wall, false)];
     walls.extend(list("rom_shop1w_modelT").map(|l| (l, true)));
-    let others: Vec<(u32, bool)> = [
-        ("rom_shop1_fuku_model", false),
-        ("rom_shop1_fuku_modelT", true),
-    ]
-    .iter()
-    .filter_map(|&(n, blend)| list(n).map(|l| (l, blend)))
-    .collect();
+    let mut others: Vec<(u32, bool)> = Vec::new();
+    if fukubiki {
+        floors.clear();
+        walls.clear();
+        others = [
+            ("rom_shop1_fuku_model", false),
+            ("rom_shop1_fuku_modelT", true),
+        ]
+        .iter()
+        .filter_map(|&(n, blend)| list(n).map(|l| (l, blend)))
+        .collect();
+    }
     let assets = (&mut *meshes, &mut *materials, &mut *images);
     spawn_shell(
         commands,

@@ -46,3 +46,7 @@ continuation; old raw probe helper is retained under cfg(test) for comparison.
 Qwen local review used; suggestions were not actionable. Pending: real-disc
 natural completion and overlapping effects checks, then Philip's listening
 acceptance. Do not infer successful playback from compile checks alone.
+
+## Philip acceptance (2026-10-20)
+
+Philip: "the audio lifecycle is fine". Listening acceptance recorded; completed by claude.

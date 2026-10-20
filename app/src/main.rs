@@ -23,6 +23,7 @@ mod goods;
 mod ground_map;
 mod gyroid;
 mod house;
+mod idle_clock;
 mod input;
 mod interaction;
 mod interior;
@@ -129,6 +130,7 @@ fn main() {
         .add_plugins(QuestPlugin)
         .add_plugins(PocketsPlugin)
         .add_plugins(ClockPlugin)
+        .add_plugins(idle_clock::IdleClockPlugin)
         .add_plugins(furniture::house_clock::HouseClockPlugin)
         .add_plugins(environment::EnvironmentPlugin)
         .add_plugins(character::CharacterPlugin)

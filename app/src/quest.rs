@@ -937,6 +937,7 @@ mod tests {
 
     fn day(month: u8, d: u8) -> crate::clock::Now {
         crate::clock::Now {
+            year: 2026,
             month,
             day: d,
             weekday: 1,

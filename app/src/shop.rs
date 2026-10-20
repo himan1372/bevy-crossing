@@ -410,6 +410,12 @@ fn build_shop_interior(
 ) {
     let ox = SHOP_ORIGIN.x;
     let oz = SHOP_ORIGIN.z;
+    // mSP_SetTanukiShopStatus for today. The bargain event (OPENEVENT) is
+    // not modelled, and the room is built once per run.
+    let today = crate::clock::now();
+    let fukubiki =
+        rustimal_logic::shop::tanuki_shop_status(today.year, today.month, today.day, false)
+            == rustimal_logic::shop::TanukiShopStatus::Fukubiki;
     // The disc's room, or the placeholder; the counter, Nook and the
     // stands keep their arrangement scaled into it.
     let real = disc.as_deref().is_some_and(|d| {
@@ -417,12 +423,14 @@ fn build_shop_interior(
             &mut commands,
             d,
             SHOP_ORIGIN,
+            fukubiki,
             &mut meshes,
             &mut n64,
             &mut images,
         )
     });
-    if real {
+    // House_Clock_Actor_ct: shops 0-4 have no wall clock on raffle day.
+    if real && !fukubiki {
         if let Some(d) = disc.as_deref() {
             crate::furniture::house_clock::spawn_shop_clock(
                 &mut commands,
