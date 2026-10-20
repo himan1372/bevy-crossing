@@ -26,6 +26,7 @@ use crate::states::GameplaySet;
 
 pub(crate) mod decorating;
 pub(crate) mod diary;
+pub(crate) mod floors;
 mod insects;
 mod lighting;
 mod loose;
@@ -613,9 +614,11 @@ pub(crate) fn can_place_in_room(item: u16) -> bool {
 
 fn setup(
     mut room: ResMut<PlayerRoom>,
+    mut floors: ResMut<floors::HomeFloors>,
     disc: Option<Res<GameDisc>>,
     loaded: Res<crate::save::LoadedSave>,
 ) {
+    floors.restore(loaded.0.as_ref().and_then(|s| s.home_floors.as_ref()));
     if let Some(disc) = disc.as_deref() {
         if let Some(table) = disc.catalog.get("furniture_quality") {
             for idx in 0..table.size / 4 {
@@ -1312,6 +1315,7 @@ impl Plugin for PlayerRoomPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PlayerRoom>()
             .init_resource::<crate::furniture::gong::Effects>()
+            .add_plugins(floors::FloorsPlugin)
             .add_plugins(diary::DiaryPlugin)
             .add_plugins(music_grid::MusicGridPlugin)
             .add_systems(

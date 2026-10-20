@@ -34,9 +34,10 @@ const WALL_BLOCK: usize = 0x1020;
 const PALETTE: usize = 0x20;
 const TEXTURE: usize = 0x800;
 
-/// Only the player shell changes when decorating; other interiors stay intact.
+/// Only the player shell changes when decorating or changing floors; other
+/// interiors stay intact. Holds the decoration and the house floor shown.
 #[derive(Component)]
-pub(crate) struct PlayerRoomShell(pub Decoration);
+pub(crate) struct PlayerRoomShell(pub Decoration, pub u8);
 
 /// A piece of furniture in the room: (centre relative to the room
 /// centre, half extents x/z) for collisions.
@@ -80,9 +81,12 @@ pub(crate) fn spawn_decorated_player_room(
     if !decoration.available(disc) {
         return None;
     }
-    let prefix = crate::home::room_model();
-    let floor_list = disc.catalog.get(&format!("{prefix}_floor_model"))?.offset;
-    let wall_list = disc.catalog.get(&format!("{prefix}_wall_model"))?.offset;
+    let (floor_name, wall_name) = crate::home::room_lists();
+    let floor_list = disc.catalog.get(&floor_name)?.offset;
+    let walls: Vec<(u32, bool)> = match wall_name {
+        Some(name) => vec![(disc.catalog.get(&name)?.offset, false)],
+        None => Vec::new(),
+    };
     let (wall, floor) = (usize::from(decoration.wall), usize::from(decoration.floor));
     let shell = spawn_shell(
         commands,
@@ -91,13 +95,15 @@ pub(crate) fn spawn_decorated_player_room(
         origin,
         crate::home::room_centre(),
         &[(floor_list, false)],
-        &[(wall_list, false)],
+        &walls,
         &[],
         floor,
         wall,
         assets,
     );
-    commands.entity(shell).insert(PlayerRoomShell(decoration));
+    commands
+        .entity(shell)
+        .insert(PlayerRoomShell(decoration, crate::home::floor()));
     info!("player room from the disc: wallpaper {wall}, carpet {floor}");
     Some(shell)
 }

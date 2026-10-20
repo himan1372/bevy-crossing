@@ -442,9 +442,23 @@ impl Default for RoomBounds {
     }
 }
 
+/// The player's room on the floor now shown (after a floor change or load).
+pub(crate) fn refresh_player_room_bounds(commands: &mut Commands) {
+    let bounds = RoomBounds::disc_room();
+    commands.insert_resource(bounds);
+    commands.insert_resource(CurrentRoom(INTERIOR_ORIGIN, bounds));
+}
+
 impl RoomBounds {
-    /// The disc's 4x4-cell room and its wooden south entrance landing.
+    /// The disc's room and its wooden south entrance landing; upstairs and
+    /// the basement have no front door.
     fn disc_room() -> Self {
+        if crate::home::floor() != crate::home::MAIN_FLOOR {
+            return Self {
+                door_z: f32::MAX,
+                ..Self::square(crate::home::room_half())
+            };
+        }
         Self {
             entrance: Some(Entrance {
                 half_width: crate::interior::ENTRANCE_HALF_WIDTH,

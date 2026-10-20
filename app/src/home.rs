@@ -5,7 +5,7 @@
 //! pending order from an earlier date is built (size, basement or statue),
 //! the ordered roof colour applied, and `renew` set so Nook bills the next
 //! loan when the player next visits ([`rustimal_logic::house`]).
-use std::sync::atomic::{AtomicU16, Ordering};
+use std::sync::atomic::{AtomicU16, AtomicU8, Ordering};
 
 use bevy::prelude::*;
 use rustimal_logic::house::{HomeSizeInfo, House, HouseSize};
@@ -197,13 +197,115 @@ const ROOMS: [(&str, f32); 4] = [
     ("rom_myhome4_1", 10.0),
 ];
 
-fn room() -> (&'static str, f32) {
-    ROOMS[(look().0 as usize).min(3)]
+/// mFI_GetPlayerHouseFloorNo: 0 main floor, 1 upstairs (LL2), 2 basement.
+pub const MAIN_FLOOR: u8 = 0;
+pub const UPPER_FLOOR: u8 = 1;
+pub const BASEMENT: u8 = 2;
+
+/// The floor of the player's house being shown.
+static FLOOR: AtomicU8 = AtomicU8::new(MAIN_FLOOR);
+
+pub fn floor() -> u8 {
+    FLOOR.load(Ordering::Relaxed)
 }
 
-/// The main room's floor and wall lists (`<prefix>_floor_model` ...).
-pub fn room_model() -> &'static str {
-    room().0
+pub fn set_floor(floor: u8) {
+    FLOOR.store(floor.min(BASEMENT), Ordering::Relaxed);
+}
+
+/// The room on the current floor: model prefix and width in units
+/// (LL2 rom_myhome4_2 is size M; the basement rom_myhome_ug is size L).
+fn room() -> (&'static str, f32) {
+    match floor() {
+        UPPER_FLOOR => ("rom_myhome4_2", 8.0),
+        BASEMENT => ("rom_myhome_ug", 10.0),
+        _ => ROOMS[(look().0 as usize).min(3)],
+    }
+}
+
+/// The current floor's floor and wall lists; the basement's single model
+/// has no separate walls (aMI_size_dsp_table).
+pub fn room_lists() -> (String, Option<String>) {
+    let prefix = room().0;
+    if floor() == BASEMENT {
+        (format!("{prefix}_model"), None)
+    } else {
+        (
+            format!("{prefix}_floor_model"),
+            Some(format!("{prefix}_wall_model")),
+        )
+    }
+}
+
+/// A staircase on the current floor (aMI_MakeStepData / aMI_DrawMyStep).
+#[derive(Clone, Copy, Debug)]
+pub struct Stair {
+    pub model: &'static str,
+    /// aMI_scale_x_table: the upper floor and basement mirror theirs.
+    pub mirror: bool,
+    /// The floor it leads to.
+    pub to: u8,
+}
+
+impl Stair {
+    /// Its span across the south wall, in room-local cells (x from the room
+    /// centre): the step models reach 40..115 game units to one side.
+    pub fn span(&self) -> (f32, f32) {
+        let pos = stair_pos();
+        let side = if self.model.ends_with("down_model") != self.mirror {
+            1.0
+        } else {
+            -1.0
+        };
+        let (a, b) = (pos.x + side * 40.0, pos.x + side * 115.0);
+        let centre = room_centre().x;
+        (a.min(b) / 40.0 - centre, a.max(b) / 40.0 - centre)
+    }
+}
+
+/// aMI_DrawMyStep step_draw_pos by room size (S/M/L), in game units.
+pub fn stair_pos() -> Vec3 {
+    match room().1 as i32 {
+        6 => Vec3::new(120.0, 40.0, 220.0),
+        8 => Vec3::new(160.0, 40.0, 300.0),
+        _ => Vec3::new(200.0, 40.0, 380.0),
+    }
+}
+
+/// The current floor's stairs for this house.
+pub fn stairs(house: &HouseSave) -> Vec<Stair> {
+    const DOWN: &str = "obj_myhome_step_down_model";
+    const UP: &str = "obj_myhome_step_up_model";
+    let mut out = Vec::new();
+    match floor() {
+        MAIN_FLOOR => {
+            if (1..=3).contains(&house.size) && house.has_basement {
+                out.push(Stair {
+                    model: DOWN,
+                    mirror: false,
+                    to: BASEMENT,
+                });
+            }
+            if house.size == HouseSize::Upper as u8 {
+                out.push(Stair {
+                    model: UP,
+                    mirror: false,
+                    to: UPPER_FLOOR,
+                });
+            }
+        }
+        UPPER_FLOOR => out.push(Stair {
+            model: DOWN,
+            mirror: true,
+            to: MAIN_FLOOR,
+        }),
+        _ => out.push(Stair {
+            model: UP,
+            mirror: true,
+            to: MAIN_FLOOR,
+        }),
+    }
+    out
 }
 
 /// The room's unit (0, 0) corner to its centre, at floor height 1.

@@ -45,3 +45,18 @@ items), lighting/sunshine coordinates and floor list, decorating checks use
 them. Verified Medium room (8x8) renders with saved patterns; furniture at
 (1,1) and (6,6); walking reaches the new walls. Not checked: window
 sunshine spots in bigger rooms, _new/_new2 (stair) variants (stage 3).
+
+## Stage 3 (claude, 2026-10-20) - done
+
+home.rs: floor() / set_floor (0 main, 1 LL2, 2 basement), room_lists per
+floor (basement single model), stairs()/Stair::span/stair_pos (aMI tables).
+player_room/floors.rs: HomeFloors (other floors' RoomSave), stair models,
+climb (south into the stair span, re-armed after releasing down), snapshot/
+restore swap carrying diary + music box, empty floors start with default
+decoration. PlayerRoomShell keys (decoration, floor) so decorating::render
+rebuilds the shell. house.rs refresh_player_room_bounds; non-main floors
+have no front door. Save: home_floors [upper, basement]; F9 shows main.
+Verified (Temp previews, real save unchanged): LL1 room with both stairs,
+basement and LL2 render, transitions both ways, saves. Not checked: room
+light / sunshine / insects per floor beyond not crashing (sunshine is main
+floor only).

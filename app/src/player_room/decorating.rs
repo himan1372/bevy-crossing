@@ -27,14 +27,7 @@ impl Decoration {
         self.standard()
             && disc.player_room_floors.len() >= (usize::from(self.floor) + 1) * 0x2020
             && disc.player_room_walls.len() >= (usize::from(self.wall) + 1) * 0x1020
-            && disc
-                .catalog
-                .get(&format!("{}_floor_model", crate::home::room_model()))
-                .is_some()
-            && disc
-                .catalog
-                .get(&format!("{}_wall_model", crate::home::room_model()))
-                .is_some()
+            && disc.catalog.get(&crate::home::room_lists().0).is_some()
     }
 }
 
@@ -103,7 +96,11 @@ pub(super) fn render(
     if pockets.as_deref().is_some_and(|p| !p.world_ready()) || !decoration.available(disc) {
         return;
     }
-    if !shells.iter().any(|(_, shell)| shell.0 == decoration) {
+    let floor = crate::home::floor();
+    if !shells
+        .iter()
+        .any(|(_, shell)| shell.0 == decoration && shell.1 == floor)
+    {
         if crate::interior::spawn_decorated_player_room(
             &mut commands,
             disc,

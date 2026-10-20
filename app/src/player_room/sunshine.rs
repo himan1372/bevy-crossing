@@ -66,8 +66,7 @@ pub(super) fn spawn(
         return;
     };
     // mCoBG_GetBgY_OnlyCenter_FromWpos: the room floor list's surface.
-    let floor = list(&format!("{}_floor_model", crate::home::room_model()))
-        .map(|l| run_display_lists(&disc.rom, &[l]));
+    let floor = list(&crate::home::room_lists().0).map(|l| run_display_lists(&disc.rom, &[l]));
     let bg_y = |x: f32, z: f32| {
         floor
             .as_ref()
@@ -160,7 +159,9 @@ pub(super) fn render(
     mut suns: Query<(&mut Sunshine, &mut Transform, &mut Visibility)>,
     mut materials: ResMut<Assets<N64Material>>,
 ) {
-    let inside = crate::house::is_player_room(&current, &house);
+    // The window shine belongs to the main floor's room.
+    let inside = crate::house::is_player_room(&current, &house)
+        && crate::home::floor() == crate::home::MAIN_FLOOR;
     let Some(table) = table.filter(|_| inside) else {
         for (mut sun, _, mut visibility) in &mut suns {
             visibility.set_if_neq(Visibility::Hidden);
