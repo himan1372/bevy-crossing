@@ -1039,12 +1039,13 @@ fn interact(
         }
     } else if room.runtime.actors[slot].as_ref().is_some_and(|a| {
         crate::furniture::gong::is_gong(a.name)
+            || crate::furniture::slot::is_slot(a.name)
             || (ftr::special_furniture::BALLOON_COMMON0..=ftr::special_furniture::BALLOON_COMMON7)
                 .contains(&a.name)
     }) && actions.consume(Action::Interact)
     {
         // aMR_FtrIdx2ChangeFtrSwitch's generic branch: toggle the bit
-        // silently; the balloon/gong callback supplies its own reaction.
+        // silently; the balloon/gong/slot callback supplies its own reaction.
         let room = &mut *room;
         if let Some(actor) = room.runtime.actors[slot].as_mut() {
             ftr::toggle_switch(actor, &mut room.layers[actor.layer]);
@@ -1287,6 +1288,14 @@ impl Plugin for PlayerRoomPlugin {
             .add_systems(
                 Update,
                 crate::furniture::fan::update
+                    .after(refresh)
+                    .after(movement::animate_roots)
+                    .after(crate::save::LoadSet)
+                    .in_set(GameplaySet),
+            )
+            .add_systems(
+                Update,
+                crate::furniture::slot::update
                     .after(refresh)
                     .after(movement::animate_roots)
                     .after(crate::save::LoadSet)

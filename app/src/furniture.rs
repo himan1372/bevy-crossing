@@ -28,6 +28,7 @@ pub(crate) mod clocks;
 pub(crate) mod fan;
 pub(crate) mod gong;
 pub(crate) mod rigs;
+pub(crate) mod slot;
 pub(crate) mod storage;
 pub(crate) mod television;
 
@@ -182,6 +183,9 @@ pub(crate) fn can_render(disc: &GameDisc, index: u16) -> bool {
     };
     if television::kind(&p.name).is_some() {
         return television::available(disc, &p);
+    }
+    if slot::is_slot(index) {
+        return slot::available(disc, &p);
     }
     if fan::is_fan(index) {
         return fan::available(disc, &p);
@@ -386,6 +390,16 @@ pub fn spawn_furniture(
         .id();
 
     let mut segs = Segments::default();
+    if slot::is_slot(profile.index as u16) {
+        slot::spawn(
+            commands,
+            disc,
+            parent,
+            &profile,
+            (meshes, materials, images),
+        );
+        return Some(parent);
+    }
     if gong::is_gong(profile.index as u16) {
         gong::spawn(
             commands,

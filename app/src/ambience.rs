@@ -32,6 +32,7 @@ pub(crate) fn update_ambience(
         With<crate::player_room::RoomPiece>,
     >,
     mut state: Local<AmbienceState>,
+    slots: Query<(Entity, &crate::furniture::slot::SlotRig, &GlobalTransform)>,
     fans: Query<(Entity, &crate::furniture::fan::FanRig, &GlobalTransform)>,
     (toy, room, current, disc): (
         Res<crate::player_toys::ToyAction>,
@@ -56,6 +57,15 @@ pub(crate) fn update_ambience(
             .into_iter()
             .collect();
         if crate::house::is_player_room(&current, &house) {
+            for (entity, slot, at) in &slots {
+                if slot.sound_on {
+                    sources.push(Source {
+                        key: entity.to_bits() | (1u64 << 62),
+                        id: 2,
+                        position: (at.translation() * 40.0).to_array(),
+                    });
+                }
+            }
             for (entity, fan, at) in &fans {
                 if fan.sound_on {
                     sources.push(Source {

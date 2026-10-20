@@ -66,6 +66,7 @@ pub mod furniture_fan;
 pub mod furniture_gong;
 pub mod furniture_motion;
 pub mod furniture_rig;
+pub mod furniture_slot;
 pub mod game_time;
 mod gbi_runtime;
 pub mod graphics;

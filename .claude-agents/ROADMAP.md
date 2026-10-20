@@ -719,3 +719,16 @@ response remains a fidelity limit. Pause freezes effects; load/scene exit clear
 them; no effect state serialized. Temp checks in backlog/gong-actions.md.
 New tracked bell item:85 total52 implemented6 doing27 planned; Philip visual/
 audio acceptance, M4/migration and Claude's insect task remain open.
+
+2026-10-19 Codex slot-machine: iam_sum_slot (indexC6/item1318) now uses a
+native stopped-only one-shot controller and exact 121-entry reel table, read
+from ac_sum_slot.c. Constructor speed0 and sample-before-advance stop crossing
+are retained; reel phase persists between spins. Full decoded disc skeleton/
+animation/two-texture preflight, cached skinned rig and existing mixer level2.
+Generic E switches silently; busy changes are consumed, no queue/payout/wallet
+mutation. QuickLoad and room exit reset transient state even when refresh keeps
+the same render entity. Pause freezes it; numeric placement/switch ownership,
+movement and pickup reuse existing room logic. No schema change. Evidence and
+validation in backlog/slot-machine.md. New item:86 tracked53 implemented6 doing
+27 planned; not game completion. Philip visual/audio acceptance/M4/migration
+and Claude's insect task remain open.
