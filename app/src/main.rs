@@ -57,6 +57,7 @@ mod skeleton;
 mod sound;
 mod sound_rom;
 mod states;
+mod statue;
 mod talk;
 mod town;
 
@@ -135,6 +136,7 @@ fn main() {
         .add_plugins(idle_clock::IdleClockPlugin)
         .add_plugins(post_office::PostOfficePlugin)
         .add_plugins(home::HomePlugin)
+        .add_plugins(statue::StatuePlugin)
         .add_plugins(furniture::house_clock::HouseClockPlugin)
         .add_plugins(environment::EnvironmentPlugin)
         .add_plugins(character::CharacterPlugin)

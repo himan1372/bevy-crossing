@@ -342,3 +342,4 @@
 {"action":"claim","task":"post-office-repay","agent":"claude","timestamp":"2026-10-20T09:31:59Z"}
 {"action":"complete","task":"post-office-repay","agent":"claude","timestamp":"2026-10-20T10:00:02Z"}
 {"action":"claim","task":"house-upgrades","agent":"claude","timestamp":"2026-10-20T10:00:10Z"}
+{"action":"complete","task":"house-upgrades","agent":"claude","timestamp":"2026-10-20T19:15:22Z"}

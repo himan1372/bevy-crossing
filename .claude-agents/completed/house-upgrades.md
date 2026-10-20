@@ -60,3 +60,14 @@ Verified (Temp previews, real save unchanged): LL1 room with both stairs,
 basement and LL2 render, transitions both ways, saves. Not checked: room
 light / sunshine / insects per floor beyond not crashing (sunshine is main
 floor only).
+
+## Stage 4 (claude, 2026-10-20) - done; task complete
+
+app/src/statue.rs (ac_douzou): RetailLayout.statue = DOUZOU (0x5843) unit;
+house 0's statue at +(0, 200) game units when next_size == STATUE; skeleton
+cKF_bs_r_obj_{s,w}_douzou posed at frame 1, boy joints 2-4 (no player sex in
+the port), girl hidden, rank scale on joint 2 and prim/env per rank on the
+figure and plate, segs 8/9 eye/mouth by face, A = structure palette 89;
+StatueUnit blocks town movement. Verified gold and silver renders and the
+block (Temp preview, real save unchanged). Not done: sparkle effect
+(ef_douzou_light), idle clip animation, other houses' statues.

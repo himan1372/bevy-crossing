@@ -37,6 +37,11 @@ pub struct HouseSave {
 }
 
 impl HouseSave {
+    /// The station statue is up (ac_douzou: next_size is STATUE).
+    pub fn statue_built(&self) -> bool {
+        self.next_size == HouseSize::Statue as u8
+    }
+
     pub fn info(&self) -> HomeSizeInfo {
         HomeSizeInfo {
             size: HouseSize::from_u8(self.size).unwrap_or_default(),

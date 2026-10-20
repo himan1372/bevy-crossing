@@ -279,6 +279,9 @@ pub struct RetailLayout {
     pub mailboxes: [Option<(usize, usize, usize, usize)>; 4],
     /// The four houses' gyroids (`ACTOR_PROP_HANIWA0..3`).
     pub gyroids: [Option<(usize, usize, usize, usize)>; 4],
+    /// `DOUZOU`: the station statues' actor unit (each house's statue
+    /// stands at its own offset from it).
+    pub statue: Option<(usize, usize, usize, usize)>,
 }
 
 #[derive(Clone, Debug)]
@@ -440,7 +443,7 @@ const GAME_UNITS_PER_CELL: f32 = 40.0;
 
 /// `structure_pal_adrs_(no)winter[index]`: the palette the game puts in
 /// segment 8 for a structure (`aSTR_get_pal_segment`).
-fn structure_palette(disc: &GameDisc, index: u32, winter: bool) -> Option<u32> {
+pub(crate) fn structure_palette(disc: &GameDisc, index: u32, winter: bool) -> Option<u32> {
     let table = if winter {
         "structure_pal_adrs_winter"
     } else {
@@ -1033,6 +1036,11 @@ pub fn build_retail_town(
         }
     }
     let buildings = place_buildings(disc, &structures);
+    let statue = structures
+        .iter()
+        .find(|s| s.0 == DOUZOU)
+        .map(|&(_, ax, az, cx, cz)| (ax, az, cx, cz));
+    info!("station statue unit: {statue:?}");
     // `mNT_IS_RESERVE`: SIGN00-SIGN20 mark where villager homes can go.
     let reserved: Vec<(usize, usize, usize, usize)> = structures
         .iter()
@@ -1085,6 +1093,7 @@ pub fn build_retail_town(
             buildings,
             mailboxes,
             gyroids,
+            statue,
             items: field_items,
         },
         ground,
@@ -1102,6 +1111,8 @@ const ROCK_A: u16 = 0x0063;
 /// `STRUCTURE_START` items (`m_name_table.h`).
 const HOUSE0: u16 = 0x5800;
 pub const SHOP0: u16 = 0x5804;
+/// `DOUZOU` (STRUCTURE_START + 67): the train station statue actor.
+const DOUZOU: u16 = 0x5843;
 
 /// Structure items in the playable acres: (item, ax, az, cx, cz).
 fn find_structures(
