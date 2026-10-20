@@ -53,6 +53,9 @@ struct Conversation {
     context: MsgContext,
 }
 
+/// Seconds inside before Nook raises the house (the door demo's length).
+const ARRIVAL: f32 = 0.6;
+
 // aNSC_get_msg_no, ordinary Nook (not the department-store twins).
 fn message(n: usize) -> usize {
     n + match n {
@@ -179,7 +182,7 @@ fn interact(
     location: Res<State<ShopLocation>>,
     mut focus: ResMut<InputFocus>,
     mut actions: ResMut<Actions>,
-    player: Query<(&Transform, &Facing), With<Player>>,
+    mut player: Query<(&Transform, &Facing, &mut crate::locomotion::Locomotion), With<Player>>,
     nook: Query<(Entity, &Transform), With<Shopkeeper>>,
     displays: Query<&ShopDisplay>,
     mut flow: ResMut<Conversation>,
@@ -188,20 +191,28 @@ fn interact(
     mut inventory: ResMut<PlayerInventory>,
     mut shop: ResMut<ShopData>,
     identity: Res<crate::save::PlayerIdentity>,
-    (mut home, mut was_inside): (Option<ResMut<crate::home::PlayerHouse>>, Local<bool>),
+    (mut home, mut inside_for, time): (
+        Option<ResMut<crate::home::PlayerHouse>>,
+        Local<Option<f32>>,
+        Res<Time>,
+    ),
 ) {
     let Some(disc) = disc.filter(|d| d.text.is_some()) else {
         return;
     };
     if *location != ShopLocation::Inside {
-        *was_inside = false;
+        *inside_for = None;
         return;
     }
     let Ok((actor, nook_transform)) = nook.single() else {
         return;
     };
-    // aNSC_start_wait: Nook speaks about the house as the player comes in.
-    if !std::mem::replace(&mut *was_inside, true) && matches!(flow.step, Step::Idle) {
+    // aNSC_start_wait: Nook speaks about the house once the player is in
+    // (after the door, as the original's entrance demo), and they stand.
+    let since = inside_for.get_or_insert(0.0);
+    let was = *since;
+    *since += time.delta_secs();
+    if was < ARRIVAL && *since >= ARRIVAL && matches!(flow.step, Step::Idle) {
         if let Some(home) = home.as_mut() {
             let today = crate::home::today();
             if let Some(n) = home.0.nook_greeting(&mut inventory.loan, today) {
@@ -209,6 +220,9 @@ fn interact(
                     "Nook house talk {n:#04x}: {:?}, loan {}",
                     home.0, inventory.loan
                 );
+                if let Ok((_, _, mut loco)) = player.single_mut() {
+                    *loco = crate::locomotion::Locomotion::default();
+                }
                 flow.context = context(&identity);
                 *focus = InputFocus::Dialogue;
                 house_say(&disc, &mut dialogue, actor, &mut flow, message(n), 0);
@@ -373,7 +387,7 @@ fn interact(
     {
         return;
     }
-    let Ok((transform, facing)) = player.single() else {
+    let Ok((transform, facing, _)) = player.single() else {
         return;
     };
     let display = displays

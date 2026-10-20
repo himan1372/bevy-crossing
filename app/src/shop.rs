@@ -51,6 +51,8 @@ pub struct ShopBuilding {
     pub placed: bool,
     /// Ground height under the building (disc terrain), 0 on flat ground.
     pub base_y: f32,
+    /// aSHOP_check_player's point (actor x - 38, z + 42), for the disc's shop.
+    pub trigger: Option<Vec3>,
 }
 
 /// True when (x, z) is inside the shop building's blocked footprint.
@@ -279,10 +281,13 @@ fn find_shop_spot(town: Res<Town>, mut commands: Commands) {
             max_z: b.centre.z + inner,
             placed: true,
             base_y,
+            // ac_shop.c: the actor stands at the layout point shifted (-20, +20).
+            trigger: Some(b.origin + Vec3::new(-38.0, 0.0, 42.0) / 40.0),
         });
         println!(
-            "Shop placed from the retail layout at {:?}, door {door_pos:?}",
-            b.centre
+            "Shop placed from the retail layout at {:?}, door {door_pos:?}, trigger {:?}",
+            b.centre,
+            b.origin + Vec3::new(-38.0, 0.0, 42.0) / 40.0
         );
         return;
     }
@@ -354,6 +359,7 @@ fn find_shop_spot(town: Res<Town>, mut commands: Commands) {
         max_z: center.z + SHOP_D / 2.0,
         placed: true,
         base_y: 0.0,
+        trigger: None,
     });
     println!("Shop placed at {:?}, door at {:?}", center, door_pos);
 }
@@ -716,28 +722,38 @@ fn shop_enter(
     building: Option<Res<ShopBuilding>>,
     mut next_state: ResMut<NextState<ShopLocation>>,
     mut commands: Commands,
-    mut player_query: Query<(&mut Transform, &mut Facing), With<Player>>,
+    mut player_query: Query<(&mut Transform, &mut Facing, &Locomotion), With<Player>>,
     room: Res<ShopRoom>,
     shop: Res<ShopData>,
 ) {
-    if *state != ShopLocation::Town {
-        return;
-    }
-    if !actions.just_pressed(Action::Interact) || !focus.is_world() {
-        return;
-    }
-    // A held tool claims E for the ecology plugin; the door needs empty hands.
-    if *tool != EquippedTool::None {
+    if *state != ShopLocation::Town || !focus.is_world() {
         return;
     }
     let Some(building) = building else { return };
     if !building.placed {
         return;
     }
-    let Ok((mut transform, mut facing)) = player_query.single_mut() else {
+    let Ok((mut transform, mut facing, loco)) = player_query.single_mut() else {
         return;
     };
-    if !can_enter_door(&building, transform.translation, facing.dir)
+    // A held tool claims E for the ecology plugin; the door needs empty hands.
+    let pressed = actions.just_pressed(Action::Interact) && *tool == EquippedTool::None;
+    if let Some(trigger) = building.trigger {
+        // aSHOP_check_player / _check_player2: within sqrt(550) game units of
+        // the door point facing between east and north, walking into it (E
+        // there works too).
+        let d = (transform.translation - trigger).with_y(0.0) * 40.0;
+        let yaw = facing.dir.x.atan2(facing.dir.z).to_degrees();
+        let at_door = d.length_squared() < 550.0 && yaw > 90.0 && yaw < 180.0;
+        let walking = loco.state() != rustimal_logic::player_move::LocomotionState::Wait;
+        if !at_door || !(walking || pressed) {
+            return;
+        }
+        if pressed {
+            actions.consume(Action::Interact);
+        }
+    } else if !pressed
+        || !can_enter_door(&building, transform.translation, facing.dir)
         || !actions.consume(Action::Interact)
     {
         return;
@@ -1223,6 +1239,7 @@ mod tests {
             max_z: 2.0,
             placed: true,
             base_y: 0.0,
+            trigger: None,
         }
     }
 

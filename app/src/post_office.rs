@@ -67,6 +67,26 @@ struct PostRoom {
     max: Vec2,
     /// Raised parts of the room (counter, desks), local.
     blocked: Vec<Rect>,
+    /// Where the model has floor at floor height, every 1/8 cell from
+    /// `min` (row-major, `columns` wide): the doorway's dark sides have none.
+    floor: Vec<bool>,
+    columns: usize,
+}
+
+impl PostRoom {
+    fn floor_at(&self, p: Vec2) -> bool {
+        let cell = (p - self.min) * 8.0;
+        if cell.x < 0.0 || cell.y < 0.0 {
+            return false;
+        }
+        let (x, z) = (cell.x as usize, cell.y as usize);
+        x < self.columns
+            && self
+                .floor
+                .get(z * self.columns + x)
+                .copied()
+                .unwrap_or(false)
+    }
 }
 
 /// The repay window (mSM_OVL_REPAY) is open: it owns the controls.
@@ -195,19 +215,23 @@ fn build_room(
         .iter()
         .fold(Vec2::splat(f32::MIN), |m, p| m.max(Vec2::new(p[0], p[2])));
     let cell = 16.0 * UNIT;
-    room.min = lo / cell + Vec2::splat(PLAYER_RADIUS);
-    room.max = hi / cell - Vec2::splat(PLAYER_RADIUS);
+    room.min = lo / cell;
+    room.max = hi / cell;
     let step = cell / 8.0;
     let (nx, nz) = (((hi.x - lo.x) / step) as i32, ((hi.y - lo.y) / step) as i32);
+    room.columns = nx.max(0) as usize;
+    room.floor = vec![false; (nx.max(0) * nz.max(0)) as usize];
     for z in 0..nz {
         let mut start = None;
         for x in 0..=nx {
             let sx = lo.x + (x as f32 + 0.5) * step;
             let sz = lo.y + (z as f32 + 0.5) * step;
-            let raised = x < nx
-                && surface
-                    .height_at(sx, sz)
-                    .is_some_and(|y| (y - GROUND_BASE_Y) / cell > 0.4);
+            let height = (x < nx).then(|| surface.height_at(sx, sz)).flatten();
+            // Floor, rugs and the doorway mat; the counter rises higher.
+            if height.is_some_and(|y| ((y - GROUND_BASE_Y) / cell).abs() <= 0.4) {
+                room.floor[(z * nx + x) as usize] = true;
+            }
+            let raised = height.is_some_and(|y| (y - GROUND_BASE_Y) / cell > 0.4);
             if raised {
                 start.get_or_insert(x);
             } else if let Some(first) = start.take() {
@@ -345,11 +369,11 @@ fn movement(
     if delta == Vec3::ZERO {
         return;
     }
+    // The player's circle must stand on floor all round.
     let free = |p: Vec2| {
-        p.x >= room.min.x
-            && p.x <= room.max.x
-            && p.y >= room.min.y
-            && p.y <= room.max.y
+        [Vec2::ZERO, Vec2::X, Vec2::NEG_X, Vec2::Y, Vec2::NEG_Y]
+            .iter()
+            .all(|d| room.floor_at(p + *d * PLAYER_RADIUS))
             && !room.blocked.iter().any(|r| {
                 p.x + PLAYER_RADIUS > r.min.x
                     && p.x - PLAYER_RADIUS < r.max.x
