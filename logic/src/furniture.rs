@@ -1355,15 +1355,39 @@ pub fn balloon_from_furniture(item: u16) -> Option<u16> {
         .then(|| 0x2244 + ((index - special_furniture::BALLOON_COMMON0) & 7))
 }
 
-/// Fish/insect furniture whose profile carries an aFTR_vtable_c: cicadas and
-/// grasshoppers/crickets start stopped and play only with sAdo_RoomIncectPos,
-/// fireflies glow, and the mole cricket, mosquito and frog call room-insect
-/// sound. Those callbacks are not ported, so these stay in pockets.
-pub fn critter_has_callback(ftr_idx: u16) -> bool {
-    matches!(
-        ftr_idx,
-        0x2F6..=0x2F9 | 0x2FF..=0x304 | 0x30D | 0x313 | 0x319 | 0x33B
-    )
+/// A fish/insect cage profile's own aFTR_vtable_c behaviour.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CritterCallback {
+    /// sAdo_RoomIncectPos with `argument`. `stopped`: the clip starts
+    /// stopped and replays once at 0.5 each time the call reports a sound
+    /// (cicadas, grasshoppers/crickets); otherwise the plain rig keeps its
+    /// standard repeat and the call only sounds (mole cricket, mosquito, frog).
+    Chirp { argument: u8, stopped: bool },
+    /// aSumgenji: standard repeat with a pulsing primitive alpha.
+    Firefly,
+}
+
+/// The callback of a fish/insect furniture index, from each ac_sum_*/ac_nog_*
+/// profile.
+pub fn critter_callback(ftr_idx: u16) -> Option<CritterCallback> {
+    let chirp = |argument, stopped| Some(CritterCallback::Chirp { argument, stopped });
+    match ftr_idx {
+        0x2F6 => chirp(64, true),                // minmin
+        0x2F7 => chirp(63, true),                // tukutuku
+        0x2F8 => chirp(61, true),                // higurashi
+        0x2F9 => chirp(60, true),                // abura
+        0x2FF => chirp(58, true),                // syouryou
+        0x300 => chirp(59, true),                // tonosama
+        0x301 => chirp(56, true),                // koorogi
+        0x302 => chirp(55, true),                // kirigirisu
+        0x303 => chirp(57, true),                // suzumushi
+        0x304 => chirp(54, true),                // matumushi
+        0x313 => chirp(0x42, false),             // nog_kera
+        0x319 => chirp(0x43, false),             // nog_ka
+        0x33B => chirp(0x41, false),             // nog_kaeru
+        0x30D => Some(CritterCallback::Firefly), // sum_genji
+        _ => None,
+    }
 }
 
 /// Supported conversions for room placement (source no_convert_tools TRUE).
@@ -1371,13 +1395,7 @@ pub fn room_item_to_furniture(item: u16) -> Option<u16> {
     clothing_to_furniture(item)
         .or_else(|| umbrella_to_furniture(item))
         .or_else(|| balloon_to_furniture(item))
-        .or_else(|| {
-            insect_to_furniture(item)
-                .or_else(|| fish_to_furniture(item))
-                .filter(|&f| {
-                    !ftr_item_no_2_idx_dir(f).is_some_and(|(i, _)| critter_has_callback(i))
-                })
-        })
+        .or_else(|| insect_to_furniture(item).or_else(|| fish_to_furniture(item)))
 }
 
 /// Reverse room conversions; tools retain their loose item IDs.

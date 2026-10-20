@@ -645,6 +645,11 @@ impl Engine {
             .unwrap_or(-1)
     }
 
+    /// `sou_trg_se[i].id`: the six trigger slots' sounds (0 = free).
+    pub fn trigger_ids(&self) -> [u16; crate::audio::slots::TRG_SE] {
+        std::array::from_fn(|i| self.triggers.slots[i].id)
+    }
+
     /// Submit a game effect through retail trigger allocation and MONO routing.
     /// The caller shares the engine lock with the renderer, so allocation,
     /// parameter updates and request submission are atomic.

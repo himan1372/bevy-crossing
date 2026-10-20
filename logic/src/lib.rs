@@ -101,6 +101,7 @@ pub use player_tools::{chase_net_angle, net_swing_outcome, net_walk_angle, NetSw
 pub mod quest;
 pub mod quest_gen;
 pub mod request_selector;
+pub mod room_insect;
 pub mod room_light;
 pub mod room_sunshine;
 mod save;

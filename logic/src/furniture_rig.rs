@@ -46,3 +46,8 @@ impl BalloonSpeed {
         self.speed
     }
 }
+
+/// cKF standard stop: advance by `speed` and hold the last frame.
+pub fn stop_frame(frame: f32, end: i16, speed: f32) -> f32 {
+    (frame + speed).min(f32::from(end.max(1)))
+}

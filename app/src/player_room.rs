@@ -26,6 +26,7 @@ use crate::states::GameplaySet;
 
 pub(crate) mod decorating;
 pub(crate) mod diary;
+mod insects;
 mod lighting;
 mod loose;
 mod loose_presentation;
@@ -124,6 +125,7 @@ pub(crate) struct PlayerRoom {
     music_box: [u32; 2],
     loose_angles: loose::Angles,
     lighting: lighting::Lighting,
+    insects: insects::Insects,
     movement: movement::Movement,
     presentation: presentation::Presentation,
     loose_presentation: loose_presentation::Presentation,
@@ -150,6 +152,7 @@ impl Default for PlayerRoom {
             music_box: [0; 2],
             loose_angles: [[0; 16]; 16],
             lighting: lighting::Lighting::default(),
+            insects: insects::Insects::default(),
             movement: movement::Movement::default(),
             presentation: presentation::Presentation::default(),
             loose_presentation: loose_presentation::Presentation::default(),
@@ -238,6 +241,7 @@ impl PlayerRoom {
         self.music_grid = None;
         self.loose_angles = [[0; 16]; 16];
         self.lighting.reset();
+        self.insects = insects::Insects::default();
         self.movement.reset();
         self.presentation.reset();
         self.loose_presentation.reset();
@@ -1329,6 +1333,14 @@ impl Plugin for PlayerRoomPlugin {
             .add_systems(
                 Update,
                 render_televisions.after(refresh).in_set(GameplaySet),
+            )
+            .add_systems(
+                Update,
+                insects::update
+                    .after(refresh)
+                    .after(crate::save::LoadSet)
+                    .before(crate::furniture::rigs::update)
+                    .in_set(GameplaySet),
             )
             .add_systems(
                 Update,

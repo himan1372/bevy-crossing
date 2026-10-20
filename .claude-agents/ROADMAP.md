@@ -732,3 +732,11 @@ movement and pickup reuse existing room logic. No schema change. Evidence and
 validation in backlog/slot-machine.md. New item:86 tracked53 implemented6 doing
 27 planned; not game completion. Philip visual/audio acceptance/M4/migration
 and Claude's insect task remain open.
+
+2026-10-19 claude room-insect-audio: all forty insects and the frog place. Native
+Na_RoomIncectPos/Sou_Insect_Lev_Cont kernel with the engine's trigger slots;
+rooms run furniture seq 246, whose port-2 beat never advances in retail because
+group callback 1 is never registered, so room insects stay mostly quiet as in
+the original. Stopped cicada/cricket clips replay per chirp; frog/mosquito/
+mole cricket repeat; firefly pulses its segment-8 prim alpha. Evidence and the
+callback finding in backlog/room-insect-audio.md; Philip acceptance pending.

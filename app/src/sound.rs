@@ -29,6 +29,8 @@ const BGM0_GROUP: u8 = audio_group::BGM0 as u8;
 const BGM1_GROUP: u8 = audio_group::BGM1 as u8;
 /// The effect player's sequence (`Na_InitAudio`).
 const SE_SEQUENCE: u8 = 242;
+/// Na_SceneMode 2 (rooms): the furniture sequence on FTR_INST_GROUP.
+const FTR_SEQUENCE: usize = 246;
 
 #[derive(Component)]
 struct SoundStream;
@@ -53,6 +55,32 @@ impl Sound {
         if let Ok(mut engine) = self.engine.lock() {
             engine.set_ambience(levels);
         }
+    }
+
+    /// Na_SceneMode: rooms start sequence 246 on FTR_INST_GROUP; the field
+    /// stops it.
+    pub(crate) fn furniture_sequence(&self, on: bool) {
+        if let Ok(mut e) = self.engine.lock() {
+            if on && !e.playing(audio_group::FTR_INST) {
+                e.start_sequence(audio_group::FTR_INST, FTR_SEQUENCE);
+            } else if !on && e.playing(audio_group::FTR_INST) {
+                e.stop_sequence(audio_group::FTR_INST);
+            }
+        }
+    }
+
+    /// `sou_trg_se` ids, for Na_RoomIncectPos's already-sounding check.
+    pub(crate) fn trigger_ids(&self) -> Vec<u16> {
+        self.engine
+            .lock()
+            .map_or_else(|_| vec![0], |e| e.trigger_ids().to_vec())
+    }
+
+    /// `Nap_ReadGrpPort(FTR_INST_GROUP, 2)`: the room-insect beat.
+    pub(crate) fn furniture_beat(&self) -> u8 {
+        self.engine
+            .lock()
+            .map_or(0, |e| e.group_port(audio_group::FTR_INST, 2) as u8)
     }
 
     /// Sends the game's audio commands to the engine.
