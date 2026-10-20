@@ -750,3 +750,8 @@ confirmed the 21:00 call. See completed/cuckoo-clock.md.
 kernel, generic silent E, 0x16/0x17, level 0x5B, destructor write-back on
 leaving). Mid-fade press quirk reproduced and verified; water flow needs
 TEXEL1. See completed/sprinkler.md.
+
+2026-10-19 claude lawnmower: ac_nog_lawnmower ported (grass level on the lawn
+carpets with back-contact push/wait, prim alpha; 0x177 per back push).
+With the cuckoo clock and sprinkler, all seven callbacks from the
+furniture-callback audit are implemented. See completed/lawnmower.md.

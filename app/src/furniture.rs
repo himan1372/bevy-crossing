@@ -28,6 +28,7 @@ pub(crate) mod clocks;
 pub(crate) mod cuckoo;
 pub(crate) mod fan;
 pub(crate) mod gong;
+pub(crate) mod lawnmower;
 pub(crate) mod rigs;
 pub(crate) mod slot;
 pub(crate) mod sprinkler;
@@ -200,6 +201,9 @@ pub(crate) fn can_render(disc: &GameDisc, index: u16) -> bool {
     }
     if sprinkler::is_sprinkler(index) {
         return sprinkler::available(disc, &p);
+    }
+    if lawnmower::is_lawnmower(index) {
+        return lawnmower::available(disc, &p);
     }
     if clocks::spec(&p.name).is_some() {
         return clocks::available(disc, &p);
@@ -400,6 +404,16 @@ pub fn spawn_furniture(
     let mut segs = Segments::default();
     if slot::is_slot(profile.index as u16) {
         slot::spawn(
+            commands,
+            disc,
+            parent,
+            &profile,
+            (meshes, materials, images),
+        );
+        return Some(parent);
+    }
+    if lawnmower::is_lawnmower(profile.index as u16) {
+        lawnmower::spawn(
             commands,
             disc,
             parent,

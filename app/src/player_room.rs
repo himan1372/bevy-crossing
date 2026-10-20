@@ -184,6 +184,26 @@ impl PlayerRoom {
             .filter(|a| a.name == ftr::ftr_item_no_2_idx_dir(piece.item).map_or(u16::MAX, |f| f.0))
             .map(|a| a.switch_bit)
     }
+    /// The lawn carpets (FLOOR_NPC026/048) with the player at `actor`'s back.
+    fn mower_contact(&self, actor: &ftr::FurnitureActor, facing: Vec3) -> bool {
+        let lawn = self
+            .decoration
+            .is_some_and(|d| rustimal_logic::furniture_lawnmower::lawn_floor(d.floor));
+        let forward = Quat::from_rotation_y(actor.angle_y.to_radians()) * Vec3::Z;
+        lawn && facing.dot(forward) > 0.5
+    }
+
+    /// fNLM_mv's cutting test for a placed lawnmower.
+    pub(crate) fn mower_cutting(&self, piece: &RoomPiece) -> bool {
+        let Some((slot, facing)) = self.movement.pushing() else {
+            return false;
+        };
+        slot == piece.slot
+            && self.runtime.actors[slot]
+                .as_ref()
+                .is_some_and(|actor| self.mower_contact(actor, facing))
+    }
+
     /// fNS_dt-style write-back of a callback's own switch state.
     pub(crate) fn set_switch(&mut self, piece: &RoomPiece, on: bool) {
         if self.switch_bit(piece).is_some_and(|bit| (bit != 0) != on) {
@@ -1332,6 +1352,13 @@ impl Plugin for PlayerRoomPlugin {
                     .in_set(GameplaySet),
             )
             .add_systems(Update, storage::render.after(refresh).in_set(GameplaySet))
+            .add_systems(
+                Update,
+                crate::furniture::lawnmower::update
+                    .after(movement::advance)
+                    .after(refresh)
+                    .in_set(GameplaySet),
+            )
             .add_systems(
                 Update,
                 crate::furniture::sprinkler::update

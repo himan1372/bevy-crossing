@@ -70,6 +70,15 @@ impl Movement {
         self.rotation_ready = true;
     }
 
+    /// The gripped piece and the player's facing while it is pushed or
+    /// waiting to be pushed (aFTR_STATE_WAIT_PUSH*/PUSH).
+    pub(super) fn pushing(&self) -> Option<(usize, Vec3)> {
+        let grip = self.grip.as_ref()?;
+        let waiting = self.direction_ticks > 0.0 && self.last_dir.dot(grip.facing) > 0.5;
+        let pushing = self.active.as_ref().is_some_and(|a| a.kind == Kind::Push);
+        (waiting || pushing).then_some((grip.slot, grip.facing))
+    }
+
     pub(super) fn load(&mut self, disc: Option<&GameDisc>) {
         self.models = disc.and_then(|disc| {
             let n = disc
@@ -453,6 +462,12 @@ pub(super) fn advance(
         return;
     };
     let old_dir = (old.angle_y / 90.0).round() as u8;
+    // aMR_SetMoveSE: a lawnmower pushed from its back on the lawn carpets
+    // plays its own sound (other floors' drag sounds are not reproduced).
+    let mower_sound = (kind == Kind::Push
+        && old.name == rustimal_logic::furniture_lawnmower::LAWNMOWER
+        && room.mower_contact(old, front))
+    .then(|| center(old));
     let long_turn = if rotating && old.shape_type.unit_count() == 2 {
         let outward = if front.x > 0.5 {
             Direction::West
@@ -576,6 +591,9 @@ pub(super) fn advance(
         room.layers = layers;
         room.loose_angles = angles;
         room.dirty = true;
+        if let Some(at) = mower_sound {
+            crate::sound::se_at(rustimal_logic::furniture_lawnmower::SE_LAWNMOWER, at);
+        }
         room.movement.active = Some(Active {
             kind,
             ticks: 0.0,
