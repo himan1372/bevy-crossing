@@ -370,16 +370,37 @@ impl Emu64 {
             op::G_SETTIMG => self.h_settimg(gfx, pc),
             op::G_SETTILE => self.h_settile(gfx, pc),
             op::G_SETTILESIZE => self.h_settilesize(gfx, pc),
-            op::G_LOADTLUT => {
-                // The TLUT name is 4 bits (NUM_TLUTS = 16): retail data loads
-                // e.g. `f08f4010` (name 15) for tiles set with `tlut` 15.
+            op::G_LOADTLUT if (gfx.w0 >> 22) & 0x3 == 2 => {
+                // gsDPLoadTLUT_Dolphin. The TLUT name is 4 bits
+                // (NUM_TLUTS = 16): retail data loads e.g. `f08f4010` (name
+                // 15) for tiles set with `tlut` 15.
                 let tlut = ((gfx.w0 >> 16) & 0xF) as usize % super::state::NUM_TLUTS;
                 self.state.tluts[tlut].addr = gfx.addr();
                 self.state.tluts[tlut].count = gfx.len() >> 6;
+                self.state.tluts[tlut].rgba5551 = false;
                 self.state.dirty.mark(Dirty::Texture);
                 *pc += 1;
             }
-            op::G_LOADBLOCK | op::G_LOADTILE => {
+            op::G_LOADTLUT => self.h_loadtlut_n64(gfx, pc),
+            op::G_LOADBLOCK => {
+                // TMEM load: record it in the tmem map; conversion is lazy.
+                let tile = ((gfx.w1 >> 24) & 0x7) as usize;
+                let tmem = self.state.tiles[tile].tmem as usize / 4;
+                if let Some(slot) = self.state.tmem_map.get_mut(tmem) {
+                    *slot = Some(super::state::TmemLoad {
+                        addr: self.state.tex_image_addr,
+                        img_w: self.state.tex_image_w,
+                        img_h: self.state.tex_image_h,
+                        img_siz: self.state.tex_image_siz,
+                        dolphin: self.state.tex_image_dolphin,
+                        sh: ((gfx.w1 >> 12) & 0xFFF) as u16,
+                        dxt: (gfx.w1 & 0xFFF) as u16,
+                    });
+                }
+                self.state.dirty.mark(Dirty::Texture);
+                *pc += 1;
+            }
+            op::G_LOADTILE => {
                 // TMEM load: marks texture dirty; conversion is lazy.
                 self.state.dirty.mark(Dirty::Texture);
                 *pc += 1;
@@ -671,18 +692,136 @@ impl Emu64 {
 
     fn h_settile(&mut self, gfx: Gfx, pc: &mut usize) {
         // Plain dl_G_SETTILE: stores the tile and clears the
-        // per-tile Dolphin flag (Dolphin tiles use opcode 0xD2).
-        let tile = ((gfx.w0 >> 16) & 0x7) as usize;
+        // per-tile Dolphin flag (Dolphin tiles use opcode 0xD2). Gsettile
+        // keeps the tile number in w1 bits 24-26.
+        let tile = ((gfx.w1 >> 24) & 0x7) as usize;
         if tile < self.state.tiles.len() {
             let t = &mut self.state.tiles[tile];
             t.is_dolphin = false;
             t.img_addr = self.state.tex_image_addr;
-            // Gsettile w1: shiftS bits 0-3, shiftT bits 10-13.
+            // Gsettile w0: fmt 21-23, siz 19-20, line 9-17, tmem 0-8.
+            t.fmt = ((gfx.w0 >> 21) & 0x7) as u8;
+            t.siz = ((gfx.w0 >> 19) & 0x3) as u8;
+            t.line = ((gfx.w0 >> 9) & 0x1FF) as u16;
+            t.tmem = (gfx.w0 & 0x1FF) as u16;
+            // w1: palette 20-23, cmt 18-19, maskt 14-17, shiftt 10-13,
+            // cms 8-9, shifts 0-3.
+            t.tlut = ((gfx.w1 >> 20) & 0xF) as u8;
+            t.cm_t = ((gfx.w1 >> 18) & 0x3) as u8;
+            t.mask_t = ((gfx.w1 >> 14) & 0xF) as u8;
+            t.cm_s = ((gfx.w1 >> 8) & 0x3) as u8;
             t.shift_s = (gfx.w1 & 0xF) as u8;
             t.shift_t = ((gfx.w1 >> 10) & 0xF) as u8;
+            self.setup_n64_tile(tile);
             self.state.dirty.mark(Dirty::Texture);
         }
         *pc += 1;
+    }
+
+    /// N64 `gsDPLoadTLUTCmd`: the palette is the current image; the name is
+    /// the load tile's TMEM / 16, and each 16 entries fill the next name.
+    fn h_loadtlut_n64(&mut self, gfx: Gfx, pc: &mut usize) {
+        let tile = ((gfx.w1 >> 24) & 0x7) as usize;
+        let mut count = ((gfx.w1 >> 14) & 0x3FF) + 1;
+        let mut name = (self.state.tiles[tile].tmem / 16) as usize & 0xF;
+        let mut addr = self.state.tex_image_addr;
+        let rgba5551 = !self.state.tex_image_dolphin;
+        while count != 0 && name < super::state::NUM_TLUTS {
+            self.state.tluts[name] = super::state::TlutState {
+                addr,
+                count: count as u16,
+                rgba5551,
+            };
+            name += 1;
+            count = count.saturating_sub(16);
+            addr = addr.wrapping_add(32);
+        }
+        self.state.dirty.mark(Dirty::Texture);
+        *pc += 1;
+    }
+
+    /// emu64 `setup_texture_tile` for a plain tile (line != 0) whose TMEM
+    /// was filled by G_LOADBLOCK: image address, format, size and wraps.
+    /// Other plain tiles keep their previous description.
+    fn setup_n64_tile(&mut self, tile: usize) {
+        let t = self.state.tiles[tile];
+        if t.is_dolphin || t.line == 0 {
+            return;
+        }
+        let Some(Some(load)) = self.state.tmem_map.get(t.tmem as usize / 4).copied() else {
+            return;
+        };
+        let siz = u32::from(t.siz.min(2));
+        let size_t = if t.mask_t != 0 {
+            1u32 << t.mask_t
+        } else {
+            1024
+        };
+        let (width, height, n64) = if load.dolphin {
+            (u32::from(load.img_w), u32::from(load.img_h), None)
+        } else if load.img_w == 1 {
+            // setimg wd 0: the block's dxt gives the width.
+            let texels = (u32::from(load.sh) + 1) << (2 - siz);
+            let width = if load.dxt == 0 {
+                u32::from(t.line) << (4 - siz)
+            } else {
+                ((1u32 << (15 - siz)) - 1) / u32::from(load.dxt) + 1
+            };
+            if width == 0 {
+                return;
+            }
+            let mut height = texels / width;
+            if t.cm_t & 2 != 0 {
+                height = height.min(u32::from(t.size_t.max(1)));
+            }
+            height = height.min(size_t);
+            let line = if load.dxt > 0 { 0 } else { t.line };
+            let layout = super::state::N64Layout {
+                fmt: t.fmt,
+                siz: t.siz,
+                src_w: width as u16,
+                src_h: height as u16,
+                line,
+            };
+            // get_dol_wd_ht: round up to whole GX blocks.
+            let (bw, bh) = match t.siz {
+                0 => (8, 8),
+                1 => (8, 4),
+                _ => (4, 4),
+            };
+            (
+                (width + bw - 1) & !(bw - 1),
+                (height + bh - 1) & !(bh - 1),
+                Some(layout),
+            )
+        } else {
+            // G_LOADTILE images are not modelled.
+            return;
+        };
+        let wrap = |size: u32, cm: u8, len: u16| -> u8 {
+            use super::state::wrap::*;
+            if !(size.is_power_of_two() && (4..=512).contains(&size)) {
+                GX_CLAMP
+            } else if cm & 2 != 0 {
+                if cm & 1 != 0 && size < u32::from(len) {
+                    GX_MIRROR
+                } else {
+                    GX_CLAMP
+                }
+            } else if cm & 1 != 0 {
+                GX_MIRROR
+            } else {
+                GX_REPEAT
+            }
+        };
+        let t = &mut self.state.tiles[tile];
+        t.img_addr = load.addr;
+        t.width = width as u16;
+        t.height = height as u16;
+        t.gx_format = super::texture::cvt_n64_to_gx(t.fmt, t.siz);
+        t.wrap_s = wrap(width, t.cm_s, t.size_s);
+        t.wrap_t = wrap(height, t.cm_t, t.size_t);
+        t.n64 = n64;
     }
 
     /// `dl_G_SETTILESIZE`: the tile origin `texture_gen` subtracts. Dolphin
@@ -694,9 +833,16 @@ impl Emu64 {
             if (gfx.w1 >> 31) & 1 != 0 {
                 t.sl = ((gfx.w0 >> 10) & 0x3FFF) as u16;
                 t.tl = ((gfx.w1 >> 10) & 0x3FFF) as u16;
+                t.size_s = (gfx.w0 & 0x3FF) as u16 + 1;
+                t.size_t = (gfx.w1 & 0x3FF) as u16 + 1;
             } else {
-                t.sl = (((gfx.w0 >> 12) & 0xFFF) * 4) as u16;
-                t.tl = ((gfx.w0 & 0xFFF) * 4) as u16;
+                let (sl, tl) = ((gfx.w0 >> 12) & 0xFFF, gfx.w0 & 0xFFF);
+                let (sh, th) = ((gfx.w1 >> 12) & 0xFFF, gfx.w1 & 0xFFF);
+                t.sl = (sl * 4) as u16;
+                t.tl = (tl * 4) as u16;
+                t.size_s = (sh.saturating_sub(sl) >> 2) as u16 + 1;
+                t.size_t = (th.saturating_sub(tl) >> 2) as u16 + 1;
+                self.setup_n64_tile(tile);
             }
         }
         *pc += 1;
@@ -725,6 +871,7 @@ impl Emu64 {
             // dl_G_SETTILE_DOLPHIN resets the tile size origin.
             t.sl = 0;
             t.tl = 0;
+            t.n64 = None;
             self.state.dirty.mark(Dirty::Texture);
         }
         *pc += 1;

@@ -248,6 +248,8 @@ fn build(
                 wrap_s: 1,
                 wrap_t: 1,
                 tlut_addr: 0,
+                n64: None,
+                tlut_rgba5551: false,
             };
             let cloth = images.add(crate::n64_material::texture_image(cloth, &cloth_key));
             for (part, (_, material)) in sink.parts.iter().zip(&model) {

@@ -141,6 +141,8 @@ fn setup(
                         wrap_s: 2,
                         wrap_t: 2,
                         tlut_addr: 0,
+                        n64: None,
+                        tlut_rgba5551: false,
                     });
                 }
             }
@@ -205,6 +207,8 @@ fn setup(
             wrap_s: 1,
             wrap_t: 1,
             tlut_addr: pal.offset,
+            n64: None,
+            tlut_rgba5551: false,
         };
         if let Some(rgba) = crate::disc_gfx::decode_texture(
             &disc.rom,

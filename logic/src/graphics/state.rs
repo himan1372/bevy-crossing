@@ -104,6 +104,45 @@ pub struct TileState {
     /// `settilesize_dolphin_cmds[tile].sl/tl` (texel x4, plain sizes x4 again).
     pub sl: u16,
     pub tl: u16,
+    /// `settilesize_dolphin_cmds[tile].slen/tlen + 1` (0 before any size).
+    pub size_s: u16,
+    pub size_t: u16,
+    /// Plain `Gsettile` fields emu64's setup_texture_tile reads.
+    pub line: u16,
+    pub tmem: u16,
+    /// cms/cmt: bit 1 clamp, bit 0 mirror.
+    pub cm_s: u8,
+    pub cm_t: u8,
+    pub mask_t: u8,
+    /// Set when the texels are N64 row-major RAM data (texconv_block_new).
+    pub n64: Option<N64Layout>,
+}
+
+/// Source layout of a legacy N64 texture (emu64 texconv_block_new input):
+/// `src_w` x `src_h` row-major texels; with `line` != 0 odd rows are stored
+/// with their 32-bit words swapped, as G_LOADBLOCK with dxt 0 expects.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct N64Layout {
+    pub fmt: u8,
+    pub siz: u8,
+    pub src_w: u16,
+    pub src_h: u16,
+    pub line: u16,
+}
+
+/// One `tmem_map` entry: the image and G_LOADBLOCK that filled a TMEM
+/// address.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TmemLoad {
+    pub addr: u32,
+    /// setimg width/height as stored by G_SETTIMG (wd + 1; Dolphin heights).
+    pub img_w: u16,
+    pub img_h: u16,
+    pub img_siz: u8,
+    pub dolphin: bool,
+    /// Gloadblock sh and dxt (`th`).
+    pub sh: u16,
+    pub dxt: u16,
 }
 
 impl Default for TileState {
@@ -123,6 +162,14 @@ impl Default for TileState {
             shift_t: 0,
             sl: 0,
             tl: 0,
+            size_s: 0,
+            size_t: 0,
+            line: 0,
+            tmem: 0,
+            cm_s: 0,
+            cm_t: 0,
+            mask_t: 0,
+            n64: None,
         }
     }
 }
@@ -141,6 +188,9 @@ pub const NUM_TLUTS: usize = 16;
 pub struct TlutState {
     pub addr: u32,
     pub count: u16,
+    /// Loaded by the N64 G_LOADTLUT form from a plain image: RGBA5551
+    /// entries (emu64 converts them with tlutconv_new).
+    pub rgba5551: bool,
 }
 
 /// RGBA color register.
@@ -187,6 +237,8 @@ pub struct GbiState {
     /// Per-tile state (retail tracks NUM_TILES worth of tile/TLUT state).
     pub tiles: [TileState; 8],
     pub tluts: [TlutState; NUM_TLUTS],
+    /// emu64 `tmem_map`, indexed by TMEM address / 4.
+    pub tmem_map: [Option<TmemLoad>; 128],
     /// Texture-generation enables.
     pub tex_gen: bool,
     pub tex_gen_linear: bool,
@@ -219,6 +271,7 @@ impl GbiState {
             tex_image_dolphin: false,
             tiles: [TileState::default(); 8],
             tluts: [TlutState::default(); NUM_TLUTS],
+            tmem_map: [None; 128],
             tex_gen: false,
             tex_gen_linear: false,
             texture_scale: (0, 0),

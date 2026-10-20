@@ -28,6 +28,7 @@ pub(crate) mod clocks;
 pub(crate) mod cuckoo;
 pub(crate) mod fan;
 pub(crate) mod gong;
+pub(crate) mod house_clock;
 pub(crate) mod lawnmower;
 pub(crate) mod rigs;
 pub(crate) mod slot;

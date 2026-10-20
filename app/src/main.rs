@@ -129,6 +129,7 @@ fn main() {
         .add_plugins(QuestPlugin)
         .add_plugins(PocketsPlugin)
         .add_plugins(ClockPlugin)
+        .add_plugins(furniture::house_clock::HouseClockPlugin)
         .add_plugins(environment::EnvironmentPlugin)
         .add_plugins(character::CharacterPlugin)
         .add_plugins(player_tools::PlayerToolsPlugin)

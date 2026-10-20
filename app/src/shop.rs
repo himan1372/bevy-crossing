@@ -422,6 +422,16 @@ fn build_shop_interior(
             &mut images,
         )
     });
+    if real {
+        if let Some(d) = disc.as_deref() {
+            crate::furniture::house_clock::spawn_shop_clock(
+                &mut commands,
+                d,
+                SHOP_ORIGIN,
+                (&mut meshes, &mut n64, &mut images),
+            );
+        }
+    }
     let k = if real { ShopRoom::disc().k } else { 1.0 };
     commands.insert_resource(if real {
         ShopRoom::disc()
@@ -536,6 +546,7 @@ fn build_shop_interior(
     // Persistent "inside shop" indicator (hidden until the player enters).
     commands.spawn((
         ShopHudText,
+        crate::dev_overlay::DevOverlay,
         Text::new(if real {
             "Nook's — E facing goods to browse, E at Nook to sell; E at the door to exit"
         } else {

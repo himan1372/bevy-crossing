@@ -16,7 +16,7 @@ use disc::gx_texture::{self, GxFormat, TlutFormat};
 use disc::{RomImage, RomSource, Target};
 use rustimal_logic::graphics::command::{dl_param, geo, op, Gfx};
 use rustimal_logic::graphics::interpreter::{EmittedTri, Emu64, GfxMemory, GxBackend};
-use rustimal_logic::graphics::state::{GbiState, Rgba, NUM_TLUTS};
+use rustimal_logic::graphics::state::{GbiState, N64Layout, Rgba, NUM_TLUTS};
 use rustimal_logic::graphics::texture::GxTexFormat;
 use rustimal_logic::graphics::vertex::{DecodedVtx, Vtx};
 
@@ -193,6 +193,10 @@ pub struct TexKey {
     pub wrap_t: u8,
     /// REL offset of a palette loaded by the list itself (0 = none).
     pub tlut_addr: u32,
+    /// Legacy N64 row-major texels (plain G_SETTILE + G_LOADBLOCK).
+    pub n64: Option<N64Layout>,
+    /// The list's palette is N64 RGBA5551 (N64 G_LOADTLUT form).
+    pub tlut_rgba5551: bool,
 }
 
 /// `emu64::texture_gen` inputs for `G_TEXTURE_GEN` reflection mapping:
@@ -304,15 +308,21 @@ impl GxBackend for TriangleSink {
         }];
         // Image addresses stay segmented here; `Segments` resolves them
         // when the texture is decoded.
-        let textured = tile.img_addr != 0 && tile.img_addr < UNRESOLVED;
-        let tex = textured.then(|| TexKey {
+        // A tile without a size cannot be decoded (and would be a zero-sized
+        // GPU texture).
+        let textured =
+            tile.img_addr != 0 && tile.img_addr < UNRESOLVED && tile.width != 0 && tile.height != 0;
+        let tlut = &state.tluts[tile.tlut as usize % NUM_TLUTS];
+        let tex = textured.then_some(TexKey {
             img_addr: tile.img_addr,
             format: tile.gx_format,
             width: tile.width,
             height: tile.height,
             wrap_s: tile.wrap_s,
             wrap_t: tile.wrap_t,
-            tlut_addr: state.tluts[tile.tlut as usize % NUM_TLUTS].addr,
+            tlut_addr: tlut.addr,
+            n64: tile.n64,
+            tlut_rgba5551: tlut.rgba5551,
         });
         let rgba = |c: Rgba| [c.r, c.g, c.b, c.a];
         self.current = Some(PartKey {
@@ -340,6 +350,8 @@ impl GxBackend for TriangleSink {
                         wrap_s: t1.wrap_s,
                         wrap_t: t1.wrap_t,
                         tlut_addr: state.tluts[t1.tlut as usize % NUM_TLUTS].addr,
+                        n64: t1.n64,
+                        tlut_rgba5551: state.tluts[t1.tlut as usize % NUM_TLUTS].rgba5551,
                     })
             },
             texgen: (textured && state.tex_gen).then_some(TexGen {
@@ -604,6 +616,14 @@ pub fn decode_texture(
     let (w, h) = (key.width as usize, key.height as usize);
     let rel = rom.bytes(RomSource::Rel);
     let data = segments.bytes(rel, key.img_addr)?;
+    if let Some(layout) = key.n64 {
+        let tlut = match key.tlut_addr {
+            a if a != 0 && a < UNRESOLVED => segments.bytes(rel, a),
+            _ => None,
+        }
+        .or_else(|| palette.and_then(|a| rel.get(a as usize..)));
+        return decode_n64(data, &layout, w, h, tlut, key.tlut_rgba5551);
+    }
     // A palette the lists loaded wins over the caller's. Disc palettes
     // checked so far (ground, `_dol`) are RGB5A3.
     let loaded = match key.tlut_addr {
@@ -616,6 +636,102 @@ pub fn decode_texture(
         .or(fallback)
         .map(|t| (&t[..t.len().min(512)], TlutFormat::Rgb5A3));
     gx_texture::decode(data, fmt, w, h, tlut)
+}
+
+/// emu64 `texconv_block_new` source: N64 row-major RAM texels, decoded
+/// straight to RGBA8 in a `w` x `h` (GX-block padded) image. Palettes are
+/// RGBA5551 when loaded by the N64 G_LOADTLUT form, else RGB5A3.
+fn decode_n64(
+    data: &[u8],
+    layout: &N64Layout,
+    w: usize,
+    h: usize,
+    tlut: Option<&[u8]>,
+    rgba5551: bool,
+) -> Option<Vec<u8>> {
+    use rustimal_logic::graphics::command::{img_fmt, img_siz};
+    let bits = 4usize << layout.siz;
+    let (sw, sh) = (layout.src_w as usize, layout.src_h as usize);
+    let row_bytes = if layout.line != 0 {
+        layout.line as usize * 8
+    } else {
+        (sw * bits).div_ceil(8)
+    };
+    let byte = |x: usize, y: usize, i: usize| -> u8 {
+        let mut at = y * row_bytes + (x * bits) / 8 + i;
+        // dxt 0 blocks store odd rows with their 32-bit words swapped.
+        if layout.line != 0 && y & 1 == 1 {
+            at ^= 4;
+        }
+        data.get(at).copied().unwrap_or(0)
+    };
+    let c5551 = |v: u16| -> [u8; 4] {
+        let c = |s: u16| ((((v >> s) & 0x1F) * 255 + 15) / 31) as u8;
+        [c(11), c(6), c(1), if v & 1 != 0 { 255 } else { 0 }]
+    };
+    let c5a3 = |v: u16| -> [u8; 4] {
+        if v & 0x8000 != 0 {
+            let c = |s: u16| ((((v >> s) & 0x1F) * 255 + 15) / 31) as u8;
+            [c(10), c(5), c(0), 255]
+        } else {
+            let c = |s: u16| (((v >> s) & 0xF) * 17) as u8;
+            [c(8), c(4), c(0), (((v >> 12) & 0x7) * 255 / 7) as u8]
+        }
+    };
+    let lookup = |i: usize| -> [u8; 4] {
+        let Some(t) = tlut else { return [0; 4] };
+        let v = match (t.get(i * 2), t.get(i * 2 + 1)) {
+            (Some(&a), Some(&b)) => u16::from_be_bytes([a, b]),
+            _ => return [0; 4],
+        };
+        if rgba5551 {
+            c5551(v)
+        } else {
+            c5a3(v)
+        }
+    };
+    let mut out = vec![0u8; w * h * 4];
+    for y in 0..sh.min(h) {
+        for x in 0..sw.min(w) {
+            let nib = |b: u8| if x & 1 == 0 { b >> 4 } else { b & 0xF };
+            let px = match (layout.fmt, layout.siz) {
+                (img_fmt::G_IM_FMT_RGBA, img_siz::G_IM_SIZ_16B) => {
+                    c5551(u16::from_be_bytes([byte(x, y, 0), byte(x, y, 1)]))
+                }
+                (img_fmt::G_IM_FMT_RGBA, img_siz::G_IM_SIZ_32B) => {
+                    [byte(x, y, 0), byte(x, y, 1), byte(x, y, 2), byte(x, y, 3)]
+                }
+                (img_fmt::G_IM_FMT_CI, img_siz::G_IM_SIZ_4B) => lookup(nib(byte(x, y, 0)) as usize),
+                (img_fmt::G_IM_FMT_CI, img_siz::G_IM_SIZ_8B) => lookup(byte(x, y, 0) as usize),
+                (img_fmt::G_IM_FMT_IA, img_siz::G_IM_SIZ_4B) => {
+                    let v = nib(byte(x, y, 0));
+                    let i = (v >> 1) * 255 / 7;
+                    [i, i, i, if v & 1 != 0 { 255 } else { 0 }]
+                }
+                (img_fmt::G_IM_FMT_IA, img_siz::G_IM_SIZ_8B) => {
+                    let v = byte(x, y, 0);
+                    let i = (v >> 4) * 17;
+                    [i, i, i, (v & 0xF) * 17]
+                }
+                (img_fmt::G_IM_FMT_IA, img_siz::G_IM_SIZ_16B) => {
+                    let i = byte(x, y, 0);
+                    [i, i, i, byte(x, y, 1)]
+                }
+                (img_fmt::G_IM_FMT_I, img_siz::G_IM_SIZ_4B) => {
+                    let i = nib(byte(x, y, 0)) * 17;
+                    [i, i, i, i]
+                }
+                (img_fmt::G_IM_FMT_I, img_siz::G_IM_SIZ_8B) => {
+                    let i = byte(x, y, 0);
+                    [i, i, i, i]
+                }
+                _ => return None,
+            };
+            let at = (y * w + x) * 4;
+            out[at..at + 4].copy_from_slice(&px);
+        }
+    }
+    Some(out)
 }
 
 #[cfg(test)]

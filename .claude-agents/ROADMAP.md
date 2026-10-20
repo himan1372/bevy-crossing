@@ -766,3 +766,8 @@ Philip. See completed/retail-hud-ui.md.
 (TEXEL1, and cycle-2 TEXEL0 per emu64 combine_auto), Dolphin tile-size
 scroll on tile 1; sprinkler water flows, lawnmower grass scrolls. See
 completed/texel1-tile-scroll.md.
+
+2026-10-19 claude shop-wall-clock: ac_house_clock in the shop; legacy N64
+texture path (plain settile from w1, tmem map, setup_texture_tile sizes,
+N64 loadtlut RGBA5551, row-major decode); zero-size tiles untextured. See
+completed/shop-wall-clock.md.

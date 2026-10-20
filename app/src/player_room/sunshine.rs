@@ -115,6 +115,8 @@ pub(super) fn spawn(
                     wrap_s: 2,
                     wrap_t: 2,
                     tlut_addr: 0,
+                    n64: None,
+                    tlut_rgba5551: false,
                 };
                 Some(images.add(texture_image(texture.clone()?, key)))
             });

@@ -34,6 +34,8 @@ fn flash_parts(disc: &GameDisc) -> Option<Vec<Part>> {
             wrap_s: 2,
             wrap_t: 2,
             tlut_addr: 0,
+            n64: None,
+            tlut_rgba5551: false,
         });
     }
     (!parts.is_empty()).then_some(parts)

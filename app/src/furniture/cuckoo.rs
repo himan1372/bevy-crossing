@@ -139,7 +139,7 @@ pub(super) fn spawn(
 }
 
 /// Joint origins in the furniture's model space (Matrix_Position of each).
-fn joint_origins(pose: &[Transform], skeleton: &Skeleton) -> Vec<Vec3> {
+pub(super) fn joint_origins(pose: &[Transform], skeleton: &Skeleton) -> Vec<Vec3> {
     let mut world: Vec<Transform> = Vec::with_capacity(pose.len());
     for (i, local) in pose.iter().enumerate() {
         let composed = match skeleton.parents[i] {
