@@ -167,6 +167,8 @@ mod code {
     pub const MIN: u8 = 34;
     pub const FREE0: u8 = 36;
     pub const FREE9: u8 = 45;
+    /// `PUT_STRING_DETERMINATION`: the answer the player just chose.
+    pub const DETERMINATION: u8 = 46;
     pub const ITEM0: u8 = 49;
     pub const ITEM4: u8 = 53;
     pub const FREE10: u8 = 54;
@@ -339,6 +341,8 @@ pub struct MsgContext {
     pub items: Vec<String>,
     /// Optional mIN_ARTICLE_* values supplied by the speaking actor.
     pub item_articles: Vec<u8>,
+    /// The last chosen answer (`PUT_STRING_DETERMINATION`).
+    pub determination: String,
     pub year: u16,
     pub month: u8,
     pub weekday: u8,
@@ -596,6 +600,7 @@ impl GameText {
                         }
                         code::TALK_NAME => put(&ctx.talk_name, page),
                         code::TAIL => put(&ctx.tail, page),
+                        code::DETERMINATION => put(&ctx.determination, page),
                         code::YEAR => put(&ctx.year.to_string(), page),
                         code::MONTH => put(MONTHS[(ctx.month.max(1) as usize - 1) % 12], page),
                         code::WEEK => put(WEEKDAYS[ctx.weekday as usize % 7], page),

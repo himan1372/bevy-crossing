@@ -15,3 +15,23 @@ Stages: 1 save state + Nook offer/order/renewal + construction on load;
 2 room model/area per size + exterior per size; 3 basement and upstairs
 floors with stairs and per-floor saves; 4 statue.
 Philip: existing saves start paid off (loan 0); new saves owe 17,400.
+
+## Stage 1 (claude, 2026-10-20) - done
+
+- app/src/home.rs: HouseSave (saved), PlayerHouse, construction at
+  PreStartup/F9 (mHm_CheckRehouseOrder incl. roof palettes), nook_greeting
+  (aNSC_start_wait/_wait/_wait1 incl. renewal loans, statue order/built,
+  large-house auto basement), order_expansion/order_basement, look() for the
+  town model.
+- shop_nook: Nook speaks on entry when there is house business; Step::House
+  follows the disc's choice branches; colour pages (3 colours + Another,
+  page = count mod 4, palette = page*3 + choice), basement answer in
+  REHOUSE_2_OFFER; messages: PUT_STRING_DETERMINATION (code 46) added.
+- disc_town: house 0 drawn and measured at its size (myhome1..4) and roof
+  palette (a..l).
+Verified in Temp previews (real save unchanged): offer 0x107B -> colour
+0x107C -> order; backdated order built at load (size 1, orange); Nook
+0x107E billed 148,000; house entry works. Limitation: F9 to a save with a
+different house keeps the town model until restart.
+Next: stage 2 (room model/area per size: rom_myhome1/2B/3/4_1, usable
+6/8/10/8 units, mHm_RehouseWallDoor).

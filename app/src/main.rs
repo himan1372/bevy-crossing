@@ -22,6 +22,7 @@ mod game_disc;
 mod goods;
 mod ground_map;
 mod gyroid;
+mod home;
 mod house;
 mod idle_clock;
 mod input;
@@ -133,6 +134,7 @@ fn main() {
         .add_plugins(ClockPlugin)
         .add_plugins(idle_clock::IdleClockPlugin)
         .add_plugins(post_office::PostOfficePlugin)
+        .add_plugins(home::HomePlugin)
         .add_plugins(furniture::house_clock::HouseClockPlugin)
         .add_plugins(environment::EnvironmentPlugin)
         .add_plugins(character::CharacterPlugin)

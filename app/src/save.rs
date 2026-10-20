@@ -63,6 +63,9 @@ pub struct SaveData {
     /// House loan. Saves from before loans count as paid off (Philip).
     #[serde(default)]
     pub loan: u32,
+    /// House size, orders and roof colour; `None` before upgrades existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub house: Option<crate::home::HouseSave>,
     /// Pocket item IDs (`crate::items`), 15 slots. `None` in saves made
     /// before pockets existed; those are converted from the legacy counts.
     #[serde(default)]
@@ -201,7 +204,7 @@ fn new_player_seed() -> u32 {
 
 /// PreStartup: read the save file (if any) and seed resources so the
 /// Startup systems (town gen, player spawn, item spawn) can use them.
-fn init_save(mut commands: Commands) {
+pub(crate) fn init_save(mut commands: Commands) {
     let loaded = read_save();
     commands.insert_resource(
         loaded
@@ -377,6 +380,7 @@ fn collect_save(
         player_pos,
         bells: inventory.bells,
         loan: inventory.loan,
+        house: None,
         pockets: Some(inventory.pockets.pockets.to_vec()),
         pocket_conds: inventory.pockets.item_conditions,
         fruit: 0,
@@ -480,11 +484,12 @@ fn quick_save(
     quest: Res<crate::quest::QuestState>,
     mut timer: ResMut<NotifyTimer>,
     notify_query: Query<&mut Text, With<NotifyText>>,
-    (look, roster, identity, room): (
+    (look, roster, identity, room, home): (
         Res<PlayerLook>,
         Option<Res<crate::roster::TownRoster>>,
         Res<PlayerIdentity>,
         Res<crate::player_room::PlayerRoom>,
+        Option<Res<crate::home::PlayerHouse>>,
     ),
 ) {
     // Furniture movement already has an atomic committed destination. Other
@@ -514,6 +519,7 @@ fn quick_save(
     save.player_face = Some(look.face as u8);
     save.identity = identity.clone();
     save.home_furniture = room.snapshot();
+    save.house = home.map(|h| h.0);
     save.player_cloth = Some(look.cloth as u16);
     if let Some(r) = roster {
         save.villagers = Some(r.residents.iter().map(|e| e.index).collect());
@@ -554,6 +560,7 @@ fn quick_load(
     mut quest: ResMut<crate::quest::QuestState>,
     mut timer: ResMut<NotifyTimer>,
     notify_query: Query<&mut Text, With<NotifyText>>,
+    home: Option<ResMut<crate::home::PlayerHouse>>,
 ) {
     if !actions.just_pressed(Action::QuickLoad)
         || !matches!(*focus, InputFocus::World | InputFocus::Furniture)
@@ -577,6 +584,9 @@ fn quick_load(
     inventory.bells = save.bells;
     inventory.loan = save.loan;
     inventory.pockets = pockets_from_save(&save);
+    if let Some(mut home) = home {
+        crate::home::restore(&mut home, save.house, &mut inventory);
+    }
     playtime.secs = save.playtime_secs;
     mailbox.letters = save.letters.clone();
     mailbox.sent = save.sent_letters.clone();

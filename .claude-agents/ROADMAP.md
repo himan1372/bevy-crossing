@@ -779,3 +779,5 @@ completed/shop-wall-clock.md.
 2026-10-20 claude: Philip accepted room music player and music-source fidelity ("i was listening to all the play tests").
 
 2026-10-20 claude post-office-repay: post office interior, Pelly/Phyllis, loan repay (m_repay_ovl) and saved loan. See completed/post-office-repay.md. Next: house-upgrades.
+
+2026-10-20 claude house-upgrades stage 1: saved house record, Nook offers/orders/billing, construction at load, exterior per size and roof colour. Interiors next. See backlog/house-upgrades.md.

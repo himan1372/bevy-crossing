@@ -296,19 +296,29 @@ fn player_home_bodies(
     // Same size-one model and idle cKF pose as spawn_player_homes.
     // t3 includes the surrounding yard fence and doorstep: including it
     // in one bounding box makes the open approach to the door solid.
-    let prefix = "obj_s_myhome1";
-    let lists = part_lists(&disc.catalog, prefix, &["t1", "t2", "door"]);
-    let mut sink = run_display_lists(&disc.rom, &lists);
-    pose_parts(disc, &lists, &mut sink);
-    let points: Vec<Vec2> = sink
-        .parts
-        .iter()
-        .flat_map(|p| &p.vertices)
-        .map(|v| Vec2::new(v.pos[0], v.pos[2]) * OBJECT_SCALE)
-        .collect();
-    let door = posed_centroid(disc, prefix, "door");
+    // House 0 is the player's, at its saved size (myhome1..4).
+    let measure = |size: u8| {
+        let prefix = format!("obj_s_myhome{}", size + 1);
+        let lists = part_lists(&disc.catalog, &prefix, &["t1", "t2", "door"]);
+        let mut sink = run_display_lists(&disc.rom, &lists);
+        pose_parts(disc, &lists, &mut sink);
+        let points: Vec<Vec2> = sink
+            .parts
+            .iter()
+            .flat_map(|p| &p.vertices)
+            .map(|v| Vec2::new(v.pos[0], v.pos[2]) * OBJECT_SCALE)
+            .collect();
+        (points, posed_centroid(disc, &prefix, "door"))
+    };
+    let small = measure(0);
+    let own = crate::home::look().0;
+    let mine = (own != 0).then(|| measure(own));
     std::array::from_fn(|house| {
         let cell = homes[house]?;
+        let (points, door) = match (&mine, house) {
+            (Some(m), 0) => (&m.0, m.1),
+            _ => (&small.0, small.1),
+        };
         if points.is_empty() {
             return None;
         }
@@ -320,7 +330,7 @@ fn player_home_bodies(
         let yaw = door_yaw - model_yaw;
         let back = Vec2::from_angle(yaw);
         let (mut lo, mut hi) = (Vec2::splat(f32::MAX), Vec2::splat(f32::MIN));
-        for &point in &points {
+        for &point in points {
             let p = back.rotate(point);
             lo = lo.min(p);
             hi = hi.max(p);
@@ -2112,8 +2122,60 @@ fn spawn_player_homes(
 ) {
     let Some(retail) = &town.retail else { return };
     let season = if winter { "w" } else { "s" };
-    // House size comes from the save (upgrades); everyone starts at size 1.
-    let prefix = format!("obj_{season}_myhome1");
+    // House 0 is the player's: its saved size (myhome1..4) and roof colour
+    // (outlook_pal a..l); the others keep the starting house.
+    let (own_size, own_pal) = crate::home::look();
+    let mut models: Vec<((u8, u8), Vec<(Handle<Mesh>, Handle<N64Material>)>)> = Vec::new();
+    for (house, cell) in retail.player_homes.iter().enumerate() {
+        let Some(cell) = *cell else { continue };
+        let look = if house == 0 {
+            (own_size, own_pal)
+        } else {
+            (0, 0)
+        };
+        if !models.iter().any(|(k, _)| *k == look) {
+            let Some(model) =
+                player_home_model(disc, season, look, meshes, materials, images, lights)
+            else {
+                continue;
+            };
+            models.push((look, model));
+        }
+        let Some((_, model)) = models.iter().find(|(k, _)| *k == look) else {
+            continue;
+        };
+        let (centre, yaw, _) = player_home_placement(house, cell);
+        let ground_y = town.ground_y(centre);
+        let root = commands
+            .spawn((
+                DiscObject,
+                Name::new(format!("player house {house}")),
+                Transform::from_xyz(centre.x, ground_y, centre.z)
+                    .with_rotation(Quat::from_rotation_y(yaw)),
+                Visibility::default(),
+            ))
+            .id();
+        for (mesh, material) in model {
+            commands.spawn((
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(material.clone()),
+                ChildOf(root),
+            ));
+        }
+    }
+}
+
+/// One player house model: size 0-3 (myhome1..4) and roof palette 0-11.
+fn player_home_model(
+    disc: &GameDisc,
+    season: &str,
+    (size, pal): (u8, u8),
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<N64Material>,
+    images: &mut Assets<Image>,
+    lights: &mut BuildingLights,
+) -> Option<Vec<(Handle<Mesh>, Handle<N64Material>)>> {
+    let prefix = format!("obj_{season}_myhome{}", size + 1);
     // `aMHS_actor_draw_before` hides the fish weathervane (kazamiA/B,
     // joints 3/5) and the insect plaque (fuda, joint 1) until the player
     // has finished that encyclopedia, which nothing tracks yet.
@@ -2121,12 +2183,13 @@ fn spawn_player_homes(
     let lists = part_lists(&disc.catalog, &prefix, &parts);
     if lists.is_empty() {
         warn!("player house model not found on the disc");
-        return;
+        return None;
     }
-    // Roof colour: the house's saved paint (`outlook_pal`); `a` for now.
+    // Roof colour: the house's paint (`outlook_pal` 0-11 = a..l).
+    let letter = char::from(b'a' + pal.min(11));
     let palette = disc
         .catalog
-        .get(&format!("obj_{season}_myhome_a_pal"))
+        .get(&format!("obj_{season}_myhome_{letter}_pal"))
         .map(|a| a.offset);
     // The door design (`mark`): segments 9/A hold the default
     // `obj_myhome_mark_tex_txt` / `_pal` until the player hangs their own.
@@ -2167,27 +2230,7 @@ fn spawn_player_homes(
         images,
         &mut lights.normal,
     ));
-    for (house, cell) in retail.player_homes.iter().enumerate() {
-        let Some(cell) = *cell else { continue };
-        let (centre, yaw, _) = player_home_placement(house, cell);
-        let ground_y = town.ground_y(centre);
-        let root = commands
-            .spawn((
-                DiscObject,
-                Name::new(format!("player house {house}")),
-                Transform::from_xyz(centre.x, ground_y, centre.z)
-                    .with_rotation(Quat::from_rotation_y(yaw)),
-                Visibility::default(),
-            ))
-            .id();
-        for (mesh, material) in &model {
-            commands.spawn((
-                Mesh3d(mesh.clone()),
-                MeshMaterial3d(material.clone()),
-                ChildOf(root),
-            ));
-        }
-    }
+    Some(model)
 }
 
 /// Where a mailbox stands: its unit's centre.

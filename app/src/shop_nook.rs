@@ -38,6 +38,13 @@ enum Step {
         price: u32,
     },
     Finish,
+    /// A house question (offer, basement or roof colour): the disc's own
+    /// branches, the answers and which colour page is showing.
+    House {
+        next: Vec<Option<usize>>,
+        labels: Vec<String>,
+        page: u8,
+    },
 }
 
 #[derive(Resource, Default)]
@@ -63,6 +70,40 @@ fn say(disc: &GameDisc, dialogue: &mut DialogueState, actor: Entity, ctx: &MsgCo
     let (pages, choice) = text.talk(message(n), ctx, &mut |_| 0);
     dialogue.begin_external(actor, pages, choice.map(|c| c.labels));
     info!("Nook message {:#06x}", message(n));
+}
+
+/// Show the disc message `msg` (an absolute number); returns its question.
+fn say_abs(
+    disc: &GameDisc,
+    dialogue: &mut DialogueState,
+    actor: Entity,
+    ctx: &MsgContext,
+    msg: usize,
+) -> Option<crate::messages::MsgChoice> {
+    let text = disc.text.as_ref()?;
+    let (pages, choice) = text.talk(msg, ctx, &mut |_| 0);
+    dialogue.begin_external(actor, pages, choice.as_ref().map(|c| c.labels.clone()));
+    info!("Nook message {msg:#06x}");
+    choice
+}
+
+/// Continue the house talk at `msg`.
+fn house_say(
+    disc: &GameDisc,
+    dialogue: &mut DialogueState,
+    actor: Entity,
+    flow: &mut Conversation,
+    msg: usize,
+    page: u8,
+) {
+    flow.step = match say_abs(disc, dialogue, actor, &flow.context, msg) {
+        Some(choice) => Step::House {
+            next: choice.next,
+            labels: choice.labels,
+            page,
+        },
+        None => Step::Finish,
+    };
 }
 
 fn context(identity: &crate::save::PlayerIdentity) -> MsgContext {
@@ -147,16 +188,34 @@ fn interact(
     mut inventory: ResMut<PlayerInventory>,
     mut shop: ResMut<ShopData>,
     identity: Res<crate::save::PlayerIdentity>,
+    (mut home, mut was_inside): (Option<ResMut<crate::home::PlayerHouse>>, Local<bool>),
 ) {
     let Some(disc) = disc.filter(|d| d.text.is_some()) else {
         return;
     };
     if *location != ShopLocation::Inside {
+        *was_inside = false;
         return;
     }
     let Ok((actor, nook_transform)) = nook.single() else {
         return;
     };
+    // aNSC_start_wait: Nook speaks about the house as the player comes in.
+    if !std::mem::replace(&mut *was_inside, true) && matches!(flow.step, Step::Idle) {
+        if let Some(home) = home.as_mut() {
+            let today = crate::home::today();
+            if let Some(n) = home.0.nook_greeting(&mut inventory.loan, today) {
+                info!(
+                    "Nook house talk {n:#04x}: {:?}, loan {}",
+                    home.0, inventory.loan
+                );
+                flow.context = context(&identity);
+                *focus = InputFocus::Dialogue;
+                house_say(&disc, &mut dialogue, actor, &mut flow, message(n), 0);
+                return;
+            }
+        }
+    }
     if matches!(flow.step, Step::Pockets) {
         if pockets.open {
             return;
@@ -264,6 +323,42 @@ fn interact(
             Step::Request => {
                 say(&disc, &mut dialogue, actor, &flow.context, 24);
                 flow.step = Step::Finish;
+            }
+            Step::House { next, labels, page } => {
+                use crate::home::nook_msg::{PALLET_SELECTED, REHOUSE_2_BASEMENT};
+                let target = next.get(choice).copied().flatten();
+                flow.context.determination = labels.get(choice).cloned().unwrap_or_default();
+                // Roof colour pages: three colours and "Another color...".
+                let colours = next.len() == 4
+                    && next[..3]
+                        .iter()
+                        .all(|n| *n == Some(message(PALLET_SELECTED)));
+                // REHOUSE_2_OFFER: expand, or add a basement.
+                let basement = next.len() == 2 && next[1] == Some(message(REHOUSE_2_BASEMENT));
+                let today = crate::home::today();
+                if let Some(home) = home.as_mut() {
+                    if colours && choice < 3 {
+                        let pal = page * 3 + choice as u8;
+                        let name = labels.get(choice).cloned().unwrap_or_default();
+                        let ok = home.0.order_expansion(&mut inventory.loan, pal, today);
+                        info!("house expansion ordered ({ok}): roof {pal} {name}");
+                    } else if basement && choice == 1 {
+                        let ok = home.0.order_basement(&mut inventory.loan, today);
+                        info!("basement ordered ({ok})");
+                    }
+                }
+                let page = if colours && choice == 3 {
+                    (page + 1) % 4
+                } else {
+                    page
+                };
+                match target {
+                    Some(msg) => house_say(&disc, &mut dialogue, actor, &mut flow, msg, page),
+                    None => {
+                        *dialogue = DialogueState::default();
+                        *focus = InputFocus::World;
+                    }
+                }
             }
             _ => {
                 *dialogue = DialogueState::default();
