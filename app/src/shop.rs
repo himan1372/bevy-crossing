@@ -28,13 +28,15 @@ use crate::player::Player;
 use crate::states::{AppState, GameplaySet};
 use crate::town::Town;
 
-/// Town map vs. shop interior. Lives only while in game.
+/// Town map vs. a public building's interior (the shop, or the post
+/// office). Lives only while in game.
 #[derive(SubStates, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[source(AppState = AppState::InGame)]
 pub enum ShopLocation {
     #[default]
     Town,
     Inside,
+    PostOffice,
 }
 
 /// Exterior shop building: door position plus the blocked footprint the
@@ -1155,7 +1157,7 @@ fn update_shop_hud(
     for mut vis in query.iter_mut() {
         *vis = match *state.get() {
             ShopLocation::Inside => Visibility::Visible,
-            ShopLocation::Town => Visibility::Hidden,
+            ShopLocation::Town | ShopLocation::PostOffice => Visibility::Hidden,
         };
     }
 }

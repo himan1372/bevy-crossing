@@ -242,6 +242,7 @@ pub(crate) fn update_focus(
     dialogue: Res<crate::dialogue::DialogueState>,
     mail: Res<crate::mail::MailUi>,
     shop: Res<crate::shop::ShopUi>,
+    repay: Option<Res<crate::post_office::RepayOpen>>,
     quest: Res<crate::quest::QuestUi>,
     pockets: Res<crate::pockets::PocketsUi>,
     room: Res<crate::player_room::PlayerRoom>,
@@ -262,7 +263,7 @@ pub(crate) fn update_focus(
         InputFocus::Dialogue
     } else if mail.open {
         InputFocus::Mail
-    } else if shop.open {
+    } else if shop.open || repay.is_some_and(|r| r.0) {
         InputFocus::Shop
     } else if pockets.open {
         InputFocus::Pockets

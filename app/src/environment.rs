@@ -263,7 +263,7 @@ pub(crate) fn update_environment(
     let now = clock::now();
     let minute = now.day_secs / 60;
     let indoors = house.is_some_and(|h| *h.get() == crate::house::HouseState::Inside)
-        || shop.is_some_and(|s| *s.get() == crate::shop::ShopLocation::Inside);
+        || shop.is_some_and(|s| *s.get() != crate::shop::ShopLocation::Town);
     // Also refresh when new materials appear (town built after the table).
     let count = materials.len();
     if *last == Some((minute, count, indoors)) {

@@ -44,6 +44,7 @@ mod player_tools;
 mod player_toys;
 mod pockets;
 mod pockets_disc;
+mod post_office;
 mod quest;
 mod remote;
 mod roster;
@@ -131,6 +132,7 @@ fn main() {
         .add_plugins(PocketsPlugin)
         .add_plugins(ClockPlugin)
         .add_plugins(idle_clock::IdleClockPlugin)
+        .add_plugins(post_office::PostOfficePlugin)
         .add_plugins(furniture::house_clock::HouseClockPlugin)
         .add_plugins(environment::EnvironmentPlugin)
         .add_plugins(character::CharacterPlugin)

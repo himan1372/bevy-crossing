@@ -23,6 +23,8 @@ use rustimal_logic::inventory::{Inventory, EMPTY_NO};
 pub struct PlayerInventory {
     pub bells: u32,
     pub pockets: Inventory,
+    /// `Private_c.inventory.loan`: bells owed on the house.
+    pub loan: u32,
 }
 
 impl PlayerInventory {

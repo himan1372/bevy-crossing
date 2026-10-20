@@ -454,20 +454,19 @@ fn advance_reveal(
                 rustimal_logic::na_voice::villager_spec(speaker.looks),
                 voice_id,
             );
-        } else if dialogue.external_name == Some("Tom Nook") {
+        } else if let Some((npc, sound_id)) = dialogue.external_voice {
             let voice_id = disc
                 .as_ref()
                 .and_then(|disc| {
                     let table = disc.catalog.get("npc_draw_data_tbl")?;
-                    let offset = crate::character::NOOK * 0x6C + 0x62;
+                    let offset = npc * 0x6C + 0x62;
                     let b = disc
                         .rom
                         .slice(table.source, table.offset.checked_add(offset)?, 2)?;
                     Some(u16::from_be_bytes([b[0], b[1]]))
                 })
                 .unwrap_or(0);
-            // m_npc.c::l_sp_actor_name: Nook's sound_id is 2.
-            crate::sound::voice_begin(2, voice_id);
+            crate::sound::voice_begin(sound_id, voice_id);
         }
         *reveal = Reveal {
             total: items.len(),

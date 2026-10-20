@@ -40,6 +40,9 @@ pub struct DialogueState {
     pub revealing: bool,
     /// Actor controllers own these choices and commit their own transactions.
     pub(crate) external_name: Option<&'static str>,
+    /// The special NPC's `npc_draw_data_tbl` index and `l_sp_actor_name`
+    /// sound id, for its voice.
+    pub(crate) external_voice: Option<(u32, u8)>,
     pub(crate) external_result: Option<usize>,
     external_choices: Option<Vec<String>>,
     /// A question the last page asks (the game's own message): its
@@ -81,11 +84,31 @@ impl DialogueState {
         pages: Vec<String>,
         choices: Option<Vec<String>>,
     ) {
+        // m_npc.c l_sp_actor_name: Nook's sound_id is 2.
+        self.begin_special(
+            speaker,
+            "Tom Nook",
+            (crate::character::NOOK, 2),
+            pages,
+            choices,
+        );
+    }
+
+    /// A special NPC's talk: name plate, voice and its own choices.
+    pub(crate) fn begin_special(
+        &mut self,
+        speaker: Entity,
+        name: &'static str,
+        voice: (u32, u8),
+        pages: Vec<String>,
+        choices: Option<Vec<String>>,
+    ) {
         *self = Self {
             active: true,
             speaker: Some(speaker),
             lines: pages,
-            external_name: Some("Tom Nook"),
+            external_name: Some(name),
+            external_voice: Some(voice),
             external_choices: choices,
             ..default()
         };

@@ -21,6 +21,8 @@ pub enum Scene {
     Town,
     PlayerHouse,
     Shop(ShopTier),
+    /// `mFI_FIELD_ROOM_POST_OFFICE`; `true` while Phyllis is on duty.
+    PostOffice(bool),
 }
 
 /// Music ID (resolved through the disc's SEQ_TABLE), plus hourly arrangement.
@@ -37,6 +39,7 @@ pub struct Track {
 pub fn select(scene: Scene, day_secs: u32, weather: FieldWeather) -> Option<Track> {
     let (id, mute_mask) = match scene {
         Scene::PlayerHouse => return None,
+        Scene::PostOffice(night) => (crate::post_office::music(night), 0),
         Scene::Town => {
             let hour = (day_secs / 3600 % 24) as usize;
             match weather {

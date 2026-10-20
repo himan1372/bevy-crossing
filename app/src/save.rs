@@ -60,6 +60,9 @@ pub struct SaveData {
     pub town_seed: u32,
     pub player_pos: [f32; 3],
     pub bells: u32,
+    /// House loan. Saves from before loans count as paid off (Philip).
+    #[serde(default)]
+    pub loan: u32,
     /// Pocket item IDs (`crate::items`), 15 slots. `None` in saves made
     /// before pockets existed; those are converted from the legacy counts.
     #[serde(default)]
@@ -311,6 +314,7 @@ fn pockets_from_save(save: &SaveData) -> Inventory {
 fn apply_loaded_inventory(loaded: Res<LoadedSave>, mut inventory: ResMut<PlayerInventory>) {
     if let Some(save) = loaded.0.as_ref() {
         inventory.bells = save.bells;
+        inventory.loan = save.loan;
         inventory.pockets = pockets_from_save(save);
         println!(
             "Inventory restored: {} bells, {}/{} pockets",
@@ -318,6 +322,9 @@ fn apply_loaded_inventory(loaded: Res<LoadedSave>, mut inventory: ResMut<PlayerI
             inventory.used(),
             POCKETS_SLOT_COUNT
         );
+    } else {
+        // A new game owes the starter house (mPlayer_DEBT0).
+        inventory.loan = rustimal_logic::house::DEBT_BUY_HOUSE;
     }
 }
 
@@ -353,7 +360,7 @@ fn collect_save(
         return_pos
             .map(|r| r.0.to_array())
             .unwrap_or([0.0, 1.0, 0.0])
-    } else if *shop_loc == crate::shop::ShopLocation::Inside {
+    } else if *shop_loc != crate::shop::ShopLocation::Town {
         shop_return
             .map(|r| r.0.to_array())
             .unwrap_or([0.0, 1.0, 0.0])
@@ -369,6 +376,7 @@ fn collect_save(
         town_seed: seed.0,
         player_pos,
         bells: inventory.bells,
+        loan: inventory.loan,
         pockets: Some(inventory.pockets.pockets.to_vec()),
         pocket_conds: inventory.pockets.item_conditions,
         fruit: 0,
@@ -567,6 +575,7 @@ fn quick_load(
     next_house.set(HouseState::Town);
     next_shop.set(crate::shop::ShopLocation::Town);
     inventory.bells = save.bells;
+    inventory.loan = save.loan;
     inventory.pockets = pockets_from_save(&save);
     playtime.secs = save.playtime_secs;
     mailbox.letters = save.letters.clone();
