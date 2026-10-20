@@ -177,20 +177,101 @@ impl Collection {
     }
 }
 
+impl Collection {
+    /// aCR_get_msg_no_after_talk: how the collection is coming along.
+    pub fn after_talk(&self) -> usize {
+        match self.count() {
+            0 => 0x2F58,
+            1..=36 => 0x2F59,
+            37..=84 => 0x2F5A,
+            _ => 0x2F5B,
+        }
+    }
+
+    fn complete(&self, cat: Category) -> bool {
+        let list: &[u8] = match cat {
+            Category::Fossil => &self.fossil,
+            Category::Art => &self.art,
+            Category::Insect => &self.insect,
+            Category::Fish => &self.fish,
+        };
+        list.iter().all(|d| (1..=5).contains(d))
+    }
+
+    /// What Blathers goes on to say after keeping `item` (already
+    /// recorded): aCR_putaway_demo_end_wait and what follows it. A fossil
+    /// part may finish its skeleton (0x2F78 + kind, else 0x2F84); an insect
+    /// or fish gets his remarks on it; then either "anything else?"
+    /// (0x2F73, a question) or that category's completion and 0x2F76 /
+    /// 0x2F77 when everything is.
+    pub fn after_donation(&self, item: u16) -> Vec<usize> {
+        let Some((cat, idx)) = exhibit(item) else {
+            return Vec::new();
+        };
+        let mut chain = Vec::new();
+        match cat {
+            Category::Fossil if idx < 20 => {
+                // aCR_chk_fossil_parts_complete: the skeletons' pieces.
+                const KINDS: [std::ops::Range<usize>; 7] =
+                    [0..3, 3..6, 6..9, 9..12, 12..15, 15..18, 18..20];
+                let kind = KINDS.iter().position(|r| r.contains(&idx));
+                let done = kind
+                    .is_some_and(|k| KINDS[k].clone().all(|i| (1..=5).contains(&self.fossil[i])));
+                chain.push(match kind {
+                    Some(k) if done => 0x2F78 + k,
+                    _ => 0x2F84,
+                });
+            }
+            Category::Insect if item != COCKROACH => chain.push(INSECT_TALK[idx]),
+            Category::Fish => chain.push(FISH_TALK[idx]),
+            _ => {}
+        }
+        const COMPLETE: [usize; 4] = [0x2F85, 0x2F75, 0x2F88, 0x2F8A];
+        if self.complete(cat) {
+            chain.push(COMPLETE[cat as usize]);
+            chain.push(if self.count() == TOTAL {
+                0x2F77
+            } else {
+                0x2F76
+            });
+        } else {
+            chain.push(0x2F73);
+        }
+        chain
+    }
+}
+
+/// aCR_set_after_explain_insect: his remarks on each insect.
+const INSECT_TALK: [usize; INSECT_NUM] = [
+    0x3A56, 0x3A56, 0x3A56, 0x3A56, 0x3A57, 0x3A57, 0x3A5D, 0x3A57, 0x3A5E, 0x3A58, 0x3A58, 0x3A58,
+    0x3A5F, 0x3A59, 0x3A59, 0x3A5A, 0x3A5A, 0x3A5A, 0x3A5A, 0x3A5B, 0x3A5B, 0x3A5B, 0x3A61, 0x3A62,
+    0x3A5C, 0x3A5C, 0x3A63, 0x3A64, 0x3A56, 0x3A5B, 0x3A5B, 0x3A60, 0x3A6B, 0x3A69, 0x3A65, 0x3A6C,
+    0x3A68, 0x3A6A, 0x3A66, 0x3A67,
+];
+
+/// aCR_putaway_demo_start_wait5_2: his remarks on each fish.
+const FISH_TALK: [usize; FISH_NUM] = [
+    0x3A6D, 0x3A6E, 0x3A6D, 0x3A80, 0x3A6D, 0x3A6D, 0x3A6E, 0x3A6F, 0x3A6D, 0x3A70, 0x3A71, 0x3A6D,
+    0x3A6E, 0x3A72, 0x3A6D, 0x3A6D, 0x3A6D, 0x3A73, 0x3A6E, 0x3A81, 0x3A6E, 0x3A74, 0x3A6D, 0x3A7D,
+    0x3A75, 0x3A76, 0x3A6E, 0x3A6E, 0x3A7E, 0x3A77, 0x3A7D, 0x3A79, 0x3A7C, 0x3A82, 0x3A77, 0x3A7F,
+    0x3A6D, 0x3A7A, 0x3A7B, 0x3A78,
+];
+
 /// aCR_check_sleep_time: Blathers sleeps from 06:00 to 18:00.
 pub fn asleep(day_secs: u32) -> bool {
     (6 * 3600..18 * 3600).contains(&(day_secs % 86400))
 }
 
-/// aCR_set_talk_info's greeting for a local player. `dozing`: asleep and
-/// still in his sleep pose (woken by this talk).
-pub fn greeting(complete: bool, first_talk: bool, day_secs: u32, dozing: bool) -> usize {
+/// aCR_set_talk_info's greeting for a local player. In his sleep hours
+/// `standing` (aCR_ACTION_SLEEP_WAIT, not yet nodded off) gets the plain
+/// welcome; asleep he wakes with a start.
+pub fn greeting(complete: bool, first_talk: bool, day_secs: u32, standing: bool) -> usize {
     const MSG: [[[usize; 3]; 2]; 2] = [
         [[0x2F4E, 0x2F4F, 0x2F4F], [0x2F51, 0x2F96, 0x2F52]],
         [[0x2F53, 0x2F54, 0x2F54], [0x2F55, 0x2F94, 0x2F56]],
     ];
     let action = if asleep(day_secs) {
-        usize::from(dozing)
+        usize::from(standing)
     } else {
         2
     };

@@ -415,3 +415,4 @@ Source (concept): https://pokeacer.xyz/wii/pdf/OS.pdf (Nintendo SDK OS manual,
 [2026-10-20 claude] police-box complete on main: police box interior, Booker, lost and found (saved). New shared app/src/indoor_room.rs (post office uses it). ShopLocation::PoliceBox. Copper outside not done.
 [2026-10-20 claude] museum on main: rooms, Blathers, donations saved (SaveData.museum), fossils/paintings shown; PocketsUi.donating mode; IndoorRoom::set_furniture for solid exhibits. Fish tanks/insect cases not drawn yet.
 [2026-10-20 claude] Copper + Booker on main: copper.rs (CopperUnit blocks player), character::NpcClip/NpcGait for special NPC clips/gaits, LostAndFound::keep + daily growth (SaveData.police_grow_day). Next: finishing the museum (fish/insect displays).
+[2026-10-20 claude] museum talk flow (aCR chain) + Blathers doze on main; TextBank::talk_asking added. museum-exhibits still claimed for fish/insect displays.

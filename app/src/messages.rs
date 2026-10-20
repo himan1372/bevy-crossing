@@ -445,6 +445,18 @@ impl GameText {
         ctx: &MsgContext,
         pick: &mut dyn FnMut(u32) -> u32,
     ) -> (Vec<String>, Option<MsgChoice>) {
+        let (pages, choice) = self.talk_asking(msg_no, ctx, pick);
+        (pages, choice.map(|(_, c)| c))
+    }
+
+    /// [`Self::talk`], also naming the message that asks the question
+    /// (what `mMsg_Get_msg_num` reports while the choice is up).
+    pub fn talk_asking(
+        &self,
+        msg_no: usize,
+        ctx: &MsgContext,
+        pick: &mut dyn FnMut(u32) -> u32,
+    ) -> (Vec<String>, Option<(usize, MsgChoice)>) {
         let mut pages = vec![String::new()];
         let mut next = Some(msg_no);
         let mut followed = 0;
@@ -461,8 +473,8 @@ impl GameText {
                 pages.push(String::new());
             }
             let (then, asks) = self.render(text, ctx, &mut pages, pick);
-            if asks.is_some() {
-                choice = asks;
+            if let Some(asks) = asks {
+                choice = Some((no, asks));
                 break;
             }
             next = then;

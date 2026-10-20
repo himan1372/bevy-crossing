@@ -223,9 +223,21 @@ fn at(room: usize, p: Vec2) -> Vec3 {
 
 #[derive(Component)]
 struct Blathers {
-    /// Still in his sleep pose (aCR_ACTION_SLEEP_WAIT).
-    dozing: bool,
+    doze: Doze,
 }
+
+/// aCR_ACTION_WAIT / SLEEP_WAIT / SLEEP.
+#[derive(Clone, Copy, PartialEq)]
+enum Doze {
+    Wait,
+    /// Standing a while (aCR_SLEEP_WAIT_TIMER, 360 frames) before nodding off.
+    SleepWait(f32),
+    /// Asleep (wait_nemu1).
+    Sleep,
+}
+
+/// aCR_SLEEP_WAIT_TIMER.
+const SLEEP_WAIT_FRAMES: f32 = 360.0;
 
 #[derive(Component)]
 struct Exhibit;
@@ -234,10 +246,10 @@ struct Exhibit;
 enum Step {
     #[default]
     Idle,
-    /// His question (0x2F50): donate / about donating / leave.
-    Menu,
-    /// 0x2F5F, then 0x2F60: about donating.
-    About(u8),
+    /// A question is up; the message asking it (`mMsg_Get_msg_num`).
+    Asked(usize),
+    /// A line before the pockets open (0x2F62).
+    ThenPockets,
     /// The pockets are open to pick an item.
     Picking,
     Finish,
@@ -302,7 +314,10 @@ fn build(
     }
     commands.spawn((
         Name::new("Blathers"),
-        Blathers { dozing: true },
+        Blathers {
+            doze: Doze::SleepWait(SLEEP_WAIT_FRAMES),
+        },
+        crate::character::NpcClip::default(),
         crate::character::NpcModel(BLATHERS_NPC),
         Mesh3d(meshes.add(Capsule3d::new(0.35, 0.9))),
         Transform::from_translation(at(0, BLATHERS) + Vec3::Y).looking_to(Vec3::NEG_Z, Vec3::Y),
@@ -544,26 +559,78 @@ fn context(identity: &crate::save::PlayerIdentity) -> MsgContext {
     }
 }
 
+/// Shows `msgs` one after another in one window (mMsg_Set_continue_msg_num)
+/// and returns the message asking the question it ends on, if any.
 fn say(
     disc: &GameDisc,
     dialogue: &mut DialogueState,
     actor: Entity,
     ctx: &MsgContext,
-    msg: usize,
-) -> bool {
-    let Some(text) = disc.text.as_ref() else {
-        return false;
-    };
-    let (pages, choice) = text.talk(msg, ctx, &mut |_| 0);
+    msgs: &[usize],
+) -> Option<usize> {
+    let text = disc.text.as_ref()?;
+    let mut pages = Vec::new();
+    let mut asked = None;
+    for &msg in msgs {
+        let (more, choice) = text.talk_asking(msg, ctx, &mut |_| 0);
+        pages.extend(more);
+        asked = choice;
+        info!("museum message {msg:#06x}");
+    }
     dialogue.begin_special(
         actor,
         "Blathers",
         (BLATHERS_NPC, BLATHERS_SOUND),
         pages,
-        choice.as_ref().map(|c| c.labels.clone()),
+        asked.as_ref().map(|(_, c)| c.labels.clone()),
     );
-    info!("museum message {msg:#06x}");
-    choice.is_some()
+    asked.map(|(no, _)| no)
+}
+
+/// Where a choice leads by the message script (`MsgChoice::next`).
+fn choice_target(disc: &GameDisc, ctx: &MsgContext, asked: usize, choice: usize) -> Option<usize> {
+    let text = disc.text.as_ref()?;
+    let (_, c) = text.talk_asking(asked, ctx, &mut |_| 0);
+    c.and_then(|(_, c)| c.next.get(choice).copied().flatten())
+}
+
+/// aCR_think_main_proc / aCR_sleep_wait: by day he stands a while, then
+/// sleeps; by night he is awake.
+fn doze(
+    time: Res<Time>,
+    state: Res<State<ShopLocation>>,
+    dialogue: Res<DialogueState>,
+    mut owl: Query<(Entity, &mut Blathers, &mut crate::character::NpcClip)>,
+) {
+    let Ok((entity, mut owl, mut clip)) = owl.single_mut() else {
+        return;
+    };
+    let talking = dialogue.active && dialogue.speaker == Some(entity);
+    if talking || (state.is_changed() && *state.get() == ShopLocation::Museum) {
+        // aCR_talk_init, or the actor made afresh: WAIT.
+        owl.doze = Doze::Wait;
+    }
+    let night = !native::asleep(crate::clock::now().day_secs);
+    owl.doze = match owl.doze {
+        _ if night => Doze::Wait,
+        Doze::Wait if !talking => Doze::SleepWait(SLEEP_WAIT_FRAMES),
+        Doze::SleepWait(t) => {
+            let t = t - time.delta_secs() * 60.0;
+            if t <= 0.0 {
+                Doze::Sleep
+            } else {
+                Doze::SleepWait(t)
+            }
+        }
+        d => d,
+    };
+    let want = (owl.doze == Doze::Sleep).then_some("cKF_ba_r_npc_1_wait_nemu1");
+    if clip.name != want {
+        match want {
+            Some(name) => clip.start(name, false, 8.0),
+            None => clip.stop(8.0),
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -574,7 +641,7 @@ fn talk(
     mut focus: ResMut<InputFocus>,
     mut actions: ResMut<Actions>,
     player: Query<(&Transform, &Facing), With<Player>>,
-    mut blathers: Query<(Entity, &Transform, &mut Blathers)>,
+    blathers: Query<(Entity, &Transform, &Blathers)>,
     mut flow: ResMut<Talk>,
     mut dialogue: ResMut<DialogueState>,
     mut pockets: ResMut<PocketsUi>,
@@ -588,80 +655,86 @@ fn talk(
     if *state != ShopLocation::Museum {
         return;
     }
-    let Ok((actor, actor_at, mut owl)) = blathers.single_mut() else {
+    let Ok((actor, actor_at, owl)) = blathers.single() else {
         return;
     };
-    // Awake at night; back to his doze when the morning comes.
-    if !native::asleep(crate::clock::now().day_secs) {
-        owl.dozing = false;
+    let open_pockets =
+        |pockets: &mut PocketsUi, focus: &mut InputFocus, dialogue: &mut DialogueState| {
+            *pockets = PocketsUi {
+                open: true,
+                donating: true,
+                ..default()
+            };
+            *dialogue = DialogueState::default();
+            *focus = InputFocus::Pockets;
+            crate::sound::se(crate::sound::se_id::MENU_PAUSE);
+        };
+    let asked_or_finish = |asked: Option<usize>| asked.map_or(Step::Finish, Step::Asked);
+
+    // aCR_menu_open_wait: his line read, the pockets open.
+    if matches!(flow.step, Step::ThenPockets) {
+        if !dialogue.active {
+            open_pockets(&mut pockets, &mut focus, &mut dialogue);
+            flow.step = Step::Picking;
+        }
+        return;
     }
 
-    // The pockets closed after picking an item to offer.
+    // aCR_msg_win_open_wait: the pockets closed after picking (or not).
     if matches!(flow.step, Step::Picking) {
         if pockets.open {
             return;
         }
         pockets.donating = false;
         *focus = InputFocus::Dialogue;
-        let msg = match pockets.sell_slot.take() {
+        let msgs = match pockets.sell_slot.take() {
             Some(slot) => {
                 let item = inventory.pockets.pockets[slot];
-                flow.context.free[0] = crate::items::name(item);
+                flow.context.items[0] = crate::items::name(item);
+                flow.context.item_articles[0] = crate::shop_nook::item_article(&disc, item);
                 let pick = (crate::clock::now().day_secs ^ slot as u32).wrapping_mul(2654435761);
                 let answer = collection.0.offer(item, 1, pick >> 16);
+                let mut msgs = vec![answer.msg];
                 if answer.accepted {
                     inventory.pockets.pockets[slot] = 0;
                     inventory.pockets.set_item_cond(slot, 0);
+                    msgs.extend(collection.0.after_donation(item));
                     info!("donated {item:#06x} to the museum");
                 }
-                answer.msg
+                msgs
             }
-            // aCR_msg_win_open_wait with nothing chosen.
-            None => 0x2F63,
+            None => vec![0x2F63],
         };
-        say(&disc, &mut dialogue, actor, &flow.context, msg);
-        flow.step = Step::Finish;
+        let asked = say(&disc, &mut dialogue, actor, &flow.context, &msgs);
+        flow.step = asked_or_finish(asked);
         return;
     }
 
     if let Some(choice) = dialogue.external_result.take() {
         *focus = InputFocus::Dialogue;
-        let open_pockets =
-            |pockets: &mut PocketsUi, focus: &mut InputFocus, dialogue: &mut DialogueState| {
-                *pockets = PocketsUi {
-                    open: true,
-                    donating: true,
-                    ..default()
+        let Step::Asked(asked) = std::mem::take(&mut flow.step) else {
+            *dialogue = DialogueState::default();
+            *focus = InputFocus::World;
+            return;
+        };
+        let target = choice_target(&disc, &flow.context, asked, choice);
+        let after_talk = collection.0.after_talk();
+        // aCR_chk_request / chk_decide_to_donate(2) / chk_continue_to_donate.
+        let next: Option<(Vec<usize>, bool)> = match (asked, choice) {
+            (0x2F50 | 0x2F60 | 0x2F66 | 0x2F6F | 0x2F73, 0) => Some((vec![0x2F62], true)),
+            (0x2F50, 2) | (0x2F66 | 0x2F6F, _) => Some((vec![after_talk], false)),
+            _ => target.map(|t| (vec![t], false)),
+        };
+        match next {
+            Some((msgs, pockets_after)) => {
+                let asked = say(&disc, &mut dialogue, actor, &flow.context, &msgs);
+                flow.step = if pockets_after {
+                    Step::ThenPockets
+                } else {
+                    asked_or_finish(asked)
                 };
-                *dialogue = DialogueState::default();
-                *focus = InputFocus::Pockets;
-                crate::sound::se(crate::sound::se_id::MENU_PAUSE);
-            };
-        match std::mem::take(&mut flow.step) {
-            Step::Menu => match choice {
-                // aCR_chk_request.
-                0 => {
-                    open_pockets(&mut pockets, &mut focus, &mut dialogue);
-                    flow.step = Step::Picking;
-                }
-                1 => {
-                    say(&disc, &mut dialogue, actor, &flow.context, 0x2F5F);
-                    flow.step = Step::About(0);
-                }
-                _ => {
-                    *dialogue = DialogueState::default();
-                    *focus = InputFocus::World;
-                }
-            },
-            Step::About(0) if choice == 0 => {
-                say(&disc, &mut dialogue, actor, &flow.context, 0x2F60);
-                flow.step = Step::About(1);
             }
-            Step::About(1) if choice == 0 => {
-                open_pockets(&mut pockets, &mut focus, &mut dialogue);
-                flow.step = Step::Picking;
-            }
-            _ => {
+            None => {
                 *dialogue = DialogueState::default();
                 *focus = InputFocus::World;
             }
@@ -691,16 +764,15 @@ fn talk(
         complete,
         !flow.talked,
         crate::clock::now().day_secs,
-        owl.dozing,
+        matches!(owl.doze, Doze::SleepWait(_)),
     );
-    owl.dozing = false;
     flow.talked = true;
     // aCR_set_talk_info: a local player gets his question unless done.
-    let asks = say(&disc, &mut dialogue, actor, &flow.context, msg);
-    flow.step = if asks && !complete {
-        Step::Menu
-    } else {
+    let asked = say(&disc, &mut dialogue, actor, &flow.context, &[msg]);
+    flow.step = if complete {
         Step::Finish
+    } else {
+        asked_or_finish(asked)
     };
 }
 
@@ -726,6 +798,7 @@ impl Plugin for MuseumPlugin {
                     .in_set(GameplaySet),
             )
             .add_systems(Update, talk.in_set(InteractSet::Talk).in_set(GameplaySet))
+            .add_systems(Update, doze.in_set(GameplaySet))
             .add_systems(
                 Update,
                 movement
