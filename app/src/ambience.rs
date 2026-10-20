@@ -34,6 +34,11 @@ pub(crate) fn update_ambience(
     mut state: Local<AmbienceState>,
     slots: Query<(Entity, &crate::furniture::slot::SlotRig, &GlobalTransform)>,
     fans: Query<(Entity, &crate::furniture::fan::FanRig, &GlobalTransform)>,
+    sprinklers: Query<(
+        Entity,
+        &crate::furniture::sprinkler::SprinklerRig,
+        &GlobalTransform,
+    )>,
     (toy, room, current, disc): (
         Res<crate::player_toys::ToyAction>,
         Res<crate::player_room::PlayerRoom>,
@@ -62,6 +67,16 @@ pub(crate) fn update_ambience(
                     sources.push(Source {
                         key: entity.to_bits() | (1u64 << 62),
                         id: 2,
+                        position: (at.translation() * 40.0).to_array(),
+                    });
+                }
+            }
+            for (entity, sprinkler, at) in &sprinklers {
+                if sprinkler.sound_on {
+                    // fNS_mv: sAdo_OngenPos(.., 0x5B, ..) while on.
+                    sources.push(Source {
+                        key: entity.to_bits() | (1u64 << 62),
+                        id: rustimal_logic::furniture_sprinkler::LEVEL_SOUND,
                         position: (at.translation() * 40.0).to_array(),
                     });
                 }

@@ -30,6 +30,7 @@ pub(crate) mod fan;
 pub(crate) mod gong;
 pub(crate) mod rigs;
 pub(crate) mod slot;
+pub(crate) mod sprinkler;
 pub(crate) mod storage;
 pub(crate) mod television;
 
@@ -196,6 +197,9 @@ pub(crate) fn can_render(disc: &GameDisc, index: u16) -> bool {
     }
     if cuckoo::is_cuckoo(index) {
         return cuckoo::available(disc, &p);
+    }
+    if sprinkler::is_sprinkler(index) {
+        return sprinkler::available(disc, &p);
     }
     if clocks::spec(&p.name).is_some() {
         return clocks::available(disc, &p);
@@ -396,6 +400,16 @@ pub fn spawn_furniture(
     let mut segs = Segments::default();
     if slot::is_slot(profile.index as u16) {
         slot::spawn(
+            commands,
+            disc,
+            parent,
+            &profile,
+            (meshes, materials, images),
+        );
+        return Some(parent);
+    }
+    if sprinkler::is_sprinkler(profile.index as u16) {
+        sprinkler::spawn(
             commands,
             disc,
             parent,

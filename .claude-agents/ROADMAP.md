@@ -745,3 +745,8 @@ callback finding in completed/room-insect-audio.md; Philip acceptance pending.
 machine with exact cKF stop timing and frame-2 sound 0x133, hands at joints
 7/8 by yaw and 90deg minus angle). 12 calls observed at 00:00; Philip
 confirmed the 21:00 call. See completed/cuckoo-clock.md.
+
+2026-10-19 claude sprinkler: ac_nog_sprinkler ported (native fade/toggle
+kernel, generic silent E, 0x16/0x17, level 0x5B, destructor write-back on
+leaving). Mid-fade press quirk reproduced and verified; water flow needs
+TEXEL1. See completed/sprinkler.md.

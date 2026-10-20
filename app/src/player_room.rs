@@ -184,6 +184,14 @@ impl PlayerRoom {
             .filter(|a| a.name == ftr::ftr_item_no_2_idx_dir(piece.item).map_or(u16::MAX, |f| f.0))
             .map(|a| a.switch_bit)
     }
+    /// fNS_dt-style write-back of a callback's own switch state.
+    pub(crate) fn set_switch(&mut self, piece: &RoomPiece, on: bool) {
+        if self.switch_bit(piece).is_some_and(|bit| (bit != 0) != on) {
+            if let Some(actor) = self.runtime.actors[piece.slot].as_mut() {
+                ftr::toggle_switch(actor, &mut self.layers[actor.layer]);
+            }
+        }
+    }
     pub(crate) fn clock_sound_allowed(&self, piece: &RoomPiece) -> bool {
         self.runtime
             .actors
@@ -1044,12 +1052,14 @@ fn interact(
     } else if room.runtime.actors[slot].as_ref().is_some_and(|a| {
         crate::furniture::gong::is_gong(a.name)
             || crate::furniture::slot::is_slot(a.name)
+            || crate::furniture::sprinkler::is_sprinkler(a.name)
             || (ftr::special_furniture::BALLOON_COMMON0..=ftr::special_furniture::BALLOON_COMMON7)
                 .contains(&a.name)
     }) && actions.consume(Action::Interact)
     {
         // aMR_FtrIdx2ChangeFtrSwitch's generic branch: toggle the bit
-        // silently; the balloon/gong/slot callback supplies its own reaction.
+        // silently; the balloon/gong/slot/sprinkler callback supplies its
+        // own reaction.
         let room = &mut *room;
         if let Some(actor) = room.runtime.actors[slot].as_mut() {
             ftr::toggle_switch(actor, &mut room.layers[actor.layer]);
@@ -1322,6 +1332,14 @@ impl Plugin for PlayerRoomPlugin {
                     .in_set(GameplaySet),
             )
             .add_systems(Update, storage::render.after(refresh).in_set(GameplaySet))
+            .add_systems(
+                Update,
+                crate::furniture::sprinkler::update
+                    .after(refresh)
+                    .after(interact)
+                    .after(crate::save::LoadSet)
+                    .in_set(GameplaySet),
+            )
             .add_systems(
                 Update,
                 crate::furniture::cuckoo::update
