@@ -99,7 +99,7 @@ fn is_winter(term: usize) -> bool {
 }
 
 /// What the game would have copied into the ground buffers this term.
-fn ground_segments(catalog: &AssetCatalog, term: usize) -> Segments {
+pub(crate) fn ground_segments(catalog: &AssetCatalog, term: usize) -> Segments {
     let mut segs = Segments::default();
     let palette = FIELD_PAL_IDX[term % 18];
     let winter = is_winter(term);

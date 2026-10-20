@@ -18,6 +18,7 @@ use bevy::prelude::*;
 use rustimal_logic::museum::{self as native, Collection};
 
 use crate::dialogue::DialogueState;
+use crate::disc_gfx::Segments;
 use crate::game_disc::GameDisc;
 use crate::indoor_room::IndoorRoom;
 use crate::input::{Action, Actions, InputFocus, InteractSet};
@@ -204,16 +205,16 @@ struct MuseumBuilding {
 }
 
 #[derive(Resource, Default)]
-struct Museum {
+pub(crate) struct Museum {
     built: bool,
-    rooms: Vec<Option<IndoorRoom>>,
+    pub(crate) rooms: Vec<Option<IndoorRoom>>,
     /// Each room's FG layout (doors).
     layouts: Vec<[u16; 256]>,
     /// The room shown.
     room: usize,
 }
 
-fn room_origin(room: usize) -> Vec3 {
+pub(crate) fn room_origin(room: usize) -> Vec3 {
     ORIGIN + Vec3::X * ROOM_SPACING * room as f32
 }
 
@@ -295,19 +296,51 @@ fn build(
     }
     museum.built = true;
     let layouts = crate::disc_town::read_fg_layouts(&disc.fgdata);
+    // The insect garden takes the season's ground textures.
+    let ground = crate::disc_town::ground_segments(&disc.catalog, crate::disc_town::current_term());
     for (i, def) in ROOMS.iter().enumerate() {
-        let room = IndoorRoom::build(
+        let segs = if i == 3 {
+            ground.clone()
+        } else {
+            Segments::default()
+        };
+        let room = IndoorRoom::build_with(
             &mut commands,
             &disc,
             def.name,
             room_origin(i),
             def.model,
+            &segs,
             (&mut meshes, &mut materials, &mut images),
         );
         if room.is_none() {
             warn!("{} missing from the disc", def.name);
         }
+        // The garden beds, rocks and pond rise a little: keep off them.
+        let mut room = room;
+        if let (3, Some(room)) = (i, room.as_mut()) {
+            let raised = (0..16)
+                .flat_map(|x| (0..16).map(move |z| (x, z)))
+                .filter(|&(x, z)| {
+                    room.height_at(Vec2::new(x as f32 + 0.5, z as f32 + 0.5))
+                        .is_some_and(|h| h.abs() > 0.05)
+                })
+                .collect();
+            room.set_furniture(raised);
+        }
         museum.rooms.push(room);
+        // Ef_Room_Sunshine_Minsect: the insect room's upper garden layer.
+        if i == 3 {
+            let _ = IndoorRoom::build_with(
+                &mut commands,
+                &disc,
+                "museum insect garden",
+                room_origin(i),
+                ("rom_museum4_ue_model", None),
+                &segs,
+                (&mut meshes, &mut materials, &mut images),
+            );
+        }
         museum
             .layouts
             .push(layouts.get(&def.fg).copied().unwrap_or([0; 256]));
@@ -526,6 +559,7 @@ fn movement(
     time: Res<Time>,
     museum: Res<Museum>,
     mut player: Query<(&mut Transform, &mut Facing, &mut Locomotion), With<Player>>,
+    owl: Query<&Transform, (With<Blathers>, Without<Player>)>,
 ) {
     if *state != ShopLocation::Museum || !focus.is_world() {
         return;
@@ -535,11 +569,19 @@ fn movement(
     else {
         return;
     };
+    let before = transform.translation;
     room.walk(
         &actions,
         time.delta_secs(),
         (&mut transform, &mut facing, &mut loco),
     );
+    // Blathers is solid: no stepping closer once bodies touch.
+    if let (0, Ok(b)) = (museum.room, owl.single()) {
+        let gap = |p: Vec3| (p - b.translation).with_y(0.0).length();
+        if gap(transform.translation) < 0.75 && gap(transform.translation) < gap(before) {
+            transform.translation = before;
+        }
+    }
 }
 
 fn context(identity: &crate::save::PlayerIdentity) -> MsgContext {

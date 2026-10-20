@@ -49,7 +49,33 @@ impl IndoorRoom {
         disc: &GameDisc,
         name: &str,
         origin: Vec3,
+        models: (&str, Option<&str>),
+        assets: (
+            &mut Assets<Mesh>,
+            &mut Assets<N64Material>,
+            &mut Assets<Image>,
+        ),
+    ) -> Option<Self> {
+        Self::build_with(
+            commands,
+            disc,
+            name,
+            origin,
+            models,
+            &Segments::default(),
+            assets,
+        )
+    }
+
+    /// [`Self::build`] with segments filled, e.g. the field's ground
+    /// textures (grass_tex_dummy...) for the museum's insect garden.
+    pub(crate) fn build_with(
+        commands: &mut Commands,
+        disc: &GameDisc,
+        name: &str,
+        origin: Vec3,
         (opaque, translucent): (&str, Option<&str>),
+        segs: &Segments,
         (meshes, materials, images): (
             &mut Assets<Mesh>,
             &mut Assets<N64Material>,
@@ -67,7 +93,6 @@ impl IndoorRoom {
                 Visibility::default(),
             ))
             .id();
-        let segs = Segments::default();
         for (l, blend) in [(Some(opaque), false), (translucent, true)] {
             let Some(l) = l else { continue };
             let sink = run_ground_lists(&disc.rom, &[l]);
@@ -76,7 +101,7 @@ impl IndoorRoom {
                 &sink,
                 None,
                 blend,
-                &segs,
+                segs,
                 1.0,
                 (&mut *meshes, &mut *materials, &mut *images),
             ) {

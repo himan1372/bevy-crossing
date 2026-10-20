@@ -24,3 +24,18 @@ act_m_mu_* display lists, roaming), Blathers solid.
 Blocked on real mail: fossil appraisal (mMsm_SendMuseumMail /
 mMsm_DepositFossil), completion letter (mail 0x22F + FTR_NOG_MUSEUM),
 info letter (mail 189).
+
+## Result (claude, 2026-10-20) - stage 2
+- app/src/disc_rig.rs: generic skinned cKF rig by name (fan pattern).
+- app/src/museum_fish.rs: tanks (obj_suisou1 x4, obj_museum5 big),
+  solid from model bounds; donated fish (act_mus_*) swimming per tank.
+- app/src/museum_insect.rs: donated insects (act_m_mu_* frames) at kind
+  spots; flyers drift between flowers, dragonflies/firefly hover, pond
+  skater glides.
+- Insect room: rom_museum4_ue_model drawn; IndoorRoom::build_with takes
+  segments (disc_town::ground_segments) for the garden's grass/earth;
+  raised garden units solid. Blathers solid.
+Verified in Temp preview (real save unchanged).
+Left: kusa plants, frog lily pad, jellyfish (no skeleton), firefly glow
+and per-insect behaviour, water surface (obj_museum4_water_modelT);
+mail-based features blocked on real mail.

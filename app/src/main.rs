@@ -12,6 +12,7 @@ mod critters;
 mod dev_overlay;
 mod dialogue;
 mod disc_gfx;
+mod disc_rig;
 mod disc_town;
 mod ecology;
 mod environment;
@@ -39,6 +40,8 @@ mod messages;
 mod model_view;
 mod msg_window;
 mod museum;
+mod museum_fish;
+mod museum_insect;
 mod n64_material;
 mod npc;
 mod pause_menu;
@@ -141,6 +144,8 @@ fn main() {
         .add_plugins(post_office::PostOfficePlugin)
         .add_plugins(police_box::PoliceBoxPlugin)
         .add_plugins(museum::MuseumPlugin)
+        .add_plugins(museum_fish::MuseumFishPlugin)
+        .add_plugins(museum_insect::MuseumInsectPlugin)
         .add_plugins(copper::CopperPlugin)
         .add_plugins(home::HomePlugin)
         .add_plugins(statue::StatuePlugin)
