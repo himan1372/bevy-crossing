@@ -8,6 +8,7 @@ mod assets;
 mod character;
 mod clock;
 mod critters;
+mod dev_overlay;
 mod dialogue;
 mod disc_gfx;
 mod disc_town;
@@ -104,6 +105,7 @@ fn main() {
             DiscTownPlugin,
         ))
         .add_plugins(SavePlugin)
+        .add_plugins(dev_overlay::DevOverlayPlugin)
         .add_plugins(TownPlugin)
         .add_plugins(PlayerPlugin)
         .add_plugins(NpcPlugin)

@@ -505,6 +505,7 @@ fn setup_ecology_ui(mut commands: Commands) {
     // Tool indicator — top-left, under the inventory HUD.
     commands.spawn((
         ToolText,
+        crate::dev_overlay::DevOverlay,
         Text::new("Tool: none (1=rod 2=net)"),
         TextFont {
             font_size: FontSize::Px(18.0),

@@ -112,6 +112,7 @@ struct ClockText;
 fn setup_clock_ui(mut commands: Commands) {
     commands.spawn((
         ClockText,
+        crate::dev_overlay::DevOverlay,
         Text::new(""),
         TextFont {
             font_size: FontSize::Px(20.0),

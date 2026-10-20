@@ -77,6 +77,8 @@ pub enum Action {
     Mark,
     /// The GameCube Z button: the room light switch in the player's house.
     LightSwitch,
+    /// Show or hide the development overlay (retail has no field HUD).
+    DevOverlay,
 }
 
 /// Keys for each action. Several actions may share a key: they are read in
@@ -124,6 +126,7 @@ impl Default for KeyBindings {
             (DebugToys, vec![K::F1]),
             (Mark, vec![K::KeyM]),
             (LightSwitch, vec![K::KeyZ]),
+            (DevOverlay, vec![K::F10]),
         ];
         Self(map.into_iter().collect())
     }

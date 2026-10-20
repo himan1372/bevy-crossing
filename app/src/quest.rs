@@ -446,6 +446,7 @@ fn setup_quest_ui(mut commands: Commands) {
 
     commands.spawn((
         QuestHudText,
+        crate::dev_overlay::DevOverlay,
         Text::new(""),
         TextFont {
             font_size: FontSize::Px(18.0),

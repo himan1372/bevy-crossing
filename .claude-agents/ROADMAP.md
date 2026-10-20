@@ -755,3 +755,9 @@ TEXEL1. See completed/sprinkler.md.
 carpets with back-contact push/wait, prim alpha; 0x177 per back push).
 With the cuckoo clock and sprinkler, all seven callbacks from the
 furniture-callback audit are implemented. See completed/lawnmower.md.
+
+2026-10-19 claude retail-hud-ui: retail has no field HUD (source trace), so
+the dev text is a DevOverlay hidden by default with F10 to toggle (Philip's
+choice). Shop wall clock (ac_house_clock) split to shop-wall-clock: blocked on
+legacy N64 tiles and segment-7 palettes. texel1-tile-scroll queued next per
+Philip. See completed/retail-hud-ui.md.

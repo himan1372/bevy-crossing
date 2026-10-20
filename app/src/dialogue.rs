@@ -229,6 +229,7 @@ fn setup_ui(mut commands: Commands) {
     // Inventory HUD — top-left corner.
     commands.spawn((
         HudText,
+        crate::dev_overlay::DevOverlay,
         Text::new("Bells: 0   Fruit: 0"),
         TextFont {
             font_size: FontSize::Px(20.0),

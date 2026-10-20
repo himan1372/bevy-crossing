@@ -392,6 +392,7 @@ fn spawn_house_hud(commands: &mut Commands) {
     // Persistent "inside" indicator (hidden until the player enters).
     commands.spawn((
         HouseHudText,
+        crate::dev_overlay::DevOverlay,
         Text::new("House — press E at the door to exit"),
         TextFont {
             font_size: FontSize::Px(22.0),

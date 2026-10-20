@@ -75,9 +75,9 @@
       <span class="d" style="width:61.6%"></span><span class="p2" style="width:7.0%"></span><span class="pl" style="width:31.4%"></span>
     </div>
     <div class="counts">
-      <span><b id="count-done" style="color:var(--done)">57</b>implemented</span>
+      <span><b id="count-done" style="color:var(--done)">58</b>implemented</span>
       <span><b id="count-doing" style="color:var(--doing)">6</b>in progress</span>
-      <span><b id="count-planned" style="color:var(--plan)">27</b>planned</span>
+      <span><b id="count-planned" style="color:var(--plan)">26</b>planned</span>
     </div>
     <div class="legend">
       <span><span class="dot d-d"></span>Implemented</span>
@@ -90,7 +90,8 @@
 
 <aside class="focus" aria-labelledby="current-work">
   <h2 id="current-work">Latest work and next steps</h2>
-  <p><strong>Implemented: the lawnmower.</strong> On the backyard-lawn or daisy-meadow carpet, push the lawnmower from behind (hold G and walk into it from its back) and cut grass appears under it, with the mower's own sound on each push. On other carpets, or pushed from another side, it moves like any furniture.</p>
+  <p><strong>Implemented: a retail-clean screen.</strong> The original game shows no on-screen HUD in town or at home, so the port's development text (bells and pockets, tool, clock, house key hints, quest line) is now hidden by default. Press F10 to show it again while playtesting. In the original you read the time from the clocks in buildings and in your house, and your bells in the pockets screen.</p>
+  <p><strong>Lawnmower:</strong> On the backyard-lawn or daisy-meadow carpet, push the lawnmower from behind (hold G and walk into it from its back) and cut grass appears under it, with the mower's own sound on each push. On other carpets, or pushed from another side, it moves like any furniture.</p>
   <p><strong>Sprinkler:</strong> Press E beside it to turn the water on or off; the spray fades in and out over a moment with the original switch sounds, and its running sound plays while it is on. As in the original, a press while the water is still fading is ignored by the sprinkler itself (only the switch flips), and leaving the room saves the sprinkler's real state. The water does not flow yet: its moving second texture layer needs a renderer feature the port lacks.</p>
   <p><strong>Cuckoo clock:</strong> On the hour the bird calls once per hour (12 at noon and midnight), and once on the half hour, each call replaying its original animation with its sound; its hour and minute hands follow the game clock. Visiting during minute 0 or 30 starts the calls, as in the original.</p>
   <p><strong>Room insects:</strong> All forty insects can now be placed. The cicadas, crickets, mole cricket, mosquito and frog run the original room-insect sound scheduler and chirp from their cage when it says so; cicada and cricket cages replay their animation with each chirp. The firefly cage pulses its light the original way. Faithful to the original, they are usually quiet: the game's room "beat" depends on an audio callback it never installs, so a placed insect only sounds when all six sound channels are busy at the moment it appears. That behaviour is reproduced, not a missing feature.</p>
@@ -181,7 +182,7 @@
     <li class="item doing"><span class="it">Retail shop UI — Nook follows the display floor, describes goods in dialogue, pockets-based selling</span><span class="det">First Cranny flow done; Philip acceptance pending.</span></li>
     <li class="item planned"><span class="it">Net render fidelity: held-net appearance</span><span class="det">Deferred by Philip on 2026-10-18. Revisit asset/mesh/pose comparison when requested.</span></li>
     <li class="item planned"><span class="it">Pause/save flow matching the original presentation</span></li>
-    <li class="item planned"><span class="it">HUD from disc: clock/date, bells, context prompts replacing the dev overlay</span></li>
+    <li class="item done"><span class="it">Retail field HUD: no on-screen dev text (F10 shows it)</span><span class="det">Source trace: retail shows no field HUD. Time comes from the wall clocks in buildings (ac_house_clock, scene-keyed interiors) and furniture clocks, bells from the pockets screen, and there are no context prompts. The bells/pockets, tool, clock, house-hint and quest lines are now a development overlay hidden by default; F10 toggles it. The shop wall clock needs legacy N64 tile and segment-7 palette decoding (follow-up shop-wall-clock). Philip acceptance pending.</span></li>
     <li class="item planned"><span class="it">Mail attachments, letter move/transfer and mail-storage actions; pockets–mail integration</span><span class="det">Read/Grab/Throw Away menus landed; attachments, transfer and paper effects still open.</span></li>
     <li class="item planned"><span class="it">Net swing and tool animations matched to the original source</span></li>
     <li class="item planned"><span class="it">Title screen (back burner per Philip)</span></li>
