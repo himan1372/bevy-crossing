@@ -152,6 +152,7 @@ pub(super) fn spawn(
         let material = materials.add(N64Material {
             combiner: CombinerUniform::from_key(&part.key, false, false),
             texture: frames.first().cloned(),
+            texture1: None,
             env: default(),
             blend: false,
         });

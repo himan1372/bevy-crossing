@@ -279,12 +279,22 @@ fn spawn_blend_lists(
         let texture = part.key.tex.as_ref().and_then(|k| {
             decode_texture(&disc.rom, k, None, &segs).map(|rgba| images.add(texture_image(rgba, k)))
         });
-        let material = materials.add(N64Material {
+        let mut material = N64Material {
             combiner: CombinerUniform::from_key(&part.key, false, blend),
             texture,
+            texture1: None,
             env: default(),
             blend,
-        });
+        };
+        crate::n64_material::attach_texture1(
+            &mut material,
+            &disc.rom,
+            &part.key,
+            None,
+            &segs,
+            images,
+        );
+        let material = materials.add(material);
         commands.spawn((
             Mesh3d(meshes.add(part_mesh(part, 1.0))),
             MeshMaterial3d(material),
@@ -426,12 +436,22 @@ pub fn spawn_sink(
             decode_texture(&disc.rom, k, palette, segs)
                 .map(|rgba| images.add(texture_image(rgba, k)))
         });
-        let material = materials.add(N64Material {
+        let mut material = N64Material {
             combiner: CombinerUniform::from_key(&part.key, false, blend),
             texture,
+            texture1: None,
             env: default(),
             blend,
-        });
+        };
+        crate::n64_material::attach_texture1(
+            &mut material,
+            &disc.rom,
+            &part.key,
+            palette,
+            segs,
+            images,
+        );
+        let material = materials.add(material);
         commands.spawn((
             Mesh3d(meshes.add(part_mesh(part, 1.0))),
             MeshMaterial3d(material),

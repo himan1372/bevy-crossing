@@ -251,6 +251,7 @@ pub(crate) fn update(
                 let material = materials.add(N64Material {
                     combiner: CombinerUniform::from_key(&part.key, false, true),
                     texture: Some(image),
+                    texture1: None,
                     env: default(),
                     blend: true,
                 });

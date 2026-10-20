@@ -235,12 +235,15 @@ fn spawn_acre(
             let texture = part.key.tex.as_ref().and_then(|k| {
                 decode_texture(rom, k, None, segs).map(|rgba| images.add(texture_image(rgba, k)))
             });
-            let material = materials.add(N64Material {
+            let mut material = N64Material {
                 combiner: CombinerUniform::from_key(&part.key, false, blend),
                 texture,
+                texture1: None,
                 env: default(),
                 blend,
-            });
+            };
+            crate::n64_material::attach_texture1(&mut material, rom, &part.key, None, segs, images);
+            let material = materials.add(material);
             commands.spawn((
                 Mesh3d(meshes.add(part_mesh(part, GROUND_SCALE))),
                 MeshMaterial3d(material),
@@ -706,8 +709,8 @@ fn fountain_model(
     ));
     let mut flow = Vec::new();
     // Offsets are quarter texels per texture_frame, normalized by the
-    // original tile dimensions. TEXEL1 still uses the shared combiner's
-    // existing TEXEL0 approximation; these animate the first tile only.
+    // original tile dimensions. These animate the first tile only; a bound
+    // tile 1 is sampled but not scrolled here.
     for (part, scroll) in [
         ("water", Vec2::new(-50.0 / (4.0 * 32.0), 0.0)),
         ("sprash", Vec2::new(0.0, 5.0 / (4.0 * 16.0))),
@@ -1688,12 +1691,21 @@ pub(crate) fn sink_meshes_scaled(
                 decode_texture(&disc.rom, k, palette, segs)
                     .map(|rgba| images.add(texture_image(rgba, k)))
             });
-            let material = N64Material {
+            let mut material = N64Material {
                 combiner: CombinerUniform::from_key(&part.key, false, blend),
                 texture,
+                texture1: None,
                 env: default(),
                 blend,
             };
+            crate::n64_material::attach_texture1(
+                &mut material,
+                &disc.rom,
+                &part.key,
+                palette,
+                segs,
+                images,
+            );
             (meshes.add(part_mesh(part, scale)), materials.add(material))
         })
         .collect()

@@ -6,9 +6,8 @@
 //! settled (`switch_changed_flag` is one frame long), so a press mid-fade
 //! leaves the local state alone. Leaving the room runs fNS_dt, writing the
 //! local state back to the switch bit. The water list reads its environment
-//! colour from the draw code: (0, 180, 255, fade alpha). Its second tile's
-//! scroll (two_tex_scroll_dolphin) needs TEXEL1, which the renderer does not
-//! model, so the water does not flow.
+//! colour from the draw code: (0, 180, 255, fade alpha); its second tile
+//! scrolls by `-counter * 10` (two_tex_scroll_dolphin), giving the flow.
 use super::*;
 use crate::house::{CurrentRoom, HouseState};
 use crate::player_room::{PlayerRoom, RoomPiece};
@@ -35,7 +34,6 @@ pub(crate) struct SprinklerRig {
     state: Option<Sprinkler>,
     switch: Option<u8>,
     ticks: f32,
-    alpha: Option<u8>,
     pub(crate) sound_on: bool,
 }
 
@@ -94,7 +92,6 @@ pub(super) fn spawn(
         state: None,
         switch: None,
         ticks: 0.0,
-        alpha: None,
         sound_on: false,
     });
 }
@@ -109,6 +106,7 @@ pub(crate) fn update(
     children: Query<&Children>,
     handles: Query<&MeshMaterial3d<N64Material>>,
     mut materials: ResMut<Assets<N64Material>>,
+    images: Res<Assets<Image>>,
 ) {
     let shown = crate::house::is_player_room(&current, &house);
     for (mut rig, at, piece) in &mut rigs {
@@ -145,15 +143,15 @@ pub(crate) fn update(
         rig.state = Some(state);
         rig.sound_on = state.on && room.clock_sound_allowed(piece);
         let alpha = state.water_alpha();
-        if rig.alpha != Some(alpha) {
-            rig.alpha = Some(alpha);
-            let [r, g, b] = native::WATER_ENV;
-            let env = Vec4::new(r as f32, g as f32, b as f32, f32::from(alpha)) / 255.0;
-            for entity in children.iter_descendants(rig.water) {
-                if let Ok(handle) = handles.get(entity) {
-                    if let Some(mut m) = materials.get_mut(handle.id()) {
-                        m.combiner.env = env;
-                    }
+        let [r, g, b] = native::WATER_ENV;
+        let env = Vec4::new(r as f32, g as f32, b as f32, f32::from(alpha)) / 255.0;
+        // fNS_dw: fNS_GetTwoTileGfx(0, 0, 0, -counter * 10).
+        let scroll = state.tile1_scroll();
+        for entity in children.iter_descendants(rig.water) {
+            if let Ok(handle) = handles.get(entity) {
+                if let Some(mut m) = materials.get_mut(handle.id()) {
+                    m.combiner.env = env;
+                    crate::n64_material::set_tile1_scroll(&mut m, &images, 0, scroll);
                 }
             }
         }

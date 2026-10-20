@@ -14,6 +14,8 @@ struct Combiner {
     extra: vec4<f32>,
     // G_TEXTURE_GEN: uv = (s', t') * xy - zw.
     texgen: vec4<f32>,
+    // Tile 1: xy scale tile-0 UVs to tile 1, zw its origin shift.
+    tile1: vec4<f32>,
     flags: u32,
 };
 
@@ -25,11 +27,14 @@ const FLAG_NO_SHADE: u32 = 16u;
 const FLAG_BLEND: u32 = 32u;
 const FLAG_FOG: u32 = 64u;
 const FLAG_TEXGEN: u32 = 2048u;
+const FLAG_TEX1: u32 = 4096u;
 const FLAG_OPAQUE: u32 = 128u;
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> cc: Combiner;
 @group(#{MATERIAL_BIND_GROUP}) @binding(1) var tex: texture_2d<f32>;
 @group(#{MATERIAL_BIND_GROUP}) @binding(2) var tex_sampler: sampler;
+@group(#{MATERIAL_BIND_GROUP}) @binding(4) var tex1: texture_2d<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(5) var tex1_sampler: sampler;
 
 struct Env {
     ambient: vec4<f32>,
@@ -82,6 +87,8 @@ fn texgen_uv(n: vec3<f32>) -> vec2<f32> {
 struct Inputs {
     combined: vec4<f32>,
     texel: vec4<f32>,
+    // TEXEL1: tile 1 when bound, else tile 0.
+    texel1: vec4<f32>,
     shade: vec4<f32>,
 };
 
@@ -89,7 +96,8 @@ struct Inputs {
 fn common_rgb(sel: u32, i: Inputs) -> vec3<f32> {
     switch sel {
         case 0u: { return i.combined.rgb; }
-        case 1u, 2u: { return i.texel.rgb; }
+        case 1u: { return i.texel.rgb; }
+        case 2u: { return i.texel1.rgb; }
         case 3u: { return cc.prim.rgb; }
         case 4u: { return i.shade.rgb; }
         case 5u: { return cc.env.rgb; }
@@ -110,7 +118,8 @@ fn color_b(sel: u32, i: Inputs) -> vec3<f32> {
 fn color_c(sel: u32, i: Inputs) -> vec3<f32> {
     switch sel {
         case 7u: { return vec3(i.combined.a); }
-        case 8u, 9u: { return vec3(i.texel.a); }
+        case 8u: { return vec3(i.texel.a); }
+        case 9u: { return vec3(i.texel1.a); }
         case 10u: { return vec3(cc.prim.a); }
         case 11u: { return vec3(i.shade.a); }
         case 12u: { return vec3(cc.env.a); }
@@ -128,7 +137,8 @@ fn color_d(sel: u32, i: Inputs) -> vec3<f32> {
 fn alpha_abd(sel: u32, i: Inputs) -> f32 {
     switch sel {
         case 0u: { return i.combined.a; }
-        case 1u, 2u: { return i.texel.a; }
+        case 1u: { return i.texel.a; }
+        case 2u: { return i.texel1.a; }
         case 3u: { return cc.prim.a; }
         case 4u: { return i.shade.a; }
         case 5u: { return cc.env.a; }
@@ -139,7 +149,8 @@ fn alpha_abd(sel: u32, i: Inputs) -> f32 {
 
 fn alpha_c(sel: u32, i: Inputs) -> f32 {
     switch sel {
-        case 1u, 2u: { return i.texel.a; }
+        case 1u: { return i.texel.a; }
+        case 2u: { return i.texel1.a; }
         case 3u: { return cc.prim.a; }
         case 4u: { return i.shade.a; }
         case 5u: { return cc.env.a; }
@@ -164,6 +175,10 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
             uv = texgen_uv(normalize(in.world_normal));
         }
         i.texel = textureSample(tex, tex_sampler, uv + cc.extra.yz);
+    }
+    i.texel1 = i.texel;
+    if (cc.flags & FLAG_TEX1) != 0u {
+        i.texel1 = textureSample(tex1, tex1_sampler, in.uv * cc.tile1.xy + cc.tile1.zw);
     }
 
     // Shade: vertex colour, or the scene's ambient + sun + moon lights.
@@ -190,6 +205,11 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         i.combined = cycle(cc.color0, cc.alpha0, i);
         out = i.combined;
         if (cc.flags & FLAG_TWO_CYCLE) != 0u {
+            // emu64 combine_auto: second-cycle stages sample TEXMAP1, so
+            // TEXEL0 there reads tile 1 (as on the RDP).
+            if (cc.flags & FLAG_TEX1) != 0u {
+                i.texel = i.texel1;
+            }
             out = cycle(cc.color1, cc.alpha1, i);
         }
     }

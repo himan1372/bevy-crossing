@@ -761,3 +761,8 @@ the dev text is a DevOverlay hidden by default with F10 to toggle (Philip's
 choice). Shop wall clock (ac_house_clock) split to shop-wall-clock: blocked on
 legacy N64 tiles and segment-7 palettes. texel1-tile-scroll queued next per
 Philip. See completed/retail-hud-ui.md.
+
+2026-10-19 claude texel1-tile-scroll: tile 1 bound for two-cycle parts
+(TEXEL1, and cycle-2 TEXEL0 per emu64 combine_auto), Dolphin tile-size
+scroll on tile 1; sprinkler water flows, lawnmower grass scrolls. See
+completed/texel1-tile-scroll.md.

@@ -7,8 +7,9 @@
 //! texture, shade (vertex colour or simple lighting), primitive and
 //! environment colours.
 //!
-//! Not yet modelled: TEXEL1 (second tile; uses TEXEL0), noise, LOD
-//! fraction, chroma key and the full blender. Cutouts use a 0.5 cutoff;
+//! Tile 1 is bound for two-cycle parts that load it (TEXEL1, and cycle 2's
+//! TEXEL0 as in emu64 combine_auto); otherwise TEXEL1 falls back to tile 0.
+//! Not yet modelled: noise, LOD fraction, chroma key and the full blender. Cutouts use a 0.5 cutoff;
 //! explicitly opaque panels ignore combiner alpha, as emu64 does.
 
 use bevy::asset::{embedded_asset, RenderAssetUsages};
@@ -50,6 +51,8 @@ pub const FLAG_CULL_BACK: u32 = 512;
 pub(crate) const FLAG_MENU_LIGHTING: u32 = 1024;
 /// `G_TEXTURE_GEN`: texture coordinates from normals (see [`texgen_coefficients`]).
 pub const FLAG_TEXGEN: u32 = 2048;
+/// A decoded tile 1 is bound (see [`attach_texture1`]).
+pub const FLAG_TEX1: u32 = 4096;
 
 /// Mux selectors for one cycle: colour a b c d, alpha a b c d.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -93,6 +96,8 @@ pub struct CombinerUniform {
     pub extra: Vec4,
     /// Reflection mapping: uv = (s', t') * xy - zw.
     pub texgen: Vec4,
+    /// Tile 1: xy scales tile-0 UVs to tile 1's size, zw is its origin shift.
+    pub tile1: Vec4,
     pub flags: u32,
 }
 
@@ -135,6 +140,7 @@ impl CombinerUniform {
             env: rgba(key.env),
             extra: Vec4::new(key.prim_lod as f32 / 255.0, 0.0, 0.0, 0.0),
             texgen,
+            tile1: Vec4::new(1.0, 1.0, 0.0, 0.0),
             flags,
         }
     }
@@ -214,6 +220,10 @@ pub struct N64Material {
     #[texture(1)]
     #[sampler(2)]
     pub texture: Option<Handle<Image>>,
+    /// Tile 1 (two-cycle second-cycle TEXEL0 / TEXEL1); None uses tile 0.
+    #[texture(4)]
+    #[sampler(5)]
+    pub texture1: Option<Handle<Image>>,
     /// Translucent (`*_modelT`, XLU) geometry is alpha-blended. Other
     /// parts retain the existing cutout policy unless marked explicitly opaque.
     pub blend: bool,
@@ -353,6 +363,52 @@ impl Plugin for N64MaterialPlugin {
         embedded_asset!(app, "n64_combiner.wgsl");
         app.add_plugins(MaterialPlugin::<N64Material>::default());
     }
+}
+
+/// Decode `key`'s tile 1 and bind it, enabling FLAG_TEX1. Parts without a
+/// usable tile 1 keep sampling tile 0.
+pub fn attach_texture1(
+    material: &mut N64Material,
+    rom: &disc::RomImage,
+    key: &PartKey,
+    palette: Option<u32>,
+    segments: &crate::disc_gfx::Segments,
+    images: &mut Assets<Image>,
+) {
+    let (Some(tex0), Some(tex1)) = (key.tex.as_ref(), key.tex1.as_ref()) else {
+        return;
+    };
+    if tex1.width == 0 || tex1.height == 0 {
+        return;
+    }
+    let Some(rgba) = crate::disc_gfx::decode_texture(rom, tex1, palette, segments) else {
+        return;
+    };
+    material.texture1 = Some(images.add(texture_image(rgba, tex1)));
+    material.combiner.flags |= FLAG_TEX1;
+    material.combiner.tile1 = Vec4::new(
+        f32::from(tex0.width) / f32::from(tex1.width),
+        f32::from(tex0.height) / f32::from(tex1.height),
+        0.0,
+        0.0,
+    );
+}
+
+/// `gDPSetTileSize_Dolphin(tile1, x << 1, y << 1, ..)` from
+/// two_tex_scroll_dolphin on a material's bound tile 1: the RDP subtracts
+/// the 14-bit origin / 16 texels from the coordinate.
+pub fn set_tile1_scroll(material: &mut N64Material, images: &Assets<Image>, x: i32, y: i32) {
+    let Some(size) = material
+        .texture1
+        .as_ref()
+        .and_then(|h| images.get(h))
+        .map(|image| image.size_f32())
+    else {
+        return;
+    };
+    let origin = |v: i32| ((v << 1) & 0x3FFF) as f32 / 16.0;
+    material.combiner.tile1.z = -origin(x) / size.x.max(1.0);
+    material.combiner.tile1.w = -origin(y) / size.y.max(1.0);
 }
 
 #[cfg(test)]

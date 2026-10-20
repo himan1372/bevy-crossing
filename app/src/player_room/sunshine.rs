@@ -124,6 +124,7 @@ pub(super) fn spawn(
                 combiner,
                 env: default(),
                 texture: image,
+                texture1: None,
                 blend: true,
             });
             handles.push(material.clone());

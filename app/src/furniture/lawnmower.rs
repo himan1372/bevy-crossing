@@ -2,9 +2,8 @@
 //!
 //! fNLM_mv eases the grass level toward 1 while the mower is pushed (or
 //! waiting to be pushed) from its back on FLOOR_NPC026/048, else toward 0;
-//! fNLM_dw draws the grass list with primitive (120, 255, 180, level). The
-//! grass list's two-tile scroll needs TEXEL1, which the renderer does not
-//! model, so the grass does not scroll.
+//! fNLM_dw draws the grass list with primitive (120, 255, 180, level) and
+//! scrolls its second tile by `-10 * frame` (fFTR_GetTwoTileGfx).
 use super::*;
 use crate::house::{CurrentRoom, HouseState};
 use crate::player_room::{PlayerRoom, RoomPiece};
@@ -30,7 +29,6 @@ pub(crate) struct MowerRig {
     grass: Entity,
     level: f32,
     ticks: f32,
-    alpha: Option<u8>,
 }
 
 pub(super) fn spawn(
@@ -87,7 +85,6 @@ pub(super) fn spawn(
         grass,
         level: 0.0,
         ticks: 0.0,
-        alpha: None,
     });
 }
 
@@ -101,7 +98,10 @@ pub(crate) fn update(
     children: Query<&Children>,
     handles: Query<&MeshMaterial3d<N64Material>>,
     mut materials: ResMut<Assets<N64Material>>,
+    images: Res<Assets<Image>>,
 ) {
+    // fFTR_GetTwoTileGfx(16, 16, 0, 0, 16, 16, 0, 10, ..): ofs = game frame.
+    let frame = (time.elapsed_secs_f64() * 60.0) as i64 as i32;
     let shown = crate::house::is_player_room(&current, &house);
     for (mut rig, piece) in &mut rigs {
         if shown {
@@ -118,16 +118,14 @@ pub(crate) fn update(
             rig.ticks = 0.0;
         }
         let alpha = native::grass_alpha(rig.level);
-        if rig.alpha == Some(alpha) {
-            continue;
-        }
-        rig.alpha = Some(alpha);
         let [r, g, b] = native::GRASS_PRIM;
         let prim = Vec4::new(r as f32, g as f32, b as f32, f32::from(alpha)) / 255.0;
         for entity in children.iter_descendants(rig.grass) {
             if let Ok(handle) = handles.get(entity) {
                 if let Some(mut m) = materials.get_mut(handle.id()) {
                     m.combiner.prim = prim;
+                    let y = frame.wrapping_mul(10).wrapping_neg();
+                    crate::n64_material::set_tile1_scroll(&mut m, &images, 0, y);
                 }
             }
         }

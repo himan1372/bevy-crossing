@@ -224,6 +224,7 @@ fn spawn_net(
                 let material = materials.add(N64Material {
                     combiner: CombinerUniform::from_key(&part.key, false, false),
                     texture,
+                    texture1: None,
                     env: default(),
                     blend: false,
                 });

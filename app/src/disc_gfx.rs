@@ -222,6 +222,9 @@ pub struct PartKey {
     pub fog: bool,
     /// Texture coordinates come from normals (`G_TEXTURE_GEN`).
     pub texgen: Option<TexGen>,
+    /// Tile 1 for two-cycle combines: emu64 combine_auto samples TEXMAP1 in
+    /// the second cycle (TEXEL0 there reads tile 1), as the RDP does.
+    pub tex1: Option<TexKey>,
 }
 
 /// Triangles sharing one [`PartKey`].
@@ -321,6 +324,24 @@ impl GxBackend for TriangleSink {
             lit: state.geometry_mode & geo::G_LIGHTING != 0,
             two_cycle: state.othermode.is_2cycle(),
             fog: state.geometry_mode & geo::G_FOG != 0 && state.othermode.blends_fog(),
+            tex1: {
+                let t1 = &state.tiles[1];
+                (!self.inventory_mask
+                    && state.othermode.is_2cycle()
+                    && t1.img_addr != 0
+                    && t1.img_addr < UNRESOLVED
+                    && t1.width != 0
+                    && t1.height != 0)
+                    .then(|| TexKey {
+                        img_addr: t1.img_addr,
+                        format: t1.gx_format,
+                        width: t1.width,
+                        height: t1.height,
+                        wrap_s: t1.wrap_s,
+                        wrap_t: t1.wrap_t,
+                        tlut_addr: state.tluts[t1.tlut as usize % NUM_TLUTS].addr,
+                    })
+            },
             texgen: (textured && state.tex_gen).then_some(TexGen {
                 scale: state.texture_scale,
                 shift: (tile.shift_s, tile.shift_t),

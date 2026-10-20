@@ -235,6 +235,7 @@ fn spawn(
                                 &part.key, false, false,
                             ),
                             texture,
+                            texture1: None,
                             env: default(),
                             blend: false,
                         });
