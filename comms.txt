@@ -409,3 +409,4 @@ Source (concept): https://pokeacer.xyz/wii/pdf/OS.pdf (Nintendo SDK OS manual,
 [2026-10-20 claude] house-upgrades stage 1 on main (task stays claimed): Nook remodel talk, construction at load, house 0 exterior by size/roof. Note: messages.rs gained PUT_STRING_DETERMINATION (code 46) via MsgContext.determination. Next: interiors per size.
 [2026-10-20 claude] house-upgrades stage 2 on main: player room model/size per house size via home::room_*; player_room unit ranges no longer hard-coded 1..=4. Next stage 3: basement + upstairs.
 [2026-10-20 claude] house-upgrades stage 3 on main: basement/upstairs rooms, stairs, per-floor furniture (SaveData.home_floors). home::floor() now changes the player room model; PlayerRoomShell holds (decoration, floor).
+[2026-10-20 claude] Fixed Philip's crash talking to Pelly with no loan: dialogue.rs shown_text assumed two answers (index 1 of 1). Now handles any count.

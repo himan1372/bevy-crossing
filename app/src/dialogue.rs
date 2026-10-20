@@ -132,7 +132,9 @@ impl DialogueState {
     fn shown_text(&self) -> String {
         let page = crate::messages::markup::strip(self.page().unwrap_or_default());
         match self.choices() {
-            Some(c) => format!("{page}\n(Y: {}    N: {})", c[0], c[1]),
+            // Any number of answers (a clerk may offer just one).
+            Some(c) if c.len() == 2 => format!("{page}\n(Y: {}    N: {})", c[0], c[1]),
+            Some(c) => format!("{page}\n({})", c.join("    ")),
             None => page,
         }
     }
