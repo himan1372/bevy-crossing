@@ -4,13 +4,14 @@
 //! ac_police_box_move: walking in within sqrt(1100) game units of (x + 24,
 //! z + 40) facing between north and west enters at (200, 380); leaving puts
 //! the player at (x + 60, z + 60) facing south-east. Booker (SP_NPC_POLICE2)
-//! stands at unit (4, 6), greets a player who came through the door
+//! starts at unit (4, 6) and follows the player about the room, greets a player who came through the door
 //! (0x784 / 0x785 by whether anything is kept) and otherwise answers with
 //! 0x786 / 0x787 / 0x77D. The lost and found (mPB, 20 items) lies on the
 //! floor at the room's RSV_POLICE_ITEM units; A facing one makes Booker
 //! offer it (0x77E): yes takes it if the pockets have room (else 0x781).
 //! A new lost and found holds one common furniture item and two shirts
-//! (mPB_police_box_init). Copper's post outside is not modelled yet.
+//! (mPB_police_box_init); each new day it may gain one more
+//! (mPB_force_set_keep_item). Copper's post outside is in copper.rs.
 use bevy::prelude::*;
 
 use crate::dialogue::DialogueState;
@@ -54,6 +55,90 @@ impl LostAndFound {
     pub fn count(&self) -> usize {
         self.0.iter().filter(|&&i| i != 0).count()
     }
+
+    /// mPB_keep_item: items and furniture only, after the others; when
+    /// full the oldest goes. (The box is compacted first, as leaving it does,
+    /// mPB_copy_itemBuf.)
+    pub fn keep(&mut self, item: u16) {
+        if !matches!(item >> 12, 1..=3) {
+            return;
+        }
+        let mut kept: Vec<u16> = self.0.iter().copied().filter(|&i| i != 0).collect();
+        if kept.len() >= KEEP_COUNT {
+            kept.remove(0);
+        }
+        kept.push(item);
+        self.0 = [0; KEEP_COUNT];
+        for (slot, i) in self.0.iter_mut().zip(kept) {
+            *slot = i;
+        }
+        info!("lost and found keeps {item:#06x}");
+    }
+}
+
+/// The game day the lost and found last grew (m_all_grow once a day).
+#[derive(Resource, Default)]
+pub struct LostGrowDay(pub Option<i64>);
+
+/// mPB_force_set_keep_item, once on a new day: with five or fewer kept, a
+/// 50-50 chance of one more: goods 86% (furniture 36, stationery 23,
+/// clothing 30, carpet 6, wallpaper 5), a tool or sapling 5%, a flower bag
+/// 5%, an umbrella 4%.
+fn grow_lost_and_found(
+    mut lost: ResMut<LostAndFound>,
+    mut day: ResMut<LostGrowDay>,
+    disc: Option<Res<GameDisc>>,
+) {
+    let today = crate::clock::now().day_number;
+    if disc.is_none() || day.0 == Some(today) {
+        return;
+    }
+    let first = day.0.is_none();
+    day.0 = Some(today);
+    if first {
+        return;
+    }
+    let mut seed = (today as u32).wrapping_mul(2_654_435_761) ^ 0x9e37_79b9;
+    let mut below = |n: u32| {
+        seed ^= seed << 13;
+        seed ^= seed >> 17;
+        seed ^= seed << 5;
+        seed % n.max(1)
+    };
+    if lost.count() > 5 || below(2) == 0 {
+        return;
+    }
+    let roll = below(100);
+    let item = if roll <= 85 {
+        use crate::goods::Kind;
+        let goods = below(100);
+        let kind = [
+            (35, Kind::Furniture),
+            (58, Kind::Paper),
+            (88, Kind::Cloth),
+            (94, Kind::Carpet),
+        ]
+        .iter()
+        .find(|(top, _)| goods <= *top)
+        .map_or(Kind::Wallpaper, |(_, k)| *k);
+        let now = crate::goods::roll_now();
+        crate::goods::select(&now, kind, 1, &[], &mut below)
+            .first()
+            .copied()
+            .unwrap_or(0)
+    } else if roll <= 90 {
+        // ITM_NET, AXE, SHOVEL, ROD, SAPLING, CEDAR_SAPLING.
+        [0x2200, 0x2201, 0x2202, 0x2203, 0x2900, 0x2901][below(6) as usize]
+    } else if roll <= 95 {
+        // ITM_WHITE_PANSY_BAG ..
+        0x2902 + below(8) as u16
+    } else {
+        // mSP_RandomUmbSelect: one of the 32 shop umbrellas.
+        0x2204 + below(32) as u16
+    };
+    if item != 0 {
+        lost.keep(item);
+    }
 }
 
 #[derive(Resource)]
@@ -70,8 +155,165 @@ struct PoliceRoom {
     spots: Vec<((usize, usize), usize)>,
 }
 
-#[derive(Component)]
-struct Booker;
+/// aPOL2's state: his speed (game units a frame) and the zone he heads for.
+#[derive(Component, Default)]
+struct Booker {
+    speed: f32,
+    next_zone: Option<u8>,
+}
+
+/// aPOL2_get_zone: the room in a 4 x 5 grid (units x 0-1 / 2-4 / 5-7 / 8-,
+/// z 2..6 clamped).
+fn booker_zone(p: Vec2) -> u8 {
+    let ux = (p.x / UNIT).floor() as i32;
+    let uz = ((p.y / UNIT).floor() as i32).clamp(2, 6);
+    let x = match ux {
+        8.. => 3,
+        5..=7 => 2,
+        2..=4 => 1,
+        _ => 0,
+    };
+    ((uz - 2) * 4 + x) as u8
+}
+
+/// aPOL2_get_next_zone: the next zone on the way from `src` to `dst`
+/// (`coin` is RANDOM(2)).
+fn booker_next_zone(dst: u8, src: u8, coin: u8) -> u8 {
+    let (sx, sz, dx, dz) = (src % 4, src / 4, dst % 4, dst / 4);
+    let move_z = || -> u8 {
+        if sx == 0 || sx == 3 {
+            if sz < dz {
+                sx + (sz + 1) * 4
+            } else {
+                sx + (sz - 1) * 4
+            }
+        } else if sx == dx {
+            if sx == 1 {
+                sx + sz * 4 - 1
+            } else {
+                sx + sz * 4 + 1
+            }
+        } else if sx < dx {
+            sx + sz * 4 + 1
+        } else {
+            sx + sz * 4 - 1
+        }
+    };
+    if sz == 1 || sz == 3 {
+        if sz != dz {
+            move_z()
+        } else if sx == dx {
+            dst
+        } else {
+            sx + (sz + coin) * 4
+        }
+    } else if dz.abs_diff(sz) > 1 {
+        move_z()
+    } else if sx == dx {
+        dst
+    } else if sx < dx {
+        sx + sz * 4 + 1
+    } else {
+        sx + sz * 4 - 1
+    }
+}
+
+/// aPOL2 movement: he follows the player about the room, zone by zone,
+/// walking (max 1, +0.1 a frame) when near and running (max 4, +0.4)
+/// beyond about 70 units, stopping within 50; more than 90 degrees off he
+/// turns on the spot first (11.25 degrees a frame). He stays put to talk.
+fn booker_follow(
+    time: Res<Time>,
+    state: Res<State<ShopLocation>>,
+    focus: Res<InputFocus>,
+    room: Res<PoliceRoom>,
+    player: Query<&Transform, (With<Player>, Without<Booker>)>,
+    mut booker: Query<(&mut Transform, &mut Booker, &mut crate::character::NpcGait)>,
+) {
+    if *state != ShopLocation::PoliceBox {
+        return;
+    }
+    let (Ok(at), Ok((mut transform, mut booker, mut gait)), Some(room)) =
+        (player.single(), booker.single_mut(), room.room.as_ref())
+    else {
+        return;
+    };
+    let ticks = time.delta_secs() * 60.0;
+    let local = |p: Vec3| Vec2::new(p.x - POLICE_ORIGIN.x, p.z - POLICE_ORIGIN.z) * UNIT;
+    let (me, pl) = (local(transform.translation), local(at.translation));
+    let to_player = pl - me;
+    let dist2 = to_player.length_squared();
+    let yaw = {
+        let f = transform.rotation * Vec3::Z;
+        f.x.atan2(f.z)
+    };
+    let step = 11.25f32.to_radians() * ticks;
+    let chase = |from: f32, to: f32| {
+        let d = (to - from + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
+            - std::f32::consts::PI;
+        from + d.clamp(-step, step)
+    };
+    let face_player = to_player.x.atan2(to_player.y);
+    // aPOL2_decide_next_move_act.
+    let (max, accel) = if !focus.is_world() || dist2 < 50.0 * 50.0 - 50.0 {
+        (0.0, 0.0)
+    } else if dist2 < 70.0 * 70.0 + 100.0 {
+        (1.0, 0.1)
+    } else {
+        (4.0, 0.4)
+    };
+    let (now_zone, pl_zone) = (booker_zone(me), booker_zone(pl));
+    let target = if max == 0.0 {
+        booker.next_zone = None;
+        face_player
+    } else if pl_zone != now_zone {
+        let coin = (time.elapsed_secs() * 7.0) as u8 & 1;
+        let next = *booker
+            .next_zone
+            .get_or_insert_with(|| booker_next_zone(pl_zone, now_zone, coin));
+        // aPOL2_search_player2: the next zone's centre.
+        const POS_X: [f32; 4] = [60.0, 140.0, 260.0, 340.0];
+        const POS_Z: [f32; 5] = [100.0, 140.0, 180.0, 220.0, 300.0];
+        let centre = Vec2::new(POS_X[(next % 4) as usize], POS_Z[(next / 4) as usize]);
+        if (centre - me).length_squared() < 14.0 * 14.0 + 4.0 {
+            booker.next_zone = Some(booker_next_zone(pl_zone, now_zone, coin));
+        }
+        let d = centre - me;
+        d.x.atan2(d.y)
+    } else {
+        booker.next_zone = None;
+        face_player
+    };
+    let off = (target - yaw + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
+        - std::f32::consts::PI;
+    let new_yaw = chase(yaw, target);
+    transform.rotation = Quat::from_rotation_y(new_yaw);
+    // aPOL2_ACT_TURN: on the spot while more than 90 degrees off.
+    let (max, accel) = if off.abs() > std::f32::consts::FRAC_PI_2 {
+        (0.0, 0.0)
+    } else {
+        (max, accel)
+    };
+    booker.speed = if booker.speed < max {
+        (booker.speed + accel * ticks).min(max)
+    } else {
+        (booker.speed - (if max == 0.0 { 0.8 } else { 0.2 }) * ticks).max(max)
+    };
+    let dir = Vec2::new(new_yaw.sin(), new_yaw.cos());
+    let next = me + dir * booker.speed * ticks;
+    // Bumping a counter (ClObj_DID_COLLIDE): wait.
+    if booker.speed > 0.0 && room.free(next / UNIT) {
+        transform.translation.x = POLICE_ORIGIN.x + next.x / UNIT;
+        transform.translation.z = POLICE_ORIGIN.z + next.y / UNIT;
+    } else {
+        booker.speed = 0.0;
+    }
+    gait.0 = match booker.speed {
+        s if s <= 0.05 => 0,
+        s if s <= 1.5 => 1,
+        _ => 2,
+    };
+}
 
 #[derive(Component)]
 struct KeptItemModel;
@@ -120,6 +362,7 @@ fn locate(town: Res<Town>, mut commands: Commands) {
 /// mPB_police_box_init for a lost and found never filled.
 fn init_lost_and_found(
     mut lost: ResMut<LostAndFound>,
+    mut grow: ResMut<LostGrowDay>,
     loaded: Res<crate::save::LoadedSave>,
     disc: Option<Res<GameDisc>>,
     mut done: Local<bool>,
@@ -128,6 +371,7 @@ fn init_lost_and_found(
         return;
     }
     *done = true;
+    grow.0 = loaded.0.as_ref().and_then(|s| s.police_grow_day);
     if let Some(saved) = loaded.0.as_ref().and_then(|s| s.police_box) {
         lost.0 = saved;
         return;
@@ -194,7 +438,8 @@ fn build_room(
     info!("police box: {} lost-and-found spots", room.spots.len());
     commands.spawn((
         Name::new("Booker"),
-        Booker,
+        Booker::default(),
+        crate::character::NpcGait::default(),
         crate::character::NpcModel(BOOKER_NPC),
         Mesh3d(meshes.add(Capsule3d::new(0.35, 0.9))),
         Transform::from_translation(local(BOOKER) + Vec3::Y).looking_to(Vec3::NEG_Z, Vec3::Y),
@@ -311,6 +556,7 @@ fn leave(
     mut next: ResMut<NextState<ShopLocation>>,
     return_pos: Option<Res<ShopReturnPos>>,
     mut player: Query<(&mut Transform, &mut Facing), With<Player>>,
+    mut lost: ResMut<LostAndFound>,
 ) {
     if *state != ShopLocation::PoliceBox || !focus.is_world() {
         return;
@@ -328,6 +574,12 @@ fn leave(
         transform.translation = r.0;
     }
     facing.dir = Vec3::new(1.0, 0.0, 1.0).normalize();
+    // mPB_copy_itemBuf: the kept items close up on the way out.
+    let kept: Vec<u16> = lost.0.iter().copied().filter(|&i| i != 0).collect();
+    lost.0 = [0; KEEP_COUNT];
+    for (slot, item) in lost.0.iter_mut().zip(kept) {
+        *slot = item;
+    }
     crate::sound::door_sound(None, false);
     next.set(ShopLocation::Town);
     info!("left the police box");
@@ -340,6 +592,7 @@ fn movement(
     time: Res<Time>,
     room: Res<PoliceRoom>,
     mut player: Query<(&mut Transform, &mut Facing, &mut Locomotion), With<Player>>,
+    booker: Query<&Transform, (With<Booker>, Without<Player>)>,
 ) {
     if *state != ShopLocation::PoliceBox || !focus.is_world() {
         return;
@@ -349,11 +602,19 @@ fn movement(
     else {
         return;
     };
+    let before = transform.translation;
     room.walk(
         &actions,
         time.delta_secs(),
         (&mut transform, &mut facing, &mut loco),
     );
+    // Booker is solid: no stepping closer once bodies touch.
+    if let Ok(b) = booker.single() {
+        let gap = |p: Vec3| (p - b.translation).with_y(0.0).length();
+        if gap(transform.translation) < 0.7 && gap(transform.translation) < gap(before) {
+            transform.translation = before;
+        }
+    }
 }
 
 fn context(identity: &crate::save::PlayerIdentity) -> MsgContext {
@@ -518,11 +779,13 @@ impl Plugin for PoliceBoxPlugin {
         app.init_resource::<PoliceRoom>()
             .init_resource::<Talk>()
             .init_resource::<LostAndFound>()
+            .init_resource::<LostGrowDay>()
             .add_systems(Startup, locate.after(crate::town::generate_town))
             .add_systems(
                 Update,
                 (
                     init_lost_and_found,
+                    grow_lost_and_found,
                     build_room.run_if(resource_exists::<GameDisc>),
                     draw_items,
                 )
@@ -537,7 +800,7 @@ impl Plugin for PoliceBoxPlugin {
             .add_systems(Update, talk.in_set(InteractSet::Talk).in_set(GameplaySet))
             .add_systems(
                 Update,
-                movement
+                (movement, booker_follow)
                     .in_set(crate::locomotion::MovementSet)
                     .in_set(GameplaySet),
             );

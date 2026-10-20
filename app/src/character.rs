@@ -252,6 +252,40 @@ pub struct CharacterRig {
     furniture_phase: Option<u8>,
     toy_phase: Option<(u16, bool)>,
     pose_morph: f32,
+    /// The special clip playing (`NpcClip`), by name.
+    clip: Option<(&'static str, Arc<Animation>)>,
+}
+
+/// A special NPC's own disc animation in place of standing (Copper's
+/// exercises and dozing): `cKF_ba_r_npc_1_*` by name, looped (counting
+/// `loops`) or played once and held (`done`). `morph` is the blend in
+/// frames (the clip's `morph_counter`).
+#[derive(Component, Default)]
+pub struct NpcClip {
+    pub name: Option<&'static str>,
+    pub once: bool,
+    pub morph: f32,
+    pub loops: u32,
+    pub done: bool,
+}
+
+/// A special NPC's stride: 0 standing, 1 walking, 2 running.
+#[derive(Component, Default, Clone, Copy)]
+pub struct NpcGait(pub u8);
+
+impl NpcClip {
+    pub fn start(&mut self, name: &'static str, once: bool, morph: f32) {
+        *self = Self {
+            name: Some(name),
+            once,
+            morph,
+            ..default()
+        };
+    }
+
+    pub fn stop(&mut self, morph: f32) {
+        *self = Self { morph, ..default() };
+    }
 }
 
 impl CharacterRig {
@@ -468,6 +502,7 @@ fn spawn_rig(
         furniture_phase: None,
         toy_phase: None,
         pose_morph: 0.0,
+        clip: None,
     });
     debug!("{} face parts", face_parts.len());
     if !face_parts.is_empty() {
@@ -770,6 +805,52 @@ fn play(
     contacts
 }
 
+/// Steps an `NpcClip`, loading it from the disc when it changes; false
+/// when there is none (or it is not on the disc), to play standing instead.
+fn play_clip(
+    rig: &mut CharacterRig,
+    clip: &mut NpcClip,
+    disc: Option<&GameDisc>,
+    ticks: f32,
+    transforms: &mut Query<&mut Transform>,
+) -> bool {
+    let current = rig.clip.as_ref().map(|(n, _)| *n);
+    if clip.name != current {
+        rig.clip = clip.name.and_then(|name| {
+            let a = disc?.catalog.get(name)?;
+            let anim = Animation::read(&disc?.rom, a.offset, rig.skeleton.joints.len())?;
+            Some((name, Arc::new(anim)))
+        });
+        rig.frame = 1.0;
+        // Back to standing restarts its loop too.
+        rig.playing = Motion::Wait;
+        rig.pose_morph = clip.morph;
+    }
+    let Some((_, anim)) = rig.clip.clone() else {
+        return false;
+    };
+    let last = anim.frames.max(2) as f32;
+    rig.frame += WAIT_SPEED * ticks;
+    if clip.once {
+        if rig.frame >= last {
+            rig.frame = last;
+            clip.done = true;
+        }
+    } else {
+        while rig.frame >= last {
+            rig.frame -= last - 1.0;
+            clip.loops += 1;
+        }
+    }
+    let locals = anim.pose(rig.frame).local_transforms(&rig.skeleton);
+    for (&joint, local) in rig.joints.iter().zip(locals) {
+        if let Ok(mut t) = transforms.get_mut(joint) {
+            *t = local;
+        }
+    }
+    true
+}
+
 /// World units per second above which a villager walks / runs (between
 /// their wander speeds, see `npc.rs`).
 const VILLAGER_WALK_MIN: f32 = 0.3;
@@ -782,7 +863,15 @@ fn animate_characters(
     time: Res<Time>,
     players: Query<(&Locomotion, &Facing), With<Player>>,
     villagers: Query<(&GlobalTransform, &Villager, Option<&VillagerTalk>)>,
-    npcs: Query<Option<&crate::shop_nook::Shopkeeper>, With<NpcModel>>,
+    mut npcs: Query<
+        (
+            Option<&crate::shop_nook::Shopkeeper>,
+            Option<&mut NpcClip>,
+            Option<&NpcGait>,
+        ),
+        With<NpcModel>,
+    >,
+    disc: Option<Res<GameDisc>>,
     mut rigs: Query<(Entity, &ChildOf, &mut CharacterRig)>,
     mut transforms: Query<&mut Transform>,
     focus: Res<crate::input::InputFocus>,
@@ -923,13 +1012,35 @@ fn animate_characters(
                     }
                 }
             }
-        } else if let Ok(keeper) = npcs.get(owner) {
-            let motion = if keeper.is_some_and(|n| n.walking) {
-                Motion::Walk
-            } else {
-                Motion::Wait
-            };
-            play(&mut rig, motion, WAIT_SPEED, ticks, &mut transforms);
+        } else if let Ok((keeper, clip, gait)) = npcs.get_mut(owner) {
+            let previous = (rig.pose_morph > 0.0).then(|| {
+                rig.joints
+                    .iter()
+                    .map(|&joint| transforms.get(joint).copied().unwrap_or_default())
+                    .collect::<Vec<_>>()
+            });
+            let played = clip.is_some_and(|mut clip| {
+                play_clip(&mut rig, &mut clip, disc.as_deref(), ticks, &mut transforms)
+            });
+            if !played {
+                let (motion, speed) = match gait.map(|g| g.0) {
+                    Some(2) => (Motion::Run, 1.0),
+                    Some(1) => (Motion::Walk, WAIT_SPEED),
+                    _ if keeper.is_some_and(|n| n.walking) => (Motion::Walk, WAIT_SPEED),
+                    _ => (Motion::Wait, WAIT_SPEED),
+                };
+                play(&mut rig, motion, speed, ticks, &mut transforms);
+            }
+            if let Some(previous) = previous {
+                let weight = (ticks / rig.pose_morph).min(1.0);
+                for (&joint, old) in rig.joints.iter().zip(previous) {
+                    if let Ok(mut t) = transforms.get_mut(joint) {
+                        t.translation = old.translation.lerp(t.translation, weight);
+                        t.rotation = old.rotation.slerp(t.rotation, weight);
+                    }
+                }
+                rig.pose_morph = (rig.pose_morph - ticks).max(0.0);
+            }
         } else if let Ok((g, villager, talk)) = villagers.get(owner) {
             let pos = g.translation();
             let moved = rig.last_pos.map_or(0.0, |p| (pos - p).with_y(0.0).length());

@@ -72,6 +72,9 @@ pub struct SaveData {
     /// The police box's lost and found; `None` before it existed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub police_box: Option<[u16; 20]>,
+    /// The day the lost and found last grew.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub police_grow_day: Option<i64>,
     /// House size, orders and roof colour; `None` before upgrades existed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub house: Option<crate::home::HouseSave>,
@@ -391,6 +394,7 @@ fn collect_save(
         loan: inventory.loan,
         house: None,
         police_box: None,
+        police_grow_day: None,
         museum: None,
         pockets: Some(inventory.pockets.pockets.to_vec()),
         pocket_conds: inventory.pockets.item_conditions,
@@ -496,7 +500,7 @@ fn quick_save(
     quest: Res<crate::quest::QuestState>,
     mut timer: ResMut<NotifyTimer>,
     notify_query: Query<&mut Text, With<NotifyText>>,
-    (look, roster, identity, room, home, floors, lost, museum): (
+    (look, roster, identity, room, home, floors, lost, museum, grow): (
         Res<PlayerLook>,
         Option<Res<crate::roster::TownRoster>>,
         Res<PlayerIdentity>,
@@ -505,6 +509,7 @@ fn quick_save(
         Res<crate::player_room::floors::HomeFloors>,
         Option<Res<crate::police_box::LostAndFound>>,
         Option<Res<crate::museum::MuseumCollection>>,
+        Option<Res<crate::police_box::LostGrowDay>>,
     ),
 ) {
     // Furniture movement already has an atomic committed destination. Other
@@ -538,6 +543,7 @@ fn quick_save(
     save.home_floors = extra.iter().any(Option::is_some).then_some(extra);
     save.house = home.map(|h| h.0);
     save.police_box = lost.map(|l| l.0);
+    save.police_grow_day = grow.and_then(|g| g.0);
     save.museum = museum.map(|m| m.save());
     save.player_cloth = Some(look.cloth as u16);
     if let Some(r) = roster {

@@ -791,3 +791,5 @@ completed/shop-wall-clock.md.
 2026-10-20 claude police-box: interior, Booker, lost and found. See completed/police-box.md.
 
 2026-10-20 claude museum: lobby, wings, Blathers, donating, fossil and painting displays. Fish/insect displays next. See completed/museum.md.
+
+2026-10-20 claude police-officers: Copper outside (schedule, talk, menu), Booker follows, lost-and-found daily growth. See completed/police-officers.md.

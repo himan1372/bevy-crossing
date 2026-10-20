@@ -65,7 +65,10 @@ pub fn player_movement(
     net: Res<crate::player_tools::NetAction>,
     toys: Res<crate::player_toys::ToyAction>,
     time: Res<Time>,
-    statue: Option<Res<crate::statue::StatueUnit>>,
+    (statue, copper): (
+        Option<Res<crate::statue::StatueUnit>>,
+        Option<Res<crate::copper::CopperUnit>>,
+    ),
 ) {
     if *state != HouseState::Town || *shop_loc != crate::shop::ShopLocation::Town {
         return;
@@ -88,6 +91,7 @@ pub fn player_movement(
                 .as_ref()
                 .is_some_and(|s| crate::shop::point_blocked(s, x, z))
                 || statue.as_ref().is_some_and(|s| s.blocks(x, z))
+                || copper.as_ref().is_some_and(|c| c.blocks(x, z))
         };
 
         // Try X movement

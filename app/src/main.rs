@@ -7,6 +7,7 @@ mod ambience;
 mod assets;
 mod character;
 mod clock;
+mod copper;
 mod critters;
 mod dev_overlay;
 mod dialogue;
@@ -140,6 +141,7 @@ fn main() {
         .add_plugins(post_office::PostOfficePlugin)
         .add_plugins(police_box::PoliceBoxPlugin)
         .add_plugins(museum::MuseumPlugin)
+        .add_plugins(copper::CopperPlugin)
         .add_plugins(home::HomePlugin)
         .add_plugins(statue::StatuePlugin)
         .add_plugins(furniture::house_clock::HouseClockPlugin)
