@@ -619,7 +619,9 @@ fn update_music(
     let previous_volume = bgm.volume.current;
     bgm.volume.advance(time.delta_secs());
 
-    let scene = if *shop.get() == crate::shop::ShopLocation::PoliceBox {
+    let scene = if *shop.get() == crate::shop::ShopLocation::Museum {
+        music_policy::Scene::Museum
+    } else if *shop.get() == crate::shop::ShopLocation::PoliceBox {
         music_policy::Scene::PoliceBox
     } else if *shop.get() == crate::shop::ShopLocation::PostOffice {
         music_policy::Scene::PostOffice(crate::post_office::night_clerk())

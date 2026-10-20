@@ -66,6 +66,9 @@ pub struct SaveData {
     /// Upstairs and basement furniture (`home_furniture` is the main floor).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) home_floors: Option<[Option<crate::player_room::RoomSave>; 2]>,
+    /// The museum's donations; `None` before the museum existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub museum: Option<crate::museum::MuseumSave>,
     /// The police box's lost and found; `None` before it existed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub police_box: Option<[u16; 20]>,
@@ -388,6 +391,7 @@ fn collect_save(
         loan: inventory.loan,
         house: None,
         police_box: None,
+        museum: None,
         pockets: Some(inventory.pockets.pockets.to_vec()),
         pocket_conds: inventory.pockets.item_conditions,
         fruit: 0,
@@ -492,7 +496,7 @@ fn quick_save(
     quest: Res<crate::quest::QuestState>,
     mut timer: ResMut<NotifyTimer>,
     notify_query: Query<&mut Text, With<NotifyText>>,
-    (look, roster, identity, room, home, floors, lost): (
+    (look, roster, identity, room, home, floors, lost, museum): (
         Res<PlayerLook>,
         Option<Res<crate::roster::TownRoster>>,
         Res<PlayerIdentity>,
@@ -500,6 +504,7 @@ fn quick_save(
         Option<Res<crate::home::PlayerHouse>>,
         Res<crate::player_room::floors::HomeFloors>,
         Option<Res<crate::police_box::LostAndFound>>,
+        Option<Res<crate::museum::MuseumCollection>>,
     ),
 ) {
     // Furniture movement already has an atomic committed destination. Other
@@ -533,6 +538,7 @@ fn quick_save(
     save.home_floors = extra.iter().any(Option::is_some).then_some(extra);
     save.house = home.map(|h| h.0);
     save.police_box = lost.map(|l| l.0);
+    save.museum = museum.map(|m| m.save());
     save.player_cloth = Some(look.cloth as u16);
     if let Some(r) = roster {
         save.villagers = Some(r.residents.iter().map(|e| e.index).collect());
@@ -573,11 +579,12 @@ fn quick_load(
     mut quest: ResMut<crate::quest::QuestState>,
     mut timer: ResMut<NotifyTimer>,
     notify_query: Query<&mut Text, With<NotifyText>>,
-    (home, mut floors, mut commands, lost): (
+    (home, mut floors, mut commands, lost, museum): (
         Option<ResMut<crate::home::PlayerHouse>>,
         ResMut<crate::player_room::floors::HomeFloors>,
         Commands,
         Option<ResMut<crate::police_box::LostAndFound>>,
+        Option<ResMut<crate::museum::MuseumCollection>>,
     ),
 ) {
     if !actions.just_pressed(Action::QuickLoad)
@@ -594,6 +601,9 @@ fn quick_load(
     floors.restore(save.home_floors.as_ref());
     if let (Some(mut lost), Some(kept)) = (lost, save.police_box) {
         lost.0 = kept;
+    }
+    if let Some(mut museum) = museum {
+        museum.restore(save.museum.as_ref());
     }
     room.restore(save.home_furniture.as_ref(), disc.as_deref());
     if disc.is_some() {

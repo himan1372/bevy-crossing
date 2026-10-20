@@ -37,6 +37,7 @@ mod mailbox;
 mod messages;
 mod model_view;
 mod msg_window;
+mod museum;
 mod n64_material;
 mod npc;
 mod pause_menu;
@@ -138,6 +139,7 @@ fn main() {
         .add_plugins(idle_clock::IdleClockPlugin)
         .add_plugins(post_office::PostOfficePlugin)
         .add_plugins(police_box::PoliceBoxPlugin)
+        .add_plugins(museum::MuseumPlugin)
         .add_plugins(home::HomePlugin)
         .add_plugins(statue::StatuePlugin)
         .add_plugins(furniture::house_clock::HouseClockPlugin)

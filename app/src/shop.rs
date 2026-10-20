@@ -38,6 +38,7 @@ pub enum ShopLocation {
     Inside,
     PostOffice,
     PoliceBox,
+    Museum,
 }
 
 /// Exterior shop building: door position plus the blocked footprint the
@@ -1174,9 +1175,10 @@ fn update_shop_hud(
     for mut vis in query.iter_mut() {
         *vis = match *state.get() {
             ShopLocation::Inside => Visibility::Visible,
-            ShopLocation::Town | ShopLocation::PostOffice | ShopLocation::PoliceBox => {
-                Visibility::Hidden
-            }
+            ShopLocation::Town
+            | ShopLocation::PostOffice
+            | ShopLocation::PoliceBox
+            | ShopLocation::Museum => Visibility::Hidden,
         };
     }
 }

@@ -345,3 +345,5 @@
 {"action":"complete","task":"house-upgrades","agent":"claude","timestamp":"2026-10-20T19:15:22Z"}
 {"action":"claim","task":"police-box","agent":"claude","timestamp":"2026-10-20T19:16:10Z"}
 {"action":"complete","task":"police-box","agent":"claude","timestamp":"2026-10-20T19:33:05Z"}
+{"action":"claim","task":"museum","agent":"claude","timestamp":"2026-10-20T19:36:10Z"}
+{"action":"complete","task":"museum","agent":"claude","timestamp":"2026-10-20T19:57:37Z"}

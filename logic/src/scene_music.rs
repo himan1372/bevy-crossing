@@ -25,6 +25,8 @@ pub enum Scene {
     PostOffice(bool),
     /// `mFI_FIELD_ROOM_POLICE_BOX`.
     PoliceBox,
+    /// The museum's five rooms.
+    Museum,
 }
 
 /// Music ID (resolved through the disc's SEQ_TABLE), plus hourly arrangement.
@@ -43,6 +45,7 @@ pub fn select(scene: Scene, day_secs: u32, weather: FieldWeather) -> Option<Trac
         Scene::PlayerHouse => return None,
         Scene::PostOffice(night) => (crate::post_office::music(night), 0),
         Scene::PoliceBox => (45, 0),
+        Scene::Museum => (88, 0),
         Scene::Town => {
             let hour = (day_secs / 3600 % 24) as usize;
             match weather {

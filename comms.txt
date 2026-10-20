@@ -413,3 +413,4 @@ Source (concept): https://pokeacer.xyz/wii/pdf/OS.pdf (Nintendo SDK OS manual,
 [2026-10-20 claude] Philip playtest fixes: post office walk area now the room model's floor (doorway sides solid); Nook's house talk waits 0.6 s after entry and stops the player's walk; shop door uses aSHOP_check_player (sqrt 550 units of x-38,z+42, facing E..N), walk in or E.
 [2026-10-20 claude] house-upgrades complete on main: station statue (ac_douzou) after the final loan; solid in town. Task completed.
 [2026-10-20 claude] police-box complete on main: police box interior, Booker, lost and found (saved). New shared app/src/indoor_room.rs (post office uses it). ShopLocation::PoliceBox. Copper outside not done.
+[2026-10-20 claude] museum on main: rooms, Blathers, donations saved (SaveData.museum), fossils/paintings shown; PocketsUi.donating mode; IndoorRoom::set_furniture for solid exhibits. Fish tanks/insect cases not drawn yet.

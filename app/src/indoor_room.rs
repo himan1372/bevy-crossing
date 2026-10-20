@@ -33,9 +33,16 @@ pub(crate) struct IndoorRoom {
     /// Surface height above the floor (cells) per sample; NaN: no surface.
     heights: Vec<f32>,
     blocked: Vec<Rect>,
+    /// Solid furniture units placed in the room (exhibits), room-local.
+    furniture: Vec<(i32, i32)>,
 }
 
 impl IndoorRoom {
+    /// Replace the solid furniture units (whole cells, room-local).
+    pub(crate) fn set_furniture(&mut self, units: Vec<(i32, i32)>) {
+        self.furniture = units;
+    }
+
     /// Draw `opaque` (and `translucent`) at `origin` and measure the floor.
     pub(crate) fn build(
         commands: &mut Commands,
@@ -106,6 +113,7 @@ impl IndoorRoom {
             floor: vec![false; (nx.max(0) * nz.max(0)) as usize],
             heights: vec![f32::NAN; (nx.max(0) * nz.max(0)) as usize],
             blocked: Vec::new(),
+            furniture: Vec::new(),
         };
         for z in 0..nz {
             let mut start = None;
@@ -178,6 +186,12 @@ impl IndoorRoom {
                     && p.x - PLAYER_RADIUS < r.max.x
                     && p.y + PLAYER_RADIUS > r.min.y
                     && p.y - PLAYER_RADIUS < r.max.y
+            })
+            && !self.furniture.iter().any(|&(x, z)| {
+                p.x + PLAYER_RADIUS > x as f32
+                    && p.x - PLAYER_RADIUS < (x + 1) as f32
+                    && p.y + PLAYER_RADIUS > z as f32
+                    && p.y - PLAYER_RADIUS < (z + 1) as f32
             })
     }
 
