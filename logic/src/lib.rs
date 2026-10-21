@@ -88,7 +88,7 @@ pub mod letter_score;
 pub mod lights;
 pub mod mail;
 mod mck_key_tables;
-mod mother_mail;
+pub mod mother_mail;
 mod move_bg;
 pub mod movement;
 mod mtx;

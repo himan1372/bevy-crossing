@@ -62,6 +62,12 @@ pub struct Post {
     pub museum: MuseumRecord,
     /// The last day the daily work was done.
     pub day: Option<i64>,
+    /// mPr_mother_mail_info_c: the last date Mom's mail was considered
+    /// (None: never) and which of her letters have been sent.
+    #[serde(default)]
+    pub mother_date: Option<(u16, u8, u8)>,
+    #[serde(default)]
+    pub mother_sent: [u8; 10],
 }
 
 impl Post {
@@ -265,6 +271,112 @@ fn random_fossil(disc: &GameDisc, seed: &mut u32) -> u16 {
     pool[rand(seed, pool.len() as u32) as usize]
 }
 
+/// The sender name on Mom's letters.
+pub const MOM_NAME: &str = "Mom";
+
+/// mPr_SendMailFromMother, once a day: special dates first (birthday,
+/// month == day, April Fools, Mother's and Father's Day, Toy Day), else a
+/// one-in-five chance of one of her 56 letters, then her seasonal ones.
+fn mother_mail(
+    disc: &GameDisc,
+    post: &mut Post,
+    mailbox: &mut Mailbox,
+    identity: &crate::save::PlayerIdentity,
+    fruit: u16,
+    seed: &mut u32,
+) {
+    use rustimal_logic::mother_mail as mom;
+    let now = crate::clock::now();
+    let today = mom::RtcYmd {
+        year: now.year,
+        month: now.month,
+        day: now.day,
+    };
+    let mut info = mom::MotherMailInfo {
+        date: post
+            .mother_date
+            .map_or(mom::CLEAR_DATE, |(year, month, day)| mom::RtcYmd {
+                year,
+                month,
+                day,
+            }),
+        data: mom::MotherMailData::from_bytes(post.mother_sent),
+    };
+    let sunday = |month: u8, week: i32| {
+        now.month == month
+            && now.day == rustimal_logic::game_time::weekly_day(now.year, month, week, 0)
+    };
+    let ctx = mom::MotherMailCtx {
+        is_local_player: true,
+        has_private: true,
+        has_player_id: true,
+        // The port keeps no birthday yet.
+        birthday: (0, 0),
+        // mEv_EVENT_MOTHERS_DAY: May's 2nd Sunday; FATHERS_DAY: June's 3rd.
+        mothers_day_active: sunday(5, 2),
+        fathers_day_active: sunday(6, 3),
+        house_mailbox_has_room: mailbox.has_room(),
+        post_office_has_room: !post.desk_full(),
+    };
+    let outcome = mom::send_mail_from_mother(&mut info, &today, &ctx, &mut |n| rand(seed, n));
+    post.mother_date = Some((info.date.year, info.date.month, info.date.day));
+    post.mother_sent = info.data.bytes();
+    let letter = match outcome {
+        mom::StepOutcome::Special(letter, _) | mom::StepOutcome::Normal(Some(letter)) => letter,
+        _ => return,
+    };
+    if letter.delivery == mom::Delivery::Failed {
+        return;
+    }
+    // The presents the scheduler leaves to the game.
+    let roll = crate::goods::roll_now();
+    let mut pick = |kind| {
+        crate::goods::select(&roll, kind, 1, &[], &mut |n| rand(seed, n))
+            .first()
+            .copied()
+            .unwrap_or(0)
+    };
+    let present = match letter.present {
+        mom::PresentSpec::None => 0,
+        mom::PresentSpec::Item(item) => item,
+        mom::PresentSpec::RandomClothing => pick(crate::goods::Kind::Cloth),
+        mom::PresentSpec::RandomFurniture => pick(crate::goods::Kind::Furniture),
+        // mSP_RandomUmbSelect: one of the 32 shop umbrellas.
+        mom::PresentSpec::RandomUmbrella => 0x2204 + rand(seed, 32) as u16,
+        // mFI_GetOtherFruit (retail): one of four, stepping past the native.
+        mom::PresentSpec::OtherFruit => {
+            let other = 0x2800 | rand(seed, 4) as u16;
+            if other == fruit {
+                other + 1
+            } else {
+                other
+            }
+        }
+        // FTR_START(FTR_SUM_BDCAKE01 / DOLL02 / PL_DRACAENA).
+        mom::PresentSpec::BirthdayCake => 0x11FC,
+        mom::PresentSpec::Doll => 0x10E8,
+        mom::PresentSpec::Dracaena => 0x13B0,
+    };
+    let ctx = letter_context(identity);
+    let Some(mail) = disc_letter(
+        disc,
+        letter.mail_no as usize,
+        &ctx,
+        MOM_NAME,
+        letter.paper,
+        present,
+    ) else {
+        return;
+    };
+    info!("Mom wrote (mail {:#05x})", letter.mail_no);
+    match letter.delivery {
+        mom::Delivery::HouseMailbox => {
+            mailbox.push(mail);
+        }
+        _ => post.store.push(mail),
+    }
+}
+
 /// mMl_send_mail: the mailbox if it has room, else the post office.
 fn send(letter: Letter, mailbox: &mut Mailbox, post: &mut Post) -> bool {
     if mailbox.has_room() {
@@ -288,6 +400,7 @@ fn daily(
     identity: Res<crate::save::PlayerIdentity>,
     collection: Res<crate::museum::MuseumCollection>,
     villagers: Query<&crate::npc::Villager>,
+    field: Option<Res<crate::field_items::FieldItems>>,
     mut seed: Local<u32>,
 ) {
     let Some(disc) = disc.filter(|d| d.text.is_some()) else {
@@ -302,6 +415,8 @@ fn daily(
         *seed = (today as u32).wrapping_mul(0x9E37_79B9) | 1;
     }
     let names: Vec<&str> = villagers.iter().map(|v| v.name).collect();
+    let fruit = field.as_ref().map_or(0x2800, |f| f.fruit);
+    mother_mail(&disc, &mut post, &mut mailbox, &identity, fruit, &mut seed);
 
     // mNpc_Remail: replies to letters from an earlier day, through the
     // post office while it has room.

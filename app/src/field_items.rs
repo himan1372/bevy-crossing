@@ -83,6 +83,8 @@ const RND_Z: [[f32; 4]; 4] = [
 #[derive(Resource)]
 pub struct FieldItems {
     pub acres: Vec<[u16; 256]>,
+    /// The town's native fruit (Save_Get(fruit)).
+    pub fruit: u16,
     /// The new town's grid: what the save's changes are measured from.
     base: Vec<[u16; 256]>,
     /// Shells waiting to wash up (`l_reserve_set_shell`).
@@ -101,6 +103,7 @@ impl FieldItems {
         let fruit = logic::decide_fruit(&mut rng);
         logic::change_tree_to_fruit_tree(&mut acres, ACRE_WIDTH, fruit, &mut rng);
         Self {
+            fruit,
             base: acres.clone(),
             acres,
             reserved_shells: SET_SHELL_NUM,

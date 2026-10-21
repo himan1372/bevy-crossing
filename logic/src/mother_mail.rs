@@ -115,6 +115,15 @@ pub struct MotherMailData {
 }
 
 impl MotherMailData {
+    /// The raw 10-byte block, for saving.
+    pub fn bytes(&self) -> [u8; 10] {
+        self.bytes
+    }
+
+    pub fn from_bytes(bytes: [u8; 10]) -> Self {
+        Self { bytes }
+    }
+
     fn normal_pos(idx: usize) -> (usize, u8) {
         (idx / 8, (idx % 8) as u8)
     }
