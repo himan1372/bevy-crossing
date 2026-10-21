@@ -66,6 +66,10 @@ pub struct SaveData {
     /// Upstairs and basement furniture (`home_furniture` is the main floor).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) home_floors: Option<[Option<crate::player_room::RoomSave>; 2]>,
+    /// The collection record, tickets waiting for the mail and catalog
+    /// orders.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub catalog: Option<crate::catalog::CatalogSave>,
     /// The house mailbox's letters (the pockets' are `letters`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub house_mail: Vec<crate::mail::Letter>,
@@ -409,6 +413,7 @@ fn collect_save(
         post: None,
         villager_memory: Vec::new(),
         house_mail: Vec::new(),
+        catalog: None,
         pockets: Some(inventory.pockets.pockets.to_vec()),
         pocket_conds: inventory.pockets.item_conditions,
         fruit: 0,
@@ -513,7 +518,21 @@ fn quick_save(
     quest: Res<crate::quest::QuestState>,
     mut timer: ResMut<NotifyTimer>,
     notify_query: Query<&mut Text, With<NotifyText>>,
-    (look, roster, identity, room, home, floors, lost, museum, grow, post, memory, house_mail): (
+    (
+        look,
+        roster,
+        identity,
+        room,
+        home,
+        floors,
+        lost,
+        museum,
+        grow,
+        post,
+        memory,
+        house_mail,
+        catalog,
+    ): (
         Res<PlayerLook>,
         Option<Res<crate::roster::TownRoster>>,
         Res<PlayerIdentity>,
@@ -526,6 +545,7 @@ fn quick_save(
         Option<Res<crate::post::Post>>,
         Option<Res<crate::villager_memory::VillagerMemory>>,
         Option<Res<crate::mail::HouseMailbox>>,
+        Option<Res<crate::catalog::Catalog>>,
     ),
 ) {
     // Furniture movement already has an atomic committed destination. Other
@@ -566,6 +586,7 @@ fn quick_save(
         .map(|m| m.0.iter().cloned().collect())
         .unwrap_or_default();
     save.house_mail = house_mail.map(|h| h.0.letters.clone()).unwrap_or_default();
+    save.catalog = catalog.map(|c| c.save());
     save.player_cloth = Some(look.cloth as u16);
     if let Some(r) = roster {
         save.villagers = Some(r.residents.iter().map(|e| e.index).collect());
@@ -606,7 +627,7 @@ fn quick_load(
     mut quest: ResMut<crate::quest::QuestState>,
     mut timer: ResMut<NotifyTimer>,
     notify_query: Query<&mut Text, With<NotifyText>>,
-    (home, mut floors, mut commands, lost, museum, post, memory, house_mail): (
+    (home, mut floors, mut commands, lost, museum, post, memory, house_mail, catalog): (
         Option<ResMut<crate::home::PlayerHouse>>,
         ResMut<crate::player_room::floors::HomeFloors>,
         Commands,
@@ -615,6 +636,7 @@ fn quick_load(
         Option<ResMut<crate::post::Post>>,
         Option<ResMut<crate::villager_memory::VillagerMemory>>,
         Option<ResMut<crate::mail::HouseMailbox>>,
+        Option<ResMut<crate::catalog::Catalog>>,
     ),
 ) {
     if !actions.just_pressed(Action::QuickLoad)
@@ -643,6 +665,9 @@ fn quick_load(
     }
     if let Some(mut house_mail) = house_mail {
         house_mail.0.letters = save.house_mail.clone();
+    }
+    if let Some(mut catalog) = catalog {
+        catalog.restore(save.catalog.as_ref());
     }
     room.restore(save.home_furniture.as_ref(), disc.as_deref());
     if disc.is_some() {

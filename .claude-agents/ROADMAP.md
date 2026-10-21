@@ -795,3 +795,4 @@ completed/shop-wall-clock.md.
 2026-10-20 claude police-officers: Copper outside (schedule, talk, menu), Booker follows, lost-and-found daily growth. See completed/police-officers.md.
 
 2026-10-20 claude post-office-mail: real letters, counter sending, delivery, villager replies, museum appraisal. See completed/post-office-mail.md.
+2026-10-21 claude nook-tickets-catalog stage 1: tickets with purchases, ticket/order start-up mail, raffle (fukubiki), collection bits. Catalog screen/ordering open. See backlog/nook-tickets-catalog.md.

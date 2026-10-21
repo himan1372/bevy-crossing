@@ -191,10 +191,11 @@ fn interact(
     mut inventory: ResMut<PlayerInventory>,
     mut shop: ResMut<ShopData>,
     identity: Res<crate::save::PlayerIdentity>,
-    (mut home, mut inside_for, time): (
+    (mut home, mut inside_for, time, mut catalog): (
         Option<ResMut<crate::home::PlayerHouse>>,
         Local<Option<f32>>,
         Res<Time>,
+        ResMut<crate::catalog::Catalog>,
     ),
 ) {
     let Some(disc) = disc.filter(|d| d.text.is_some()) else {
@@ -202,6 +203,10 @@ fn interact(
     };
     if *location != ShopLocation::Inside {
         *inside_for = None;
+        return;
+    }
+    // On the raffle day Nook runs the raffle instead (raffle.rs).
+    if crate::raffle::raffle_day() {
         return;
     }
     let Ok((actor, nook_transform)) = nook.single() else {
@@ -299,14 +304,27 @@ fn interact(
                     crate::shop::maybe_upgrade(&mut shop.shop);
                     crate::sound::se(crate::sound::se_id::REGISTER);
                     info!("Nook purchase stock={index} item={item:#06x} price={price}");
-                    // aNSC_sell_answer0's tool-specific response.
-                    match item {
-                        0x2200 => 101,
-                        0x2201 => 103,
-                        0x2202 => 100,
-                        0x2203 => 102,
-                        0x251E => 104,
-                        _ => 34,
+                    // aNSC_sell_answer0: a lottery ticket with furniture,
+                    // clothing, wallpaper, carpets and umbrellas, onto this
+                    // month's stack or a free slot (GIVE_TICKET), else by
+                    // mail (MAIL_TICKET); otherwise the tool's own line.
+                    let month = crate::clock::now().month;
+                    if crate::catalog::comes_with_ticket(item) {
+                        if crate::catalog::give_ticket(&mut inventory.pockets.pockets, month) {
+                            51
+                        } else {
+                            catalog.ticket_by_mail(month);
+                            52
+                        }
+                    } else {
+                        match item {
+                            0x2200 => 101,
+                            0x2201 => 103,
+                            0x2202 => 100,
+                            0x2203 => 102,
+                            0x251E => 104,
+                            _ => 34,
+                        }
                     }
                 };
                 say(&disc, &mut dialogue, actor, &flow.context, response);

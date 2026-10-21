@@ -64,6 +64,15 @@ struct GoodsLists {
 
 static LISTS: OnceLock<GoodsLists> = OnceLock::new();
 
+/// The disc's raw list `index` of `kind` (mSP_LIST_*: 0-2 A-C, 3 event,
+/// 4 train, 5 lottery ...).
+pub fn list(kind: Kind, index: usize) -> Vec<ItemId> {
+    LISTS
+        .get()
+        .and_then(|g| g.lists.get(kind as usize)?.get(index).cloned())
+        .unwrap_or_default()
+}
+
 /// Reads the goods lists once the disc is loaded.
 pub fn install(disc: &GameDisc) {
     let rom = &disc.rom;

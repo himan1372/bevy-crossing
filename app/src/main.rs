@@ -5,6 +5,7 @@ use bevy::prelude::*;
 
 mod ambience;
 mod assets;
+mod catalog;
 mod character;
 mod clock;
 mod copper;
@@ -56,6 +57,7 @@ mod post;
 mod post_office;
 mod postman;
 mod quest;
+mod raffle;
 mod remote;
 mod roster;
 mod save;
@@ -151,6 +153,8 @@ fn main() {
         .add_plugins(museum_insect::MuseumInsectPlugin)
         .add_plugins(copper::CopperPlugin)
         .add_plugins(post::PostPlugin)
+        .add_plugins(catalog::CatalogPlugin)
+        .add_plugins(raffle::RafflePlugin)
         .add_plugins(postman::PostmanPlugin)
         .add_plugins(villager_memory::VillagerMemoryPlugin)
         .add_plugins(home::HomePlugin)
