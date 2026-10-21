@@ -9,6 +9,11 @@
 //! mailbox is empty (`flag_off1` 1-17), all at 0.5 frames a tick; the
 //! winter skeleton uses the summer animations.
 //!
+//! The body plays `post_open1` when the player opens the box (frames 1 to
+//! 31, then back to 1 to close; SE 0x146 at 18, 0x147 at 4) and
+//! `post_delivery1` when Pete fills it (1-98; 0x146 at 14, 0x147 at 80).
+//! The owner hears the waving flag ring once a second (SE 0x43B).
+//!
 //! The flag tip (joint 3) is drawn after `post_flag_saki_model_type0`
 //! (`flag2_TA` in segment 8) or, while waving, `_type1` with the
 //! `flag_on_wait1` EVW texture animation in segment 9: a 30 fps pattern
@@ -57,6 +62,9 @@ struct MailboxModels {
     up: FlagAnim,
     wait: FlagAnim,
     down: FlagAnim,
+    /// `cKF_ba_r_obj_s_post_open1` and `_delivery1` (body joints).
+    open: Option<Animation>,
+    delivery: Option<Animation>,
     /// Tip: down/rising, then the EVW textures.
     tip_still: Model,
     tip_wave: Vec<Model>,
@@ -64,10 +72,23 @@ struct MailboxModels {
     pattern: Vec<u8>,
 }
 
+/// What the box itself is doing (`aMBX_REQUEST_*`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum BoxAction {
+    /// Opening for the player (frames 1 to 31); holds open at 31.
+    Open,
+    /// Closing again (31 back to 1).
+    Close,
+    /// Pete putting letters in (1-98).
+    Delivery,
+}
+
 /// A mailbox's flag state.
 #[derive(Component)]
 pub struct MailboxFlag {
-    house: usize,
+    pub house: usize,
+    /// The body track, while the box opens, closes or takes letters.
+    pub action: Option<(BoxAction, f32)>,
     flag: Flag,
     frame: f32,
     /// Joint index -> its part entity.
@@ -246,6 +267,8 @@ fn load(
             up: flag("cKF_ba_r_obj_s_post_flag_on1")?,
             wait: flag("cKF_ba_r_obj_s_post_flag_on_wait1")?,
             down: flag("cKF_ba_r_obj_s_post_flag_off1")?,
+            open: anim("cKF_ba_r_obj_s_post_open1"),
+            delivery: anim("cKF_ba_r_obj_s_post_delivery1"),
             skeleton: skel,
             tip_still,
             tip_wave,
@@ -267,15 +290,23 @@ fn joint_transform(m: Mat4) -> Transform {
 }
 
 impl MailboxModels {
-    /// Joint matrices with the flag joints at `frame` of `flag`.
-    fn pose(&self, flag: Flag, frame: f32) -> Vec<Mat4> {
+    /// Joint matrices with the flag joints at `frame` of `flag` and the
+    /// body at its action's frame (else at rest).
+    fn pose(&self, flag: Flag, frame: f32, action: Option<(BoxAction, f32)>) -> Vec<Mat4> {
         let anim = match flag {
             Flag::Up => &self.up,
             Flag::UpWait => &self.wait,
             Flag::Down => &self.down,
         };
         let flag_locals = anim.anim.pose(frame).local_transforms(&self.skeleton);
-        let mut locals = self.body.clone();
+        let body = action.and_then(|(a, f)| {
+            let anim = match a {
+                BoxAction::Open | BoxAction::Close => self.open.as_ref(),
+                BoxAction::Delivery => self.delivery.as_ref(),
+            }?;
+            Some(anim.pose(f).local_transforms(&self.skeleton))
+        });
+        let mut locals = body.unwrap_or_else(|| self.body.clone());
         for j in FLAG_JOINTS {
             if let (Some(l), Some(f)) = (locals.get_mut(j), flag_locals.get(j)) {
                 *l = *f;
@@ -319,7 +350,7 @@ pub fn spawn_mailboxes(
                 Visibility::default(),
             ))
             .id();
-        let world = models.pose(Flag::Down, models.down.end);
+        let world = models.pose(Flag::Down, models.down.end, None);
         let mut joints = Vec::new();
         let mut spawn_joint = |commands: &mut Commands, j: usize, model: &Model| {
             let joint = commands
@@ -350,6 +381,7 @@ pub fn spawn_mailboxes(
         let tip_parts = spawn_joint(commands, TIP_JOINT, &models.tip_still);
         commands.entity(root).insert(MailboxFlag {
             house,
+            action: None,
             // aMBX_actor_ct: anim_idx1 starts at NUM, so check_flag goes
             // straight to UP_WAIT with mail, else plays FLAG_DOWN.
             flag: Flag::Down,
@@ -365,18 +397,65 @@ pub fn spawn_mailboxes(
 fn animate_flags(
     time: Res<Time>,
     models: Res<MailboxModels>,
-    mail: Res<crate::mail::Mailbox>,
+    mail: Res<crate::mail::HouseMailbox>,
     mut flags: Query<(&GlobalTransform, &mut MailboxFlag)>,
     mut transforms: Query<&mut Transform>,
     mut parts: Query<(&mut Mesh3d, &mut MeshMaterial3d<N64Material>)>,
     mut first: Local<bool>,
+    mut ring: Local<f32>,
 ) {
     let ticks = time.delta_secs() * 60.0;
-    // Only the player's house (0) gets letters here; unread ones stand in
-    // for the mail the retail mailbox holds.
-    let has_mail = mail.letters.iter().any(|l| !l.read);
+    // aMBX_check_flag: any letter in the house's mailbox (the player's is
+    // house 0).
+    let has_mail = !mail.0.letters.is_empty();
+    // The owner's waving flag rings once a second (accumulated, PC).
+    *ring += time.delta_secs();
+    let ring_now = *ring >= 1.0;
+    if ring_now {
+        *ring -= 1.0;
+    }
     for (position, mut f) in &mut flags {
         let mail_here = f.house == 0 && has_mail;
+        if ring_now && mail_here && f.flag == Flag::UpWait {
+            crate::sound::se_at(0x43B, position.translation());
+        }
+        // The body's own track.
+        if let Some((action, frame)) = f.action {
+            let step = FLAG_SPEED * ticks;
+            let (next, sounds, done): (f32, &[(f32, u16)], bool) = match action {
+                BoxAction::Open => {
+                    let n = (frame + step).min(31.0);
+                    (n, &[(18.0, 0x146)], false)
+                }
+                BoxAction::Close => {
+                    let n = (frame - step).max(1.0);
+                    (n, &[(4.0, 0x147)], n <= 1.0)
+                }
+                BoxAction::Delivery => {
+                    let n = frame + step;
+                    (n.min(98.0), &[(14.0, 0x146), (80.0, 0x147)], n >= 98.0)
+                }
+            };
+            for &(at, id) in sounds {
+                let crossed = if action == BoxAction::Close {
+                    frame > at && next <= at
+                } else {
+                    frame < at && next >= at
+                };
+                if crossed {
+                    crate::sound::se_at(id, position.translation());
+                }
+            }
+            f.action = if done { None } else { Some((action, next)) };
+            let world = models.pose(f.flag, f.frame, f.action);
+            for &(j, e) in &f.joints {
+                if !FLAG_JOINTS.contains(&j) {
+                    if let Ok(mut t) = transforms.get_mut(e) {
+                        *t = joint_transform(world[j]);
+                    }
+                }
+            }
+        }
         let want = match (mail_here, f.flag) {
             (false, _) => Flag::Down,
             (true, Flag::UpWait) => Flag::UpWait,
@@ -419,7 +498,7 @@ fn animate_flags(
                 Flag::Down => f.frame = anim.end,
             }
         }
-        let world = models.pose(f.flag, f.frame);
+        let world = models.pose(f.flag, f.frame, f.action);
         for &(j, e) in &f.joints {
             if FLAG_JOINTS.contains(&j) {
                 if let Ok(mut t) = transforms.get_mut(e) {
@@ -458,7 +537,7 @@ impl Plugin for MailboxPlugin {
             animate_flags.run_if(
                 in_state(crate::states::AppState::InGame)
                     .and_then(resource_exists::<MailboxModels>)
-                    .and_then(resource_exists::<crate::mail::Mailbox>),
+                    .and_then(resource_exists::<crate::mail::HouseMailbox>),
             ),
         );
     }

@@ -227,6 +227,7 @@ fn leave(
     mut next: ResMut<NextState<ShopLocation>>,
     return_pos: Option<Res<ShopReturnPos>>,
     mut player: Query<(&mut Transform, &mut Facing), With<Player>>,
+    mut post: ResMut<crate::post::Post>,
 ) {
     if *state != ShopLocation::PostOffice
         || !focus.is_world()
@@ -246,6 +247,10 @@ fn leave(
         transform.translation = r.0;
     }
     facing.dir = Vec3::new(-1.0, 0.0, 1.0).normalize();
+    // aPG_actor_dt: a full desk sends Pete out straight away.
+    if post.desk_full() {
+        post.force = true;
+    }
     crate::sound::door_sound(None, false);
     next.set(ShopLocation::Town);
     info!("left the post office");

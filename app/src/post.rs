@@ -9,13 +9,13 @@
 //! presents), sends its address the first day (mMsm_SendInformationMail)
 //! and a gift when everything is on show (mMsm_SendCompMail).
 //!
-//! Letters land in the one letter store the pockets and the mailbox share.
+//! Letters land in the house mailbox (`HouseMailbox`).
 use bevy::prelude::*;
 use rustimal_logic::museum::{self as museum, Mailed};
 use serde::{Deserialize, Serialize};
 
 use crate::game_disc::GameDisc;
-use crate::mail::{Letter, Mailbox, Recipient};
+use crate::mail::{HouseMailbox, Letter, Mailbox, Recipient};
 use crate::messages::MsgContext;
 
 /// mPO_MAIL_STORAGE_SIZE.
@@ -68,6 +68,9 @@ pub struct Post {
     pub mother_date: Option<(u16, u8, u8)>,
     #[serde(default)]
     pub mother_sent: [u8; 10],
+    /// force_mail_delivery_flag: the counter was left with a full desk.
+    #[serde(default)]
+    pub force: bool,
 }
 
 impl Post {
@@ -396,7 +399,7 @@ fn send(letter: Letter, mailbox: &mut Mailbox, post: &mut Post) -> bool {
 fn daily(
     disc: Option<Res<GameDisc>>,
     mut post: ResMut<Post>,
-    mut mailbox: ResMut<Mailbox>,
+    mut house_box: ResMut<HouseMailbox>,
     identity: Res<crate::save::PlayerIdentity>,
     collection: Res<crate::museum::MuseumCollection>,
     villagers: Query<&crate::npc::Villager>,
@@ -416,7 +419,8 @@ fn daily(
     }
     let names: Vec<&str> = villagers.iter().map(|v| v.name).collect();
     let fruit = field.as_ref().map_or(0x2800, |f| f.fruit);
-    mother_mail(&disc, &mut post, &mut mailbox, &identity, fruit, &mut seed);
+    let mailbox = &mut house_box.0;
+    mother_mail(&disc, &mut post, mailbox, &identity, fruit, &mut seed);
 
     // mNpc_Remail: replies to letters from an earlier day, through the
     // post office while it has room.
@@ -459,7 +463,7 @@ fn daily(
             else {
                 break;
             };
-            if !send(letter, &mut mailbox, &mut post) {
+            if !send(letter, mailbox, &mut post) {
                 break;
             }
             post.museum.remail.remove(0);
@@ -472,7 +476,7 @@ fn daily(
             let Some(letter) = disc_letter(&disc, no, &ctx, MUSEUM_NAME, paper, fossil) else {
                 break;
             };
-            if !send(letter, &mut mailbox, &mut post) {
+            if !send(letter, mailbox, &mut post) {
                 break;
             }
             post.museum.stored_fossils -= 1;
@@ -505,22 +509,9 @@ fn daily(
     }
 }
 
-/// mPO_business_proc / mPO_delivery_proc: at 09:00 and 17:00 the store's
-/// letters go to the mailbox, those that fit.
-fn deliver(mut post: ResMut<Post>, mut mailbox: ResMut<Mailbox>) {
-    let now = crate::clock::now();
-    let key = now.day_number * 24 + i64::from(now.hour);
-    let next_after = |hour: u8, day: i64| {
-        let (h, tomorrow) = rustimal_logic::mail::next_delivery_time(hour);
-        (day + i64::from(tomorrow)) * 24 + i64::from(h)
-    };
-    let Some(next) = post.next_delivery else {
-        post.next_delivery = Some(next_after(now.hour, now.day_number));
-        return;
-    };
-    if key < next {
-        return;
-    }
+/// mPO_delivery_mail_sub: the store's letters into the house mailbox,
+/// those that fit; the rest wait.
+pub fn deliver_to_house(post: &mut Post, mailbox: &mut Mailbox) {
     let mut kept = Vec::new();
     for letter in std::mem::take(&mut post.store) {
         if mailbox.has_room() {
@@ -531,6 +522,72 @@ fn deliver(mut post: ResMut<Post>, mut mailbox: ResMut<Mailbox>) {
         }
     }
     post.store = kept;
+}
+
+/// Who brings the mail this time (mPO_make_post_man).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Courier {
+    /// Pete flies in to the houses (birth type 0).
+    Pete,
+    /// Pete takes off from the post office (birth type 1); the mail goes
+    /// in once he has flown.
+    PeteFromPostOffice,
+}
+
+/// Set when Pete is to come (the postman module spawns him).
+#[derive(Resource, Default)]
+pub struct CourierCall(pub Option<Courier>);
+
+/// mPO_business_proc / mPO_delivery_proc: at 09:00 and 17:00, or when the
+/// counter was left full (force_mail_delivery_flag). With the player in
+/// the houses' acre Pete flies in; in the post office's acre after a full
+/// desk he takes off from there; anywhere else (or indoors) the letters
+/// simply arrive.
+#[allow(clippy::too_many_arguments)]
+fn deliver(
+    mut post: ResMut<Post>,
+    mut house_box: ResMut<HouseMailbox>,
+    mut call: ResMut<CourierCall>,
+    town: Res<crate::town::Town>,
+    shop: Res<State<crate::shop::ShopLocation>>,
+    house: Res<State<crate::house::HouseState>>,
+    player: Query<&Transform, With<crate::player::Player>>,
+) {
+    let now = crate::clock::now();
+    let key = now.day_number * 24 + i64::from(now.hour);
+    let next_after = |hour: u8, day: i64| {
+        let (h, tomorrow) = rustimal_logic::mail::next_delivery_time(hour);
+        (day + i64::from(tomorrow)) * 24 + i64::from(h)
+    };
+    let Some(next) = post.next_delivery else {
+        post.next_delivery = Some(next_after(now.hour, now.day_number));
+        return;
+    };
+    if (key < next && !post.force) || call.0.is_some() {
+        return;
+    }
+    let outdoors = *shop.get() == crate::shop::ShopLocation::Town
+        && *house.get() == crate::house::HouseState::Town;
+    let acre = |p: Vec3| crate::town::Town::cell_indices_of(p).map(|(ax, az, _, _)| (ax, az));
+    let here = player.single().ok().and_then(|t| acre(t.translation));
+    let retail = town.retail.as_ref();
+    let houses = retail
+        .and_then(|r| r.mailboxes[0])
+        .map(|(ax, az, _, _)| (ax, az));
+    let post_office = retail
+        .and_then(|r| r.buildings.iter().find(|b| b.item == 0x5808))
+        .and_then(|b| acre(b.origin));
+    call.0 = match () {
+        _ if outdoors && here.is_some() && here == houses => Some(Courier::Pete),
+        _ if outdoors && post.force && here.is_some() && here == post_office => {
+            Some(Courier::PeteFromPostOffice)
+        }
+        _ => None,
+    };
+    if call.0.is_none() {
+        deliver_to_house(&mut post, &mut house_box.0);
+    }
+    post.force = false;
     post.next_delivery = Some(next_after(now.hour, now.day_number));
 }
 
@@ -545,6 +602,7 @@ pub struct PostPlugin;
 impl Plugin for PostPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Post>()
+            .init_resource::<CourierCall>()
             .add_systems(Startup, load)
             .add_systems(
                 Update,

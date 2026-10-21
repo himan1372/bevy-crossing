@@ -54,6 +54,7 @@ mod pockets_disc;
 mod police_box;
 mod post;
 mod post_office;
+mod postman;
 mod quest;
 mod remote;
 mod roster;
@@ -150,6 +151,7 @@ fn main() {
         .add_plugins(museum_insect::MuseumInsectPlugin)
         .add_plugins(copper::CopperPlugin)
         .add_plugins(post::PostPlugin)
+        .add_plugins(postman::PostmanPlugin)
         .add_plugins(villager_memory::VillagerMemoryPlugin)
         .add_plugins(home::HomePlugin)
         .add_plugins(statue::StatuePlugin)

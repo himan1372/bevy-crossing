@@ -12,8 +12,10 @@
 //! office counter (post.rs delivers, villagers reply, the museum answers).
 //! Letters from others are the disc's own (`GameText::letter`).
 //!
-//! Simplification vs. retail: the pockets' ten letters and the house
-//! mailbox's ten are one store here.
+//! The pockets hold ten letters (`Mailbox`) and the house mailbox ten more
+//! (`HouseMailbox`, `mHm_hs_c.mailbox`): deliveries land in the mailbox,
+//! and opening it moves its letters into the pockets, one every three
+//! frames (mTG_trans_mail, SE 0x446), the last first.
 
 use bevy::ecs::message::MessageReader;
 use bevy::input::keyboard::{Key, KeyboardInput};
@@ -91,7 +93,20 @@ pub struct Letter {
     pub to: Option<Recipient>,
 }
 
-/// The player's mailbox: received letters plus sent ones.
+/// The house's mailbox (`mHm_hs_c.mailbox`, ten letters), filled by
+/// deliveries and emptied into the pockets when opened.
+#[derive(Resource, Default)]
+pub struct HouseMailbox(pub Mailbox);
+
+impl HouseMailbox {
+    /// mMB_get_last_mail_idx: the letter in the highest slot.
+    fn take_last(&mut self) -> Option<Letter> {
+        let index = self.0.slots().iter().rev().flatten().next().copied()?;
+        Some(self.0.letters.remove(index))
+    }
+}
+
+/// The player's letters (`Private_c.mail`, the pockets' ten).
 #[derive(Resource, Default)]
 pub struct Mailbox {
     pub letters: Vec<Letter>,
@@ -451,11 +466,13 @@ fn spawn_mailbox(
     town: Res<crate::town::Town>,
     loaded: Option<Res<crate::save::LoadedSave>>,
     mut mailbox: ResMut<Mailbox>,
+    mut house_box: ResMut<HouseMailbox>,
 ) {
     let Some(house) = house else { return };
     if let Some(save) = loaded.as_ref().and_then(|l| l.0.as_ref()) {
         mailbox.letters = save.letters.clone();
         mailbox.sent = save.sent_letters.clone();
+        house_box.0.letters = save.house_mail.clone();
         println!("Restored {} letters from save", mailbox.letters.len());
     }
     // The disc town draws the real mailbox at the layout's MAILBOX0.
@@ -499,10 +516,11 @@ fn mailbox_interact(
     state: Res<State<HouseState>>,
     shop_loc: Res<State<crate::shop::ShopLocation>>,
     tool: Res<crate::ecology::EquippedTool>,
-    mut ui: ResMut<MailUi>,
+    ui: Res<MailUi>,
     mailbox_pos: Option<Res<MailboxPos>>,
     player_query: Query<(&Transform, &Facing), With<Player>>,
-    mut panel_query: Query<&mut Visibility, With<MailPanel>>,
+    mut pockets: ResMut<crate::pockets::PocketsUi>,
+    mut boxes: Query<&mut crate::mailbox::MailboxFlag>,
 ) {
     // Inside the house or shop, E belongs to the doors.
     if *state != HouseState::Town || *shop_loc != crate::shop::ShopLocation::Town {
@@ -535,20 +553,70 @@ fn mailbox_interact(
     if facing.dir.dot(to_box / dist) < MAILBOX_DOT || !actions.consume(Action::Interact) {
         return;
     }
-    ui.open = true;
-    ui.from_pockets = false;
-    ui.page = 0;
-    ui.menu = None;
-    ui.grabbed = None;
-    ui.discard = false;
-    crate::sound::se(crate::sound::se_id::PANEL_OPEN);
-    ui.selected = 0;
-    ui.reading = None;
-    ui.writing = false;
-    if let Ok(mut vis) = panel_query.single_mut() {
-        *vis = Visibility::Visible;
+    // aMBX_pl_open: the box opens, then the pockets in mailbox mode.
+    if let Some(mut b) = boxes.iter_mut().find(|b| b.house == 0) {
+        b.action = Some((crate::mailbox::BoxAction::Open, 1.0));
     }
-    println!("Mailbox opened");
+    pockets.mailbox_wait = true;
+    info!("mailbox opening");
+}
+
+/// The visit to the mailbox: once the box is open the pockets open with its
+/// letters moving in (mTG_check_trans_mail, one every three frames); when
+/// the pockets close, so does the box.
+fn mailbox_visit(
+    time: Res<Time>,
+    mut pockets: ResMut<crate::pockets::PocketsUi>,
+    mut boxes: Query<&mut crate::mailbox::MailboxFlag>,
+    mut house_box: ResMut<HouseMailbox>,
+    mut mailbox: ResMut<Mailbox>,
+    mut ticks: Local<f32>,
+) {
+    let Some(mut b) = boxes.iter_mut().find(|b| b.house == 0) else {
+        pockets.mailbox_wait = false;
+        return;
+    };
+    if pockets.mailbox_wait {
+        let open = matches!(b.action, Some((crate::mailbox::BoxAction::Open, f)) if f >= 31.0);
+        if open || b.action.is_none() {
+            pockets.mailbox_wait = false;
+            *pockets = crate::pockets::PocketsUi {
+                open: true,
+                at_mailbox: true,
+                ..default()
+            };
+            *ticks = 0.0;
+            crate::sound::se(crate::sound::se_id::PANEL_OPEN);
+        }
+        return;
+    }
+    if !pockets.at_mailbox {
+        return;
+    }
+    if !pockets.open {
+        pockets.at_mailbox = false;
+        b.action = Some((crate::mailbox::BoxAction::Close, 31.0));
+        return;
+    }
+    if house_box.0.letters.is_empty() {
+        return;
+    }
+    // mTG_mailbox_transfer_tick: every third frame.
+    *ticks += time.delta_secs() * 60.0;
+    while *ticks >= 3.0 && !house_box.0.letters.is_empty() {
+        *ticks -= 3.0;
+        if !mailbox.has_room() {
+            // mWR_WARNING_MAILBOX: no room for more letters.
+            crate::sound::se(crate::sound::se_id::MENU_EXIT);
+            pockets.mailbox_full = true;
+            *ticks = 0.0;
+            break;
+        }
+        if let Some(letter) = house_box.take_last() {
+            mailbox.push(letter);
+            crate::sound::se(0x446);
+        }
+    }
 }
 
 /// Fade the notification out.
@@ -933,6 +1001,7 @@ pub struct MailPlugin;
 impl Plugin for MailPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Mailbox::default())
+            .init_resource::<HouseMailbox>()
             .insert_resource(MailUi::default())
             .insert_resource(MailNotifyTimer::default())
             .add_systems(Startup, setup_mail_ui)
@@ -949,7 +1018,9 @@ impl Plugin for MailPlugin {
             )
             .add_systems(
                 Update,
-                mail_ui_input.in_set(InteractSet::Ui).in_set(GameplaySet),
+                (mail_ui_input, mailbox_visit)
+                    .in_set(InteractSet::Ui)
+                    .in_set(GameplaySet),
             )
             .add_systems(
                 Update,

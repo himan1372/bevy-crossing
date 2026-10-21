@@ -30,6 +30,12 @@ pub struct PocketsUi {
     /// pick a written letter; its index comes back in `mail_pick`.
     pub(crate) mailing: bool,
     pub(crate) mail_pick: Option<usize>,
+    /// The mailbox is opening (aMBX_pl_open); the pockets follow.
+    pub(crate) mailbox_wait: bool,
+    /// Opened at the mailbox (mSM_IV_OPEN_MAILBOX): its letters move in.
+    pub(crate) at_mailbox: bool,
+    /// The letters did not all fit (mWR_WARNING_MAILBOX).
+    pub(crate) mailbox_full: bool,
     pub(crate) sell_slot: Option<usize>,
     pub(crate) home: bool,
     pub(crate) storing: Option<usize>,

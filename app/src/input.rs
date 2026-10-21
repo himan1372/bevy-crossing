@@ -257,6 +257,7 @@ pub(crate) fn update_focus(
     } else if dialogue.active
         || dialogue.external_result.is_some()
         || ((pockets.selling || pockets.donating || pockets.mailing) && !pockets.open)
+        || pockets.mailbox_wait
         || pockets.room_request.is_some()
         || (pockets.storing.is_some() && !pockets.open)
     {
