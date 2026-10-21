@@ -25,6 +25,7 @@ use std::ptr;
 use std::slice;
 use std::sync::Mutex;
 
+pub mod address_book;
 mod albumin;
 mod albumin_collision_data;
 mod albumin_geometry;
@@ -94,7 +95,7 @@ mod mtx;
 pub mod npc;
 pub mod npc_ai;
 mod npc_event_mail;
-mod npc_reply;
+pub mod npc_reply;
 mod placement;
 mod player_action;
 pub mod player_move;

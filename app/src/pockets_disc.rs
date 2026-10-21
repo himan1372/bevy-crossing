@@ -84,7 +84,8 @@ pub(crate) struct PocketAssets {
     hand: Model,
     portrait: Handle<Image>,
     hand_image: Handle<Image>,
-    envelopes: [Option<Handle<Image>>; 2],
+    /// letter_tex_data_table: received, sent, read; each then with a present.
+    envelopes: [Option<Handle<Image>>; 6],
     rigs: Vec<UiRig>,
     patterns: Vec<PatternTile>,
     scroll: f32,
@@ -455,8 +456,15 @@ fn setup(
     commands.insert_resource(PocketAssets {
         portrait,
         hand_image,
-        envelopes: [false, true]
-            .map(|read| envelope(&disc, read).map(|rgba| images.add(image(rgba, 32, 32)))),
+        envelopes: [
+            ("mtegami", "mtegami"),
+            ("mtegami", "pmtegami"),
+            ("otegami", "otegami"),
+            ("otegami", "potegami"),
+            ("mtegami2", "mtegami2"),
+            ("mtegami2", "pmtegami2"),
+        ]
+        .map(|(pal, tex)| envelope(&disc, pal, tex).map(|rgba| images.add(image(rgba, 32, 32)))),
         frame,
         hand,
         rigs,
@@ -571,10 +579,22 @@ fn mail_at(slot: usize) -> Vec2 {
     )
 }
 
-fn envelope(disc: &GameDisc, read: bool) -> Option<Vec<u8>> {
-    let suffix = if read { "mtegami2" } else { "mtegami" };
-    let tex = disc.catalog.get(&format!("inv_mwin_{suffix}_tex"))?;
-    let pal = disc.catalog.get(&format!("inv_mwin_{suffix}_pal"))?;
+/// mSM_draw_mail: which letter_tex_data_table icon a letter shows (the sent
+/// letter's envelope is blue, a received one red, paler once read).
+fn envelope_kind(letter: &crate::mail::Letter) -> usize {
+    let base = if letter.to.is_some() {
+        2
+    } else if letter.read {
+        4
+    } else {
+        0
+    };
+    base + usize::from(letter.present != 0)
+}
+
+fn envelope(disc: &GameDisc, pal: &str, tex: &str) -> Option<Vec<u8>> {
+    let tex = disc.catalog.get(&format!("inv_mwin_{tex}_tex"))?;
+    let pal = disc.catalog.get(&format!("inv_mwin_{pal}_pal"))?;
     gx_texture::decode(
         disc.rom.slice(tex.source, tex.offset, tex.size)?,
         GxFormat::C4,
@@ -917,7 +937,7 @@ fn draw(
             continue;
         };
         let letter = &mailbox.letters[index];
-        if let Some(tex) = &assets.envelopes[usize::from(letter.read)] {
+        if let Some(tex) = &assets.envelopes[envelope_kind(letter)] {
             paint.put(
                 quad_mesh(mail_at(slot) - Vec2::splat(12.0), Vec2::splat(24.0)),
                 tex.clone(),
@@ -933,7 +953,7 @@ fn draw(
         .and_then(|slot| mailbox.letter_index(slot))
         .and_then(|i| mailbox.letters.get(i))
     {
-        if let Some(tex) = &assets.envelopes[usize::from(letter.read)] {
+        if let Some(tex) = &assets.envelopes[envelope_kind(letter)] {
             let shadow = paint.put(
                 quad_mesh(at + Vec2::splat(4.0) - Vec2::splat(12.0), Vec2::splat(24.0)),
                 tex.clone(),

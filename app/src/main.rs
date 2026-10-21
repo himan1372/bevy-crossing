@@ -68,6 +68,7 @@ mod states;
 mod statue;
 mod talk;
 mod town;
+mod villager_memory;
 
 use assets::GameAssetsPlugin;
 use clock::ClockPlugin;
@@ -149,6 +150,7 @@ fn main() {
         .add_plugins(museum_insect::MuseumInsectPlugin)
         .add_plugins(copper::CopperPlugin)
         .add_plugins(post::PostPlugin)
+        .add_plugins(villager_memory::VillagerMemoryPlugin)
         .add_plugins(home::HomePlugin)
         .add_plugins(statue::StatuePlugin)
         .add_plugins(furniture::house_clock::HouseClockPlugin)

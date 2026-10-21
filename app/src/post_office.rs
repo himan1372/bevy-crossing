@@ -379,12 +379,13 @@ fn talk(
     mut inventory: ResMut<PlayerInventory>,
     identity: Res<crate::save::PlayerIdentity>,
     font: Option<Res<crate::msg_window::MsgAssets>>,
-    (mut pockets, mut mailbox, mut post, mut collection, mut villagers): (
+    (mut pockets, mut mailbox, mut post, mut collection, mut villagers, mut memory): (
         ResMut<crate::pockets::PocketsUi>,
         ResMut<crate::mail::Mailbox>,
         ResMut<crate::post::Post>,
         ResMut<crate::museum::MuseumCollection>,
         Query<(&crate::npc::Villager, &mut crate::dialogue::VillagerTalk)>,
+        ResMut<crate::villager_memory::VillagerMemory>,
     ),
     (mut meshes, mut materials, mut n64, mut images): (
         ResMut<Assets<Mesh>>,
@@ -538,6 +539,9 @@ fn talk(
         let msg = if let Some(looks) = looks {
             let letter = mailbox.letters.remove(index);
             let name = letter.to.as_ref().map(|t| t.name().to_string());
+            if let Some(crate::mail::Recipient::Villager(n)) = &letter.to {
+                memory.meet(n);
+            }
             if let Some(delta) = post.receive(letter, looks, &mut collection.0) {
                 for (v, mut talk) in &mut villagers {
                     if Some(v.name) == name.as_deref() {

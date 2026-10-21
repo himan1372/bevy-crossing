@@ -617,11 +617,12 @@ fn mail_ui_input(
     mut key_events: MessageReader<KeyboardInput>,
     mut ui: ResMut<MailUi>,
     mut mailbox: ResMut<Mailbox>,
-    villagers: Query<&Villager>,
-    (mut inventory, post, identity): (
+    villagers: Query<(Entity, &Villager)>,
+    (mut inventory, post, identity, memory): (
         ResMut<crate::interaction::PlayerInventory>,
         Res<crate::post::Post>,
         Res<crate::save::PlayerIdentity>,
+        Res<crate::villager_memory::VillagerMemory>,
     ),
     mut panel_query: Query<&mut Visibility, (With<MailPanel>, Without<MailNotifyText>)>,
     font: Option<Res<crate::msg_window::MsgAssets>>,
@@ -674,12 +675,33 @@ fn mail_ui_input(
             }
         }
         if ui.write_recipients.is_empty() {
-            let mut names: Vec<String> = villagers.iter().map(|v| v.name.to_string()).collect();
-            names.sort_unstable();
-            ui.write_recipients = names.into_iter().map(Recipient::Villager).collect();
-            if post.museum.contacted {
-                ui.write_recipients.push(Recipient::Museum);
+            // The address book: the museum, then villagers who remember
+            // the player, in house order.
+            let mut known: Vec<(Entity, &Villager)> = villagers
+                .iter()
+                .filter(|(_, v)| memory.remembers(v.name))
+                .collect();
+            known.sort_by_key(|(e, _)| *e);
+            let book = rustimal_logic::address_book::AddressBook::new(
+                Vec::new(),
+                post.museum.contacted.then_some(Recipient::Museum),
+                known
+                    .into_iter()
+                    .map(|(_, v)| Recipient::Villager(v.name.to_string()))
+                    .collect(),
+            );
+            if book.is_empty() {
+                // mAD_PROC_REFUSE: nobody to write to.
+                ui.writing = false;
+                ui.write_paper = None;
+                ui.rewriting = None;
+                if ui.from_pockets {
+                    ui.open = false;
+                }
+                crate::sound::se(crate::sound::se_id::MENU_EXIT);
+                return;
             }
+            ui.write_recipients = book.entries().cloned().collect();
             // Rewriting keeps the letter's addressee.
             if let Some(to) = ui
                 .rewriting

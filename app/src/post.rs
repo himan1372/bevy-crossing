@@ -81,36 +81,21 @@ impl Post {
         let today = crate::clock::now().day_number;
         match letter.to.as_ref()? {
             Recipient::Villager(name) => {
-                let rank = rustimal_logic::letter_score::score_letter(
-                    &crate::mail::letter_body_bytes(&letter.body),
-                    rustimal_logic::letter_score::TrigramMode::Intended,
-                )
-                .total();
-                let rank = rustimal_logic::letter_score::LetterRank::of_score(rank);
-                use rustimal_logic::letter_score::LetterRank;
-                // mNpc_SetMailCondThisLand: GOOD and WRONG are answered.
-                let good = match rank {
-                    LetterRank::Ok => Some(true),
-                    LetterRank::Bad => Some(false),
-                    LetterRank::Middle => None,
-                };
-                if let Some(good) = good {
+                // mNpc_SetMailCondThisLand: GOOD and BAD letters are answered.
+                use rustimal_logic::npc_reply;
+                let score =
+                    npc_reply::score_received_letter(&crate::mail::letter_body_bytes(&letter.body));
+                let rank = score.rank;
+                if score.send_reply {
                     self.replies.retain(|r| r.villager != *name);
                     self.replies.push(Reply {
                         villager: name.clone(),
                         looks: looks.unwrap_or(0),
-                        good,
+                        good: rank == npc_reply::rank::OK,
                         day: today,
                     });
                 }
-                // mNpc_SendMailtoNpc: +3, -5 for a bad letter, +3 a present.
-                let mut friendship = 3;
-                if rank == LetterRank::Bad {
-                    friendship -= 5;
-                }
-                if letter.present != 0 {
-                    friendship += 3;
-                }
+                let friendship = npc_reply::receive_friendship_delta(rank, letter.present != 0);
                 info!("{name} got a letter ({rank:?})");
                 Some(friendship)
             }
@@ -199,61 +184,52 @@ fn reply_letter(
 ) -> Option<Letter> {
     let text = disc.text.as_ref()?;
     let mut ctx = letter_context(identity);
-    // mNpc_SetRemailFreeString: player, villager, a neighbour, then words
-    // for food, sports, hobbies, fish, insects, tastes, feelings, music,
-    // satisfaction, praise and complaint.
+    use rustimal_logic::npc_reply;
+    let looks = (reply.looks as usize).min(5);
+    // mNpc_GetRemailGoodData / mNpc_GetRemailWrongData.
+    let plan = reply
+        .good
+        .then(|| npc_reply::good_reply_plan(false, looks, &mut |n| rand(seed, n)));
+    // mNpc_SetRemailFreeString: player, villager, a neighbour, then a word
+    // each for food, sports, hobbies, fish, insects, tastes, feelings,
+    // music, satisfaction, praise and complaint.
     ctx.free[0] = identity.player.clone();
     ctx.free[1] = reply.villager.clone();
     ctx.free[2] = other_villager.to_string();
-    const WORDS: [(usize, u32); 11] = [
-        (0x314, 32),
-        (0x334, 32),
-        (0x2F4, 32),
-        (0x6A1, 40),
-        (0x679, 40),
-        (0x354, 32),
-        (0x374, 32),
-        (0x394, 32),
-        (0x3D4, 32),
-        (0x3F4, 32),
-        (0x3B4, 32),
-    ];
-    for (i, (base, n)) in WORDS.iter().enumerate() {
-        ctx.free[3 + i] = text
-            .string(base + rand(seed, *n) as usize)
-            .unwrap_or_default();
+    let words = npc_reply::free_string_indices(&mut |range| rand(seed, range as u32));
+    for (i, no) in words.iter().enumerate() {
+        ctx.free[3 + i] = text.string(*no as usize).unwrap_or_default();
     }
-    let looks = (reply.looks as usize).min(5);
-    let (letter, present) = if reply.good {
-        const START: [usize; 6] = [0x020, 0x040, 0x000, 0x060, 0x080, 0x0A0];
-        let base = START[looks];
-        // give_present = RANDOM(4) & 1; 0 means a present.
-        let give = rand(seed, 4) & 1;
-        let present = if give == 0 {
-            let roll = crate::goods::roll_now();
-            let kind = if rand(seed, 4) & 1 == 0 {
-                crate::goods::Kind::Furniture
+    let (letter, present) = match plan {
+        Some(plan) => {
+            // mNpc_GetRemailPresent: furniture or clothing.
+            let present = if plan.give_present {
+                let roll = crate::goods::roll_now();
+                let kind = if plan.present_is_cloth {
+                    crate::goods::Kind::Cloth
+                } else {
+                    crate::goods::Kind::Furniture
+                };
+                crate::goods::select(&roll, kind, 1, &[], &mut |n| rand(seed, n))
+                    .first()
+                    .copied()
+                    .unwrap_or(0)
             } else {
-                crate::goods::Kind::Cloth
+                0
             };
-            crate::goods::select(&roll, kind, 1, &[], &mut |n| rand(seed, n))
-                .first()
-                .copied()
-                .unwrap_or(0)
-        } else {
-            0
-        };
-        let pieces = (
-            base + rand(seed, 32) as usize,
-            base + rand(seed, 32) as usize,
-            base + rand(seed, 16) as usize + give as usize * 16,
-            base + rand(seed, 32) as usize,
-            base + rand(seed, 32) as usize,
-        );
-        (text.letter_z(pieces, &ctx)?, present)
-    } else {
-        let no = 0xC5 + looks * 3 + rand(seed, 3) as usize;
-        (text.letter(no, &ctx)?, 0)
+            let pieces = (
+                plan.super_no as usize,
+                plan.maila_no as usize,
+                plan.mailb_no as usize,
+                plan.mailc_no as usize,
+                plan.ps_no as usize,
+            );
+            (text.letter_z(pieces, &ctx)?, present)
+        }
+        None => {
+            let no = npc_reply::bad_reply_msg_no(false, looks, &mut |n| rand(seed, n));
+            (text.letter(no as usize, &ctx)?, 0)
+        }
     };
     Some(Letter {
         sender: reply.villager.clone(),
