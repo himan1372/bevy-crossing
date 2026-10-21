@@ -67,7 +67,8 @@ Done and pushed (stage 1):
 
 Not verified yet:
 - A ticket coming with a purchase. The test script never reached a shop display; displays sit around (2997-3001, -3002.5) inside the shop, and you buy by facing one and pressing E.
-- The ticket and order mail at start-up.
+- The order mail at start-up. (Ticket mail at start-up is verified: 7 tickets
+  arrive as two letters, stacks of 5 and 2.)
 
 Next steps:
 1. **Catalog screen and ordering** (Philip's chosen feature):
