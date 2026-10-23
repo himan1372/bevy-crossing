@@ -14,9 +14,9 @@ use std::collections::{HashMap, VecDeque};
 
 use disc::gx_texture::{self, GxFormat, TlutFormat};
 use disc::{RomImage, RomSource, Target};
-use rustimal_logic::graphics::command::{dl_param, geo, op, Gfx};
+use rustimal_logic::graphics::command::{dl_param, geo, img_fmt, img_siz, op, Gfx};
 use rustimal_logic::graphics::interpreter::{EmittedTri, Emu64, GfxMemory, GxBackend};
-use rustimal_logic::graphics::state::{GbiState, N64Layout, Rgba, NUM_TLUTS};
+use rustimal_logic::graphics::state::{wrap, GbiState, N64Layout, Rgba, NUM_TLUTS};
 use rustimal_logic::graphics::texture::GxTexFormat;
 use rustimal_logic::graphics::vertex::{DecodedVtx, Vtx};
 
@@ -436,6 +436,20 @@ pub fn run_display_lists_with_colors(
     run_lists_full(rom, entries, prim, prim_lod, env, tluts)
 }
 
+/// `mCL_set_page_dl` loads a 32×32 CI4 page texture onto tile 0 (TLUT 14,
+/// repeat) before `clg_mwin1_model`. The waku lists only replace tile 1, so
+/// the two-cycle window uses this image as colour and the waku as coverage.
+pub fn run_display_lists_with_page(
+    rom: &RomImage,
+    entries: &[u32],
+    prim: [u8; 4],
+    env: [u8; 4],
+    tex: u32,
+    pal: u32,
+) -> TriangleSink {
+    run_lists_config(rom, entries, prim, 255, env, &[], false, Some((tex, pal)))
+}
+
 /// The wet-sand colour field drawing puts in segment C for beach acres
 /// (`aFD_SetBeachColorOpaSegment`): `beach_env_color` swings between
 /// (144,128,96) and (186,164,124) with the waves; this is its midpoint.
@@ -476,14 +490,14 @@ fn run_lists_full(
     env: [u8; 4],
     tluts: &[(usize, u32)],
 ) -> TriangleSink {
-    run_lists_config(rom, entries, prim, prim_lod, env, tluts, false)
+    run_lists_config(rom, entries, prim, prim_lod, env, tluts, false, None)
 }
 
 /// mIV_set_base_frame_dl: two-tile cloth colour and frame coverage.
 /// The pockets renderer composites these at runtime; global TEXEL1 behavior
 /// remains untouched for existing world models.
 pub(crate) fn run_inventory_frame(rom: &RomImage, entries: &[u32]) -> TriangleSink {
-    run_lists_config(rom, entries, [255; 4], 255, [0; 4], &[], true)
+    run_lists_config(rom, entries, [255; 4], 255, [0; 4], &[], true, None)
 }
 
 fn run_lists_config(
@@ -494,6 +508,7 @@ fn run_lists_config(
     env: [u8; 4],
     tluts: &[(usize, u32)],
     inventory_mask: bool,
+    page: Option<(u32, u32)>,
 ) -> TriangleSink {
     let mem = RelGfx::new(rom);
     let mut emu = Emu64::new();
@@ -529,6 +544,25 @@ fn run_lists_config(
             t.addr = addr;
             t.count = 16;
         }
+    }
+    if let Some((tex, pal)) = page {
+        if let Some(t) = emu.state.tluts.get_mut(14) {
+            t.addr = pal;
+            t.count = 16;
+            t.rgba5551 = false;
+        }
+        let tile = &mut emu.state.tiles[0];
+        tile.is_dolphin = true;
+        tile.fmt = img_fmt::G_IM_FMT_CI;
+        tile.siz = img_siz::G_IM_SIZ_4B;
+        tile.width = 32;
+        tile.height = 32;
+        tile.gx_format = GxTexFormat::C4;
+        tile.wrap_s = wrap::GX_REPEAT;
+        tile.wrap_t = wrap::GX_REPEAT;
+        tile.tlut = 14;
+        tile.img_addr = tex;
+        tile.n64 = None;
     }
     let mut sink = TriangleSink {
         inventory_mask,

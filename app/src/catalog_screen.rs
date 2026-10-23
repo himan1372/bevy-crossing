@@ -29,6 +29,26 @@ const NAMES: [&str; 7] = [
     "clg_win_na7T_model",
 ];
 
+/// Page cloth, in `mCL_win_data` order: CI4 image, then its 16-colour palette.
+/// `mCL_set_page_dl` binds this on tile 0 before the window model.
+const PAGE_TEX: [[&str; 2]; 9] = [
+    ["clg_win_ha_tex_rgb_ci4", "clg_win_ha_tex_rgb_ci4_pal"],
+    ["clg_win_kabe_tex_rgb_ci4", "clg_win_kabe_tex_rgb_ci4_pal"],
+    [
+        "clg_win_jyuutan_tex_rgb_ci4",
+        "clg_win_jyuutan_tex_rgb_ci4_pal",
+    ],
+    ["clg_win_fuku_tex_rgb_ci4", "clg_win_fuku_tex_rgb_ci4_pal"],
+    ["clg_win_kasa_tex_rgb_ci4", "clg_win_kasa_tex_rgb_ci4_pal"],
+    [
+        "clg_win_tegami_tex_rgb_ci4",
+        "clg_win_tegami_tex_rgb_ci4_pal",
+    ],
+    ["clg_win_hani_tex_rgb_ci4", "clg_win_hani_tex_rgb_ci4_pal"],
+    ["clg_win_hone_tex_rgb_ci4", "clg_win_hone_tex_rgb_ci4_pal"],
+    ["clg_win_onpu_tex_rgb_ci4", "clg_win_onpu_tex_rgb_ci4_pal"],
+];
+
 /// Tab pictures, in `mCL_win_data` order. The second model is the icon.
 const TABS_GFX: [[&str; 2]; 9] = [
     ["clg_win_haT_model", "clg_win_ha2T_model"],
@@ -87,7 +107,8 @@ impl CatalogUi {
 
 #[derive(Resource)]
 struct CatalogModels {
-    window: Model,
+    /// One window per tab: each page cloth is baked into tile 0.
+    windows: [Model; 9],
     /// Name plates: dim row, then the red selected row (`mCL_set_page_dl`).
     names: [Model; 7],
     names_on: [Model; 7],
@@ -114,31 +135,43 @@ fn load_models(
     mut materials: ResMut<Assets<N64Material>>,
     mut images: ResMut<Assets<Image>>,
 ) {
+    let sym = |name: &str| {
+        disc.catalog
+            .get(name)
+            .filter(|s| s.source == RomSource::Rel)
+            .map(|s| s.offset)
+    };
     let draw = |names: &[&str],
                 prim: [u8; 4],
                 env: [u8; 4],
+                page: Option<(&str, &str)>,
                 meshes: &mut Assets<Mesh>,
                 materials: &mut Assets<N64Material>,
                 images: &mut Assets<Image>| {
-        let entries: Vec<u32> = names
-            .iter()
-            .filter_map(|name| {
-                let sym = disc.catalog.get(name)?;
-                (sym.source == RomSource::Rel).then_some(sym.offset)
-            })
-            .collect();
+        let entries: Vec<u32> = names.iter().filter_map(|name| sym(name)).collect();
         if entries.len() != names.len() {
             warn!("catalog model {} is not on the disc", names[0]);
             return Vec::new();
         }
-        let sink = crate::disc_gfx::run_display_lists_with_colors(
-            &disc.rom,
-            &entries,
-            prim,
-            255,
-            env,
-            &[],
-        );
+        let sink = match page {
+            Some((tex, pal)) => match (sym(tex), sym(pal)) {
+                (Some(tex), Some(pal)) => crate::disc_gfx::run_display_lists_with_page(
+                    &disc.rom, &entries, prim, env, tex, pal,
+                ),
+                _ => {
+                    warn!("catalog page texture {tex} is not on the disc");
+                    return Vec::new();
+                }
+            },
+            None => crate::disc_gfx::run_display_lists_with_colors(
+                &disc.rom,
+                &entries,
+                prim,
+                255,
+                env,
+                &[],
+            ),
+        };
         crate::disc_town::sink_meshes_scaled(
             &disc,
             &sink,
@@ -150,14 +183,18 @@ fn load_models(
         )
     };
     let white = [255, 255, 255, 255];
-    let window = draw(
-        &["clg_mwin_mode", "clg_mwin1_model"],
-        white,
-        [0; 4],
-        &mut meshes,
-        &mut materials,
-        &mut images,
-    );
+    let mut windows = std::array::from_fn(|_| Vec::new());
+    for (i, [tex, pal]) in PAGE_TEX.iter().enumerate() {
+        windows[i] = draw(
+            &["clg_mwin_mode", "clg_mwin1_model"],
+            white,
+            [0; 4],
+            Some((tex, pal)),
+            &mut meshes,
+            &mut materials,
+            &mut images,
+        );
+    }
     let mut names = std::array::from_fn(|_| Vec::new());
     let mut names_on = std::array::from_fn(|_| Vec::new());
     for (i, name) in NAMES.iter().enumerate() {
@@ -165,6 +202,7 @@ fn load_models(
             &["clg_name_mode", name],
             [10, 10, 50, 255],
             [0; 4],
+            None,
             &mut meshes,
             &mut materials,
             &mut images,
@@ -173,6 +211,7 @@ fn load_models(
             &["clg_name_mode", name],
             [205, 0, 0, 255],
             [0; 4],
+            None,
             &mut meshes,
             &mut materials,
             &mut images,
@@ -182,6 +221,7 @@ fn load_models(
         &["clg_name_mode", "clg_mwin2_model"],
         white,
         [0; 4],
+        None,
         &mut meshes,
         &mut materials,
         &mut images,
@@ -190,6 +230,7 @@ fn load_models(
         &["clg_win_cbT_model"],
         white,
         [0; 4],
+        None,
         &mut meshes,
         &mut materials,
         &mut images,
@@ -198,6 +239,7 @@ fn load_models(
         &["clg_name_mode", "clg_win_beruT_model"],
         white,
         [0; 4],
+        None,
         &mut meshes,
         &mut materials,
         &mut images,
@@ -206,6 +248,7 @@ fn load_models(
         &["clg_win_shirushi1T_model"],
         [0, 50, 255, 255],
         [0; 4],
+        None,
         &mut meshes,
         &mut materials,
         &mut images,
@@ -214,6 +257,7 @@ fn load_models(
         &["clg_win_hoshiT_model"],
         white,
         [0; 4],
+        None,
         &mut meshes,
         &mut materials,
         &mut images,
@@ -225,6 +269,7 @@ fn load_models(
             &["clg_tag_win_mode", back],
             [0, 0, 0, 255],
             [50, 50, 125, 255],
+            None,
             &mut meshes,
             &mut materials,
             &mut images,
@@ -233,6 +278,7 @@ fn load_models(
             &["clg_tag_picture_mode", icon],
             [145, 145, 205, 255],
             [0; 4],
+            None,
             &mut meshes,
             &mut materials,
             &mut images,
@@ -241,6 +287,7 @@ fn load_models(
             &["clg_tag_win_mode", back],
             [0, 20, 110, 255],
             [50, 50, 255, 255],
+            None,
             &mut meshes,
             &mut materials,
             &mut images,
@@ -249,19 +296,20 @@ fn load_models(
             &["clg_tag_picture_mode", icon],
             white,
             [0; 4],
+            None,
             &mut meshes,
             &mut materials,
             &mut images,
         ));
     }
-    let loaded = window.len()
+    let loaded = windows.iter().map(Vec::len).sum::<usize>()
         + names.iter().map(Vec::len).sum::<usize>()
         + extra.len()
         + buttons.len()
         + tabs.iter().map(Vec::len).sum::<usize>();
     info!("catalog models loaded: {loaded}");
     commands.insert_resource(CatalogModels {
-        window,
+        windows,
         names,
         names_on,
         extra,
@@ -357,6 +405,28 @@ fn nudge(ui: &mut CatalogUi, page: usize, count: i16, down: bool, jump: bool) {
     ui.row[page] = row;
 }
 
+#[derive(Component)]
+struct CatalogRoot;
+
+/// The furniture model in the left circle (`mCL_furniture_draw`).
+#[derive(Component)]
+struct CatalogPreview {
+    fitted: bool,
+    center: Vec3,
+    scale: f32,
+    yaw: f32,
+}
+
+/// Circle centre on the talk-window camera. Measured from the open catalog:
+/// the ring sits left of the names, and this point is its middle.
+const PREVIEW_AT: Vec3 = Vec3::new(-1360.0, 96.0, 2.0);
+/// Inner width of that ring, in overlay units, so the model stays inside it.
+const PREVIEW_SIZE: f32 = 620.0;
+/// Retail's catalog camera sits just above the piece and looks at its side
+/// (`change_view_proc`, angle 0x900 ≈ 12.7° down). This overlay camera looks
+/// along -Z, so a small pitch shows that side instead of the top.
+const PREVIEW_PITCH: f32 = 0.22;
+
 fn draw(
     mut commands: Commands,
     ui: Res<CatalogUi>,
@@ -390,6 +460,7 @@ fn draw(
     let root = commands
         .spawn((
             Name::new("catalog"),
+            CatalogRoot,
             Transform::default(),
             Visibility::default(),
             layer.clone(),
@@ -403,7 +474,7 @@ fn draw(
         let mut z = 0.0;
         paint(
             &mut commands,
-            &models.window,
+            &models.windows[ui.page],
             Vec3::ZERO,
             &mut z,
             &layer,
@@ -592,6 +663,171 @@ fn draw(
     }
 }
 
+/// Puts the selected furniture piece in the circle. Wallpaper, carpet,
+/// paper and music keep the empty ring; those are flat drawings.
+fn show_preview(
+    mut commands: Commands,
+    ui: Res<CatalogUi>,
+    disc: Option<Res<GameDisc>>,
+    roots: Query<(Entity, Option<&Children>), With<CatalogRoot>>,
+    previews: Query<(), With<CatalogPreview>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<N64Material>>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    let Some(disc) = disc else {
+        return;
+    };
+    let Ok((root, children)) = roots.single() else {
+        return;
+    };
+    if children.is_some_and(|kids| kids.iter().any(|e| previews.get(e).is_ok())) {
+        return;
+    }
+    let Some(&item) = ui.lists[ui.page].get((ui.top[ui.page] + ui.row[ui.page]) as usize) else {
+        return;
+    };
+    if crate::furniture::furniture_index(item).is_none() {
+        return;
+    }
+    let Some(piece) = crate::furniture::spawn_furniture(
+        &mut commands,
+        &disc,
+        item,
+        (0, 0),
+        Vec3::ZERO,
+        0.0,
+        &mut meshes,
+        &mut materials,
+        &mut images,
+    ) else {
+        return;
+    };
+    commands.entity(piece).insert((
+        CatalogPreview {
+            fitted: false,
+            center: Vec3::ZERO,
+            scale: 1.0,
+            yaw: 0.0,
+        },
+        Transform::default(),
+        Visibility::Hidden,
+        RenderLayers::layer(LAYER),
+        ChildOf(root),
+    ));
+}
+
+fn preview_pose(preview: &CatalogPreview) -> Transform {
+    // Tilt a little, then spin around the vertical. Spinning around the view
+    // axis laid the top toward the camera. Yaw-then-pitch stood the long axis
+    // on end whenever that axis lined up with the tilt.
+    let rotation = Quat::from_rotation_y(preview.yaw) * Quat::from_rotation_x(PREVIEW_PITCH);
+    Transform {
+        translation: PREVIEW_AT - rotation * (preview.center * preview.scale),
+        rotation,
+        scale: Vec3::splat(preview.scale),
+    }
+}
+
+/// Scales the piece to the ring once its meshes exist, then turns it.
+fn fit_preview(
+    mut commands: Commands,
+    mut previews: Query<(Entity, &mut CatalogPreview, &mut Transform, &mut Visibility)>,
+    children: Query<&Children>,
+    meshes: Query<&Mesh3d>,
+    locals: Query<&Transform, Without<CatalogPreview>>,
+    mesh_assets: Res<Assets<Mesh>>,
+    time: Res<Time>,
+) {
+    for (root, mut preview, mut transform, mut visibility) in &mut previews {
+        if !preview.fitted {
+            let mut min = Vec3::splat(f32::MAX);
+            let mut max = Vec3::splat(f32::MIN);
+            let mut count = 0usize;
+            walk_bounds(
+                root,
+                Transform::IDENTITY,
+                &children,
+                &meshes,
+                &locals,
+                &mesh_assets,
+                &mut min,
+                &mut max,
+                &mut count,
+            );
+            let size = max - min;
+            let extent = size.max_element();
+            if count == 0 || !extent.is_finite() || extent < 1.0 {
+                continue;
+            }
+            preview.center = (min + max) * 0.5;
+            preview.scale = PREVIEW_SIZE / extent;
+            // Face the long side: the longer floor axis lies across the screen.
+            preview.yaw = if size.z > size.x {
+                std::f32::consts::FRAC_PI_2
+            } else {
+                0.0
+            };
+            preview.fitted = true;
+            *visibility = Visibility::Visible;
+            for entity in std::iter::once(root).chain(children.iter_descendants(root)) {
+                commands.entity(entity).insert(RenderLayers::layer(LAYER));
+            }
+        } else {
+            // `mCL_item_move`: 1.25 degrees a frame.
+            preview.yaw = (preview.yaw + time.delta_secs() * 1.25_f32.to_radians() * 60.0)
+                % std::f32::consts::TAU;
+        }
+        *transform = preview_pose(&preview);
+    }
+}
+
+fn walk_bounds(
+    entity: Entity,
+    parent: Transform,
+    children: &Query<&Children>,
+    meshes: &Query<&Mesh3d>,
+    locals: &Query<&Transform, Without<CatalogPreview>>,
+    mesh_assets: &Assets<Mesh>,
+    min: &mut Vec3,
+    max: &mut Vec3,
+    count: &mut usize,
+) {
+    let here = locals
+        .get(entity)
+        .map(|local| parent.mul_transform(*local))
+        .unwrap_or(parent);
+    if let Ok(mesh) = meshes.get(entity) {
+        if let Some(points) = mesh_assets
+            .get(&mesh.0)
+            .and_then(|m| m.attribute(Mesh::ATTRIBUTE_POSITION))
+            .and_then(|v| v.as_float3())
+        {
+            for point in points {
+                let p = here.translation + here.rotation * (here.scale * Vec3::from(*point));
+                *min = min.min(p);
+                *max = max.max(p);
+                *count += 1;
+            }
+        }
+    }
+    if let Ok(kids) = children.get(entity) {
+        for child in kids {
+            walk_bounds(
+                *child,
+                here,
+                children,
+                meshes,
+                locals,
+                mesh_assets,
+                min,
+                max,
+                count,
+            );
+        }
+    }
+}
+
 fn bells(price: u32) -> String {
     let digits = price.to_string();
     let mut out = String::new();
@@ -690,6 +926,8 @@ impl Plugin for CatalogScreenPlugin {
                 (
                     drive.in_set(InteractSet::Ui).in_set(GameplaySet),
                     draw.run_if(resource_exists::<MsgAssets>),
+                    show_preview.after(draw),
+                    fit_preview.after(show_preview),
                 ),
             );
     }

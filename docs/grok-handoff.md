@@ -77,7 +77,7 @@ Not verified yet:
 
 Catalog screen (this commit):
 - Nook choice 1. Played: 0x10A6, 0x10A7, 0x10A8 (tricera skull), 0x10A9 (Escape), 0x10AA (blue bench, 1900 bells, slot 0 item 0x135c). Not played: 0x10AB, 0x10AC.
-- 9 tabs, 7 rows, collected items only. `clg_*` models on the talk-window camera. The left circle has no item model.
+- 9 tabs, 7 rows, collected items only. `clg_*` models on the talk-window camera. Each page uses its own window texture. The left circle shows the selected furniture from the side and spins it. Wallpaper, carpet, stationery and music stay empty there.
 - Payment is on confirm. Price 0 does not order. Escape does not spend bells or a slot. Raffle day still returns before this talk.
 
 Next: ask Philip which roadmap item to do. The open checks above can wait.
