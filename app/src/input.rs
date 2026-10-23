@@ -245,6 +245,7 @@ pub(crate) fn update_focus(
     repay: Option<Res<crate::post_office::RepayOpen>>,
     quest: Res<crate::quest::QuestUi>,
     pockets: Res<crate::pockets::PocketsUi>,
+    catalog: Res<crate::catalog_screen::CatalogUi>,
     room: Res<crate::player_room::PlayerRoom>,
     mut focus: ResMut<InputFocus>,
 ) {
@@ -266,7 +267,7 @@ pub(crate) fn update_focus(
         InputFocus::Mail
     } else if shop.open || repay.is_some_and(|r| r.0) {
         InputFocus::Shop
-    } else if pockets.open {
+    } else if pockets.open || catalog.open {
         InputFocus::Pockets
     } else if room.manipulating() {
         InputFocus::Furniture

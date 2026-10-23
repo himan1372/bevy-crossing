@@ -40,6 +40,15 @@ enum Step {
         price: u32,
     },
     Finish,
+    /// 0x10A6 is on screen; the catalog opens when the player continues.
+    CatalogIntro,
+    /// The catalog screen is up (`mSM_OVL_CATALOG`).
+    Browsing,
+    /// 0x10A7: yes pays and files the order.
+    Order {
+        item: u16,
+        price: u32,
+    },
     /// A house question (offer, basement or roof colour): the disc's own
     /// branches, the answers and which colour page is showing.
     House {
@@ -53,6 +62,8 @@ enum Step {
 struct Conversation {
     step: Step,
     context: MsgContext,
+    /// The request menu included the catalog (choice 1).
+    catalog_offered: bool,
 }
 
 /// Seconds inside before Nook raises the house (the door demo's length).
@@ -192,6 +203,7 @@ fn interact(
     mut pockets: ResMut<PocketsUi>,
     mut inventory: ResMut<PlayerInventory>,
     mut shop: ResMut<ShopData>,
+    mut catalog_ui: ResMut<crate::catalog_screen::CatalogUi>,
     identity: Res<crate::save::PlayerIdentity>,
     (mut home, mut inside_for, time, mut catalog): (
         Option<ResMut<crate::home::PlayerHouse>>,
@@ -205,15 +217,52 @@ fn interact(
     };
     if *location != ShopLocation::Inside {
         *inside_for = None;
+        if catalog_ui.open {
+            catalog_ui.open = false;
+            catalog_ui.result = None;
+        }
+        if matches!(
+            flow.step,
+            Step::CatalogIntro | Step::Browsing | Step::Order { .. }
+        ) {
+            flow.step = Step::Idle;
+        }
+        return;
+    }
+    let Ok((actor, nook_transform)) = nook.single() else {
+        return;
+    };
+    if matches!(flow.step, Step::Browsing) {
+        if catalog_ui.open {
+            return;
+        }
+        let picked = catalog_ui.result.take();
+        *focus = InputFocus::Dialogue;
+        match picked {
+            Some(Some(item)) => {
+                let price = crate::catalog_lists::order_price(item);
+                flow.context.items[1] = crate::items::name(item);
+                flow.context.item_articles[1] = item_article(&disc, item);
+                flow.context.free[3] = price.to_string();
+                if price == 0 {
+                    say(&disc, &mut dialogue, actor, &flow.context, 45);
+                    flow.step = Step::Finish;
+                } else {
+                    say(&disc, &mut dialogue, actor, &flow.context, 44);
+                    flow.step = Step::Order { item, price };
+                }
+            }
+            _ => {
+                say(&disc, &mut dialogue, actor, &flow.context, 46);
+                flow.step = Step::Finish;
+            }
+        }
         return;
     }
     // On the raffle day Nook runs the raffle instead (raffle.rs).
     if crate::raffle::raffle_day() {
         return;
     }
-    let Ok((actor, nook_transform)) = nook.single() else {
-        return;
-    };
     // aNSC_start_wait: Nook speaks about the house once the player is in
     // (after the door, as the original's entrance demo), and they stand.
     let since = inside_for.get_or_insert(0.0);
@@ -276,6 +325,43 @@ fn interact(
             Step::Request if choice == 0 => {
                 say(&disc, &mut dialogue, actor, &flow.context, 26);
                 flow.step = Step::SellStart;
+            }
+            Step::Request if choice == 1 && flow.catalog_offered => {
+                if catalog.orders.free_slot().is_none() {
+                    say(&disc, &mut dialogue, actor, &flow.context, 49);
+                    flow.step = Step::Finish;
+                } else {
+                    say(&disc, &mut dialogue, actor, &flow.context, 43);
+                    flow.step = Step::CatalogIntro;
+                }
+            }
+            Step::CatalogIntro => {
+                catalog_ui.open_from(|item| catalog.collection.has(item));
+                *dialogue = DialogueState::default();
+                *focus = InputFocus::Pockets;
+                flow.step = Step::Browsing;
+                crate::sound::se(crate::sound::se_id::MENU_PAUSE);
+            }
+            Step::Order { item, price } => {
+                let response = if choice != 0 {
+                    46
+                } else if inventory.bells < price {
+                    48
+                } else {
+                    match catalog.orders.place(item, shop.shop.shop_level as u8) {
+                        Ok(slot) => {
+                            inventory.bells -= price;
+                            shop.shop.record_purchase(price);
+                            crate::shop::maybe_upgrade(&mut shop.shop);
+                            crate::sound::se(crate::sound::se_id::REGISTER);
+                            info!("catalog order slot={slot} item={item:#06x} price={price}");
+                            47
+                        }
+                        Err(_) => 49,
+                    }
+                };
+                say(&disc, &mut dialogue, actor, &flow.context, response);
+                flow.step = Step::Finish;
             }
             Step::SellStart => {
                 *pockets = PocketsUi {
@@ -461,11 +547,20 @@ fn interact(
         actions.consume(Action::Interact);
         *focus = InputFocus::Dialogue;
         say(&disc, &mut dialogue, actor, &flow.context, 23);
-        // Only implemented services are offered; preserve the disc's own
-        // Sell and cancellation labels, without exposing nonfunctional choices.
+        // Sell, the catalog, and cancel. The turnip and password lines stay
+        // off until those services exist. Choice 1 is the catalog
+        // (aNSC_MSG_SHOW_CATALOGUE).
+        flow.catalog_offered = false;
         if let Some(options) = dialogue.choices_for_actor() {
-            let last = options.last().cloned();
-            if let (Some(first), Some(last)) = (options.first().cloned(), last) {
+            if options.len() >= 3 {
+                let first = options[0].clone();
+                let catalog_label = options[1].clone();
+                let last = options.last().cloned().unwrap_or_default();
+                dialogue.set_actor_choices(vec![first, catalog_label, last]);
+                flow.catalog_offered = true;
+            } else if let (Some(first), Some(last)) =
+                (options.first().cloned(), options.last().cloned())
+            {
                 dialogue.set_actor_choices(vec![first, last]);
             }
         }
@@ -634,8 +729,10 @@ fn reset(
     mut flow: ResMut<Conversation>,
     mut dialogue: ResMut<DialogueState>,
     mut pockets: ResMut<PocketsUi>,
+    mut catalog_ui: ResMut<crate::catalog_screen::CatalogUi>,
 ) {
     *flow = Conversation::default();
+    *catalog_ui = crate::catalog_screen::CatalogUi::default();
     if dialogue.external_name.is_some() {
         *dialogue = DialogueState::default();
     }

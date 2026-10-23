@@ -6,6 +6,8 @@ use bevy::prelude::*;
 mod ambience;
 mod assets;
 mod catalog;
+mod catalog_lists;
+mod catalog_screen;
 mod character;
 mod clock;
 mod copper;
@@ -154,6 +156,7 @@ fn main() {
         .add_plugins(copper::CopperPlugin)
         .add_plugins(post::PostPlugin)
         .add_plugins(catalog::CatalogPlugin)
+        .add_plugins(catalog_screen::CatalogScreenPlugin)
         .add_plugins(raffle::RafflePlugin)
         .add_plugins(postman::PostmanPlugin)
         .add_plugins(villager_memory::VillagerMemoryPlugin)

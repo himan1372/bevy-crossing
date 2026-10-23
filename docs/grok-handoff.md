@@ -6,10 +6,12 @@ pushing finished work to `origin main`; never force push. His latest message
 controls the task. This file preserves continuity; it does not authorize starting
 every item below.
 
-Latest gameplay commit before the raffle-day room: `f5c5d639` (lottery tickets
-with purchases, Nook's monthly raffle). The raffle-day room is the work on
-top of that: three prizes on the fuku furniture spots, Nook at the drum, the
-drum model, and the ball at tick 46. The catalog screen is still to do.
+Raffle-day shop room is `18d957c5`: three prizes on the fuku furniture spots,
+Nook at the drum, the drum model, and the ball at tick 46. The catalog screen
+and paid ordering are the commit after that. Short on bells (0x10AB) and five
+full slots (0x10AC) were not played. A ticket with a purchase, order mail at
+the next start-up, and the raffle ball during a live draw are still unverified.
+The claim on nook-tickets-catalog is still claude's; do not edit claims by hand.
 
 ## Read before continuing
 
@@ -73,13 +75,12 @@ Not verified yet:
 - The order mail at start-up. (Ticket mail at start-up is verified: 7 tickets
   arrive as two letters, stacks of 5 and 2.)
 
-Next steps:
-1. **Catalog screen and ordering** (Philip's chosen feature, next after the raffle room):
-   - Nook's talk, choice 1. Messages 0x10A6 show, 0x10A7 offer, 0x10A8 unavailable, 0x10A9 cancel, 0x10AA confirm, 0x10AB not enough money, 0x10AC orders full.
-   - 9 tabs, 7 rows a page, listing only collected items (`Catalog.collection.has`).
-   - `clg_*` disc models; 5 order slots in `Catalog.orders`, delivered by the existing start-up mail.
-   - Read the `bevy-ui-screens` skill; check the rustimal `catalog.rs` before writing new code.
-2. Then ask Philip which of the remaining roadmap items to do next.
+Catalog screen (this commit):
+- Nook choice 1. Played: 0x10A6, 0x10A7, 0x10A8 (tricera skull), 0x10A9 (Escape), 0x10AA (blue bench, 1900 bells, slot 0 item 0x135c). Not played: 0x10AB, 0x10AC.
+- 9 tabs, 7 rows, collected items only. `clg_*` models on the talk-window camera. The left circle has no item model.
+- Payment is on confirm. Price 0 does not order. Escape does not spend bells or a slot. Raffle day still returns before this talk.
+
+Next: ask Philip which roadmap item to do. The open checks above can wait.
 
 Shop door note for previews: enter by walking north-east (W+D) from about
 (-15.9, -35.9) during opening hours. On a closed hour the door does nothing.
