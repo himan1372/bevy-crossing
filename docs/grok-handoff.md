@@ -6,8 +6,10 @@ pushing finished work to `origin main`; never force push. His latest message
 controls the task. This file preserves continuity; it does not authorize starting
 every item below.
 
-Latest gameplay commit: `f5c5d639` (lottery tickets with purchases, Nook's
-monthly raffle). Pushed. No preview or Cargo process is left running.
+Latest gameplay commit before the raffle-day room: `f5c5d639` (lottery tickets
+with purchases, Nook's monthly raffle). The raffle-day room is the work on
+top of that: three prizes on the fuku furniture spots, Nook at the drum, the
+drum model, and the ball at tick 46. The catalog screen is still to do.
 
 ## Read before continuing
 
@@ -64,6 +66,7 @@ Done and pushed (stage 1):
   - A win: 0x10D9-DB plus 0x10E3; the prize is given wrapped, then 0x10DD or 0x10DC.
   - A loss: 0x10D5, then 0x10D7 or 0x10D6.
   - Verified in a preview (env `BEVY_CROSSING_DAY_OFFSET` / `BEVY_CROSSING_HOUR_OFFSET` set to Oct 31 at noon).
+  - Raffle-day room: the three prizes replace the normal goods, Nook stands at the drum, and the drum model is in the room. The ball rolls out at drum tick 46; that moment was not played (the preview save had no tickets).
 
 Not verified yet:
 - A ticket coming with a purchase. The test script never reached a shop display; displays sit around (2997-3001, -3002.5) inside the shop, and you buy by facing one and pressing E.
@@ -71,13 +74,12 @@ Not verified yet:
   arrive as two letters, stacks of 5 and 2.)
 
 Next steps:
-1. **Catalog screen and ordering** (Philip's chosen feature):
+1. **Catalog screen and ordering** (Philip's chosen feature, next after the raffle room):
    - Nook's talk, choice 1. Messages 0x10A6 show, 0x10A7 offer, 0x10A8 unavailable, 0x10A9 cancel, 0x10AA confirm, 0x10AB not enough money, 0x10AC orders full.
    - 9 tabs, 7 rows a page, listing only collected items (`Catalog.collection.has`).
    - `clg_*` disc models; 5 order slots in `Catalog.orders`, delivered by the existing start-up mail.
    - Read the `bevy-ui-screens` skill; check the rustimal `catalog.rs` before writing new code.
-2. The raffle-day room: show the three prizes on display instead of the normal goods, plus Nook's walk to the drum and the ball.
-3. Then ask Philip which of the remaining roadmap items to do next.
+2. Then ask Philip which of the remaining roadmap items to do next.
 
 Shop door note for previews: enter by walking north-east (W+D) from about
 (-15.9, -35.9) during opening hours. On a closed hour the door does nothing.

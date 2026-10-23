@@ -26,7 +26,10 @@ const SHOP_CENTRE: Vec3 = Vec3::new(4.0, 1.0, 4.0);
 /// units per cell).
 const CELL: f32 = 40.0 / 0.0625;
 /// Goods are drawn at 0.01 (`Shop_Goods_Actor_single_draw`).
-const GOODS_SCALE: f32 = 0.01 / 40.0;
+pub(crate) const GOODS_SCALE: f32 = 0.01 / 40.0;
+/// `FG_TYPE_ROM_SHOP1_FUKU`: the raffle day's layout. Its furniture
+/// reserves are the three prize spots (`aSD_MakeLotteryGoodsFg`).
+const SHOP1_FUKU: u16 = 0x014D;
 /// One `aSG_data_c`: item range, four pairs of lists, flags.
 const DSP_ENTRY: u32 = 40;
 
@@ -81,8 +84,15 @@ fn sold_sign(reserve: u16) -> u16 {
 /// What's laid out, so it's rebuilt only when the stock changes.
 #[derive(Resource, Default)]
 struct GoodsOnDisplay {
-    shown: Option<Vec<(ItemId, bool)>>,
+    shown: Option<Shown>,
     entities: Vec<Entity>,
+}
+
+#[derive(PartialEq)]
+enum Shown {
+    Shop(Vec<(ItemId, bool)>),
+    /// This month's three prizes, in lineup order.
+    Raffle([ItemId; 3]),
 }
 
 /// Stock identity survives duplicate item IDs and sold-out signs.
@@ -136,13 +146,19 @@ fn show_goods(
     mut commands: Commands,
     disc: Option<Res<GameDisc>>,
     shop: Res<ShopData>,
+    catalog: Res<crate::catalog::Catalog>,
     mut display: ResMut<GoodsOnDisplay>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<N64Material>>,
     mut images: ResMut<Assets<Image>>,
 ) {
     let Some(disc) = disc else { return };
-    let key: Vec<(ItemId, bool)> = shop.stock.iter().map(|s| (s.item, s.sold)).collect();
+    let raffle = crate::raffle::raffle_day();
+    let key = if raffle {
+        Shown::Raffle(catalog.lottery)
+    } else {
+        Shown::Shop(shop.stock.iter().map(|s| (s.item, s.sold)).collect())
+    };
     if display.shown.as_ref() == Some(&key) {
         return;
     }
@@ -150,12 +166,18 @@ fn show_goods(
         commands.entity(e).despawn();
     }
     display.shown = Some(key);
-    let Some(layout) = rustimal_logic::parse_fg_records(&disc.fgdata)
-        .ok()
-        .and_then(|r| r.into_iter().find(|r| r.fg_id == SHOP1_FG))
-    else {
-        return;
-    };
+    let records = rustimal_logic::parse_fg_records(&disc.fgdata).ok();
+    let wanted = if raffle { SHOP1_FUKU } else { SHOP1_FG };
+    let layout = records.as_ref().and_then(|r| {
+        r.iter().find(|rec| rec.fg_id == wanted).or_else(|| {
+            if raffle {
+                r.iter().find(|rec| rec.fg_id == SHOP1_FG)
+            } else {
+                None
+            }
+        })
+    });
+    let Some(layout) = layout else { return };
     let mut slots: Vec<(u16, (i32, i32), Option<(usize, ItemId, bool)>)> = layout
         .items
         .iter()
@@ -163,12 +185,27 @@ fn show_goods(
         .filter(|(_, &m)| (RSV_PAPER..=RSV_SIGNBOARD).contains(&m))
         .map(|(i, &m)| (m, ((i % 16) as i32, (i / 16) as i32), None))
         .collect();
-    for (index, s) in shop.stock.iter().enumerate() {
-        let Some(reserve) = reserve_point(s.item) else {
-            continue;
-        };
-        if let Some(slot) = slots.iter_mut().find(|t| t.0 == reserve && t.2.is_none()) {
-            slot.2 = Some((index, s.item, s.sold));
+    if raffle {
+        // aSD_MakeLotteryGoodsFg: third, first, then second into the
+        // furniture reserves, in FG scan order.
+        for &tier in &[2usize, 0, 1] {
+            let item = catalog.lottery[tier];
+            let sold = item == rustimal_logic::special_delivery::RSV_SHOP_SOLD_FTR;
+            if !sold && !rustimal_logic::special_delivery::prize_available(item) {
+                continue;
+            }
+            if let Some(slot) = slots.iter_mut().find(|t| t.0 == RSV_FTR && t.2.is_none()) {
+                slot.2 = Some((tier, item, sold));
+            }
+        }
+    } else {
+        for (index, s) in shop.stock.iter().enumerate() {
+            let Some(reserve) = reserve_point(s.item) else {
+                continue;
+            };
+            if let Some(slot) = slots.iter_mut().find(|t| t.0 == reserve && t.2.is_none()) {
+                slot.2 = Some((index, s.item, s.sold));
+            }
         }
     }
 
@@ -199,7 +236,8 @@ fn show_goods(
         };
         let assets = (&mut *meshes, &mut *materials, &mut *images);
         if let Some(e) = spawn_goods(&mut commands, &disc, shown, ut, corner, lift, assets) {
-            if let Some((stock_index, ..)) = goods {
+            // Prize spots are not for sale (the raffle hands them over).
+            if let Some((stock_index, ..)) = goods.filter(|_| !raffle) {
                 commands.entity(e).insert(ShopDisplay {
                     stock_index,
                     position: corner + Vec3::new(centre.x, 0.0, centre.y),
@@ -274,7 +312,7 @@ pub struct ShopDisplayPlugin;
 impl Plugin for ShopDisplayPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<GoodsOnDisplay>()
-            .add_systems(Update, show_goods);
+            .add_systems(Update, show_goods.after(crate::raffle::lineup));
     }
 }
 

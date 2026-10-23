@@ -796,3 +796,4 @@ completed/shop-wall-clock.md.
 
 2026-10-20 claude post-office-mail: real letters, counter sending, delivery, villager replies, museum appraisal. See completed/post-office-mail.md.
 2026-10-21 claude nook-tickets-catalog stage 1: tickets with purchases, ticket/order start-up mail, raffle (fukubiki), collection bits. Catalog screen/ordering open. See backlog/nook-tickets-catalog.md.
+2026-10-23 grok nook-tickets-catalog raffle room: three prizes on the fuku furniture spots, Nook at the drum, drum model and ball at tick 46. Catalog screen still open. See backlog/nook-tickets-catalog.md.

@@ -1026,6 +1026,7 @@ fn animate_characters(
                 let (motion, speed) = match gait.map(|g| g.0) {
                     Some(2) => (Motion::Run, 1.0),
                     Some(1) => (Motion::Walk, WAIT_SPEED),
+                    _ if keeper.is_some_and(|n| n.running) => (Motion::Run, 1.0),
                     _ if keeper.is_some_and(|n| n.walking) => (Motion::Walk, WAIT_SPEED),
                     _ => (Motion::Wait, WAIT_SPEED),
                 };

@@ -22,17 +22,11 @@ pub(crate) struct DiscRig {
 }
 
 impl DiscRig {
-    /// Advances the loop by `frames` (repeat between 1 and the last frame).
-    pub(crate) fn step<F: bevy::ecs::query::QueryFilter>(
-        &mut self,
-        frames: f32,
-        transforms: &mut Query<&mut Transform, F>,
-    ) {
-        let last = self.animation.frames.max(2) as f32;
-        self.frame += frames;
-        while self.frame >= last {
-            self.frame -= last - 1.0;
-        }
+    fn last_frame(&self) -> f32 {
+        self.animation.frames.max(2) as f32
+    }
+
+    fn apply<F: bevy::ecs::query::QueryFilter>(&self, transforms: &mut Query<&mut Transform, F>) {
         let locals = self
             .animation
             .pose(self.frame)
@@ -42,6 +36,35 @@ impl DiscRig {
                 *t = local;
             }
         }
+    }
+
+    /// Advances the loop by `frames` (repeat between 1 and the last frame).
+    pub(crate) fn step<F: bevy::ecs::query::QueryFilter>(
+        &mut self,
+        frames: f32,
+        transforms: &mut Query<&mut Transform, F>,
+    ) {
+        let last = self.last_frame();
+        self.frame += frames;
+        while self.frame >= last {
+            self.frame -= last - 1.0;
+        }
+        self.apply(transforms);
+    }
+
+    /// Advances and holds the last frame (`cKF` stop mode).
+    pub(crate) fn step_stop<F: bevy::ecs::query::QueryFilter>(
+        &mut self,
+        frames: f32,
+        transforms: &mut Query<&mut Transform, F>,
+    ) {
+        self.frame = (self.frame + frames).min(self.last_frame());
+        self.apply(transforms);
+    }
+
+    /// Back to the first frame, before the next play.
+    pub(crate) fn rewind(&mut self) {
+        self.frame = 1.0;
     }
 }
 

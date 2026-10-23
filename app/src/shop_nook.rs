@@ -16,6 +16,8 @@ use crate::states::GameplaySet;
 #[derive(Component, Default)]
 pub(crate) struct Shopkeeper {
     pub walking: bool,
+    /// Run clip while he crosses to the drum or a prize (`aNPC_ACT_RUN`).
+    pub running: bool,
     next_zone: Option<usize>,
 }
 
@@ -513,6 +515,7 @@ fn follow(
     location: Res<State<ShopLocation>>,
     focus: Res<InputFocus>,
     time: Res<Time>,
+    raffle: Res<crate::raffle::RaffleNook>,
     player: Query<&Transform, With<Player>>,
     mut nook: Query<(&mut Transform, &mut Shopkeeper), Without<Player>>,
     obstacles: Res<crate::shop::ShopObstacles>,
@@ -521,7 +524,44 @@ fn follow(
         return;
     };
     keeper.walking = false;
+    keeper.running = false;
     if disc.is_none() || *location != ShopLocation::Inside {
+        return;
+    }
+    if let Some(goal) = raffle.at {
+        // Raffle day: run to the drum, or to the prize he is picking up.
+        // aNPC_ACT_RUN, 4 game units per 30 Hz frame.
+        let corner = SHOP_ORIGIN - Vec3::new(4.0, 0.0, 4.0);
+        let pos = (transform.translation - corner) * 40.0;
+        let d = Vec3::new(goal.x - pos.x, 0.0, goal.y - pos.z);
+        let at_drum = goal.distance(crate::raffle::NOOK_AT_DRUM) < 1.0;
+        let desired = if d.length_squared() < 9.0 && at_drum {
+            0.0
+        } else {
+            d.x.atan2(d.z)
+        };
+        let (yaw, _, _) = transform.rotation.to_euler(EulerRot::YXZ);
+        let change = (desired - yaw + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
+            - std::f32::consts::PI;
+        let dt = time.delta_secs().min(0.1);
+        let turn = 11.25_f32.to_radians() * 30.0 * dt;
+        transform.rotation = Quat::from_rotation_y(yaw + change.clamp(-turn, turn));
+        let arrived = d.length_squared() < 9.0;
+        if !arrived && change.abs() < std::f32::consts::FRAC_PI_2 {
+            let step =
+                transform.rotation * Vec3::Z * (4.0 * 30.0 / 40.0 * dt).min(d.length() / 40.0);
+            let before = transform.translation;
+            let x = before.x + step.x;
+            if !crate::shop::blocked_at(x, before.z, 0.2, &obstacles) {
+                transform.translation.x = x;
+            }
+            let z = before.z + step.z;
+            if !crate::shop::blocked_at(transform.translation.x, z, 0.2, &obstacles) {
+                transform.translation.z = z;
+            }
+            keeper.walking = transform.translation.distance_squared(before) > 0.000001;
+            keeper.running = keeper.walking;
+        }
         return;
     }
     let Ok(player) = player.single() else { return };
@@ -616,6 +656,7 @@ impl Plugin for ShopNookPlugin {
                 Update,
                 follow
                     .after(crate::locomotion::MovementSet)
+                    .after(crate::raffle::stage)
                     .in_set(GameplaySet),
             );
     }

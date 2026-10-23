@@ -14,4 +14,5 @@ ordering at Nook's with the orders delivered by mail
 - Verified in a temp preview (Oct 31 at noon, two stacks of five tickets): ask, a win (prize 0x3274 given), another go, and a loss.
 - Verified 2026-10-21: seven waiting October tickets arrive at start-up as two letters 0x057 (stacks 0x2C4C and 0x2C49).
 - Not verified: the ticket coming with a purchase (my test script never reached a display), order mail at start-up.
-- Not done: the prize display and drum/ball/Nook walk on the raffle day (normal goods still show); the catalog screen and ordering (Nook choice 1, 0x10A6-0x10AC, 9 tabs, clg_* models, 5 slots).
+- Raffle-day room (2026-10-23, grok): the fuku layout's three furniture spots show this month's prizes (sold spots show the sold-out sign). Nook runs to the drum (160, 140) and, after a win, to that prize. The drum (`cKF_bs_r_obj_gara`) sits at (160, 60, 190); at tick 46 the ball (`act_fukutama`) rolls out. Preview on 31 Oct: prizes dracaena, hamster cage and queen piece, Nook at the drum, drum model in place. The ball was not played out (fresh save, no tickets).
+- Not done: the catalog screen and ordering (Nook choice 1, 0x10A6-0x10AC, 9 tabs, clg_* models, 5 slots).
