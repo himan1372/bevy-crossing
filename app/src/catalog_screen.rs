@@ -109,6 +109,9 @@ impl CatalogUi {
 struct CatalogModels {
     /// One window per tab: each page cloth is baked into tile 0.
     windows: [Model; 9],
+    /// Window parts whose tile 0 is that page cloth (`mCL_set_page_dl`
+    /// scrolls it; the waku coverage is tile 1 and stays put).
+    page_cloth: [Vec<Handle<N64Material>>; 9],
     /// Name plates: dim row, then the red selected row (`mCL_set_page_dl`).
     names: [Model; 7],
     names_on: [Model; 7],
@@ -184,16 +187,39 @@ fn load_models(
     };
     let white = [255, 255, 255, 255];
     let mut windows = std::array::from_fn(|_| Vec::new());
+    let mut page_cloth = std::array::from_fn(|_| Vec::new());
     for (i, [tex, pal]) in PAGE_TEX.iter().enumerate() {
-        windows[i] = draw(
-            &["clg_mwin_mode", "clg_mwin1_model"],
-            white,
-            [0; 4],
-            Some((tex, pal)),
-            &mut meshes,
-            &mut materials,
-            &mut images,
+        let (Some(tex_addr), Some(pal_addr)) = (sym(tex), sym(pal)) else {
+            continue;
+        };
+        let entries: Vec<u32> = ["clg_mwin_mode", "clg_mwin1_model"]
+            .iter()
+            .filter_map(|name| sym(name))
+            .collect();
+        if entries.len() != 2 {
+            continue;
+        }
+        let sink = crate::disc_gfx::run_display_lists_with_page(
+            &disc.rom, &entries, white, [0; 4], tex_addr, pal_addr,
         );
+        let model = crate::disc_town::sink_meshes_scaled(
+            &disc,
+            &sink,
+            None,
+            true,
+            &crate::disc_gfx::Segments::default(),
+            MODEL_SCALE,
+            (&mut meshes, &mut materials, &mut images),
+        );
+        // Tile 0 still bound to the page image. Waku lists retarget tile 1.
+        page_cloth[i] = sink
+            .parts
+            .iter()
+            .zip(&model)
+            .filter(|(part, _)| part.key.tex.is_some_and(|t| t.img_addr == tex_addr))
+            .map(|(_, (_, material))| material.clone())
+            .collect();
+        windows[i] = model;
     }
     let mut names = std::array::from_fn(|_| Vec::new());
     let mut names_on = std::array::from_fn(|_| Vec::new());
@@ -310,6 +336,7 @@ fn load_models(
     info!("catalog models loaded: {loaded}");
     commands.insert_resource(CatalogModels {
         windows,
+        page_cloth,
         names,
         names_on,
         extra,
@@ -408,24 +435,31 @@ fn nudge(ui: &mut CatalogUi, page: usize, count: i16, down: bool, jump: bool) {
 #[derive(Component)]
 struct CatalogRoot;
 
+/// The little camera that draws the piece into the circle (`mSM_change_view`).
+#[derive(Component)]
+struct CatalogCam;
+
 /// The furniture model in the left circle (`mCL_furniture_draw`).
 #[derive(Component)]
 struct CatalogPreview {
-    fitted: bool,
+    stable: u8,
     center: Vec3,
     scale: f32,
     yaw: f32,
 }
 
-/// Circle centre on the talk-window camera. Measured from the open catalog:
-/// the ring sits left of the names, and this point is its middle.
-const PREVIEW_AT: Vec3 = Vec3::new(-1360.0, 96.0, 2.0);
-/// Inner width of that ring, in overlay units, so the model stays inside it.
-const PREVIEW_SIZE: f32 = 620.0;
-/// Retail's catalog camera sits just above the piece and looks at its side
-/// (`change_view_proc`, angle 0x900 ≈ 12.7° down). This overlay camera looks
-/// along -Z, so a small pitch shows that side instead of the top.
-const PREVIEW_PITCH: f32 = 0.22;
+/// Circle centre on the talk-window camera, in overlay units.
+const PREVIEW_AT: Vec2 = Vec2::new(-1300.0, 96.0);
+/// Circle radius in those units. The preview camera's viewport is this disc.
+const PREVIEW_RADIUS: f32 = 560.0;
+/// Where the piece sits for its own camera. Off the town, on its own layer.
+const PREVIEW_ANCHOR: Vec3 = Vec3::new(0.0, 400.0, 0.0);
+/// `change_view_proc(330, 25, …, 0x900)`: eye this far from the look-at,
+/// 12.7° above the horizontal. The model radius below fills that view.
+const PREVIEW_EYE: Vec3 = Vec3::new(0.0, 72.5, 322.0);
+// Keep the fitted sphere inside the 20-degree view at a distance of 330.
+const PREVIEW_VIEW_RADIUS: f32 = 50.0;
+const PREVIEW_LAYER: usize = 2;
 
 fn draw(
     mut commands: Commands,
@@ -670,7 +704,7 @@ fn show_preview(
     ui: Res<CatalogUi>,
     disc: Option<Res<GameDisc>>,
     roots: Query<(Entity, Option<&Children>), With<CatalogRoot>>,
-    previews: Query<(), With<CatalogPreview>>,
+    cams: Query<(), With<CatalogCam>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<N64Material>>,
     mut images: ResMut<Assets<Image>>,
@@ -681,7 +715,7 @@ fn show_preview(
     let Ok((root, children)) = roots.single() else {
         return;
     };
-    if children.is_some_and(|kids| kids.iter().any(|e| previews.get(e).is_ok())) {
+    if children.is_some_and(|kids| kids.iter().any(|e| cams.get(e).is_ok())) {
         return;
     }
     let Some(&item) = ui.lists[ui.page].get((ui.top[ui.page] + ui.row[ui.page]) as usize) else {
@@ -703,27 +737,50 @@ fn show_preview(
     ) else {
         return;
     };
+    // Drawn by its own camera into the circle, not by the flat window camera.
+    // A turn stays inside that viewport instead of swinging across the page.
+    commands.spawn((
+        CatalogCam,
+        Camera3d::default(),
+        Camera {
+            order: 11,
+            clear_color: ClearColorConfig::None,
+            ..default()
+        },
+        bevy::core_pipeline::tonemapping::Tonemapping::None,
+        Projection::Perspective(PerspectiveProjection {
+            // mSM_change_view uses this branch when width == 256.
+            fov: 20.0_f32.to_radians(),
+            aspect_ratio: 1.0,
+            near: 100.0,
+            far: 800.0,
+            ..default()
+        }),
+        Transform::from_translation(PREVIEW_ANCHOR + PREVIEW_EYE)
+            .looking_at(PREVIEW_ANCHOR, Vec3::Y),
+        RenderLayers::layer(PREVIEW_LAYER),
+        ChildOf(root),
+    ));
     commands.entity(piece).insert((
         CatalogPreview {
-            fitted: false,
+            stable: 0,
             center: Vec3::ZERO,
             scale: 1.0,
             yaw: 0.0,
         },
-        Transform::default(),
+        Transform::from_translation(PREVIEW_ANCHOR),
         Visibility::Hidden,
-        RenderLayers::layer(LAYER),
+        RenderLayers::layer(PREVIEW_LAYER),
         ChildOf(root),
     ));
 }
 
 fn preview_pose(preview: &CatalogPreview) -> Transform {
-    // Tilt a little, then spin around the vertical. Spinning around the view
-    // axis laid the top toward the camera. Yaw-then-pitch stood the long axis
-    // on end whenever that axis lined up with the tilt.
-    let rotation = Quat::from_rotation_y(preview.yaw) * Quat::from_rotation_x(PREVIEW_PITCH);
+    // Spin around the vertical through the bounds centre. The camera, not a
+    // tilt of the mesh, is what looks slightly down on the side.
+    let rotation = Quat::from_rotation_y(preview.yaw);
     Transform {
-        translation: PREVIEW_AT - rotation * (preview.center * preview.scale),
+        translation: PREVIEW_ANCHOR - rotation * (preview.center * preview.scale),
         rotation,
         scale: Vec3::splat(preview.scale),
     }
@@ -733,45 +790,64 @@ fn preview_pose(preview: &CatalogPreview) -> Transform {
 fn fit_preview(
     mut commands: Commands,
     mut previews: Query<(Entity, &mut CatalogPreview, &mut Transform, &mut Visibility)>,
+    bounds: Query<(Option<&bevy::camera::primitives::Aabb>, &GlobalTransform), With<Mesh3d>>,
+    globals: Query<&GlobalTransform>,
     children: Query<&Children>,
-    meshes: Query<&Mesh3d>,
-    locals: Query<&Transform, Without<CatalogPreview>>,
-    mesh_assets: Res<Assets<Mesh>>,
     time: Res<Time>,
 ) {
     for (root, mut preview, mut transform, mut visibility) in &mut previews {
-        if !preview.fitted {
+        if preview.stable < 1 {
+            let Ok(global) = globals.get(root) else {
+                continue;
+            };
+            let to_root = global.affine().inverse();
             let mut min = Vec3::splat(f32::MAX);
             let mut max = Vec3::splat(f32::MIN);
-            let mut count = 0usize;
-            walk_bounds(
-                root,
-                Transform::IDENTITY,
-                &children,
-                &meshes,
-                &locals,
-                &mesh_assets,
-                &mut min,
-                &mut max,
-                &mut count,
-            );
+            let mut count = 0;
+            let mut ready = true;
+            // Wait for every mesh's propagated, joint-aware bounds. Special
+            // furniture renderers bypass the generic static spawn path.
+            for entity in children.iter_descendants(root) {
+                let Ok((aabb, world)) = bounds.get(entity) else {
+                    continue;
+                };
+                let Some(aabb) = aabb else {
+                    ready = false;
+                    break;
+                };
+                let to_root = to_root * world.affine();
+                for x in [-1.0, 1.0] {
+                    for y in [-1.0, 1.0] {
+                        for z in [-1.0, 1.0] {
+                            let corner = Vec3::from(aabb.center)
+                                + Vec3::from(aabb.half_extents) * Vec3::new(x, y, z);
+                            let point = to_root.transform_point3(corner);
+                            min = min.min(point);
+                            max = max.max(point);
+                        }
+                    }
+                }
+                count += 1;
+            }
             let size = max - min;
-            let extent = size.max_element();
-            if count == 0 || !extent.is_finite() || extent < 1.0 {
+            let radius = size.length() * 0.5;
+            if !ready || count == 0 || !radius.is_finite() || radius < 1.0 {
                 continue;
             }
             preview.center = (min + max) * 0.5;
-            preview.scale = PREVIEW_SIZE / extent;
-            // Face the long side: the longer floor axis lies across the screen.
+            preview.scale = PREVIEW_VIEW_RADIUS / radius;
+            // Face the long side: the longer floor axis lies across the view.
             preview.yaw = if size.z > size.x {
                 std::f32::consts::FRAC_PI_2
             } else {
                 0.0
             };
-            preview.fitted = true;
+            preview.stable = 1;
             *visibility = Visibility::Visible;
             for entity in std::iter::once(root).chain(children.iter_descendants(root)) {
-                commands.entity(entity).insert(RenderLayers::layer(LAYER));
+                commands
+                    .entity(entity)
+                    .insert(RenderLayers::layer(PREVIEW_LAYER));
             }
         } else {
             // `mCL_item_move`: 1.25 degrees a frame.
@@ -782,48 +858,56 @@ fn fit_preview(
     }
 }
 
-fn walk_bounds(
-    entity: Entity,
-    parent: Transform,
-    children: &Query<&Children>,
-    meshes: &Query<&Mesh3d>,
-    locals: &Query<&Transform, Without<CatalogPreview>>,
-    mesh_assets: &Assets<Mesh>,
-    min: &mut Vec3,
-    max: &mut Vec3,
-    count: &mut usize,
+/// Puts the preview camera's rectangle on the circle. Viewport origin is
+/// the top left, in physical pixels. The overlay camera is a fixed vertical
+/// 240×16 world, so one pixel is `3840 / window_height` world units.
+fn frame_preview_camera(
+    windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
+    mut cams: Query<&mut Camera, With<CatalogCam>>,
 ) {
-    let here = locals
-        .get(entity)
-        .map(|local| parent.mul_transform(*local))
-        .unwrap_or(parent);
-    if let Ok(mesh) = meshes.get(entity) {
-        if let Some(points) = mesh_assets
-            .get(&mesh.0)
-            .and_then(|m| m.attribute(Mesh::ATTRIBUTE_POSITION))
-            .and_then(|v| v.as_float3())
-        {
-            for point in points {
-                let p = here.translation + here.rotation * (here.scale * Vec3::from(*point));
-                *min = min.min(p);
-                *max = max.max(p);
-                *count += 1;
-            }
-        }
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let height = window.physical_height().max(1) as f32;
+    let width = window.physical_width() as f32;
+    let world_per_px = (240.0 * 16.0) / height;
+    let cx = width * 0.5 + PREVIEW_AT.x / world_per_px;
+    let cy = height * 0.5 - PREVIEW_AT.y / world_per_px;
+    let radius = PREVIEW_RADIUS / world_per_px;
+    let size = (radius * 2.0).max(1.0);
+    let x = (cx - radius).max(0.0);
+    let y = (cy - radius).max(0.0);
+    for mut camera in &mut cams {
+        camera.viewport = Some(bevy::camera::Viewport {
+            physical_position: UVec2::new(x as u32, y as u32),
+            physical_size: UVec2::new(size as u32, size as u32),
+            depth: 0.0..1.0,
+        });
     }
-    if let Ok(kids) = children.get(entity) {
-        for child in kids {
-            walk_bounds(
-                *child,
-                here,
-                children,
-                meshes,
-                locals,
-                mesh_assets,
-                min,
-                max,
-                count,
-            );
+}
+
+/// `mSM_tex_move`: both axes advance 0.3535 texels a 60 fps frame, then
+/// `mCL_set_page_dl` shifts tile 0 by the negation. Sampling subtracts that
+/// origin, so the cloth moves up and to the left. The tile is 32×32.
+fn scroll_page(
+    time: Res<Time>,
+    ui: Res<CatalogUi>,
+    models: Option<Res<CatalogModels>>,
+    mut materials: ResMut<Assets<N64Material>>,
+    mut texels: Local<f32>,
+) {
+    let Some(models) = models else {
+        return;
+    };
+    if !ui.open {
+        return;
+    }
+    *texels = (*texels + 0.3535 * time.delta_secs() * 60.0) % 32.0;
+    let uv = *texels / 32.0;
+    for handle in &models.page_cloth[ui.page] {
+        if let Some(mut material) = materials.get_mut(handle) {
+            material.combiner.extra.y = uv;
+            material.combiner.extra.z = uv;
         }
     }
 }
@@ -928,6 +1012,8 @@ impl Plugin for CatalogScreenPlugin {
                     draw.run_if(resource_exists::<MsgAssets>),
                     show_preview.after(draw),
                     fit_preview.after(show_preview),
+                    scroll_page.after(draw),
+                    frame_preview_camera,
                 ),
             );
     }

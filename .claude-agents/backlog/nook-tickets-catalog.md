@@ -17,3 +17,20 @@ ordering at Nook's with the orders delivered by mail
 - Raffle-day room (2026-10-23, grok): the fuku layout's three furniture spots show this month's prizes (sold spots show the sold-out sign). Nook runs to the drum (160, 140) and, after a win, to that prize. The drum (`cKF_bs_r_obj_gara`) sits at (160, 60, 190); at tick 46 the ball (`act_fukutama`) rolls out. Preview on 31 Oct: prizes dracaena, hamster cage and queen piece, Nook at the drum, drum model in place. The ball was not played out (fresh save, no tickets).
 - Catalog screen (2026-10-23, grok): Nook choice 1 opens 0x10A6, then the `clg_*` window (9 tabs, 7 rows, collected items only). A priced pick is 0x10A7; confirm pays, files the order (shop level at that moment) and says 0x10AA. Price 0 (fossils, gyroids) is 0x10A8 and does not order. Escape is 0x10A9 and leaves bells and slots alone. Preview: blue bench 0x135c for 1900 (bells 80000 to 78100, slot 0), then a tricera skull refused, then Escape. Not played: 0x10AB (short on bells) and 0x10AC (five slots full). Raffle day still skips this talk.
 - Catalog look (2026-10-23, grok): each page loads its own `clg_win_*` texture, so the window has the leaf pattern, the scalloped edge, navy name bars and a red selected bar. The left circle draws the selected furniture from the side (`mCL_item_draw`: a 0x900 look down, then a spin around the vertical). Preview: the blue bed lies across the ring and turns. Wallpaper, carpet, stationery and music stay empty in the circle.
+
+## Bounded review fixes (2026-10-24, codex)
+
+Philip authorized reviewing/fixing the pending art slice, then asking again.
+Page scroll remains 0.3535 texels per 60 Hz frame and rotation 1.25 degrees
+per frame. Removed the unsupported green-leaf pixel rewrite: clg_mwin_mode
+copies TEXEL0 RGB with TEXEL1 coverage. The separate perspective camera uses
+mSM_change_view's width256 branch (20 degrees, near100/far800).
+Preview fitting now uses rendered hierarchy Aabbs and GlobalTransforms,
+including joint-aware skinned bounds, so early-return specialised renderers
+no longer stay hidden. Removed the incomplete LocalBounds addition to shared
+furniture spawning. Inspected blue bed, blue wardrobe, retro TV and alarm
+clock screenshots in a synthetic Temp preview; all visible and rotating.
+Clock geometry has conservative bounds beyond its visible body, leaving it
+smaller/higher in the circle; exact visible-coverage fitting remains open.
+The parent task remains open/claude-owned. No remaining purchase/refusal/mail/
+raffle scenarios were taken over by this follow-up.
