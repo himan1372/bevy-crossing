@@ -42,9 +42,23 @@ full five orders0x10AC, actual paid order and restart ticket/order mail now
 played with complete affected numeric snapshots. Both refusals preserved all
 compared fields. Read both delivered Nook letters with correct attachments.
 Raffle loss consumed exactly five tickets, and ball entity timing/motion ran,
-but its rendered ball is4000x too small due to double model scaling. Fix remains
-open in backlog/raffle-ball-scale.md. Two renderer slab-allocation errors while
+but its rendered ball was4000x too small due to double model scaling. The later
+fix is recorded in completed/raffle-ball-scale.md. Two renderer slab-allocation errors while
 viewing delivered letters are recorded separately in mail-render-slab-errors.md.
 See completed/catalog-raffle-verification.md for exact evidence/setup limits.
 Parent remains open; non-furniture previews, exact clock fitting and Philip
 acceptance are not closed by these checks.
+
+## Raffle presentation follow-up (2026-10-24, codex)
+
+Ball scale fixed by retaining the existing world-scaled mesh under a unit-scale
+parent. Philip additionally reported floating drum and hat clipping: raffle
+objects now use the shell's vertical origin, seating drum at tabley0.5, and
+the shop blocks the original posed drum footprint including its tray overhang.
+Player front stop moves fromz-2998.59985 to-2998.38110; held-forward recheck
+stays there. Final inspected screenshots show seated drum, visible rolling
+ball and front clearance. Actual loss consumes exactly5 tickets and preserves
+wallet/conditions/catalog/prizes/stock/room/mail; scene cleanup/reentry checked.
+See completed/raffle-ball-scale.md for gates/evidence. The previously recorded
+allocator error also occurred during a winning-prize display refresh; that
+separate investigation remains open. Parent ownership/acceptance unchanged.

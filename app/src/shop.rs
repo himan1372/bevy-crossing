@@ -1164,6 +1164,17 @@ fn room_obstacles(disc: &crate::game_disc::GameDisc) -> Vec<Obstacle> {
             }
         }
     }
+    if crate::raffle::raffle_day() {
+        if let Some((min, max)) = crate::raffle::obstacle_bounds(disc) {
+            info!("raffle drum collision: {min:?}..{max:?}");
+            out.push(Obstacle {
+                min_x: min.x,
+                max_x: max.x,
+                min_z: min.y,
+                max_z: max.y,
+            });
+        }
+    }
     out
 }
 

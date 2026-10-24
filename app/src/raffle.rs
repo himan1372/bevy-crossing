@@ -379,8 +379,32 @@ fn prize_stand(item: u16, tier: usize, disc: Option<&GameDisc>) -> Vec2 {
 }
 
 fn game_to_world(g: Vec3) -> Vec3 {
-    let corner = crate::shop::SHOP_ORIGIN - Vec3::new(4.0, 0.0, 4.0);
+    // Match the shop shell's (4, 1, 4) centre, including its floor height.
+    let corner = crate::shop::SHOP_ORIGIN - Vec3::new(4.0, 1.0, 4.0);
     corner + g / 40.0
+}
+
+/// The drum's posed footprint, including thin parts that room-height sampling
+/// can miss. Use the existing shop collision radius around these world bounds.
+pub(crate) fn obstacle_bounds(disc: &GameDisc) -> Option<(Vec2, Vec2)> {
+    let skeleton =
+        crate::skeleton::Skeleton::read(&disc.rom, disc.catalog.get("cKF_bs_r_obj_gara")?.offset)?;
+    let animation = crate::skeleton::Animation::read(
+        &disc.rom,
+        disc.catalog.get("cKF_ba_r_obj_gara")?.offset,
+        skeleton.joints.len(),
+    )?;
+    let mut sink = crate::disc_gfx::run_display_lists(&disc.rom, &skeleton.lists());
+    let pose = skeleton.world_matrices(Some(&animation), 1.0);
+    crate::skeleton::place_on_joints(&mut sink, &skeleton, &pose);
+    let mut min = Vec2::splat(f32::INFINITY);
+    let mut max = Vec2::splat(f32::NEG_INFINITY);
+    for vertex in sink.parts.iter().flat_map(|part| &part.vertices) {
+        let point = game_to_world(DRUM_GAME + Vec3::from(vertex.pos) * 0.01).xz();
+        min = min.min(point);
+        max = max.max(point);
+    }
+    (min.is_finite() && max.is_finite()).then_some((min, max))
 }
 
 /// On the raffle day Nook stays at the drum, or at the prize he is fetching.
@@ -666,7 +690,8 @@ fn present(
         commands.spawn((
             Name::new("raffle ball"),
             RaffleBall,
-            Transform::from_scale(Vec3::splat(crate::shop_display::GOODS_SCALE)),
+            // build_model_full already converts the ball's vertices to world units.
+            Transform::default(),
             Visibility::Hidden,
         ));
     }
@@ -719,7 +744,6 @@ fn present(
         sim.shown = Some(clock.ball_type);
     }
     ball_tf.translation = game_to_world(sim.pos);
-    ball_tf.scale = Vec3::splat(crate::shop_display::GOODS_SCALE);
     if let Some(cam) = camera.iter().next() {
         let to = cam.translation() - ball_tf.translation;
         ball_tf.rotation = Quat::from_rotation_y(to.x.atan2(to.z));

@@ -14,3 +14,10 @@ catalog-checks-191b6221bb294ac48586df52c3f72862/stderr-151316.log,
 order-letter.png, ticket-letter.png, restart-after.json and mail-collected.json.
 Read bevy-debug/systematic-debugging/QA skills; reproduce with synthetic saves
 before assigning cause to game code or Bevy. No source changes made here.
+
+Additional2026-10-24 evidence during raffle-ball-scale: a height-corrected
+preview logged the same two allocator errors at20:35:07.128564Z/.128727Z,
+immediately after a second-prize win (0x10DA/0x10E3/0x10DD). Prize display
+refresh is another reproduction lead; cause is not established. Evidence:
+%TEMP%/bevy-crossing-room-critters/raffle-ball-fix-fe8bf84ca33c4e5c9798ec43a0a61068/
+stderr-163004.log. This extends the issue beyond mail viewing.

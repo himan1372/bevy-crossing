@@ -49,7 +49,8 @@ Failed / follow-ups:
   (0.00025), then present also sets parent scaleGOODS_SCALE(0.00025).
   Live child Aabb half width0.0625 times parent scale gives diameter0.00003125
   world units:4000 times smaller than a single scale. Original aGRBL_draw
-  applies scale0.01 once in game units. See backlog/raffle-ball-scale.md.
+  applies scale0.01 once in game units. See completed/raffle-ball-scale.md for
+  the later fix and its validation.
 - Two bevy_render::slab_allocator errors at2026-10-24T19:14:22Z during mail
   viewing: "Use-after-free: attempted to copy element data for an unallocated
   key". Game continued, letters/numeric snapshots correct. Not diagnosed or
