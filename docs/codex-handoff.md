@@ -1,23 +1,77 @@
-# Codex handoff - 2026-10-19
+# Codex handoff - 2026-10-24
 
 Continue in `C:/Users/phili/game c/bevy-crossing`, Windows PowerShell, branch
 `main`, identity `codex`. Philip authorizes committing and pushing finished work;
 never force push. His latest message controls the task. This file preserves
-continuity; it does not authorize starting every proposal below.
-
-Latest gameplay commit: `2fae13d2` (ten furniture clocks and antique ticking).
-Latest skill updates: `d9117594` (top-level pair) and `c163b42f` (eight new project
-skills). Those commits are pushed. This handoff update is documentation only;
-there is no interrupted gameplay edit to resume.
+continuity; it does not authorize starting every proposal below. Philip's usage
+budget is tight: prefer targeted greps over whole-file reads, and few rebuilds.
 
 **NEXT INSTANCE: actually read the relevant `SKILL.md` files before implementation.**
-Reading this handoff or a skill catalog does not replace reading the skills.
-Finish the selected authorized task, required validation, task/comms/roadmap
-updates, claim release, commit and push before telling Philip what is next.
-If asked only to read this handoff, read the context and report the next proposal;
-a subsequent "le go" authorizes that bounded proposal. Do not silently begin
-every remaining roadmap item. All previous owned previews and Cargo processes
-are closed; historical task-note PIDs are not current process targets.
+Finish the selected task, validation, task/comms/roadmap updates, claim release,
+commit and push before telling Philip what is next.
+
+## Current state (2026-10-24)
+
+Latest pushed commits on `main`:
+
+- `14ccaae3` grok: catalog page art and a side view of the selected furniture.
+- `2f5db2a8` grok: Nook takes catalog orders from the collected-item screen
+  (`app/src/catalog_screen.rs`).
+- `18d957c5` grok: raffle-day room with the prizes on display, the drum and the ball.
+- `8720668c` and `f5c5d639` claude: collection bits (`logic/src/collection.rs`),
+  `app/src/catalog.rs` (`SaveData.catalog`, start-up ticket and order letters),
+  tickets with purchases (`shop_nook.rs`), and the raffle talk (`app/src/raffle.rs`).
+
+Active task: `nook-tickets-catalog`. The note is
+`.claude-agents/backlog/nook-tickets-catalog.md`; the latest status is in
+`comms.txt`. The claim script still lists `claude`, but grok has taken the work
+over. Post in `comms.txt` before you continue it, and claim it as `codex`.
+
+**Uncommitted work in the tree. It is not yours, so do not discard it.**
+
+- `app/src/catalog_screen.rs` and `app/src/furniture.rs`, about 210 lines.
+  They come from grok's latest slice: page-cloth tile scrolling (`mCL_set_page_dl`)
+  and a preview camera for the circle (`mSM_change_view`).
+- They also add `green_catalog_leaves`, which recolours the disc's CI4 palette so
+  the leaves look green. That is a guess against fidelity. Check the original
+  combiner and TEV colours (`gc-texture-pipeline` skill) before you keep it.
+- Ask Philip or check `comms.txt` before you commit or revert these files.
+- The `.gitignore` modification also stays untouched and unstaged.
+
+Verified:
+
+- Raffle: ask, win (prize given wrapped), another go, loss.
+- Start-up ticket letters: 7 tickets arrive as letters with stacks of 5 and 2.
+- Catalog order (grok): paid order, a fossil refused (0x10A8), Escape cancels (0x10A9).
+
+Not yet played:
+
+- A ticket with a purchase (0x10AE / 0x10AF).
+- Short on bells (0x10AB).
+- Five order slots full (0x10AC).
+- Order mail at the next start-up.
+- The raffle ball roll.
+- Wallpaper, carpet, stationery and music previews in the catalog circle (empty).
+
+Next steps:
+
+1. Finish or review the uncommitted catalog slice.
+2. Play the untested paths above in a `%TEMP%` preview copy.
+3. Close the task: notes, both roadmaps, `comms.txt`, `task-claimer.sh complete`.
+
+Hard rules:
+
+- Never load, stage or overwrite the real `savegame.json`. Its SHA256 starts
+  `C15154C01FE105A3`; hash it before and after runtime work.
+- Previews only under `%TEMP%evy-crossing-room-critters` with an explicit `--disc`.
+  Stop only processes you started.
+- No tests unless Philip asks.
+- Gates: `cargo fmt --check`, then `cargo clippy --workspace --all-targets -j 1 -- -D warnings`,
+  then the capture and release builds, one Cargo process at a time.
+- Assert every patch-script replacement.
+- Raffle testing: set `BEVY_CROSSING_DAY_OFFSET` and `BEVY_CROSSING_HOUR_OFFSET`
+  to reach the last day of the month during opening hours. Enter the shop by
+  walking W+D from about (-15.9, -35.9).
 
 ## Read before continuing
 
