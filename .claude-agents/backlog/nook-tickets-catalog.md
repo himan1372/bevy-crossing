@@ -34,3 +34,17 @@ Clock geometry has conservative bounds beyond its visible body, leaving it
 smaller/higher in the circle; exact visible-coverage fitting remains open.
 The parent task remains open/claude-owned. No remaining purchase/refusal/mail/
 raffle scenarios were taken over by this follow-up.
+
+## Remaining-path verification (2026-10-24, codex)
+
+Purchase ticket0x10AE, full-pocket overflow0x10AF, insufficient Bells0x10AB,
+full five orders0x10AC, actual paid order and restart ticket/order mail now
+played with complete affected numeric snapshots. Both refusals preserved all
+compared fields. Read both delivered Nook letters with correct attachments.
+Raffle loss consumed exactly five tickets, and ball entity timing/motion ran,
+but its rendered ball is4000x too small due to double model scaling. Fix remains
+open in backlog/raffle-ball-scale.md. Two renderer slab-allocation errors while
+viewing delivered letters are recorded separately in mail-render-slab-errors.md.
+See completed/catalog-raffle-verification.md for exact evidence/setup limits.
+Parent remains open; non-furniture previews, exact clock fitting and Philip
+acceptance are not closed by these checks.
