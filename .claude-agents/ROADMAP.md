@@ -2,19 +2,18 @@
 
 ## Remaining shop services (Philip requested roadmap, 2026-10-25)
 
-Remaining priorities after the normal multi-item selling slice. The visible checklist is
+Remaining priorities after selling warnings/disposal. The visible checklist is
 [Remaining shop work](../docs/roadmap.html#shop-services-next); detailed scope is
 [retail-shop-ui](backlog/retail-shop-ui.md). Keep that parent/M4 open.
 
-1. Remaining selling cases: condition/quest/present warning conversations and
-   zero-value disposal. Normal marked/duplicate all-or-one sales are implemented.
-2. Turnip price questions and selling: native price/date/quantity/spoilage rules.
-3. Repeat-service conversations and original password validation/item delivery.
-4. Higher-tier layouts/service access, including Nookington's paint floor and
+1. Turnip price questions and selling: native price/date/quantity/spoilage rules.
+2. Repeat-service conversations and original password validation/item delivery.
+3. Higher-tier layouts/service access, including Nookington's paint floor and
    Nookway's clock/uniform/exterior; opening/closing and retail renovation delay
    instead of the current simplified immediate upgrade.
-5. Remaining seasonal stock/service branches after source audit; raffle exists.
-6. Remaining approach/transfer poses, cameras/movement blending and Philip's
+4. Remaining seasonal stock/service branches after source audit; raffle exists.
+5. Original pockets quest-warning presentation, remaining approach/transfer poses,
+   cameras/movement blending and Philip's
    browsing/purchase/selling/audio acceptance.
 
 Already implemented: Nookway paint service and ordinary room/merchandise layout;
@@ -23,6 +22,14 @@ clothing effects, tickets, catalog orders/delivery, raffle, house expansion roof
 selection/basement/statue progression. Do not schedule these again as missing.
 Pause/save screens and special quest/mail tags remain separate UI follow-ups.
 Item counts, parent ownership and M4 acceptance remain unchanged.
+
+2026-10-25 codex: [shop-selling-warnings](completed/shop-selling-warnings.md)
+adds native57 quest refusal, wrapped slot sales and56/216 free disposal with
+58/59 follow-ups. Any quest in a marked offer refuses the whole batch; mixed
+junk/paid offers remove exact slots and pay only priced goods. Disposal/cancel,
+wrapped accept/cancel and quest single/batch checked in synthetic Temp, preserving
+unrelated fields. Original pockets warning-window presentation stays in fidelity
+work; turnips remain separate. See task for build/QA evidence and limits.
 
 2026-10-25 codex: [shop-multi-selling](completed/shop-multi-selling.md) adds
 native M marks/Sell All and duplicate15 all-or-one followed by27, or marked214.

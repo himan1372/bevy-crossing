@@ -50,6 +50,9 @@ enum Step {
     Offer {
         sale: sales::Sale,
     },
+    Dispose {
+        sale: sales::Sale,
+    },
     Duplicate {
         one: sales::Sale,
         all: sales::Sale,
@@ -336,7 +339,22 @@ pub(crate) fn interact(
             let item = sale.item();
             flow.context.items[0] = crate::items::name(item);
             flow.context.item_articles[0] = item_article(&disc, item);
-            if let Some(all) = sale.duplicates(&inventory) {
+            if sale.has_quest() {
+                // Refuse the whole captured offer; a marked batch must not
+                // bypass the selected item's quest protection.
+                say(&disc, &mut dialogue, actor, &flow.context, 57);
+                flow.step = Step::Finish;
+            } else if sale.price == 0 {
+                let plural = sale.slots() > 1;
+                say(
+                    &disc,
+                    &mut dialogue,
+                    actor,
+                    &flow.context,
+                    if plural { 216 } else { 56 },
+                );
+                flow.step = Step::Dispose { sale };
+            } else if let Some(all) = sale.duplicates(&inventory) {
                 let count = all.quantity();
                 flow.context.items[2] = crate::items::name(item);
                 flow.context.item_articles[2] = item_article(&disc, item);
@@ -560,6 +578,15 @@ pub(crate) fn interact(
                     say(&disc, &mut dialogue, actor, &flow.context, 27);
                     flow.step = Step::Offer { sale };
                 }
+            }
+            Step::Dispose { sale } => {
+                if choice == 0 && sale.discard(&mut inventory) {
+                    info!("Nook disposal slots={}", sale.slots());
+                    say(&disc, &mut dialogue, actor, &flow.context, 58);
+                } else {
+                    say(&disc, &mut dialogue, actor, &flow.context, 59);
+                }
+                flow.step = Step::Finish;
             }
             Step::Offer { sale } => {
                 let response = if choice != 0 || !sale.valid(&inventory) {

@@ -132,16 +132,14 @@ recorded in comms.txt after the final gate. No tests added or run.
 
 Updated2026-10-25 at Philip's request. Priority order:
 
-1. Quest/present warning flows and zero-value disposal. Normal positive-price
-   items now support M marking/Sell All, duplicate all-or-one prompts and paper
-   sheet quantities; unsupported slots still offer Quit.
-2. Turnip-price questions and selling, with source date/price/quantity/spoilage.
-3. Repeat-service conversations and password service/validation/item delivery.
-4. Additional shop layouts/tiers and their opening/closing/service rules,
+1. Turnip-price questions and selling, with source date/price/quantity/spoilage.
+2. Repeat-service conversations and password service/validation/item delivery.
+3. Additional shop layouts/tiers and their opening/closing/service rules,
    Nookington's paint floor and Nookway clock/uniform/exterior; replace immediate
    tier upgrade with the original renovation timing.
-5. Remaining seasonal stock/service branches, following original availability.
-6. Remaining approach/transfer poses, cameras and movement blending, plus
+4. Remaining seasonal stock/service branches, following original availability.
+5. Original pockets quest-warning presentation, remaining approach/transfer
+   poses, cameras and movement blending, plus
    Philip's comparison of following, turning, targeting, dialogue, selling and
    the recent visual/audio changes.
 
@@ -211,3 +209,11 @@ unrelated/protected state and cancel/reopen preserved. Mark art/count prompts
 and no-disc pockets inspected; final build/lint gates and source review pass.
 No tests or actual-save loads. Quest/present warnings, zero disposal, turnips,
 other services and Philip acceptance remain open; parent ownership unchanged.
+
+2026-10-25 codex: completed/shop-selling-warnings.md adds native57 quest
+refusal, exact wrapped-slot selling and56/216 zero-value disposal, with58/59
+accept/cancel. Any marked quest refuses the whole offer; mixed junk/priced
+goods pay only priced value. Synthetic Temp checks preserve all unrelated saved
+fields and cancellation; quest/gift/junk transactions inspected. Original pockets
+pre-transfer warning-window presentation remains fidelity work, not implemented
+by this slice. Turnips are next; parent ownership/M4/Philip acceptance stay open.

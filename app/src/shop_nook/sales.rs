@@ -2,11 +2,14 @@
 use crate::interaction::PlayerInventory;
 
 pub(crate) fn eligible(item: u16, condition: u32) -> bool {
-    condition == 0
+    condition <= 3
+        && item != 0
         && item >> 8 != 0x21
         && item >> 8 != 0x2F
         && !(0x2523..=0x2530).contains(&item)
-        && crate::items::sell_price(item).is_some()
+        && (crate::items::sell_price(item).is_some()
+            || (crate::items::price(item) == Some(0)
+                && !crate::items::name(item).starts_with("item 0x")))
 }
 
 fn paper(item: u16) -> bool {
@@ -57,7 +60,9 @@ impl Sale {
             if !eligible(item, condition) {
                 return None;
             }
-            sale.price = sale.price.checked_add(crate::items::sell_price(item)?)?;
+            sale.price = sale
+                .price
+                .checked_add(crate::items::sell_price(item).unwrap_or(0))?;
             sale.lines.push(Line {
                 slot,
                 item,
@@ -78,10 +83,14 @@ impl Sale {
         self.lines.iter().map(|l| quantity(l.item)).sum()
     }
 
+    pub fn has_quest(&self) -> bool {
+        self.lines.iter().any(|l| l.condition & 2 != 0)
+    }
+
     /// aNSC_check_buy_*: duplicates exclude quest and wrapped slots. Paper
     /// compares design across all stack sizes, then offers one or all sheets.
     pub fn duplicates(&self, inventory: &PlayerInventory) -> Option<Self> {
-        if self.lines.len() != 1 {
+        if self.lines.len() != 1 || self.lines[0].condition != 0 || self.price == 0 {
             return None;
         }
         let item = self.item();
@@ -92,7 +101,7 @@ impl Sale {
             } else {
                 item == candidate
             };
-            if same && eligible(candidate, inventory.pockets.item_cond(slot)) {
+            if same && inventory.pockets.item_cond(slot) == 0 && eligible(candidate, 0) {
                 mask |= 1 << slot;
             }
         }
@@ -123,7 +132,7 @@ impl Sale {
     }
 
     pub fn commit(&self, inventory: &mut PlayerInventory) -> Option<Payment> {
-        if !self.valid(inventory) {
+        if self.has_quest() || self.price == 0 || !self.valid(inventory) {
             return None;
         }
         let mut bells = inventory.bells.checked_add(self.price)?;
@@ -149,5 +158,19 @@ impl Sale {
         inventory.pockets = pockets;
         inventory.bells = bells;
         Some(payment)
+    }
+
+    /// aNSC_receive_check: no payment, ledger credit or wallet bag conversion.
+    pub fn discard(&self, inventory: &mut PlayerInventory) -> bool {
+        if self.has_quest() || self.price != 0 || !self.valid(inventory) {
+            return false;
+        }
+        let mut pockets = inventory.pockets.clone();
+        for line in &self.lines {
+            pockets.pockets[line.slot] = 0;
+            pockets.set_item_cond(line.slot, 0);
+        }
+        inventory.pockets = pockets;
+        true
     }
 }

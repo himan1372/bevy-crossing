@@ -226,8 +226,7 @@ impl PocketsUi {
                     "Quit",
                 ]
             } else {
-                // Present/quest handling and zero-value disposal have their
-                // own source flows; don't offer an unsupported transaction.
+                // Currency, turnips and unsupported item IDs remain excluded.
                 vec!["Quit"]
             }
         } else if self.storing.is_some() {
