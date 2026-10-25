@@ -156,6 +156,7 @@ pub fn camera_follow(
     preview: Res<crate::shop_nook::preview::Preview>,
     location: Res<State<crate::shop::ShopLocation>>,
     mut preview_camera: Local<crate::shop_nook::preview::CameraBlend>,
+    layout: Res<crate::shop::layout::Layout>,
 ) {
     let Ok(player_transform) = player_query.single() else {
         return;
@@ -180,7 +181,7 @@ pub fn camera_follow(
     };
 
     let (look, eye) = preview_camera.view(
-        preview.camera(),
+        preview.camera(*layout),
         (*c, *c + camera_eye_offset()),
         frames,
         *location == crate::shop::ShopLocation::Inside,

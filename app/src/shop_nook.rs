@@ -464,13 +464,22 @@ pub(crate) fn interact(
                     .stock
                     .get(index)
                     .is_some_and(|s| s.item == item && !s.sold && s.price == price);
+                let paint = (0x222D..=0x2238).contains(&item);
                 let response = if choice != 0 || !valid {
                     31
                 } else if inventory.bells < price {
                     33
-                } else if !inventory.add(item) {
+                } else if paint && home.is_none() {
+                    31
+                } else if !paint && !inventory.add(item) {
                     39
                 } else {
+                    if paint {
+                        // Source queues the exterior palette, even with full pockets.
+                        if let Some(home) = home.as_mut() {
+                            home.0.order_paint(item);
+                        }
+                    }
                     inventory.bells -= price;
                     shop.stock[index].sold = true;
                     shop.shop.record_purchase(price);
@@ -482,7 +491,9 @@ pub(crate) fn interact(
                     // month's stack or a free slot (GIVE_TICKET), else by
                     // mail (MAIL_TICKET); otherwise the tool's own line.
                     let month = crate::clock::now().month;
-                    if crate::catalog::comes_with_ticket(item) {
+                    if paint {
+                        203
+                    } else if crate::catalog::comes_with_ticket(item) {
                         if crate::catalog::give_ticket(&mut inventory.pockets.pockets, month) {
                             51
                         } else {
@@ -598,11 +609,6 @@ pub(crate) fn interact(
             actions.consume(Action::Interact);
             return;
         }
-        // Paint changes the house rather than entering pockets: keep that
-        // service deferred instead of selling a useless paint-can item.
-        if (0x222D..=0x2238).contains(&stock.item) {
-            return;
-        }
         actions.consume(Action::Interact);
         *focus = InputFocus::Dialogue;
         flow.context.items[0] = stock.name.clone();
@@ -613,7 +619,9 @@ pub(crate) fn interact(
             &mut dialogue,
             actor,
             &flow.context,
-            if preview::Surface::of(stock.item) == Some(preview::Surface::Shirt) {
+            if (0x222D..=0x2238).contains(&stock.item) {
+                202
+            } else if preview::Surface::of(stock.item) == Some(preview::Surface::Shirt) {
                 18
             } else if preview::Surface::of(stock.item).is_some() {
                 40
@@ -711,6 +719,7 @@ fn follow(
     player: Query<&Transform, With<Player>>,
     mut nook: Query<(&mut Transform, &mut Shopkeeper), Without<Player>>,
     obstacles: Res<crate::shop::ShopObstacles>,
+    layout: Res<crate::shop::layout::Layout>,
 ) {
     let Ok((mut transform, mut keeper)) = nook.single_mut() else {
         return;
@@ -723,7 +732,7 @@ fn follow(
     if let Some(goal) = raffle.at {
         // Raffle day: run to the drum, or to the prize he is picking up.
         // aNPC_ACT_RUN, 4 game units per 30 Hz frame.
-        let corner = SHOP_ORIGIN - Vec3::new(4.0, 0.0, 4.0);
+        let corner = SHOP_ORIGIN - layout.centre().with_y(0.0);
         let pos = (transform.translation - corner) * 40.0;
         let d = Vec3::new(goal.x - pos.x, 0.0, goal.y - pos.z);
         let at_drum = goal.distance(crate::raffle::NOOK_AT_DRUM) < 1.0;
@@ -757,7 +766,7 @@ fn follow(
         return;
     }
     let Ok(player) = player.single() else { return };
-    let corner = SHOP_ORIGIN - Vec3::new(4.0, 0.0, 4.0);
+    let corner = SHOP_ORIGIN - layout.centre().with_y(0.0);
     let pos = (transform.translation - corner) * 40.0;
     let target = (player.translation - corner) * 40.0;
     let delta = (target - pos).with_y(0.0);

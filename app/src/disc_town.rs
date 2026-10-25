@@ -16,6 +16,8 @@
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
 
+mod player_home_roof;
+
 use disc::{rel_bss, AssetCatalog, RomImage, RomSource, Target};
 use rustimal_logic::random_field::{
     bt, make_random_field, ComboInfo, RandomField, BLOCK_X_NUM, BLOCK_Z_NUM,
@@ -2166,6 +2168,9 @@ fn spawn_player_homes(
                 Visibility::default(),
             ))
             .id();
+        if house == 0 {
+            player_home_roof::track(commands, root, look, winter, model);
+        }
         for (mesh, material) in model {
             commands.spawn((
                 Mesh3d(mesh.clone()),
@@ -2277,18 +2282,26 @@ pub struct DiscTownPlugin;
 
 impl Plugin for DiscTownPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            OnEnter(AppState::InGame),
-            build_disc_town.run_if(resource_exists::<GameDisc>.and_then(resource_exists::<Town>)),
-        )
-        .add_systems(
-            Update,
-            (follow_ground, update_cranny_door).run_if(in_state(AppState::InGame)),
-        )
-        .add_systems(
-            Update,
-            update_fountain_flow.in_set(crate::states::GameplaySet),
-        );
+        app.init_resource::<player_home_roof::Cache>()
+            .add_systems(
+                OnEnter(AppState::InGame),
+                build_disc_town
+                    .run_if(resource_exists::<GameDisc>.and_then(resource_exists::<Town>)),
+            )
+            .add_systems(
+                Update,
+                (follow_ground, update_cranny_door).run_if(in_state(AppState::InGame)),
+            )
+            .add_systems(
+                Update,
+                update_fountain_flow.in_set(crate::states::GameplaySet),
+            )
+            .add_systems(
+                Update,
+                player_home_roof::update
+                    .after(crate::save::LoadSet)
+                    .in_set(crate::states::GameplaySet),
+            );
     }
 }
 

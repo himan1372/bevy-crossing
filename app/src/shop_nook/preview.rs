@@ -127,7 +127,7 @@ impl Preview {
         Some(item)
     }
 
-    pub fn camera(&self) -> Option<(Vec3, Vec3)> {
+    pub fn camera(&self, layout: crate::shop::layout::Layout) -> Option<(Vec3, Vec3)> {
         let (_, item) = self.active?;
         let (center, eye) = match Surface::of(item)? {
             Surface::Wall => (
@@ -140,7 +140,7 @@ impl Preview {
             ),
             Surface::Shirt => return None,
         };
-        let corner = crate::shop::SHOP_ORIGIN - Vec3::new(4.0, 1.0, 4.0);
+        let corner = crate::shop::SHOP_ORIGIN - layout.centre();
         Some((corner + center / 40.0, corner + eye / 40.0))
     }
 }

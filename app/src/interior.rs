@@ -211,12 +211,7 @@ fn spawn_shell(
     room
 }
 
-/// The shop's floor spans model cells 0.875..7.125: centre (4, 1, 4).
-const SHOP_CENTRE: Vec3 = Vec3::new(4.0, 1.0, 4.0);
-/// Half the shop's inside width, in cells.
-pub const SHOP_HALF: f32 = 3.125;
-
-/// Nook's Cranny's room (`ac_shop_indoor`, shop level 1): floor and walls,
+/// The selected shop room (`ac_shop_indoor`): floor and walls,
 /// opaque and translucent, with the shop's default carpet and wallpaper
 /// (`aSI_floor_default_table` / `aSI_wall_default_table`). On the monthly
 /// raffle day (`fukubiki`) aSI_DrawShopIndoor draws the decorated
@@ -227,26 +222,45 @@ pub fn spawn_shop_room(
     disc: &GameDisc,
     origin: Vec3,
     fukubiki: bool,
+    layout: crate::shop::layout::Layout,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<N64Material>,
     images: &mut Assets<Image>,
 ) -> bool {
     let list = |name: &str| disc.catalog.get(name).map(|a| a.offset);
-    let (Some(floor), Some(wall)) = (list("rom_shop1f_model"), list("rom_shop1w_model")) else {
+    let (Some(floor), Some(wall)) = (list(layout.floor()), list(layout.wall())) else {
         return false;
     };
     let table = |name: &str| {
         let a = disc.catalog.get(name)?;
-        let b = disc.rom.slice(RomSource::Rel, a.offset, 2)?;
+        let b = disc.rom.slice(
+            RomSource::Rel,
+            a.offset + if layout.nookway { 4 } else { 0 },
+            2,
+        )?;
         // `(u8)ITM_*`: the low byte is the pattern number.
         Some((i16::from_be_bytes([b[0], b[1]]) & 0xFF) as usize)
     };
     let floor_no = table("aSI_floor_default_table").unwrap_or(0);
     let wall_no = table("aSI_wall_default_table").unwrap_or(0);
     let mut floors = vec![(floor, false)];
-    floors.extend(list("rom_shop1f_modelT").map(|l| (l, true)));
+    floors.extend(
+        list(if layout.nookway {
+            "rom_shop3f_modelT"
+        } else {
+            "rom_shop1f_modelT"
+        })
+        .map(|l| (l, true)),
+    );
     let mut walls = vec![(wall, false)];
-    walls.extend(list("rom_shop1w_modelT").map(|l| (l, true)));
+    walls.extend(
+        list(if layout.nookway {
+            "rom_shop3w_modelT"
+        } else {
+            "rom_shop1w_modelT"
+        })
+        .map(|l| (l, true)),
+    );
     let mut others: Vec<(u32, bool)> = Vec::new();
     if fukubiki {
         floors.clear();
@@ -265,7 +279,7 @@ pub fn spawn_shop_room(
         disc,
         "shop room",
         origin,
-        SHOP_CENTRE,
+        layout.centre(),
         &floors,
         &walls,
         &others,

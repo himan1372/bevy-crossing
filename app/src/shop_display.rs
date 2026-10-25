@@ -1,6 +1,6 @@
 //! Nook's goods on display (`ac_shop_design` / `ac_shop_goods`).
 //!
-//! The shop's layout (`FG_TYPE_ROM_SHOP1` in `fgdata.bin`) marks a slot
+//! The built shop's layout (SHOP1 or SUPER in `fgdata.bin`) marks a slot
 //! for each kind of goods (`RSV_SHOP_*`, 0xFE00-0xFE0C); each day's goods
 //! fill the slots of their kind in order (`aSD_MakeGoodsFg`). Furniture,
 //! shirts (on a mannequin, `ac_shop_manekin`) and umbrellas (in a stand,
@@ -21,7 +21,6 @@ use crate::shop::ShopData;
 /// `FG_TYPE_ROM_SHOP1`: Nook's Cranny's layout.
 const SHOP1_FG: u16 = 0x22;
 /// The shop room's floor centre in model cells (see `interior`).
-const SHOP_CENTRE: Vec3 = Vec3::new(4.0, 1.0, 4.0);
 /// Model units per room cell (`aSI` draws the room at 0.0625; 40 game
 /// units per cell).
 const CELL: f32 = 40.0 / 0.0625;
@@ -146,6 +145,7 @@ pub(crate) fn show_goods(
     mut commands: Commands,
     disc: Option<Res<GameDisc>>,
     shop: Res<ShopData>,
+    layout: Res<crate::shop::layout::Layout>,
     catalog: Res<crate::catalog::Catalog>,
     mut display: ResMut<GoodsOnDisplay>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -167,8 +167,8 @@ pub(crate) fn show_goods(
     }
     display.shown = Some(key);
     let records = rustimal_logic::parse_fg_records(&disc.fgdata).ok();
-    let wanted = if raffle { SHOP1_FUKU } else { SHOP1_FG };
-    let layout = records.as_ref().and_then(|r| {
+    let wanted = if raffle { SHOP1_FUKU } else { layout.fg() };
+    let fg = records.as_ref().and_then(|r| {
         r.iter().find(|rec| rec.fg_id == wanted).or_else(|| {
             if raffle {
                 r.iter().find(|rec| rec.fg_id == SHOP1_FG)
@@ -177,8 +177,8 @@ pub(crate) fn show_goods(
             }
         })
     });
-    let Some(layout) = layout else { return };
-    let mut slots: Vec<(u16, (i32, i32), Option<(usize, ItemId, bool)>)> = layout
+    let Some(fg) = fg else { return };
+    let mut slots: Vec<(u16, (i32, i32), Option<(usize, ItemId, bool)>)> = fg
         .items
         .iter()
         .enumerate()
@@ -210,13 +210,13 @@ pub(crate) fn show_goods(
     }
 
     // Table tops: the highest surface of the room over each slot.
-    let room: Vec<u32> = ["rom_shop1f_model", "rom_shop1w_model"]
+    let room: Vec<u32> = [layout.floor(), layout.wall()]
         .iter()
         .filter_map(|n| disc.catalog.get(n).map(|a| a.offset))
         .collect();
     let surface = run_display_lists(&disc.rom, &room);
-    let corner = crate::shop::SHOP_ORIGIN - SHOP_CENTRE.with_y(0.0);
-    let floor = SHOP_CENTRE.y;
+    let corner = crate::shop::SHOP_ORIGIN - layout.centre().with_y(0.0);
+    let floor = layout.centre().y;
     for (reserve, ut, goods) in slots {
         let centre = Vec2::new(ut.0 as f32 + 0.5, ut.1 as f32 + 0.5);
         let top = surface

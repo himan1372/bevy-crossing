@@ -37,6 +37,16 @@ pub struct HouseSave {
 }
 
 impl HouseSave {
+    /// aNSC_sell_check queues paint for mHm_CheckRehouseOrder at startup/load.
+    /// Paint never enters pockets and does not replace an expansion's palette.
+    pub(crate) fn order_paint(&mut self, item: u16) -> bool {
+        let Some(palette) = item.checked_sub(0x222D).filter(|&p| p < 12) else {
+            return false;
+        };
+        self.next_outlook_pal = palette as u8;
+        true
+    }
+
     /// The station statue is up (ac_douzou: next_size is STATUE).
     pub fn statue_built(&self) -> bool {
         self.next_size == HouseSize::Statue as u8
@@ -347,7 +357,8 @@ fn init_house(mut commands: Commands, loaded: Res<crate::save::LoadedSave>) {
     commands.insert_resource(PlayerHouse(house));
 }
 
-/// F9: the loaded save's house (the town keeps the model it started with).
+/// F9: restore house state; the town refreshes roof palettes at the same size.
+/// A size-changing exterior reload still needs a restart.
 pub(crate) fn restore(
     house: &mut PlayerHouse,
     saved: Option<HouseSave>,

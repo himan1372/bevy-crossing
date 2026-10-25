@@ -28,6 +28,8 @@ use crate::player::Player;
 use crate::states::{AppState, GameplaySet};
 use crate::town::Town;
 
+pub(crate) mod layout;
+
 /// Town map vs. a public building's interior (the shop, or the post
 /// office). Lives only while in game.
 #[derive(SubStates, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -417,6 +419,7 @@ fn build_shop_interior(
     disc: Option<Res<crate::game_disc::GameDisc>>,
     mut n64: ResMut<Assets<crate::n64_material::N64Material>>,
     mut images: ResMut<Assets<Image>>,
+    shop: Res<ShopData>,
 ) {
     let ox = SHOP_ORIGIN.x;
     let oz = SHOP_ORIGIN.z;
@@ -426,6 +429,12 @@ fn build_shop_interior(
     let fukubiki =
         rustimal_logic::shop::tanuki_shop_status(today.year, today.month, today.day, false)
             == rustimal_logic::shop::TanukiShopStatus::Fukubiki;
+    // Paint is sold in SUPER. Other new tier rooms and raffle layouts remain
+    // separate work; retain the existing room on those paths.
+    let layout = layout::Layout {
+        nookway: shop.shop.shop_level == ShopTier::Super && !fukubiki,
+    };
+    commands.insert_resource(layout);
     // The disc's room, or the placeholder; the counter, Nook and the
     // stands keep their arrangement scaled into it.
     let real = disc.as_deref().is_some_and(|d| {
@@ -434,13 +443,14 @@ fn build_shop_interior(
             d,
             SHOP_ORIGIN,
             fukubiki,
+            layout,
             &mut meshes,
             &mut n64,
             &mut images,
         )
     });
     // House_Clock_Actor_ct: shops 0-4 have no wall clock on raffle day.
-    if real && !fukubiki {
+    if real && !fukubiki && !layout.nookway {
         if let Some(d) = disc.as_deref() {
             crate::furniture::house_clock::spawn_shop_clock(
                 &mut commands,
@@ -450,9 +460,9 @@ fn build_shop_interior(
             );
         }
     }
-    let k = if real { ShopRoom::disc().k } else { 1.0 };
+    let k = if real { ShopRoom::disc(layout).k } else { 1.0 };
     commands.insert_resource(if real {
-        ShopRoom::disc()
+        ShopRoom::disc(layout)
     } else {
         ShopRoom::default()
     });
@@ -529,7 +539,9 @@ fn build_shop_interior(
     // Display pedestals with sample goods (colors only; names/prices live
     // in the shop menu).
     let mut obstacles = if real {
-        disc.as_deref().map(room_obstacles).unwrap_or_default()
+        disc.as_deref()
+            .map(|d| room_obstacles(d, layout))
+            .unwrap_or_default()
     } else {
         vec![counter]
     };
@@ -595,6 +607,7 @@ struct ShopRoom {
     walk_x: f32,
     walk_z: f32,
     door_z: f32,
+    door_x: f32,
 }
 
 impl Default for ShopRoom {
@@ -604,19 +617,21 @@ impl Default for ShopRoom {
             walk_x: SHOP_WALK_X,
             walk_z: SHOP_WALK_Z,
             door_z: INTERIOR_DOOR_Z,
+            door_x: 0.0,
         }
     }
 }
 
 impl ShopRoom {
-    /// Nook's Cranny from the disc: 6.25 cells inside, door mid south wall.
-    fn disc() -> Self {
-        let half = crate::interior::SHOP_HALF;
+    /// Native room bounds and the chosen layout's south-wall doorway.
+    fn disc(layout: layout::Layout) -> Self {
+        let half = layout.half();
         Self {
             k: half / 5.0,
             walk_x: half - 0.4,
             walk_z: half - 0.4,
             door_z: half,
+            door_x: layout.door_x(),
         }
     }
 }
@@ -761,7 +776,7 @@ fn shop_enter(
         return;
     }
     commands.insert_resource(ShopReturnPos(transform.translation));
-    transform.translation = SHOP_ORIGIN + Vec3::new(0.0, 1.0, room.door_z - 0.8);
+    transform.translation = SHOP_ORIGIN + Vec3::new(room.door_x, 1.0, room.door_z - 0.8);
     facing.dir = Vec3::new(0.0, 0.0, -1.0);
     crate::sound::door_sound(Some(shop.shop.shop_level), true);
     next_state.set(ShopLocation::Inside);
@@ -791,7 +806,7 @@ fn shop_exit(
     };
     // The door panel on the inner face of the south wall.
     let door = DoorPanel {
-        center_x: SHOP_ORIGIN.x,
+        center_x: SHOP_ORIGIN.x + room.door_x,
         half_w: INTERIOR_DOOR_HALF_W,
         face_z: SHOP_ORIGIN.z + room.door_z,
         into_z: 1.0,
@@ -1133,22 +1148,23 @@ pub(crate) fn blocked_at(x: f32, z: f32, radius: f32, obstacles: &ShopObstacles)
 /// The disc shell contains its own tables, rack and pots. Use the existing
 /// surface reader at 1/8-cell spacing, merging contiguous samples into row
 /// bounds. Both actors collide with the visible furniture, even empty tables.
-fn room_obstacles(disc: &crate::game_disc::GameDisc) -> Vec<Obstacle> {
-    let lists: Vec<u32> = [
-        "rom_shop1f_model",
-        "rom_shop1w_model",
-        "rom_shop1_fuku_model",
-    ]
-    .iter()
-    .filter_map(|n| disc.catalog.get(n).map(|a| a.offset))
-    .collect();
+fn room_obstacles(disc: &crate::game_disc::GameDisc, layout: layout::Layout) -> Vec<Obstacle> {
+    let mut names = vec![layout.floor(), layout.wall()];
+    if !layout.nookway {
+        names.push("rom_shop1_fuku_model");
+    }
+    let lists: Vec<u32> = names
+        .iter()
+        .filter_map(|n| disc.catalog.get(n).map(|a| a.offset))
+        .collect();
     let surface = crate::disc_gfx::run_display_lists(&disc.rom, &lists);
     let mut out = Vec::new();
-    let corner = SHOP_ORIGIN - Vec3::new(4.0, 0.0, 4.0);
-    for z in 0..64 {
+    let corner = SHOP_ORIGIN - layout.centre().with_y(0.0);
+    let samples = (layout.centre().x * 16.0) as i32;
+    for z in 0..samples {
         let mut start = None;
-        for x in 0..=64 {
-            let raised = x < 64
+        for x in 0..=samples {
+            let raised = x < samples
                 && surface
                     .height_at((x as f32 + 0.5) * 80.0, (z as f32 + 0.5) * 80.0)
                     .is_some_and(|y| y / 640.0 > 1.2);
@@ -1199,6 +1215,7 @@ pub struct ShopPlugin;
 impl Plugin for ShopPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ShopRoom>()
+            .init_resource::<layout::Layout>()
             .add_sub_state::<ShopLocation>()
             .insert_resource(ShopData::default())
             .insert_resource(ShopUi::default())
@@ -1207,7 +1224,9 @@ impl Plugin for ShopPlugin {
                 Startup,
                 (
                     spawn_shop_exterior.after(find_shop_spot),
-                    build_shop_interior.after(crate::game_disc::start_disc_load),
+                    build_shop_interior
+                        .after(crate::game_disc::start_disc_load)
+                        .after(apply_loaded_shop),
                     setup_shop_ui,
                     apply_loaded_shop,
                 ),

@@ -132,24 +132,21 @@ recorded in comms.txt after the final gate. No tests added or run.
 
 Updated2026-10-25 at Philip's request. Priority order:
 
-1. Paint/roof service. Current shop_nook deliberately ignores displayed paint.
-   Trace aNSC_set_talk_info_sell_item and sell_check: original resident/visitor
-   rules, offer202/confirmation203, funds check, next_outlook_pal and pending
-   exterior update. Paint changes the house, so full pockets must not cause an
-   ordinary item-capacity refusal. Verify source update timing and persistence.
-2. Duplicate/all-item sale prompts, multi-marking, quest/present warning flows
+1. Duplicate/all-item sale prompts, multi-marking, quest/present warning flows
    and zero-value disposal. Only normal positive-price pocket items currently
    offer Sell; unsupported slots offer Quit.
-3. Turnip-price questions and selling, with source date/price/quantity/spoilage.
-4. Repeat-service conversations and password service/validation/item delivery.
-5. Additional shop layouts/tiers and their opening/closing/service rules;
-   replace immediate tier upgrade with the original renovation timing.
-6. Remaining seasonal stock/service branches, following original availability.
-7. Remaining approach/transfer poses, cameras and movement blending, plus
+2. Turnip-price questions and selling, with source date/price/quantity/spoilage.
+3. Repeat-service conversations and password service/validation/item delivery.
+4. Additional shop layouts/tiers and their opening/closing/service rules,
+   Nookington's paint floor and Nookway clock/uniform/exterior; replace immediate
+   tier upgrade with the original renovation timing.
+5. Remaining seasonal stock/service branches, following original availability.
+6. Remaining approach/transfer poses, cameras and movement blending, plus
    Philip's comparison of following, turning, targeting, dialogue, selling and
    the recent visual/audio changes.
 
-Already implemented by later slices: clothing try-on and carpet/wall previews,
+Already implemented by later slices: Nookway paint/roof service and its ordinary
+room/merchandise layout, clothing try-on and carpet/wall previews,
 clothing-change sparkles/wear trigger, ticket gifts/full-pocket ticket mail,
 catalog orders and delivery, raffle, and house expansion/roof selection during
 expansion/basement/statue progression. These supersede the older missing-feature
@@ -193,3 +190,13 @@ scale/fall/timing and feel-joint anchor; load/scene/AppState cleanup and gamepla
 pause gating. Captures, event/particle samples and full saved-state comparisons
 pass. Audible comparison remains Philip acceptance; no new shop services in
 this bounded detail task. See completed/shop-change-effects.md for evidence.
+
+2026-10-25 codex: completed/shop-paint-service.md adds native202/203 service,
+charging/selling the selected paint display and queueing next_outlook_pal with
+no pocket item/ticket/capacity refusal. Roof loads/redraws own same-size house
+only through cached original palettes. Ordinary Nookway room/layout/collision/
+door/preview coordinates were a necessary dependency: Cranny has no paint slot.
+Normal/full, refusal/cancel, duplicate slot,12palettes/cache, reload/restart and
+Cranny checks pass; see evidence for the separate startup field_items delta.
+Higher-tier completion (including Nookington's paint access), Nookway clock/
+uniform/exterior, other services and Philip acceptance remain open.

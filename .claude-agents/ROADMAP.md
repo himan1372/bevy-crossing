@@ -2,28 +2,41 @@
 
 ## Remaining shop services (Philip requested roadmap, 2026-10-25)
 
-Planned, not implemented by this documentation update. The visible checklist is
+Remaining priorities after the Nookway paint slice. The visible checklist is
 [Remaining shop work](../docs/roadmap.html#shop-services-next); detailed scope is
 [retail-shop-ui](backlog/retail-shop-ui.md). Keep that parent/M4 open.
 
-1. Paint/roof service: original offers/confirmation and resident restrictions;
-   update next_outlook_pal at source timing, not a pocket paint item. Check
-   funds/cancellation, full pockets, house palette and save/load behavior.
-2. Multi-item selling: marking/all-item prompts, duplicate slot identity,
+1. Multi-item selling: marking/all-item prompts, duplicate slot identity,
    condition/quest/present warnings and zero-value disposal.
-3. Turnip price questions and selling: native price/date/quantity/spoilage rules.
-4. Repeat-service conversations and original password validation/item delivery.
-5. Higher-tier layouts, availability/opening/closing and retail renovation delay
+2. Turnip price questions and selling: native price/date/quantity/spoilage rules.
+3. Repeat-service conversations and original password validation/item delivery.
+4. Higher-tier layouts/service access, including Nookington's paint floor and
+   Nookway's clock/uniform/exterior; opening/closing and retail renovation delay
    instead of the current simplified immediate upgrade.
-6. Remaining seasonal stock/service branches after source audit; raffle exists.
-7. Remaining approach/transfer poses, cameras/movement blending and Philip's
+5. Remaining seasonal stock/service branches after source audit; raffle exists.
+6. Remaining approach/transfer poses, cameras/movement blending and Philip's
    browsing/purchase/selling/audio acceptance.
 
-Already implemented: ordinary purchase/single-item sale, category previews and
+Already implemented: Nookway paint service and ordinary room/merchandise layout;
+ordinary purchase/single-item sale, category previews and
 clothing effects, tickets, catalog orders/delivery, raffle, house expansion roof
 selection/basement/statue progression. Do not schedule these again as missing.
 Pause/save screens and special quest/mail tags remain separate UI follow-ups.
-No gameplay/item counts or parent ownership changed by this roadmap update.
+Item counts, parent ownership and M4 acceptance remain unchanged.
+
+2026-10-25 codex: shop-paint-service connects native202/203 paint offers to
+exact-slot purchase, funds/roof queue/ledger/sold sign, bypassing pockets and
+tickets. Pending palette applies on startup/load; same-size own roof refresh
+uses a bounded twelve-palette native-model cache without changing neighbours.
+Cranny FG22 has no paint, so ordinary SUPER/Nookway FG24/rom_shop3 layout was
+added as a dependency, including native room/default69/shelves/collision/offset
+door and preview coordinates. Other tiers and raffle retain previous layouts;
+Nookway clock/uniform/exterior and Nookington's paint floor remain follow-ups.
+Normal/full purchases, cancel/short refusals, duplicate sold-slot repeat,
+all12 roof palettes/cache reuse, reload/restart, Nookway preview/door and Cranny
+regression checked. Unrelated empty field_items repopulates20 on fresh restart;
+paint state otherwise preserved. See completed/shop-paint-service.md for exact
+evidence and limits. Check/lint/fmt/capture/default/release pass, no tests.
 
 2026-10-25 codex: shop-change-effects adds ef_kigae/ef_kigae_light spirals
 and NA_SE_WEAR0x11C at MENU_CHANGE1 frame16 for try-on and return. Source feel

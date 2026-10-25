@@ -312,6 +312,11 @@ fn update_building_lights(
 }
 
 impl WindowLights {
+    /// Newly decoded window materials need the current level applied once.
+    pub(crate) fn invalidate(&mut self) {
+        self.level = None;
+    }
+
     fn update(&mut self, on: bool, step: f32, materials: &mut Assets<N64Material>) {
         let target = if on { 1.0 } else { 0.0 };
         if self.level == Some(target) {
