@@ -73,7 +73,7 @@ pub enum Action {
     /// Playtest aid: add K.K. Love Song to an empty pocket in your room.
     DebugMusic,
     DebugToys,
-    /// Toggle a registered music title's take-out mark.
+    /// Toggle a music take-out mark or a pocket item's sale mark.
     Mark,
     /// The GameCube Z button: the room light switch in the player's house.
     LightSwitch,

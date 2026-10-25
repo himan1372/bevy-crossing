@@ -23,6 +23,7 @@ use crate::skeleton::{Animation, Skeleton};
 
 type Model = Vec<(Handle<Mesh>, Handle<N64Material>)>;
 
+mod marks;
 mod tags;
 
 struct UiRig {
@@ -82,6 +83,8 @@ struct PocketCarry(Vec2, f32);
 
 #[derive(Resource)]
 pub(crate) struct PocketAssets {
+    marks: Model,
+    mark_ticks: f32,
     frame: Model,
     tags: Option<tags::TagModels>,
     tag_state: tags::Presentation,
@@ -463,6 +466,8 @@ fn setup(
     let portrait = make_view(&mut commands, &mut images, &preview, 2, true);
     let hand_image = make_view(&mut commands, &mut images, &hand, 3, false);
     commands.insert_resource(PocketAssets {
+        marks: marks::load(&disc, &mut meshes, &mut materials, &mut images),
+        mark_ticks: 0.0,
         tags: tags::TagModels::load(&disc, &mut meshes, &mut materials, &mut images),
         tag_state: tags::Presentation::default(),
         tags_busy: false,
@@ -653,11 +658,14 @@ fn animate(
     carries: Query<(Entity, &PocketCarry)>,
     mut cameras: Query<(&mut Camera, &PocketView)>,
     room: Res<crate::player_room::PlayerRoom>,
+    mut n64: ResMut<Assets<N64Material>>,
 ) {
     for (mut camera, view) in &mut cameras {
         camera.is_active = assets.root.is_some() || (view.hand && room.music_menu_open());
     }
     let ticks = time.delta_secs() * 60.0;
+    assets.mark_ticks = (assets.mark_ticks + ticks).rem_euclid(40.0);
+    marks::pulse(&assets.marks, assets.mark_ticks, &mut n64);
     if ticks <= 0.0 || assets.root.is_none() {
         return;
     }
@@ -924,6 +932,9 @@ fn draw(
             }
         }
         let at = slot_at(slot);
+        if ui.selling && ui.sale_marks & (1 << slot) != 0 {
+            marks::draw(&assets.marks, &mut paint, at);
+        }
         if let Some(tex) = assets.icons.get(&key) {
             paint.put(
                 quad_mesh(at - Vec2::splat(12.0), Vec2::splat(24.0)),

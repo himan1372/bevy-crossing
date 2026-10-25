@@ -2,12 +2,12 @@
 
 ## Remaining shop services (Philip requested roadmap, 2026-10-25)
 
-Remaining priorities after the Nookway paint slice. The visible checklist is
+Remaining priorities after the normal multi-item selling slice. The visible checklist is
 [Remaining shop work](../docs/roadmap.html#shop-services-next); detailed scope is
 [retail-shop-ui](backlog/retail-shop-ui.md). Keep that parent/M4 open.
 
-1. Multi-item selling: marking/all-item prompts, duplicate slot identity,
-   condition/quest/present warnings and zero-value disposal.
+1. Remaining selling cases: condition/quest/present warning conversations and
+   zero-value disposal. Normal marked/duplicate all-or-one sales are implemented.
 2. Turnip price questions and selling: native price/date/quantity/spoilage rules.
 3. Repeat-service conversations and original password validation/item delivery.
 4. Higher-tier layouts/service access, including Nookington's paint floor and
@@ -18,11 +18,20 @@ Remaining priorities after the Nookway paint slice. The visible checklist is
    browsing/purchase/selling/audio acceptance.
 
 Already implemented: Nookway paint service and ordinary room/merchandise layout;
-ordinary purchase/single-item sale, category previews and
+ordinary purchases and normal single/marked/duplicate-item sales, category previews and
 clothing effects, tickets, catalog orders/delivery, raffle, house expansion roof
 selection/basement/statue progression. Do not schedule these again as missing.
 Pause/save screens and special quest/mail tags remain separate UI follow-ups.
 Item counts, parent ownership and M4 acceptance remain unchanged.
+
+2026-10-25 codex: [shop-multi-selling](completed/shop-multi-selling.md) adds
+native M marks/Sell All and duplicate15 all-or-one followed by27, or marked214.
+Paper quantities aggregate sheets and retain exact selected-stack remainders;
+slot/condition snapshots and staged wallet/overflow bags prevent partial sales.
+Temp batch/cancel/duplicate/paper/overflow/capacity/protected/mark-clear checks,
+no-disc fallback, check/clippy/fmt and capture/default/release builds pass.
+No tests added/run. Real save hash unchanged; warning/disposal/turnip flows and
+Philip's playtest remain open. See task for numeric evidence and source limits.
 
 2026-10-25 codex: shop-paint-service connects native202/203 paint offers to
 exact-slot purchase, funds/roof queue/ledger/sold sign, bypassing pockets and

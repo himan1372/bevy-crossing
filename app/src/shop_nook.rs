@@ -14,6 +14,7 @@ use crate::shop_display::ShopDisplay;
 use crate::states::GameplaySet;
 
 pub(crate) mod preview;
+pub(crate) mod sales;
 
 #[derive(Component, Default)]
 pub(crate) struct Shopkeeper {
@@ -47,10 +48,11 @@ enum Step {
         price: u32,
     },
     Offer {
-        slot: usize,
-        item: u16,
-        condition: u32,
-        price: u32,
+        sale: sales::Sale,
+    },
+    Duplicate {
+        one: sales::Sale,
+        all: sales::Sale,
     },
     Finish,
     /// 0x10A6 is on screen; the catalog opens when the player continues.
@@ -328,25 +330,59 @@ pub(crate) fn interact(
         }
         pockets.selling = false;
         *focus = InputFocus::Dialogue;
-        if let Some(slot) = pockets.sell_slot.take() {
-            let item = inventory.pockets.pockets[slot];
-            let condition = inventory.pockets.item_cond(slot);
-            let price = crate::items::sell_price(item);
+        let picked = pockets.sale_pick.take();
+        pockets.sale_marks = 0;
+        if let Some(sale) = picked.and_then(|mask| sales::Sale::selected(&inventory, mask)) {
+            let item = sale.item();
             flow.context.items[0] = crate::items::name(item);
             flow.context.item_articles[0] = item_article(&disc, item);
-            flow.context.free[2] = price.unwrap_or(0).to_string();
-            if condition != 0 || price.is_none() {
-                // Recheck the handoff if the slot changed after selection.
-                say(&disc, &mut dialogue, actor, &flow.context, 29);
-                flow.step = Step::Finish;
-            } else {
-                say(&disc, &mut dialogue, actor, &flow.context, 27);
-                flow.step = Step::Offer {
-                    slot,
-                    item,
-                    condition,
-                    price: price.unwrap_or(0),
+            if let Some(all) = sale.duplicates(&inventory) {
+                let count = all.quantity();
+                flow.context.items[2] = crate::items::name(item);
+                flow.context.item_articles[2] = item_article(&disc, item);
+                flow.context.free[7] = count.to_string();
+                let unit = if item >> 12 == 2 {
+                    disc.catalog
+                        .get("aNSC_item_tanni_type")
+                        .and_then(|a| {
+                            disc.rom
+                                .pointer_at(a.source, a.offset + u32::from((item >> 8) & 15) * 4)
+                        })
+                        .and_then(|p| match p {
+                            disc::Target::File(source, at) => {
+                                disc.rom.slice(source, at + u32::from(item & 255), 1)
+                            }
+                            _ => None,
+                        })
+                        .and_then(|b| b.first())
+                        .copied()
+                        .unwrap_or(0)
+                        .min(9)
+                } else {
+                    0
                 };
+                let bases = [
+                    0x566, 0x575, 0x584, 0x593, 0x5a2, 0x5b1, 0x5c0, 0x5cf, 0x5de, 0x5ed,
+                ];
+                flow.context.free[8] = disc
+                    .text
+                    .as_ref()
+                    .and_then(|t| t.string(bases[usize::from(unit)] + count as usize - 1))
+                    .unwrap_or_default();
+                if let Some(one) = sale.one() {
+                    say(&disc, &mut dialogue, actor, &flow.context, 15);
+                    flow.step = Step::Duplicate { one, all };
+                }
+            } else {
+                flow.context.free[2] = sale.price.to_string();
+                say(
+                    &disc,
+                    &mut dialogue,
+                    actor,
+                    &flow.context,
+                    if sale.slots() > 1 { 214 } else { 27 },
+                );
+                flow.step = Step::Offer { sale };
             }
         } else {
             say(&disc, &mut dialogue, actor, &flow.context, 29);
@@ -514,24 +550,31 @@ pub(crate) fn interact(
                 say(&disc, &mut dialogue, actor, &flow.context, response);
                 flow.step = Step::Finish;
             }
-            Step::Offer {
-                slot,
-                item,
-                condition,
-                price,
-            } => {
-                let valid = inventory.pockets.pockets[slot] == item
-                    && inventory.pockets.item_cond(slot) == condition;
-                let response = if choice != 0 || !valid {
-                    29
-                } else if !sell_slot(&mut inventory, slot, price) {
-                    200
+            Step::Duplicate { one, all } => {
+                let sale = if choice == 0 { all } else { one };
+                if !sale.valid(&inventory) {
+                    say(&disc, &mut dialogue, actor, &flow.context, 29);
+                    flow.step = Step::Finish;
                 } else {
-                    shop.shop.record_sale(price);
+                    flow.context.free[2] = sale.price.to_string();
+                    say(&disc, &mut dialogue, actor, &flow.context, 27);
+                    flow.step = Step::Offer { sale };
+                }
+            }
+            Step::Offer { sale } => {
+                let response = if choice != 0 || !sale.valid(&inventory) {
+                    29
+                } else if let Some(payment) = sale.commit(&mut inventory) {
+                    shop.shop.record_sale(sale.price);
                     crate::shop::maybe_upgrade(&mut shop.shop);
                     crate::sound::se(crate::sound::se_id::REGISTER);
-                    info!("Nook sale slot={slot} item={item:#06x} payout={price}");
-                    28
+                    info!("Nook sale slots={} payout={}", sale.slots(), sale.price);
+                    match payment {
+                        sales::Payment::Wallet => 28,
+                        sales::Payment::Bags => 38,
+                    }
+                } else {
+                    200
                 };
                 say(&disc, &mut dialogue, actor, &flow.context, response);
                 flow.step = Step::Finish;
@@ -671,29 +714,6 @@ pub(crate) fn interact(
         }
         flow.step = Step::Request;
     }
-}
-
-/// Original wallet overflow policy: exchange 30,000 bells into bags. Stage
-/// the complete pocket update first so failure cannot consume the offered item.
-fn sell_slot(inventory: &mut PlayerInventory, slot: usize, price: u32) -> bool {
-    let Some(mut bells) = inventory.bells.checked_add(price) else {
-        return false;
-    };
-    let mut pockets = inventory.pockets.clone();
-    pockets.pockets[slot] = 0;
-    pockets.set_item_cond(slot, 0);
-    while bells >= 99999 {
-        let Some(empty) = pockets.pockets.iter().position(|&i| i == 0) else {
-            return false;
-        };
-        // ITM_MONEY_30000 (m_private / the translated buried-items table).
-        pockets.pockets[empty] = 0x2102;
-        pockets.set_item_cond(empty, 0);
-        bells -= 30000;
-    }
-    inventory.pockets = pockets;
-    inventory.bells = bells;
-    true
 }
 
 fn zone(p: Vec3) -> usize {

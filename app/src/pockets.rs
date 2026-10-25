@@ -21,8 +21,10 @@ pub struct PocketsUi {
     pub menu: Option<usize>,
     pub grabbed: Option<usize>,
     pub mail_slot: Option<usize>,
-    /// Inventory mode 0x5: return a slot to Nook, never transact here.
+    /// Inventory mode 0x5: return selected slots to Nook, never transact here.
     pub(crate) selling: bool,
+    pub(crate) sale_marks: u16,
+    pub(crate) sale_pick: Option<u16>,
     /// Inventory mode for the museum (mSM_IV_OPEN_CURATOR): pick an item
     /// to offer Blathers; the slot comes back in `sell_slot`.
     pub(crate) donating: bool,
@@ -133,6 +135,8 @@ fn toggle_pockets(
         return;
     }
     ui.open = next;
+    ui.sale_marks = 0;
+    ui.sale_pick = None;
     if next {
         ui.home = home.available;
     }
@@ -212,8 +216,15 @@ impl PocketsUi {
                 vec!["Quit"]
             }
         } else if self.selling {
-            if condition == 0 && crate::items::sell_price(item).is_some() {
-                vec!["Sell", "Quit"]
+            if crate::shop_nook::sales::eligible(item, condition) {
+                vec![
+                    if self.sale_marks & (1 << self.selected) != 0 {
+                        "Sell All"
+                    } else {
+                        "Sell"
+                    },
+                    "Quit",
+                ]
             } else {
                 // Present/quest handling and zero-value disposal have their
                 // own source flows; don't offer an unsupported transaction.
@@ -252,6 +263,19 @@ fn pockets_input(
     mut mailbox: ResMut<crate::mail::Mailbox>,
 ) {
     if !ui.open || *focus != InputFocus::Pockets {
+        return;
+    }
+    if ui.selling && ui.menu.is_none() && ui.mail_slot.is_none() && actions.consume(Action::Mark) {
+        let slot = ui.selected;
+        if crate::shop_nook::sales::eligible(
+            inventory.pockets.pockets[slot],
+            inventory.pockets.item_cond(slot),
+        ) {
+            ui.sale_marks ^= 1 << slot;
+            crate::sound::se(crate::sound::se_id::CURSOR);
+        }
+        actions.consume(Action::Confirm);
+        actions.consume(Action::Interact);
         return;
     }
     if renderer
@@ -385,10 +409,13 @@ fn pockets_input(
         }
         if ui.selling {
             if choice == 0
-                && inventory.pockets.item_cond(slot) == 0
-                && items::sell_price(item).is_some()
+                && crate::shop_nook::sales::eligible(item, inventory.pockets.item_cond(slot))
             {
-                ui.sell_slot = Some(slot);
+                ui.sale_pick = Some(if ui.sale_marks & (1 << slot) != 0 {
+                    ui.sale_marks
+                } else {
+                    1 << slot
+                });
                 ui.open = false;
             }
             crate::sound::se(crate::sound::se_id::CHOICE_CONFIRM);
@@ -469,6 +496,9 @@ fn pockets_input(
             ui.grabbed = Some(slot);
         }
     } else if inventory.pockets.pockets[slot] != EMPTY_NO {
+        if ui.selling && ui.sale_marks & (1 << slot) == 0 {
+            ui.sale_marks = 0;
+        }
         ui.menu = Some(0);
     }
     crate::sound::se(crate::sound::se_id::CHOICE_CONFIRM);
@@ -527,6 +557,16 @@ fn refresh_pockets(
                 ""
             }
         );
+        if ui.selling {
+            let marked = (0..15)
+                .filter(|&s| ui.sale_marks & (1 << s) != 0)
+                .map(|s| (s + 1).to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            t.0.push_str(&format!(
+                "\nM: mark/unmark; Enter: actions\nMarked slots: {marked}"
+            ));
+        }
     }
 }
 

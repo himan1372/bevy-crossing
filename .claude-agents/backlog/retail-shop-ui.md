@@ -132,9 +132,9 @@ recorded in comms.txt after the final gate. No tests added or run.
 
 Updated2026-10-25 at Philip's request. Priority order:
 
-1. Duplicate/all-item sale prompts, multi-marking, quest/present warning flows
-   and zero-value disposal. Only normal positive-price pocket items currently
-   offer Sell; unsupported slots offer Quit.
+1. Quest/present warning flows and zero-value disposal. Normal positive-price
+   items now support M marking/Sell All, duplicate all-or-one prompts and paper
+   sheet quantities; unsupported slots still offer Quit.
 2. Turnip-price questions and selling, with source date/price/quantity/spoilage.
 3. Repeat-service conversations and password service/validation/item delivery.
 4. Additional shop layouts/tiers and their opening/closing/service rules,
@@ -145,7 +145,8 @@ Updated2026-10-25 at Philip's request. Priority order:
    Philip's comparison of following, turning, targeting, dialogue, selling and
    the recent visual/audio changes.
 
-Already implemented by later slices: Nookway paint/roof service and its ordinary
+Already implemented by later slices: normal marked/duplicate-item selling,
+Nookway paint/roof service and its ordinary
 room/merchandise layout, clothing try-on and carpet/wall previews,
 clothing-change sparkles/wear trigger, ticket gifts/full-pocket ticket mail,
 catalog orders and delivery, raffle, and house expansion/roof selection during
@@ -200,3 +201,13 @@ Normal/full, refusal/cancel, duplicate slot,12palettes/cache, reload/restart and
 Cranny checks pass; see evidence for the separate startup field_items delta.
 Higher-tier completion (including Nookington's paint access), Nookway clock/
 uniform/exterior, other services and Philip acceptance remain open.
+
+2026-10-25 codex: completed/shop-multi-selling.md adds native M marks/Sell All,
+duplicate all-or-one and paper sheet quantities for normal positive-price goods.
+Exact slots/conditions are validated, all removals/remainders and wallet/bags
+commit together after final confirmation. Batch625, duplicate100/200, paper10/60,
+overflow bag and full-pocket partial-paper refusal checked in synthetic Temp;
+unrelated/protected state and cancel/reopen preserved. Mark art/count prompts
+and no-disc pockets inspected; final build/lint gates and source review pass.
+No tests or actual-save loads. Quest/present warnings, zero disposal, turnips,
+other services and Philip acceptance remain open; parent ownership unchanged.
