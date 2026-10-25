@@ -130,19 +130,33 @@ recorded in comms.txt after the final gate. No tests added or run.
 
 ## Still open
 
-- Philip's comparison of following, turning, display targeting, dialogue and
-  selling. Precise retail cameras, approach/transfer poses and movement blending.
-- Clothing try-on, carpet/wall previews and paint/house service. Ordinary
-  clothing/wall/floor items currently use the normal purchase offer without a
-  preview; paint interaction is deferred rather than adding useless paint items.
-- Duplicate/all-item sale prompts, multi-marking, quest/present warning flows,
-  zero-value disposal, turnip pricing and special services. Only normal,
-  positive-price pocket items offer Sell; unsupported slots offer Quit.
-- Ticket gifts with qualifying purchases, repeat-service conversations,
-  catalogue/password/remodel/events and additional shop layouts/tiers. The
-  existing immediate tier upgrade remains simplified, not retail remodeling.
-- Overflow bag logic and duplicate display identity have source/code review
-  only in this slice; those edge cases were not exercised live.
+Updated2026-10-25 at Philip's request. Priority order:
+
+1. Paint/roof service. Current shop_nook deliberately ignores displayed paint.
+   Trace aNSC_set_talk_info_sell_item and sell_check: original resident/visitor
+   rules, offer202/confirmation203, funds check, next_outlook_pal and pending
+   exterior update. Paint changes the house, so full pockets must not cause an
+   ordinary item-capacity refusal. Verify source update timing and persistence.
+2. Duplicate/all-item sale prompts, multi-marking, quest/present warning flows
+   and zero-value disposal. Only normal positive-price pocket items currently
+   offer Sell; unsupported slots offer Quit.
+3. Turnip-price questions and selling, with source date/price/quantity/spoilage.
+4. Repeat-service conversations and password service/validation/item delivery.
+5. Additional shop layouts/tiers and their opening/closing/service rules;
+   replace immediate tier upgrade with the original renovation timing.
+6. Remaining seasonal stock/service branches, following original availability.
+7. Remaining approach/transfer poses, cameras and movement blending, plus
+   Philip's comparison of following, turning, targeting, dialogue, selling and
+   the recent visual/audio changes.
+
+Already implemented by later slices: clothing try-on and carpet/wall previews,
+clothing-change sparkles/wear trigger, ticket gifts/full-pocket ticket mail,
+catalog orders and delivery, raffle, and house expansion/roof selection during
+expansion/basement/statue progression. These supersede the older missing-feature
+notes above. Development checks are recorded separately from Philip acceptance.
+Original single-item sale and exact stock-slot validation remain the foundation;
+the first slice's limited edge-case evidence is historical, not a new claim
+that every current combination has been played.
 
 Load original assets at runtime from Philip's own disc; never commit extracted
 bytes. Keep the no-disc placeholder usable. Use source and existing translations,

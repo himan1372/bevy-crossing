@@ -1,5 +1,30 @@
 # bevy-crossing roadmap (revised 2026-10-14)
 
+## Remaining shop services (Philip requested roadmap, 2026-10-25)
+
+Planned, not implemented by this documentation update. The visible checklist is
+[Remaining shop work](../docs/roadmap.html#shop-services-next); detailed scope is
+[retail-shop-ui](backlog/retail-shop-ui.md). Keep that parent/M4 open.
+
+1. Paint/roof service: original offers/confirmation and resident restrictions;
+   update next_outlook_pal at source timing, not a pocket paint item. Check
+   funds/cancellation, full pockets, house palette and save/load behavior.
+2. Multi-item selling: marking/all-item prompts, duplicate slot identity,
+   condition/quest/present warnings and zero-value disposal.
+3. Turnip price questions and selling: native price/date/quantity/spoilage rules.
+4. Repeat-service conversations and original password validation/item delivery.
+5. Higher-tier layouts, availability/opening/closing and retail renovation delay
+   instead of the current simplified immediate upgrade.
+6. Remaining seasonal stock/service branches after source audit; raffle exists.
+7. Remaining approach/transfer poses, cameras/movement blending and Philip's
+   browsing/purchase/selling/audio acceptance.
+
+Already implemented: ordinary purchase/single-item sale, category previews and
+clothing effects, tickets, catalog orders/delivery, raffle, house expansion roof
+selection/basement/statue progression. Do not schedule these again as missing.
+Pause/save screens and special quest/mail tags remain separate UI follow-ups.
+No gameplay/item counts or parent ownership changed by this roadmap update.
+
 2026-10-25 codex: shop-change-effects adds ef_kigae/ef_kigae_light spirals
 and NA_SE_WEAR0x11C at MENU_CHANGE1 frame16 for try-on and return. Source feel
 joint25, radius22/every2ticks/60tick emitter,30tick scale/fall children, original
