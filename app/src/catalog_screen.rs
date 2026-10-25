@@ -14,6 +14,8 @@ use crate::msg_window::{self, MsgAssets};
 use crate::n64_material::N64Material;
 use crate::states::{AppState, GameplaySet};
 
+mod flat_preview;
+
 const LAYER: usize = 1;
 const PAGE: i16 = 7;
 /// `mCL_set_page_dl` draws the models through a scale of 16, in font pixels.
@@ -697,8 +699,8 @@ fn draw(
     }
 }
 
-/// Puts the selected furniture piece in the circle. Wallpaper, carpet,
-/// paper and music keep the empty ring; those are flat drawings.
+/// Puts furniture in the perspective circle; flat_preview draws other types
+/// through the existing overlay camera, as mCL_item_draw does.
 fn show_preview(
     mut commands: Commands,
     ui: Res<CatalogUi>,
@@ -1003,6 +1005,7 @@ impl Plugin for CatalogScreenPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CatalogUi>()
             .init_resource::<Drawn>()
+            .init_resource::<flat_preview::Cache>()
             .add_systems(
                 OnEnter(AppState::InGame),
                 load_models.run_if(resource_exists::<GameDisc>),
@@ -1013,6 +1016,8 @@ impl Plugin for CatalogScreenPlugin {
                     drive.in_set(InteractSet::Ui).in_set(GameplaySet),
                     draw.run_if(resource_exists::<MsgAssets>),
                     show_preview.after(draw),
+                    flat_preview::show.after(draw),
+                    flat_preview::animate.after(flat_preview::show),
                     fit_preview.after(show_preview),
                     scroll_page.after(draw),
                     frame_preview_camera,

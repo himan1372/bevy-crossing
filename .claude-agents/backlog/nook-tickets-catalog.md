@@ -73,3 +73,17 @@ actual third-prize win replayed without allocator errors. Letter saved-state
 comparison and five-ticket/wrapped-prize/sold-slot assertions pass. Source review
 and compiler/lint/format gates pass; no tests. Parent remains open for missing
 non-furniture previews, exact clock fitting and Philip's acceptance.
+
+## Flat catalog previews (2026-10-24, codex)
+
+Selected follow-up catalog-flat-previews adds original mCL flat overlay models
+for wallpaper, carpet, stationery and music. Source scales0.54/0.54/0.28/0.55,
+wall paletteA and floor paletteD with textures8-B; paper design modulo64 matches
+catalog20C0..20FF IDs. Music shares original note art with 60Hz bob/sway/tilt.
+Lazy model cache retains assets across selection changes, existing catalog root
+owns cleanup. Original furniture perspective renderer and order logic unchanged.
+Inspected multiple patterns/ruling/no-ruling papers and music screenshots;
+navigation/cancel preserved complete compared numeric fields and music motion
+was sampled. See completed/catalog-flat-previews.md for final verification.
+This supersedes earlier empty-preview notes. Parent remains open for exact
+clock fitting and Philip's acceptance; ownership unchanged.
