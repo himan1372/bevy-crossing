@@ -823,7 +823,9 @@ fn mail_ui_input(
     }
 
     // --- List view ---
-    if renderer.as_ref().is_some_and(|r| r.hand_busy())
+    if renderer
+        .as_ref()
+        .is_some_and(|r| r.hand_busy() || r.tags_busy())
         && !actions.just_pressed(Action::Cancel)
         && !actions.just_pressed(Action::Back)
     {

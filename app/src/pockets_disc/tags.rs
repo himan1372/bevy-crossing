@@ -1,10 +1,12 @@
-//! mTG_set_win_field artwork. Popup anchors remain the port's current layout.
+//! Original tag artwork, native placement and retained popup motion.
 use super::*;
+
+mod layout;
+mod presentation;
+pub(super) use presentation::{animate, Presentation};
 
 struct Shape {
     model: Model,
-    min: Vec3,
-    max: Vec3,
 }
 
 pub(super) struct TagModels {
@@ -14,6 +16,7 @@ pub(super) struct TagModels {
     action_shadow: Shape,
     confirm: Shape,
     cursor: Shape,
+    arrows: [Shape; 2],
 }
 
 impl Shape {
@@ -79,19 +82,7 @@ impl Shape {
                 }
             }
         }
-        Some(Self { model, min, max })
-    }
-
-    fn fitted(&self, rect: Rect, z: f32) -> Transform {
-        let scale = Vec3::new(
-            rect.width() * 16.0 / (self.max.x - self.min.x),
-            rect.height() * 16.0 / (self.max.y - self.min.y),
-            1.0,
-        );
-        Transform::from_translation(
-            screen(rect.center()).with_z(z) - (self.min + self.max) * 0.5 * scale,
-        )
-        .with_scale(scale)
+        Some(Self { model })
     }
 
     fn draw(&self, paint: &mut Paint, transform: Transform, name: &str) {
@@ -139,19 +130,23 @@ impl TagModels {
                 [110, 110, 200, 150],
             )?,
             cursor: load("sen_win_cursor_model", [215, 30, 215, 255], [0; 4])?,
+            arrows: [
+                load("sen_itemw_yajirushi_model", [215, 165, 60, 255], [0; 4])?,
+                load("sen_itemw_yajirushi2T_model", [215, 165, 60, 255], [0; 4])?,
+            ],
         })
     }
 
-    pub(super) fn frame(&self, paint: &mut Paint, rect: Rect, z: f32, item: bool, confirm: bool) {
-        let (frame, shadow) = if item {
+    fn layout(&self, paint: &mut Paint, layout: layout::Layout, kind: usize) {
+        let (frame, shadow) = if kind == 0 {
             (&self.item, &self.item_shadow)
-        } else if confirm {
+        } else if kind == 2 {
             (&self.confirm, &self.action_shadow)
         } else {
             (&self.action, &self.action_shadow)
         };
-        let rect = if item { rect } else { Self::action_body(rect) };
-        let transform = frame.fitted(rect, z);
+        let transform = Transform::from_translation((layout.body * 16.0).extend(0.1))
+            .with_scale((layout.body_scale * 0.875).extend(1.0));
         // Shadow vertices already carry the source offset: share the frame's transform.
         let mut shadow_transform = transform;
         shadow_transform.translation.z -= 0.2;
@@ -159,35 +154,18 @@ impl TagModels {
         frame.draw(
             paint,
             transform,
-            if item {
+            if kind == 0 {
                 "retail item tag"
             } else {
                 "retail action tag"
             },
         );
-    }
-
-    fn action_body(rect: Rect) -> Rect {
-        // mTG_set_tag_win_scale_p(SELECT2), including transparent padding.
-        let text = rect.size() - Vec2::new(24.0, 12.0);
-        let fraction = Vec2::new((text.x - 31.5) / 42.0, (text.y - 28.0) / 42.0);
-        let minimum = Vec2::new(0.5714286, 0.43243244);
-        let body_scale = minimum + fraction * (Vec2::ONE - minimum);
-        let size = Vec2::new(122.5, 129.5) * 0.875 * body_scale;
-        Rect::from_center_size(rect.center(), size)
-    }
-
-    pub(super) fn action_shift(rect: Rect) -> f32 {
-        // Keep tall popups clear of the port's name tag at y193.
-        (Self::action_body(rect).max.y - 190.0).max(0.0)
-    }
-
-    pub(super) fn cursor(&self, paint: &mut Paint, at: Vec2, z: f32) {
-        self.cursor.draw(
-            paint,
-            self.cursor
-                .fitted(Rect::from_corners(at, at + Vec2::splat(8.0)), z),
-            "retail tag cursor",
-        );
+        if layout.arrow != 0 {
+            self.arrows[usize::from(layout.arrow - 1)].draw(
+                paint,
+                Transform::from_xyz(0.0, 0.0, 0.05),
+                "retail tag arrow",
+            );
+        }
     }
 }

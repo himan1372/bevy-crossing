@@ -254,7 +254,10 @@ fn pockets_input(
     if !ui.open || *focus != InputFocus::Pockets {
         return;
     }
-    if renderer.as_ref().is_some_and(|r| r.hand_busy()) {
+    if renderer
+        .as_ref()
+        .is_some_and(|r| r.hand_busy() || r.tags_busy())
+    {
         actions.consume(Action::Confirm);
         actions.consume(Action::Interact);
         return;

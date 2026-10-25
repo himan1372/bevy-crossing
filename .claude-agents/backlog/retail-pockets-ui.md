@@ -177,3 +177,13 @@ tall menus move up together to clear the fixed name tag. Wrapped names now say
 Present as mTG_init_tag_data_item_win does. Tool/gift/stationery/mail/shop tags
 and cancel/state preservation checked. Existing actions unchanged. Full mTG
 anchor/arrow/morph animation and Philip acceptance remain open.
+
+2026-10-25 codex: completed/retail-tag-layout-motion.md supersedes the ordinary
+tag placement/motion deferral. Name tags use selected-slot anchors, original
+arrows and20tick delay; after-item/after-select menus use mTG edge rules and
+source scale rates. Retained roots avoid per-frame asset creation/cursor reset.
+Input during opening/return is gated as in source, Cancel retained. Returning
+closes name and action, resets name wait; empty slots hide names immediately.
+Pocket edges/middle-row special case, rapid gift presses, full saved-state
+comparison, reload/empty/no-disc checked. Special context families and Philip
+acceptance remain open; no inventory transaction changes.

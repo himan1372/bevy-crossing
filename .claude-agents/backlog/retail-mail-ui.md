@@ -120,3 +120,10 @@ with original name/action frames, shadows and cursor; source sizing and a shared
 upward offset keep four action rows/confirmation and the sender label readable.
 Mail discard remains initially No; cancellation preserves complete letter and
 inventory fields. Exact tag arrows/animation/positioning and acceptance stay open.
+
+2026-10-25 codex: completed/retail-tag-layout-motion.md now supplies source
+ordinary tag anchors/edge rules/motion, original item pointer arrows and nested
+after-select discard positioning. Long From label and both letter-grid edges
+inspected; cursor/root continuity, return/reset and numeric cancellation pass.
+The port's single-line From/To label is retained; source multi-line special mail/
+quest families and Philip acceptance remain separate. No mail transactions changed.

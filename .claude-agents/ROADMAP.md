@@ -124,8 +124,14 @@ Shared original tag-art follow-up (2026-10-24, codex): sen_itemw/sen_win frames,
 shadows and cursor, source colors/font/body sizing, tall-popup name clearance
 and wrapped Present labels. Tool/gift/paper/mail-discard/shop Sell/Quit capture
 and cancel-state comparisons pass; no-disc fallback inspected. See
-completed/retail-tag-art.md. Full tag arrows/morph/anchors and remaining shop/
-pause/HUD work remain open; this does not close the parent retail UI tasks.
+completed/retail-tag-art.md. The later completed/retail-tag-layout-motion.md
+adds native ordinary tag anchors/edge rules/item arrows and20tick wait/.125/.185
+scale animation with retained roots. Cancel returns name+action and reinitializes
+name timing; busy guards prevent invisible actions and duplicate reopening.
+Pockets/mail edges, nested confirmation, cursor retention, rapid gift presses,
+reload/empty slots, shop Sell/Quit and no-disc fallback checked with numeric
+comparisons. Special multiline quest/mail tag families, remaining shop/pause/HUD
+and Philip acceptance stay open; parent retail tasks are not closed by this.
 
 - [x] **dialogue-polish** — typing, pauses, name plate and normal villager Animalese. Philip's F8 comparison sounds good without hiccups. Remaining voice modes/edge cases are tracked below.
 - [x] **pause-menu** — Save / Settings / Quit; Settings currently edits the disc path.

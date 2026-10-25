@@ -156,3 +156,8 @@ Sell/Quit popup to original sen_win frame/shadow/cursor/colors/font, with source
 body sizing. Inspected actual shop Sell/Quit; Quit then pockets cancellation
 preserves every saved field except position/playtime. No shop transaction or
 category-preview behavior changed; parent ownership/acceptance unchanged.
+
+2026-10-25 codex: completed/retail-tag-layout-motion.md extends the shared
+Sell/Quit popup with native after-item positioning and source open/return rates.
+Shop capture/cancel comparison preserved every field except position/playtime.
+Category previews/services and Philip acceptance remain open.

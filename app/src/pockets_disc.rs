@@ -84,6 +84,9 @@ struct PocketCarry(Vec2, f32);
 pub(crate) struct PocketAssets {
     frame: Model,
     tags: Option<tags::TagModels>,
+    tag_state: tags::Presentation,
+    tags_busy: bool,
+    tag_dirty: bool,
     hand: Model,
     portrait: Handle<Image>,
     hand_image: Handle<Image>,
@@ -104,6 +107,9 @@ pub(crate) struct PocketAssets {
     white: Handle<Image>,
 }
 impl PocketAssets {
+    pub(crate) fn tags_busy(&self) -> bool {
+        self.tags_busy
+    }
     pub(crate) fn hand_image(&self) -> Handle<Image> {
         self.hand_image.clone()
     }
@@ -458,6 +464,9 @@ fn setup(
     let hand_image = make_view(&mut commands, &mut images, &hand, 3, false);
     commands.insert_resource(PocketAssets {
         tags: tags::TagModels::load(&disc, &mut meshes, &mut materials, &mut images),
+        tag_state: tags::Presentation::default(),
+        tags_busy: false,
+        tag_dirty: false,
         portrait,
         hand_image,
         envelopes: [
@@ -824,6 +833,7 @@ fn draw(
             crate::input::InputFocus::Pockets | crate::input::InputFocus::Mail
         );
     if !visible {
+        assets.tag_state.close(&mut commands);
         if !open && !mail.open && assets.root.is_some() && assets.slide < 300.0 {
             return;
         }
@@ -876,6 +886,7 @@ fn draw(
         assets.root = Some(root);
     }
     if !fresh
+        && !assets.tag_dirty
         && !ui.is_changed()
         && !inventory.is_changed()
         && !identity.is_changed()
@@ -884,6 +895,7 @@ fn draw(
     {
         return;
     }
+    assets.tag_dirty = false;
     if let Some(old) = assets.dynamic.take() {
         commands.entity(old).despawn();
     }
@@ -1033,25 +1045,38 @@ fn draw(
     } else {
         crate::items::name(labelled)
     };
-    let label = if assets.tags.is_some() && !label.is_empty() {
-        scaled_text(&label, 28)
-    } else {
-        label
-    };
-    let width = text_width(&label, &font.widths);
-    if !label.is_empty() {
-        if let Some(tags) = &assets.tags {
-            tags.frame(
-                &mut paint,
-                Rect::from_corners(
-                    Vec2::new(160.0 - width * 0.5 - 7.0, 193.0),
-                    Vec2::new(160.0 + width * 0.5 + 7.0, 215.0),
-                ),
-                140.0,
-                true,
-                false,
-            );
+    if assets.tags.is_some() {
+        let options = if mail.menu.is_some() {
+            let (written, present) = mail.menu_letter;
+            vec![
+                if written { "Rewrite" } else { "Read" },
+                "Grab",
+                if present { "Present" } else { "Throw Away" },
+                "Quit",
+            ]
         } else {
+            ui.actions(selected, inventory.pockets.item_cond(ui.selected))
+        };
+        let PocketAssets {
+            tags, tag_state, ..
+        } = &mut *assets;
+        if let Some(models) = tags {
+            tag_state.show(
+                models,
+                &mut paint,
+                &font,
+                root,
+                at,
+                &label,
+                &options,
+                mail.menu.or(ui.menu),
+                mail.discard,
+                mail_slot.is_none().then_some(ui.selected / 5),
+            );
+        }
+    } else {
+        let width = text_width(&label, &font.widths);
+        if !label.is_empty() {
             paint.put(
                 quad_mesh(
                     Vec2::new(160.0 - width * 0.5 - 5.0, 195.0),
@@ -1061,18 +1086,14 @@ fn draw(
                 Color::srgb_u8(255, 255, 210),
                 140.0,
             );
+            paint.text(
+                &font,
+                &label,
+                Vec2::new(160.0 - width * 0.5, 196.0),
+                [50, 60, 50, 255],
+                141.0,
+            );
         }
-        paint.text(
-            &font,
-            &label,
-            Vec2::new(160.0 - width * 0.5, 196.0),
-            if assets.tags.is_some() {
-                [90, 60, 50, 255]
-            } else {
-                [50, 60, 50, 255]
-            },
-            141.0,
-        );
     }
     // mIV_SetLineStrings_centering: town then player, source scale/colors.
     for (name, origin, scale, color) in [
@@ -1103,54 +1124,30 @@ fn draw(
         [255, 60, 0, 255],
         130.0,
     );
-    if let Some(choice) = mail.menu.or(ui.menu) {
-        let options = if mail.menu.is_some() {
-            mail.action_options().to_vec()
-        } else {
-            ui.actions(selected, inventory.pockets.item_cond(ui.selected))
-        };
-        let tag_layout = assets.tags.as_ref().map(|_| {
-            let width = options
-                .iter()
-                .map(|s| text_width(s, &font.widths))
-                .chain(
-                    mail.discard
-                        .then(|| text_width("Throw it out?", &font.widths)),
-                )
-                .fold(0.0, f32::max)
-                * 0.875
-                + 24.0;
-            let height = options.len() as f32 * 14.0 + 12.0 + if mail.discard { 22.0 } else { 0.0 };
-            let min = Vec2::new(186.0, if mail.discard { 122.0 } else { 144.0 });
-            let rect = Rect::from_corners(min, min + Vec2::new(width, height));
-            let shift = tags::TagModels::action_shift(rect);
-            (
-                Rect::from_corners(rect.min - Vec2::Y * shift, rect.max - Vec2::Y * shift),
-                shift,
-            )
-        });
-        let tag_shift = tag_layout.map_or(0.0, |(_, shift)| shift);
-        if mail.discard {
-            paint.text(
-                &font,
-                &scaled_text("Throw it out?", 28),
-                Vec2::new(194.0, 128.0 - tag_shift),
-                [220, 30, 220, 255],
-                162.0,
-            );
-        }
-        let centre = Vec2::new(224.0, 166.0);
-        let compact = assets.tags.is_some()
-            || mail.menu.is_some()
-            || ui.selling
-            || ui.donating
-            || ui.mailing
-            || ui.storing.is_some()
-            || ui.home;
-        let (menu_min, menu_max) = font.choice_bounds;
-        if let (Some(tags), Some((rect, _))) = (&assets.tags, tag_layout) {
-            tags.frame(&mut paint, rect, 160.0, false, mail.discard);
-        } else {
+    if assets.tags.is_none() {
+        if let Some(choice) = mail.menu.or(ui.menu) {
+            let options = if mail.menu.is_some() {
+                mail.action_options().to_vec()
+            } else {
+                ui.actions(selected, inventory.pockets.item_cond(ui.selected))
+            };
+            if mail.discard {
+                paint.text(
+                    &font,
+                    &scaled_text("Throw it out?", 28),
+                    Vec2::new(194.0, 128.0),
+                    [220, 30, 220, 255],
+                    162.0,
+                );
+            }
+            let centre = Vec2::new(224.0, 166.0);
+            let compact = mail.menu.is_some()
+                || ui.selling
+                || ui.donating
+                || ui.mailing
+                || ui.storing.is_some()
+                || ui.home;
+            let (menu_min, menu_max) = font.choice_bounds;
             for (mesh, material) in &font.choice_body {
                 let transform = if compact && menu_min.is_finite() && menu_max.is_finite() {
                     let width = options
@@ -1190,36 +1187,25 @@ fn draw(
                     ChildOf(dynamic),
                 ));
             }
-        }
-        for (i, label) in options.iter().enumerate() {
-            let at = Vec2::new(
-                205.0,
-                150.0 + i as f32 * if compact { 14.0 } else { 16.0 } - tag_shift,
-            );
-            let label = if compact {
-                scaled_text(label, 28)
-            } else {
-                (*label).to_string()
-            };
-            paint.text(
-                &font,
-                &label,
-                at,
-                if assets.tags.is_some() && i == choice {
-                    [120, 35, 255, 255]
-                } else if assets.tags.is_some() {
-                    [140, 150, 190, 255]
-                } else if i == choice {
-                    [120, 50, 50, 255]
+            for (i, label) in options.iter().enumerate() {
+                let at = Vec2::new(205.0, 150.0 + i as f32 * if compact { 14.0 } else { 16.0 });
+                let label = if compact {
+                    scaled_text(label, 28)
                 } else {
-                    [180, 150, 110, 255]
-                },
-                162.0,
-            );
-            if i == choice {
-                if let Some(tags) = &assets.tags {
-                    tags.cursor(&mut paint, at + Vec2::new(-12.0, 3.0), 163.0);
-                } else {
+                    (*label).to_string()
+                };
+                paint.text(
+                    &font,
+                    &label,
+                    at,
+                    if i == choice {
+                        [120, 50, 50, 255]
+                    } else {
+                        [180, 150, 110, 255]
+                    },
+                    162.0,
+                );
+                if i == choice {
                     paint.put(
                         quad_mesh(at - Vec2::new(16.0, 0.0), Vec2::splat(16.0)),
                         font.cursor.clone(),
@@ -1255,7 +1241,10 @@ impl Plugin for PocketDiscPlugin {
             );
         app.add_systems(
             Update,
-            animate.after(draw).run_if(resource_exists::<PocketAssets>),
+            (
+                animate.after(draw).run_if(resource_exists::<PocketAssets>),
+                tags::animate.after(draw).in_set(crate::states::GameplaySet),
+            ),
         );
     }
 }
