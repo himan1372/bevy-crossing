@@ -114,10 +114,18 @@ Each milestone ends with a Philip playtest.
 - [ ] **retail-pause-ui** — compare the original pause/save flow and implement its applicable presentation; retain accessible port Settings and Quit controls. See backlog/retail-pause-ui.md.
 - [ ] **retail-hud-ui** — source-backed clock/date, bells and context prompts; replace the current development-style overlay where retail has an equivalent. See backlog/retail-hud-ui.md.
 
-UI order: pockets → mail → shop → pause/save → HUD. Pockets has a first
-implementation; the other UI tasks remain planned. Each requires source tracing, runtime disc loading,
-a usable no-disc fallback and Philip's comparison acceptance. This order does
-not move title-screen or rename out of their deferred status.
+UI order: pockets → mail → shop → pause/save → HUD. Pockets/mail/shop have
+initial implementations; pause/save and remaining HUD presentation stay open.
+Each requires source tracing, runtime disc loading, a usable no-disc fallback
+and Philip's comparison acceptance. This order does not move title-screen or
+rename out of their deferred status.
+
+Shared original tag-art follow-up (2026-10-24, codex): sen_itemw/sen_win frames,
+shadows and cursor, source colors/font/body sizing, tall-popup name clearance
+and wrapped Present labels. Tool/gift/paper/mail-discard/shop Sell/Quit capture
+and cancel-state comparisons pass; no-disc fallback inspected. See
+completed/retail-tag-art.md. Full tag arrows/morph/anchors and remaining shop/
+pause/HUD work remain open; this does not close the parent retail UI tasks.
 
 - [x] **dialogue-polish** — typing, pauses, name plate and normal villager Animalese. Philip's F8 comparison sounds good without hiccups. Remaining voice modes/edge cases are tracked below.
 - [x] **pause-menu** — Save / Settings / Quit; Settings currently edits the disc path.

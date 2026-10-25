@@ -114,3 +114,9 @@ load shows the correct Neighbor1 stationery/body. Explicit no-disc fallback
 also swaps, shows the confirmation, cancels and discards. User data untouched.
 Compile/lint/format/capture/default build gates pass; no tests added/run. Philip
 has not yet accepted the corrected menu size, movement or action behavior.
+
+2026-10-24 codex: completed/retail-tag-art.md replaces generic popup artwork
+with original name/action frames, shadows and cursor; source sizing and a shared
+upward offset keep four action rows/confirmation and the sender label readable.
+Mail discard remains initially No; cancellation preserves complete letter and
+inventory fields. Exact tag arrows/animation/positioning and acceptance stay open.

@@ -167,3 +167,13 @@ retail-mail-ui now populates/selects the ten envelope slots, opens stationery
 reading and returns to pockets. Both grids currently share the existing mailbox
 pool; separate carried-mail transfer/storage remains explicitly outside this
 visual implementation. See retail-mail-ui.md for evidence and remaining scope.
+
+## Shared tag artwork follow-up (2026-10-24, codex)
+
+See completed/retail-tag-art.md. Original sen_itemw name and sen_win action
+frames/shadows/cursor replace generic shapes, with source normal colors/font
+scale. SELECT2 source body sizing keeps all menu rows within visible artwork;
+tall menus move up together to clear the fixed name tag. Wrapped names now say
+Present as mTG_init_tag_data_item_win does. Tool/gift/stationery/mail/shop tags
+and cancel/state preservation checked. Existing actions unchanged. Full mTG
+anchor/arrow/morph animation and Philip acceptance remain open.

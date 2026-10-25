@@ -23,6 +23,8 @@ use crate::skeleton::{Animation, Skeleton};
 
 type Model = Vec<(Handle<Mesh>, Handle<N64Material>)>;
 
+mod tags;
+
 struct UiRig {
     skeleton: Skeleton,
     animation: Animation,
@@ -81,6 +83,7 @@ struct PocketCarry(Vec2, f32);
 #[derive(Resource)]
 pub(crate) struct PocketAssets {
     frame: Model,
+    tags: Option<tags::TagModels>,
     hand: Model,
     portrait: Handle<Image>,
     hand_image: Handle<Image>,
@@ -454,6 +457,7 @@ fn setup(
     let portrait = make_view(&mut commands, &mut images, &preview, 2, true);
     let hand_image = make_view(&mut commands, &mut images, &hand, 3, false);
     commands.insert_resource(PocketAssets {
+        tags: tags::TagModels::load(&disc, &mut meshes, &mut materials, &mut images),
         portrait,
         hand_image,
         envelopes: [
@@ -1019,25 +1023,54 @@ fn draw(
             .unwrap_or_default()
     } else if labelled == 0 {
         String::new()
+    } else if inventory
+        .pockets
+        .item_cond(ui.grabbed.unwrap_or(ui.selected))
+        == 1
+    {
+        // mTG_init_tag_data_item_win: do not reveal a wrapped item's name.
+        "Present".to_string()
     } else {
         crate::items::name(labelled)
     };
+    let label = if assets.tags.is_some() && !label.is_empty() {
+        scaled_text(&label, 28)
+    } else {
+        label
+    };
     let width = text_width(&label, &font.widths);
     if !label.is_empty() {
-        paint.put(
-            quad_mesh(
-                Vec2::new(160.0 - width * 0.5 - 5.0, 195.0),
-                Vec2::new(width + 10.0, 19.0),
-            ),
-            assets.white.clone(),
-            Color::srgb_u8(255, 255, 210),
-            140.0,
-        );
+        if let Some(tags) = &assets.tags {
+            tags.frame(
+                &mut paint,
+                Rect::from_corners(
+                    Vec2::new(160.0 - width * 0.5 - 7.0, 193.0),
+                    Vec2::new(160.0 + width * 0.5 + 7.0, 215.0),
+                ),
+                140.0,
+                true,
+                false,
+            );
+        } else {
+            paint.put(
+                quad_mesh(
+                    Vec2::new(160.0 - width * 0.5 - 5.0, 195.0),
+                    Vec2::new(width + 10.0, 19.0),
+                ),
+                assets.white.clone(),
+                Color::srgb_u8(255, 255, 210),
+                140.0,
+            );
+        }
         paint.text(
             &font,
             &label,
             Vec2::new(160.0 - width * 0.5, 196.0),
-            [50, 60, 50, 255],
+            if assets.tags.is_some() {
+                [90, 60, 50, 255]
+            } else {
+                [50, 60, 50, 255]
+            },
             141.0,
         );
     }
@@ -1076,64 +1109,93 @@ fn draw(
         } else {
             ui.actions(selected, inventory.pockets.item_cond(ui.selected))
         };
+        let tag_layout = assets.tags.as_ref().map(|_| {
+            let width = options
+                .iter()
+                .map(|s| text_width(s, &font.widths))
+                .chain(
+                    mail.discard
+                        .then(|| text_width("Throw it out?", &font.widths)),
+                )
+                .fold(0.0, f32::max)
+                * 0.875
+                + 24.0;
+            let height = options.len() as f32 * 14.0 + 12.0 + if mail.discard { 22.0 } else { 0.0 };
+            let min = Vec2::new(186.0, if mail.discard { 122.0 } else { 144.0 });
+            let rect = Rect::from_corners(min, min + Vec2::new(width, height));
+            let shift = tags::TagModels::action_shift(rect);
+            (
+                Rect::from_corners(rect.min - Vec2::Y * shift, rect.max - Vec2::Y * shift),
+                shift,
+            )
+        });
+        let tag_shift = tag_layout.map_or(0.0, |(_, shift)| shift);
         if mail.discard {
             paint.text(
                 &font,
                 &scaled_text("Throw it out?", 28),
-                Vec2::new(194.0, 128.0),
+                Vec2::new(194.0, 128.0 - tag_shift),
                 [220, 30, 220, 255],
                 162.0,
             );
         }
         let centre = Vec2::new(224.0, 166.0);
-        let compact = mail.menu.is_some()
+        let compact = assets.tags.is_some()
+            || mail.menu.is_some()
             || ui.selling
             || ui.donating
             || ui.mailing
             || ui.storing.is_some()
             || ui.home;
         let (menu_min, menu_max) = font.choice_bounds;
-        for (mesh, material) in &font.choice_body {
-            let transform = if compact && menu_min.is_finite() && menu_max.is_finite() {
-                let width = options
-                    .iter()
-                    .map(|s| text_width(s, &font.widths))
-                    .chain(
-                        mail.discard
-                            .then(|| text_width("Throw it out?", &font.widths)),
+        if let (Some(tags), Some((rect, _))) = (&assets.tags, tag_layout) {
+            tags.frame(&mut paint, rect, 160.0, false, mail.discard);
+        } else {
+            for (mesh, material) in &font.choice_body {
+                let transform = if compact && menu_min.is_finite() && menu_max.is_finite() {
+                    let width = options
+                        .iter()
+                        .map(|s| text_width(s, &font.widths))
+                        .chain(
+                            mail.discard
+                                .then(|| text_width("Throw it out?", &font.widths)),
+                        )
+                        .fold(0.0, f32::max)
+                        * 0.875
+                        + 24.0;
+                    let height =
+                        options.len() as f32 * 14.0 + 12.0 + if mail.discard { 22.0 } else { 0.0 };
+                    let scale = Vec3::new(
+                        width * 16.0 / (menu_max.x - menu_min.x).max(1.0),
+                        height * 16.0 / (menu_max.y - menu_min.y).max(1.0),
+                        1.0,
+                    );
+                    let center = Vec2::new(
+                        186.0 + width * 0.5,
+                        (if mail.discard { 122.0 } else { 144.0 }) + height * 0.5,
+                    );
+                    Transform::from_translation(
+                        screen(center).with_z(160.0) - (menu_min + menu_max) * 0.5 * scale,
                     )
-                    .fold(0.0, f32::max)
-                    * 0.875
-                    + 24.0;
-                let height =
-                    options.len() as f32 * 14.0 + 12.0 + if mail.discard { 22.0 } else { 0.0 };
-                let scale = Vec3::new(
-                    width * 16.0 / (menu_max.x - menu_min.x).max(1.0),
-                    height * 16.0 / (menu_max.y - menu_min.y).max(1.0),
-                    1.0,
-                );
-                let center = Vec2::new(
-                    186.0 + width * 0.5,
-                    (if mail.discard { 122.0 } else { 144.0 }) + height * 0.5,
-                );
-                Transform::from_translation(
-                    screen(center).with_z(160.0) - (menu_min + menu_max) * 0.5 * scale,
-                )
-                .with_scale(scale)
-            } else {
-                Transform::from_translation(screen(centre).with_z(160.0))
-                    .with_scale(Vec3::new(0.7, 0.7, 1.0))
-            };
-            paint.commands.spawn((
-                Mesh3d(mesh.clone()),
-                MeshMaterial3d(material.clone()),
-                transform,
-                RenderLayers::layer(1),
-                ChildOf(dynamic),
-            ));
+                    .with_scale(scale)
+                } else {
+                    Transform::from_translation(screen(centre).with_z(160.0))
+                        .with_scale(Vec3::new(0.7, 0.7, 1.0))
+                };
+                paint.commands.spawn((
+                    Mesh3d(mesh.clone()),
+                    MeshMaterial3d(material.clone()),
+                    transform,
+                    RenderLayers::layer(1),
+                    ChildOf(dynamic),
+                ));
+            }
         }
         for (i, label) in options.iter().enumerate() {
-            let at = Vec2::new(205.0, 150.0 + i as f32 * if compact { 14.0 } else { 16.0 });
+            let at = Vec2::new(
+                205.0,
+                150.0 + i as f32 * if compact { 14.0 } else { 16.0 } - tag_shift,
+            );
             let label = if compact {
                 scaled_text(label, 28)
             } else {
@@ -1143,7 +1205,11 @@ fn draw(
                 &font,
                 &label,
                 at,
-                if i == choice {
+                if assets.tags.is_some() && i == choice {
+                    [120, 35, 255, 255]
+                } else if assets.tags.is_some() {
+                    [140, 150, 190, 255]
+                } else if i == choice {
                     [120, 50, 50, 255]
                 } else {
                     [180, 150, 110, 255]
@@ -1151,12 +1217,16 @@ fn draw(
                 162.0,
             );
             if i == choice {
-                paint.put(
-                    quad_mesh(at - Vec2::new(16.0, 0.0), Vec2::splat(16.0)),
-                    font.cursor.clone(),
-                    Color::srgb_u8(0, 195, 185),
-                    163.0,
-                );
+                if let Some(tags) = &assets.tags {
+                    tags.cursor(&mut paint, at + Vec2::new(-12.0, 3.0), 163.0);
+                } else {
+                    paint.put(
+                        quad_mesh(at - Vec2::new(16.0, 0.0), Vec2::splat(16.0)),
+                        font.cursor.clone(),
+                        Color::srgb_u8(0, 195, 185),
+                        163.0,
+                    );
+                }
             }
         }
     }

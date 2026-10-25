@@ -150,3 +150,9 @@ not guessed layouts or gameplay rules. Claim before implementation. Run suitable
 compile/lint/format/build checks for code changes; no tests unless Philip requests
 them. Record implementation evidence separately from Philip's actual acceptance.
 M4 remains open; title and rename remain deferred.
+
+2026-10-24 codex: completed/retail-tag-art.md updates the shared pockets
+Sell/Quit popup to original sen_win frame/shadow/cursor/colors/font, with source
+body sizing. Inspected actual shop Sell/Quit; Quit then pockets cancellation
+preserves every saved field except position/playtime. No shop transaction or
+category-preview behavior changed; parent ownership/acceptance unchanged.
