@@ -44,7 +44,7 @@ compared fields. Read both delivered Nook letters with correct attachments.
 Raffle loss consumed exactly five tickets, and ball entity timing/motion ran,
 but its rendered ball was4000x too small due to double model scaling. The later
 fix is recorded in completed/raffle-ball-scale.md. Two renderer slab-allocation errors while
-viewing delivered letters are recorded separately in mail-render-slab-errors.md.
+viewing delivered letters were later fixed in completed/mail-render-slab-errors.md.
 See completed/catalog-raffle-verification.md for exact evidence/setup limits.
 Parent remains open; non-furniture previews, exact clock fitting and Philip
 acceptance are not closed by these checks.
@@ -60,5 +60,16 @@ stays there. Final inspected screenshots show seated drum, visible rolling
 ball and front clearance. Actual loss consumes exactly5 tickets and preserves
 wallet/conditions/catalog/prizes/stock/room/mail; scene cleanup/reentry checked.
 See completed/raffle-ball-scale.md for gates/evidence. The previously recorded
-allocator error also occurred during a winning-prize display refresh; that
-separate investigation remains open. Parent ownership/acceptance unchanged.
+allocator error also occurred during a winning-prize display refresh; the later
+fix is in completed/mail-render-slab-errors.md. Parent ownership/acceptance unchanged.
+
+## Empty text renderer follow-up (2026-10-24, codex)
+
+Blank letter lines and markup-only raffle reveal prefixes submitted zero-vertex
+indexed meshes. Shared text builder now returns None for no glyph geometry;
+dialogue, pockets/mail, catalog and music-grid callers skip allocation/spawning.
+Both baseline error paths reproduced with producer logs, then same letter and
+actual third-prize win replayed without allocator errors. Letter saved-state
+comparison and five-ticket/wrapped-prize/sold-slot assertions pass. Source review
+and compiler/lint/format gates pass; no tests. Parent remains open for missing
+non-furniture previews, exact clock fitting and Philip's acceptance.

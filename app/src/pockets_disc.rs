@@ -791,12 +791,10 @@ impl Paint<'_, '_, '_> {
             .id()
     }
     pub(crate) fn text(&mut self, font: &MsgAssets, text: &str, at: Vec2, color: [u8; 4], z: f32) {
-        self.put(
-            text_mesh(text, at, &font.widths, color, usize::MAX),
-            font.font.clone(),
-            Color::WHITE,
-            z,
-        );
+        let Some(mesh) = text_mesh(text, at, &font.widths, color, usize::MAX) else {
+            return;
+        };
+        self.put(mesh, font.font.clone(), Color::WHITE, z);
     }
 }
 

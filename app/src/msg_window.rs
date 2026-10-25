@@ -299,13 +299,14 @@ pub(crate) fn choice_layout(answers: &[&str], widths: &[u8; 256]) -> (Vec2, Vec2
 /// A text mesh: one quad per character from `origin` (screen pixels),
 /// `\n` starting a new 16-pixel line, the first `limit` pieces of the page
 /// (`messages::markup`), each character in its own colour or `color`.
+/// Blank lines and unrevealed control-only prefixes have no geometry.
 pub(crate) fn text_mesh(
     text: &str,
     origin: Vec2,
     widths: &[u8; 256],
     color: [u8; 4],
     limit: usize,
-) -> Mesh {
+) -> Option<Mesh> {
     let (mut pos, mut uv, mut idx, mut col) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     let mut cursor = origin;
     let (mut line_scale, mut char_scale) = (1.0, 1.0);
@@ -351,14 +352,19 @@ pub(crate) fn text_mesh(
         idx.extend([base, base + 2, base + 1, base, base + 3, base + 2]);
         cursor.x += w * scale;
     }
-    Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::RENDER_WORLD,
+    if pos.is_empty() {
+        return None;
+    }
+    Some(
+        Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::RENDER_WORLD,
+        )
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)
+        .with_inserted_indices(Indices::U32(idx)),
     )
-    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)
-    .with_inserted_indices(Indices::U32(idx))
 }
 
 pub(crate) fn text_width(text: &str, widths: &[u8; 256]) -> f32 {
@@ -598,23 +604,27 @@ fn draw_window(
     };
     model(&mut commands, &assets.window, window_at, 0.0);
     // Text and marks: a mesh in screen space, `image` tinted `color`.
-    let mut put =
-        |commands: &mut Commands, mesh: Mesh, image: &Handle<Image>, color: [u8; 4], z: f32| {
-            let material = text_materials.add(StandardMaterial {
-                base_color: Color::srgba_u8(color[0], color[1], color[2], color[3]),
-                base_color_texture: Some(image.clone()),
-                unlit: true,
-                alpha_mode: AlphaMode::Blend,
-                ..default()
-            });
-            commands.spawn((
-                Mesh3d(meshes.add(mesh)),
-                MeshMaterial3d(material),
-                Transform::from_xyz(0.0, 0.0, z),
-                layer.clone(),
-                ChildOf(root),
-            ));
-        };
+    let mut put = |commands: &mut Commands,
+                   mesh: Option<Mesh>,
+                   image: &Handle<Image>,
+                   color: [u8; 4],
+                   z: f32| {
+        let Some(mesh) = mesh else { return };
+        let material = text_materials.add(StandardMaterial {
+            base_color: Color::srgba_u8(color[0], color[1], color[2], color[3]),
+            base_color_texture: Some(image.clone()),
+            unlit: true,
+            alpha_mode: AlphaMode::Blend,
+            ..default()
+        });
+        commands.spawn((
+            Mesh3d(meshes.add(mesh)),
+            MeshMaterial3d(material),
+            Transform::from_xyz(0.0, 0.0, z),
+            layer.clone(),
+            ChildOf(root),
+        ));
+    };
     let font = assets.font.clone();
     let widths = assets.widths;
     let speaker = speaker.and_then(|e| villagers.get(e).ok());
@@ -679,7 +689,7 @@ fn draw_window(
                     let at = origin - Vec2::new(16.0, 0.0);
                     put(
                         &mut commands,
-                        quad_mesh(at, Vec2::splat(MARK)),
+                        Some(quad_mesh(at, Vec2::splat(MARK))),
                         &assets.cursor,
                         CHOICE_CURSOR,
                         5.0,
@@ -702,7 +712,7 @@ fn draw_window(
             let at = WINDOW_CENTRE + NEXT_AT - SCREEN * 0.5;
             put(
                 &mut commands,
-                quad_mesh(at, Vec2::splat(MARK)),
+                Some(quad_mesh(at, Vec2::splat(MARK))),
                 &assets.next,
                 NEXT_COLOR,
                 3.0,

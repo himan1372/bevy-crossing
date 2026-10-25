@@ -979,7 +979,9 @@ fn put_text(
     root: Entity,
     layer: &RenderLayers,
 ) {
-    let mesh = msg_window::text_mesh(text, at, widths, color, usize::MAX);
+    let Some(mesh) = msg_window::text_mesh(text, at, widths, color, usize::MAX) else {
+        return;
+    };
     let material = materials.add(StandardMaterial {
         base_color_texture: Some(font.clone()),
         unlit: true,

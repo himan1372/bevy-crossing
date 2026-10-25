@@ -553,7 +553,10 @@ fn draw(
         ));
     }
     let mut text = |s: &str, at: Vec2, color: [u8; 4]| {
-        let mesh = meshes.add(text_mesh(s, at, &font.widths, color, usize::MAX));
+        let Some(mesh) = text_mesh(s, at, &font.widths, color, usize::MAX) else {
+            return;
+        };
+        let mesh = meshes.add(mesh);
         drawn.meshes.push(mesh.clone());
         commands.spawn((
             Mesh3d(mesh),
