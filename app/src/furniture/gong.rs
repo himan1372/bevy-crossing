@@ -11,13 +11,13 @@ pub(crate) fn is_gong(index: u16) -> bool {
     index == 0x4EE
 }
 
-fn flash_parts(disc: &GameDisc) -> Option<Vec<Part>> {
+pub(crate) fn flash_parts(disc: &GameDisc, alpha: u8) -> Option<Vec<Part>> {
     let mode = disc.catalog.get("ef_takurami01_normal_render_mode")?;
     let model = disc.catalog.get("ef_takurami01_kira_modelT")?;
     let mut parts = run_display_lists_with_prim(
         &disc.rom,
         &[mode.offset, model.offset],
-        [255, 255, 255, 200],
+        [255, 255, 255, alpha],
         255,
     )
     .parts;
@@ -43,7 +43,7 @@ fn flash_parts(disc: &GameDisc) -> Option<Vec<Part>> {
 
 /// ef_flash's legacy gsDPLoadBlock texture is row-major N64 IA8, not
 /// Dolphin/GX-tiled IA4. Keep this known asset conversion local to the effect.
-fn flash_rgba(disc: &GameDisc, part: &Part) -> Option<Vec<u8>> {
+pub(crate) fn flash_rgba(disc: &GameDisc, part: &Part) -> Option<Vec<u8>> {
     let key = part.key.tex.as_ref()?;
     let asset = disc.catalog.get("ef_takurami01_1")?;
     if key.img_addr != asset.offset
@@ -84,7 +84,8 @@ pub(super) fn available(disc: &GameDisc, profile: &Profile) -> bool {
             }
         }
     }
-    count > 0 && flash_parts(disc).is_some_and(|p| p.iter().all(|p| flash_rgba(disc, p).is_some()))
+    count > 0
+        && flash_parts(disc, 200).is_some_and(|p| p.iter().all(|p| flash_rgba(disc, p).is_some()))
 }
 
 #[derive(Component)]
@@ -241,7 +242,7 @@ pub(crate) fn update(
             effects.clear(&mut commands);
             return;
         };
-        let Some(parts) = flash_parts(&disc) else {
+        let Some(parts) = flash_parts(&disc, 200) else {
             return;
         };
         let assets: Option<Vec<_>> = parts

@@ -296,6 +296,10 @@ impl CharacterRig {
     pub(crate) fn joint_count(&self) -> usize {
         self.joints.len()
     }
+    /// Player_actor_draw_After_feel: joint callback25 supplies ef_kigae's centre.
+    pub(crate) fn feel_joint(&self) -> Option<Entity> {
+        self.joints.get(25).copied()
+    }
     /// Player_actor_draw_After_Larm2: callback16, VecX(1100).
     pub(crate) fn left_hand_position(
         &self,

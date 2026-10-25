@@ -7,6 +7,8 @@ use crate::game_disc::GameDisc;
 use crate::n64_material::{texture_image, N64Material};
 use crate::skeleton::{Animation, Skeleton};
 
+pub(super) mod effects;
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Surface {
     Shirt,
@@ -57,6 +59,7 @@ pub(crate) struct Preview {
     frame: f32,
     restoring: bool,
     changing: bool,
+    gesture: u64,
 }
 
 impl Preview {
@@ -78,6 +81,7 @@ impl Preview {
             }
             self.frame = 1.0;
             self.changing = true;
+            self.gesture = self.gesture.wrapping_add(1);
         }
         self.restoring = false;
         self.active = Some((index, item));
@@ -99,6 +103,7 @@ impl Preview {
         self.restoring = true;
         self.changing = true;
         self.frame = 1.0;
+        self.gesture = self.gesture.wrapping_add(1);
     }
 
     pub fn changing(&self) -> bool {

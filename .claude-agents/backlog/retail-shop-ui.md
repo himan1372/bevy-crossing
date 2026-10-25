@@ -171,3 +171,11 @@ identity, funds, pocket and ticket handling retained; no saved appearance writes
 Input remains reserved throughout changing; leaving/loading resets owned talk.
 Parent ownership/M4/Philip acceptance remain open. Change puff/wear sound,
 other shop services, pause/save presentation and special tag families deferred.
+
+2026-10-25 codex: shop-change-effects completes the clothing gesture effect:
+source ef_kigae spiral/ef_kigae_light children and one positional NA_SE_WEAR
+trigger at frame16 on try-on and restoration. Native cached sparkle art,
+scale/fall/timing and feel-joint anchor; load/scene/AppState cleanup and gameplay
+pause gating. Captures, event/particle samples and full saved-state comparisons
+pass. Audible comparison remains Philip acceptance; no new shop services in
+this bounded detail task. See completed/shop-change-effects.md for evidence.

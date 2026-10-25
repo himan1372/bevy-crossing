@@ -1,5 +1,16 @@
 # bevy-crossing roadmap (revised 2026-10-14)
 
+2026-10-25 codex: shop-change-effects adds ef_kigae/ef_kigae_light spirals
+and NA_SE_WEAR0x11C at MENU_CHANGE1 frame16 for try-on and return. Source feel
+joint25, radius22/every2ticks/60tick emitter,30tick scale/fall children, original
+sparkle geometry/legacy IA8 decode and billboard. Gong keeps alpha200; clothing
+uses255. Once-per-gesture latch, pause/scene/load/AppState cleanup; explicit
+LoadSet ordering from review. Repeated captures and complete39-field saved
+comparisons pass; source sound ID/diagnostics checked, audible acceptance still
+requires listening. See completed/shop-change-effects.md for gate/runtime
+evidence and limits. No item-count/parent-ownership/M4 acceptance changes.
+Next remaining shop services, pause/save screens, special quest/mail tags.
+
 2026-10-25 codex: shop-category-previews adds original preview/skip/cancel
 questions for ordinary Cranny clothing, wallpaper and carpet. Temporary shirt/
 hat and room texture swaps restore before/after the final decision; MENU_CHANGE1

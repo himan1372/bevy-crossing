@@ -220,6 +220,7 @@ pub mod se_id {
     pub const PAGE_OKURI: u16 = 0x0B;
     pub const MENU_PAUSE: u16 = 0x30;
     pub const ITEM_GET: u16 = 0x40;
+    pub const WEAR: u16 = 0x11C;
     pub const TOOL_FURI: u16 = 0x5A;
     pub const NET_CATCH: u16 = 0x5D;
     pub const POCKET_RUSTLE: u16 = 0x69;

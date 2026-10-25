@@ -845,9 +845,16 @@ impl Plugin for ShopNookPlugin {
         app.init_resource::<Conversation>()
             .init_resource::<preview::Preview>()
             .init_resource::<preview::Mannequin>()
+            .init_resource::<preview::effects::Effects>()
             .add_systems(
                 OnExit(crate::states::AppState::InGame),
-                (reset, preview::textures, preview::mannequin).chain(),
+                (
+                    reset,
+                    preview::textures,
+                    preview::mannequin,
+                    preview::effects::reset,
+                )
+                    .chain(),
             )
             .add_systems(
                 Update,
@@ -858,6 +865,10 @@ impl Plugin for ShopNookPlugin {
                     preview::mannequin
                         .after(interact)
                         .after(crate::shop_display::show_goods),
+                    preview::effects::update
+                        .after(crate::character::CharacterAnimationSet)
+                        .after(crate::save::LoadSet)
+                        .after(crate::player::camera_follow),
                 )
                     .in_set(GameplaySet),
             )
