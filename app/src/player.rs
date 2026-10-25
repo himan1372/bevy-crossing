@@ -153,6 +153,9 @@ pub fn camera_follow(
         ),
     >,
     mut centre: Local<Option<Vec3>>,
+    preview: Res<crate::shop_nook::preview::Preview>,
+    location: Res<State<crate::shop::ShopLocation>>,
+    mut preview_camera: Local<crate::shop_nook::preview::CameraBlend>,
 ) {
     let Ok(player_transform) = player_query.single() else {
         return;
@@ -176,8 +179,14 @@ pub fn camera_follow(
         *c + step
     };
 
-    camera_transform.translation = *c + camera_eye_offset();
-    camera_transform.look_at(*c, Vec3::Y);
+    let (look, eye) = preview_camera.view(
+        preview.camera(),
+        (*c, *c + camera_eye_offset()),
+        frames,
+        *location == crate::shop::ShopLocation::Inside,
+    );
+    camera_transform.translation = eye;
+    camera_transform.look_at(look, Vec3::Y);
 }
 
 pub struct PlayerPlugin;
@@ -188,7 +197,9 @@ impl Plugin for PlayerPlugin {
             Update,
             (
                 player_movement.in_set(locomotion::MovementSet),
-                camera_follow.after(locomotion::MovementSet),
+                camera_follow
+                    .after(locomotion::MovementSet)
+                    .after(crate::shop_nook::interact),
             )
                 .in_set(GameplaySet),
         );

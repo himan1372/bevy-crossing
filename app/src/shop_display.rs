@@ -83,7 +83,7 @@ fn sold_sign(reserve: u16) -> u16 {
 
 /// What's laid out, so it's rebuilt only when the stock changes.
 #[derive(Resource, Default)]
-struct GoodsOnDisplay {
+pub(crate) struct GoodsOnDisplay {
     shown: Option<Shown>,
     entities: Vec<Entity>,
 }
@@ -142,7 +142,7 @@ pub(crate) fn has_goods_model(disc: &GameDisc, item: u16) -> bool {
 
 /// Lays the stock out whenever it changes.
 #[allow(clippy::too_many_arguments)]
-fn show_goods(
+pub(crate) fn show_goods(
     mut commands: Commands,
     disc: Option<Res<GameDisc>>,
     shop: Res<ShopData>,

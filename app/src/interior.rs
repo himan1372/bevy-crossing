@@ -109,7 +109,7 @@ pub(crate) fn spawn_decorated_player_room(
 }
 
 /// Floor segments (`aMI` / `aSI` draw): textures in 8-B, palette in C.
-fn floor_segments(disc: &GameDisc, floor: usize) -> Segments {
+pub(crate) fn floor_segments(disc: &GameDisc, floor: usize) -> Segments {
     let mut segs = Segments::default();
     let fb = floor * FLOOR_BLOCK;
     segs.set_segment(0x0C, slice(&disc.player_room_floors, fb, PALETTE));
@@ -127,7 +127,7 @@ fn floor_segments(disc: &GameDisc, floor: usize) -> Segments {
 }
 
 /// Wall segments: textures in 8 and 9, palette in A.
-fn wall_segments(disc: &GameDisc, wall: usize) -> Segments {
+pub(crate) fn wall_segments(disc: &GameDisc, wall: usize) -> Segments {
     let mut segs = Segments::default();
     let wb = wall * WALL_BLOCK;
     segs.set_segment(0x0A, slice(&disc.player_room_walls, wb, PALETTE));
@@ -184,6 +184,7 @@ fn spawn_shell(
             None,
             &floor_segs,
             blend,
+            crate::shop_nook::preview::Surface::Floor,
             meshes,
             materials,
             images,
@@ -198,6 +199,7 @@ fn spawn_shell(
             None,
             &wall_segs,
             blend,
+            crate::shop_nook::preview::Surface::Wall,
             meshes,
             materials,
             images,
@@ -258,7 +260,7 @@ pub fn spawn_shop_room(
         .collect();
     }
     let assets = (&mut *meshes, &mut *materials, &mut *images);
-    spawn_shell(
+    let shell = spawn_shell(
         commands,
         disc,
         "shop room",
@@ -271,6 +273,9 @@ pub fn spawn_shop_room(
         wall_no,
         assets,
     );
+    commands
+        .entity(shell)
+        .insert(crate::shop_nook::preview::ShopShell);
     info!("shop room from the disc: wallpaper {wall_no}, carpet {floor_no}");
     true
 }
@@ -420,13 +425,24 @@ fn spawn_lists(
     palette: Option<u32>,
     segs: &Segments,
     blend: bool,
+    surface: crate::shop_nook::preview::Surface,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<N64Material>,
     images: &mut Assets<Image>,
 ) {
     let sink = run_display_lists(&disc.rom, lists);
-    spawn_sink(
-        commands, disc, parent, &sink, palette, segs, blend, meshes, materials, images,
+    spawn_surface_sink(
+        commands,
+        disc,
+        parent,
+        &sink,
+        palette,
+        segs,
+        blend,
+        Some(surface),
+        meshes,
+        materials,
+        images,
     );
 }
 
@@ -440,6 +456,25 @@ pub fn spawn_sink(
     palette: Option<u32>,
     segs: &Segments,
     blend: bool,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<N64Material>,
+    images: &mut Assets<Image>,
+) {
+    spawn_surface_sink(
+        commands, disc, parent, sink, palette, segs, blend, None, meshes, materials, images,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn spawn_surface_sink(
+    commands: &mut Commands,
+    disc: &GameDisc,
+    parent: Entity,
+    sink: &crate::disc_gfx::TriangleSink,
+    palette: Option<u32>,
+    segs: &Segments,
+    blend: bool,
+    surface: Option<crate::shop_nook::preview::Surface>,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<N64Material>,
     images: &mut Assets<Image>,
@@ -464,11 +499,16 @@ pub fn spawn_sink(
             segs,
             images,
         );
+        let preview =
+            surface.map(|s| crate::shop_nook::preview::PreviewTexture::new(s, part.key, &material));
         let material = materials.add(material);
-        commands.spawn((
+        let mut entity = commands.spawn((
             Mesh3d(meshes.add(part_mesh(part, 1.0))),
             MeshMaterial3d(material),
             ChildOf(parent),
         ));
+        if let Some(preview) = preview {
+            entity.insert(preview);
+        }
     }
 }

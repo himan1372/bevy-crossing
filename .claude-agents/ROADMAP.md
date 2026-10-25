@@ -1,5 +1,18 @@
 # bevy-crossing roadmap (revised 2026-10-14)
 
+2026-10-25 codex: shop-category-previews adds original preview/skip/cancel
+questions for ordinary Cranny clothing, wallpaper and carpet. Temporary shirt/
+hat and room texture swaps restore before/after the final decision; MENU_CHANGE1
+frame36, bare mannequin, native room-camera endpoints and28tick Hermite/return.
+Exact stock/funds/full-pocket/ticket transaction retained. Input held throughout
+gestures; scene/reload and shared mannequin cleanup reviewed. Inspected images,
+39-field cancel/refusal comparisons, exact purchase/ticket totals, camera and
+gesture-input assertions pass; sequential compile/lint/fmt/capture/default/
+release gates pass, no tests. Evidence in completed/shop-category-previews.md.
+Real save hash unchanged. Counts, parent ownership and M4 acceptance unchanged.
+Next pause/save presentation, special quest/mail tags, remaining shop effects/
+services; clothing puff/wear sound and Philip comparison still open.
+
 Claimable tasks live in `backlog/` (one file per task). Claim in `claims.jsonl`
 before starting work; announce claims, completions, blockers,
 and questions on `comms.txt` on the **main** branch (append-only).

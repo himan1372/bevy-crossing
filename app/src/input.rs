@@ -247,6 +247,7 @@ pub(crate) fn update_focus(
     pockets: Res<crate::pockets::PocketsUi>,
     catalog: Res<crate::catalog_screen::CatalogUi>,
     room: Res<crate::player_room::PlayerRoom>,
+    preview: Res<crate::shop_nook::preview::Preview>,
     mut focus: ResMut<InputFocus>,
 ) {
     let next = if pause.is_some_and(|p| *p.get() == PauseState::Paused) {
@@ -256,6 +257,7 @@ pub(crate) fn update_focus(
     } else if quest.open {
         InputFocus::Quest
     } else if dialogue.active
+        || preview.active.is_some()
         || dialogue.external_result.is_some()
         || ((pockets.selling || pockets.donating || pockets.mailing) && !pockets.open)
         || pockets.mailbox_wait

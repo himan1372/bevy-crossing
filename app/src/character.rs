@@ -478,7 +478,21 @@ fn spawn_rig(
                     frames,
                 });
             }
-            commands.spawn((
+            let preview = (src.face == FaceKind::Player
+                && part
+                    .key
+                    .tex
+                    .is_some_and(|k| k.img_addr >> 24 == u32::from(SEG_CLOTH)))
+            .then(|| {
+                crate::shop_nook::preview::PreviewTexture::new(
+                    crate::shop_nook::preview::Surface::Shirt,
+                    part.key,
+                    materials
+                        .get(&material)
+                        .expect("just added player material"),
+                )
+            });
+            let mut entity = commands.spawn((
                 Mesh3d(meshes.add(skinned_part_mesh(part, j, &matrix_joints))),
                 MeshMaterial3d(material),
                 SkinnedMesh {
@@ -487,6 +501,9 @@ fn spawn_rig(
                 },
                 ChildOf(root),
             ));
+            if let Some(preview) = preview {
+                entity.insert(preview);
+            }
             parts += 1;
         }
     }
@@ -880,6 +897,7 @@ fn animate_characters(
     net_models: Option<Res<crate::player_tools::NetModels>>,
     room: Res<crate::player_room::PlayerRoom>,
     toys: Res<crate::player_toys::ToyAction>,
+    preview: Res<crate::shop_nook::preview::Preview>,
 ) {
     let dt = time.delta_secs();
     let ticks = dt * 60.0;
@@ -888,9 +906,35 @@ fn animate_characters(
         if let Ok((loco, facing)) = players.get(owner) {
             // Facing angle as the actor's shape rotation: 0 = +z, 90 deg = +x.
             if let Ok(mut t) = transforms.get_mut(root) {
-                t.rotation = Quat::from_rotation_y(facing.dir.x.atan2(facing.dir.z));
+                if preview.shirt() {
+                    let (yaw, _, _) = t.rotation.to_euler(EulerRot::YXZ);
+                    let delta = (-yaw + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
+                        - std::f32::consts::PI;
+                    let fraction = 1.0 - 0.5_f32.sqrt().powf(ticks);
+                    let angle_unit = std::f32::consts::TAU / 65536.0;
+                    let step = (delta * fraction)
+                        .abs()
+                        .clamp(50.0 * angle_unit * ticks, 2500.0 * angle_unit * ticks)
+                        .min(delta.abs());
+                    t.rotation = Quat::from_rotation_y(yaw + step * delta.signum());
+                } else {
+                    t.rotation = Quat::from_rotation_y(facing.dir.x.atan2(facing.dir.z));
+                }
             }
             let furniture = room.animation();
+            if let Some((animation, frame)) = preview.animation() {
+                let locals = animation.pose(frame).local_transforms(&rig.skeleton);
+                let weight = ((frame - 1.0) / 10.0).clamp(0.0, 1.0);
+                for (&joint, local) in rig.joints.iter().zip(locals) {
+                    if let Ok(mut t) = transforms.get_mut(joint) {
+                        t.translation = t.translation.lerp(local.translation, weight);
+                        t.rotation = t.rotation.slerp(local.rotation, weight);
+                    }
+                }
+                rig.last_pos = transforms.get(owner).ok().map(|t| t.translation);
+                rig.pose_morph = 5.0;
+                continue;
+            }
             if rig.furniture_phase != furniture.map(|(_, _, phase)| phase) {
                 rig.furniture_phase = furniture.map(|(_, _, phase)| phase);
                 rig.pose_morph = 5.0;
@@ -1097,6 +1141,7 @@ impl Plugin for CharacterPlugin {
                 spawn_villager_models,
                 spawn_npc_models,
                 animate_characters
+                    .after(crate::shop_nook::interact)
                     .after(crate::locomotion::MovementSet)
                     .in_set(CharacterAnimationSet),
             )

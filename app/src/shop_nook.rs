@@ -13,6 +13,8 @@ use crate::shop::{ShopData, ShopLocation, SHOP_ORIGIN};
 use crate::shop_display::ShopDisplay;
 use crate::states::GameplaySet;
 
+pub(crate) mod preview;
+
 #[derive(Component, Default)]
 pub(crate) struct Shopkeeper {
     pub walking: bool,
@@ -28,6 +30,17 @@ enum Step {
     Request,
     SellStart,
     Pockets,
+    ShowQuestion {
+        index: usize,
+        item: u16,
+        price: u32,
+    },
+    ChangingCloth {
+        index: usize,
+        item: u16,
+        price: u32,
+        decision: Option<usize>,
+    },
     Purchase {
         index: usize,
         item: u16,
@@ -59,7 +72,7 @@ enum Step {
 }
 
 #[derive(Resource, Default)]
-struct Conversation {
+pub(crate) struct Conversation {
     step: Step,
     context: MsgContext,
     /// The request menu included the catalog (choice 1).
@@ -190,7 +203,7 @@ fn aimed_display(pos: Vec3, facing: Vec3, display: &ShopDisplay) -> bool {
 // This controller needs the actor, inventory, dialogue and pockets at the
 // same confirmation point; separating their writes would permit partial sales.
 #[allow(clippy::too_many_arguments)]
-fn interact(
+pub(crate) fn interact(
     disc: Option<Res<GameDisc>>,
     location: Res<State<ShopLocation>>,
     mut focus: ResMut<InputFocus>,
@@ -205,33 +218,56 @@ fn interact(
     mut shop: ResMut<ShopData>,
     mut catalog_ui: ResMut<crate::catalog_screen::CatalogUi>,
     identity: Res<crate::save::PlayerIdentity>,
-    (mut home, mut inside_for, time, mut catalog): (
+    (mut home, mut inside_for, time, mut catalog, mut preview): (
         Option<ResMut<crate::home::PlayerHouse>>,
         Local<Option<f32>>,
         Res<Time>,
         ResMut<crate::catalog::Catalog>,
+        ResMut<preview::Preview>,
     ),
 ) {
     let Some(disc) = disc.filter(|d| d.text.is_some()) else {
         return;
     };
     if *location != ShopLocation::Inside {
+        preview.clear();
+        if !matches!(flow.step, Step::Idle) {
+            flow.step = Step::Idle;
+            *dialogue = DialogueState::default();
+            *focus = InputFocus::World;
+        }
         *inside_for = None;
         if catalog_ui.open {
             catalog_ui.open = false;
             catalog_ui.result = None;
         }
-        if matches!(
-            flow.step,
-            Step::CatalogIntro | Step::Browsing | Step::Order { .. }
-        ) {
-            flow.step = Step::Idle;
-        }
         return;
     }
     let Ok((actor, nook_transform)) = nook.single() else {
+        preview.clear();
         return;
     };
+    if let Step::ChangingCloth {
+        index,
+        item,
+        price,
+        decision,
+    } = flow.step
+    {
+        if preview.changing() {
+            return;
+        }
+        flow.step = Step::Purchase { index, item, price };
+        if let Some(choice) = decision {
+            preview.clear();
+            dialogue.external_result = Some(choice);
+        } else if preview.active.is_some() {
+            say(&disc, &mut dialogue, actor, &flow.context, 19);
+        } else {
+            say(&disc, &mut dialogue, actor, &flow.context, 31);
+            flow.step = Step::Finish;
+        }
+    }
     if matches!(flow.step, Step::Browsing) {
         if catalog_ui.open {
             return;
@@ -374,7 +410,56 @@ fn interact(
                 flow.step = Step::Pockets;
                 crate::sound::se(crate::sound::se_id::MENU_PAUSE);
             }
+            Step::ShowQuestion { index, item, price } => {
+                let valid = shop
+                    .stock
+                    .get(index)
+                    .is_some_and(|s| s.item == item && !s.sold && s.price == price);
+                if choice >= 2 || !valid {
+                    preview.clear();
+                    say(&disc, &mut dialogue, actor, &flow.context, 31);
+                    flow.step = Step::Finish;
+                } else if choice == 0 && preview.start(&disc, index, item) {
+                    if preview.shirt() {
+                        *dialogue = DialogueState::default();
+                        flow.step = Step::ChangingCloth {
+                            index,
+                            item,
+                            price,
+                            decision: None,
+                        };
+                    } else {
+                        say(&disc, &mut dialogue, actor, &flow.context, 41);
+                        flow.step = Step::Purchase { index, item, price };
+                    }
+                } else {
+                    say(
+                        &disc,
+                        &mut dialogue,
+                        actor,
+                        &flow.context,
+                        if preview::Surface::of(item) == Some(preview::Surface::Shirt) {
+                            20
+                        } else {
+                            42
+                        },
+                    );
+                    flow.step = Step::Purchase { index, item, price };
+                }
+            }
             Step::Purchase { index, item, price } => {
+                if preview.shirt() {
+                    preview.restore_shirt();
+                    *dialogue = DialogueState::default();
+                    flow.step = Step::ChangingCloth {
+                        index,
+                        item,
+                        price,
+                        decision: Some(choice),
+                    };
+                    return;
+                }
+                preview.clear();
                 let valid = shop
                     .stock
                     .get(index)
@@ -528,16 +613,28 @@ fn interact(
             &mut dialogue,
             actor,
             &flow.context,
-            if (0x2000..=0x20FF).contains(&stock.item) {
+            if preview::Surface::of(stock.item) == Some(preview::Surface::Shirt) {
+                18
+            } else if preview::Surface::of(stock.item).is_some() {
+                40
+            } else if (0x2000..=0x20FF).contains(&stock.item) {
                 222
             } else {
                 30
             },
         );
-        flow.step = Step::Purchase {
-            index: display.stock_index,
-            item: stock.item,
-            price: stock.price,
+        flow.step = if preview::Surface::of(stock.item).is_some() {
+            Step::ShowQuestion {
+                index: display.stock_index,
+                item: stock.item,
+                price: stock.price,
+            }
+        } else {
+            Step::Purchase {
+                index: display.stock_index,
+                item: stock.item,
+                price: stock.price,
+            }
         };
     } else {
         let delta = (nook_transform.translation - transform.translation).with_y(0.0);
@@ -726,11 +823,13 @@ fn follow(
 pub(crate) struct ShopNookPlugin;
 
 fn reset(
+    mut preview: ResMut<preview::Preview>,
     mut flow: ResMut<Conversation>,
     mut dialogue: ResMut<DialogueState>,
     mut pockets: ResMut<PocketsUi>,
     mut catalog_ui: ResMut<crate::catalog_screen::CatalogUi>,
 ) {
+    preview.clear();
     *flow = Conversation::default();
     *catalog_ui = crate::catalog_screen::CatalogUi::default();
     if dialogue.external_name.is_some() {
@@ -744,10 +843,23 @@ fn reset(
 impl Plugin for ShopNookPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Conversation>()
-            .add_systems(OnExit(crate::states::AppState::InGame), reset)
+            .init_resource::<preview::Preview>()
+            .init_resource::<preview::Mannequin>()
+            .add_systems(
+                OnExit(crate::states::AppState::InGame),
+                (reset, preview::textures, preview::mannequin).chain(),
+            )
             .add_systems(
                 Update,
-                interact.in_set(InteractSet::Objects).in_set(GameplaySet),
+                (
+                    preview::advance.before(interact),
+                    interact.in_set(InteractSet::Objects),
+                    preview::textures.after(interact),
+                    preview::mannequin
+                        .after(interact)
+                        .after(crate::shop_display::show_goods),
+                )
+                    .in_set(GameplaySet),
             )
             .add_systems(
                 Update,

@@ -161,3 +161,13 @@ category-preview behavior changed; parent ownership/acceptance unchanged.
 Sell/Quit popup with native after-item positioning and source open/return rates.
 Shop capture/cancel comparison preserved every field except position/playtime.
 Category previews/services and Philip acceptance remain open.
+
+2026-10-25 codex: shop-category-previews implements the bounded ordinary-day
+clothing/wallpaper/carpet slice (see completed task evidence). Original18/40
+preview/skip/cancel ->19/20/41/42 purchase questions, temporary material swaps,
+MENU_CHANGE1/frame36 shirt switch and restoration before transaction, bare
+mannequin, native room camera endpoints/28tick Hermite and reverse. Exact stock
+identity, funds, pocket and ticket handling retained; no saved appearance writes.
+Input remains reserved throughout changing; leaving/loading resets owned talk.
+Parent ownership/M4/Philip acceptance remain open. Change puff/wear sound,
+other shop services, pause/save presentation and special tag families deferred.

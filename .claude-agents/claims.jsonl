@@ -374,3 +374,5 @@
 {"action":"complete","task":"retail-tag-art","agent":"codex","timestamp":"2026-10-25T03:34:47Z"}
 {"action":"claim","task":"retail-tag-layout-motion","agent":"codex","timestamp":"2026-10-25T06:45:51Z"}
 {"action":"complete","task":"retail-tag-layout-motion","agent":"codex","timestamp":"2026-10-25T07:25:03Z"}
+{"action":"claim","task":"shop-category-previews","agent":"codex","timestamp":"2026-10-25T08:07:17Z"}
+{"action":"complete","task":"shop-category-previews","agent":"codex","timestamp":"2026-10-25T08:47:31Z"}
