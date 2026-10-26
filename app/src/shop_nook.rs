@@ -74,6 +74,28 @@ enum Step {
     PasswordPresent {
         item: u16,
     },
+    /// The receiver question (301/302) is up; the names window opens next.
+    SendInfo,
+    /// The receiver window is open.
+    SendReceiver,
+    /// 303: is this who the code is for (answers lead to 304, 301, 308).
+    SendConfirm {
+        next: Vec<Option<usize>>,
+    },
+    /// 304 is up; the pockets open to pick the item.
+    SendPickWait,
+    /// The pockets are open in password mode.
+    SendPicking,
+    /// 305: nothing was picked; try again?
+    SendRetry {
+        next: Vec<Option<usize>>,
+    },
+    /// 306: trade this item for the code (answers lead to 307, 301, 308).
+    SendCheck {
+        slot: usize,
+        item: u16,
+        next: Vec<Option<usize>>,
+    },
     /// 0x10A6 is on screen; the catalog opens when the player continues.
     CatalogIntro,
     /// The catalog screen is up (`mSM_OVL_CATALOG`).
@@ -101,6 +123,8 @@ pub(crate) struct Conversation {
     other_offered: bool,
     /// The Other things menu included Enter a password (choice 2 of 4).
     password_offered: bool,
+    /// Who the code being made is for: town and player names.
+    send_to: Option<password::Receiver>,
 }
 
 #[derive(Default)]
@@ -133,10 +157,14 @@ fn message(n: usize) -> usize {
     }
 }
 
-fn say(disc: &GameDisc, dialogue: &mut DialogueState, actor: Entity, ctx: &ShopContext, n: usize) {
-    let Some(text) = disc.text.as_ref() else {
-        return;
-    };
+fn say(
+    disc: &GameDisc,
+    dialogue: &mut DialogueState,
+    actor: Entity,
+    ctx: &ShopContext,
+    n: usize,
+) -> Option<crate::messages::MsgChoice> {
+    let text = disc.text.as_ref()?;
     let msg = if ctx.upper {
         if n == 15 {
             0x173D
@@ -151,12 +179,26 @@ fn say(disc: &GameDisc, dialogue: &mut DialogueState, actor: Entity, ctx: &ShopC
         message(n)
     };
     let (pages, choice) = text.talk(msg, ctx, &mut |_| 0);
+    let labels = choice.as_ref().map(|c| c.labels.clone());
     if ctx.upper {
-        dialogue.begin_special(actor, "Timmy", (276, 2), pages, choice.map(|c| c.labels));
+        dialogue.begin_special(actor, "Timmy", (276, 2), pages, labels);
     } else {
-        dialogue.begin_external(actor, pages, choice.map(|c| c.labels));
+        dialogue.begin_external(actor, pages, labels);
     }
     info!("Shop message {msg:#06x}");
+    choice
+}
+
+/// A refusal or return that ends on the request menu: the menu's own
+/// answers are what the player picks next.
+fn ask_menu(dialogue: &DialogueState, flow: &mut Conversation) {
+    if dialogue.choices_for_actor().is_some() {
+        flow.catalog_offered = true;
+        flow.other_offered = true;
+        flow.step = Step::Request;
+    } else {
+        flow.step = Step::PasswordBack;
+    }
 }
 
 /// Show the disc message `msg` (an absolute number); returns its question.
@@ -319,6 +361,7 @@ pub(crate) fn interact(
     if *location != ShopLocation::Inside {
         preview.clear();
         password.close();
+        pockets.sending = false;
         if !matches!(flow.step, Step::Idle) {
             flow.step = Step::Idle;
             *dialogue = DialogueState::default();
@@ -369,6 +412,99 @@ pub(crate) fn interact(
         *focus = InputFocus::Dialogue;
         say(&disc, &mut dialogue, actor, &flow.context, message);
         flow.step = step;
+        if matches!(flow.step, Step::PasswordBack) {
+            ask_menu(&dialogue, &mut flow);
+        }
+        return;
+    }
+    // m_passwordMake_ovl closed: back out, the same town, or confirm.
+    if matches!(flow.step, Step::SendReceiver) {
+        if password.open {
+            return;
+        }
+        let Some(result) = password.receiver.take() else {
+            flow.step = Step::Idle;
+            *focus = InputFocus::World;
+            return;
+        };
+        *focus = InputFocus::Dialogue;
+        match result {
+            None => {
+                say(&disc, &mut dialogue, actor, &flow.context, 308);
+                ask_menu(&dialogue, &mut flow);
+            }
+            Some((town, name)) => {
+                flow.context.free[6] = password::field_text(&town);
+                flow.context.free[7] = password::field_text(&name);
+                flow.send_to = Some((town, name));
+                if town == password::padded(&identity.town) {
+                    say(
+                        &disc,
+                        &mut dialogue,
+                        actor,
+                        &flow.context,
+                        password::msg::SAME_NAME,
+                    );
+                    flow.step = Step::SendInfo;
+                } else {
+                    let asked = say(
+                        &disc,
+                        &mut dialogue,
+                        actor,
+                        &flow.context,
+                        password::msg::CONFIRM,
+                    );
+                    flow.step = asked.map_or(Step::Finish, |c| Step::SendConfirm { next: c.next });
+                }
+            }
+        }
+        return;
+    }
+    // The pockets closed after picking the item to trade in (or not).
+    if matches!(flow.step, Step::SendPicking) {
+        if pockets.open {
+            return;
+        }
+        pockets.sending = false;
+        *focus = InputFocus::Dialogue;
+        // The key that closed the pockets must not also answer the question.
+        for action in [
+            Action::Cancel,
+            Action::Back,
+            Action::Confirm,
+            Action::Interact,
+        ] {
+            actions.consume(action);
+        }
+        match pockets.sell_slot.take() {
+            Some(slot) => {
+                let item = inventory.pockets.pockets[slot];
+                flow.context.items[2] = crate::items::name(item);
+                flow.context.item_articles[2] = item_article(&disc, item);
+                let asked = say(
+                    &disc,
+                    &mut dialogue,
+                    actor,
+                    &flow.context,
+                    password::msg::CHECK,
+                );
+                flow.step = asked.map_or(Step::Finish, |c| Step::SendCheck {
+                    slot,
+                    item,
+                    next: c.next,
+                });
+            }
+            None => {
+                let asked = say(
+                    &disc,
+                    &mut dialogue,
+                    actor,
+                    &flow.context,
+                    password::msg::CANCEL,
+                );
+                flow.step = asked.map_or(Step::Finish, |c| Step::SendRetry { next: c.next });
+            }
+        }
         return;
     }
     if let Step::ChangingCloth {
@@ -613,21 +749,10 @@ pub(crate) fn interact(
             }
             Step::Request if choice == 2 && flow.other_offered => {
                 say(&disc, &mut dialogue, actor, &flow.context, 309);
-                flow.password_offered = false;
-                if let Some(options) = dialogue.choices_for_actor().cloned() {
-                    if let (Some(first), Some(last)) =
-                        (options.first().cloned(), options.last().cloned())
-                    {
-                        // Turnip prices, Enter a password and the way back;
-                        // sending a password stays hidden.
-                        if options.len() >= 4 {
-                            flow.password_offered = true;
-                            dialogue.set_actor_choices(vec![first, options[2].clone(), last]);
-                        } else {
-                            dialogue.set_actor_choices(vec![first, last]);
-                        }
-                    }
-                }
+                // Turnip prices, Send a code, Say code and the way back.
+                flow.password_offered = dialogue
+                    .choices_for_actor()
+                    .is_some_and(|options| options.len() >= 4);
                 flow.step = Step::Other;
             }
             Step::Other if choice == 0 => {
@@ -646,6 +771,28 @@ pub(crate) fn interact(
                 flow.step = Step::Finish;
             }
             Step::Other if choice == 1 && flow.password_offered => {
+                // aNSC_request_Q_answer_wait2, choice 1: something to trade in?
+                if password::tradeable(&inventory.pockets) {
+                    say(
+                        &disc,
+                        &mut dialogue,
+                        actor,
+                        &flow.context,
+                        password::msg::INFO,
+                    );
+                    flow.step = Step::SendInfo;
+                } else {
+                    say(
+                        &disc,
+                        &mut dialogue,
+                        actor,
+                        &flow.context,
+                        password::msg::NO_ITEM,
+                    );
+                    ask_menu(&dialogue, &mut flow);
+                }
+            }
+            Step::Other if choice == 2 && flow.password_offered => {
                 // aNSC_request_Q_answer_wait2, choice 2: the gift limit, then
                 // a free pocket, before the question.
                 let message = if password.presents >= password::PRESENT_LIMIT {
@@ -656,11 +803,11 @@ pub(crate) fn interact(
                     password::msg::SAY
                 };
                 say(&disc, &mut dialogue, actor, &flow.context, message);
-                flow.step = if message == password::msg::SAY {
-                    Step::PasswordSay
+                if message == password::msg::SAY {
+                    flow.step = Step::PasswordSay;
                 } else {
-                    Step::PasswordBack
-                };
+                    ask_menu(&dialogue, &mut flow);
+                }
             }
             Step::Other | Step::PasswordBack => request(&disc, &mut dialogue, actor, &mut flow),
             Step::PasswordSay => {
@@ -682,7 +829,71 @@ pub(crate) fn interact(
                         &flow.context,
                         password::msg::DECLINE,
                     );
-                    flow.step = Step::PasswordBack;
+                    ask_menu(&dialogue, &mut flow);
+                }
+            }
+            Step::SendInfo => {
+                password.begin_receiver();
+                *dialogue = DialogueState::default();
+                flow.step = Step::SendReceiver;
+            }
+            Step::SendPickWait => {
+                *pockets = PocketsUi {
+                    open: true,
+                    sending: true,
+                    ..default()
+                };
+                *dialogue = DialogueState::default();
+                *focus = InputFocus::Pockets;
+                crate::sound::se(crate::sound::se_id::MENU_PAUSE);
+                flow.step = Step::SendPicking;
+            }
+            Step::SendConfirm { next } => {
+                let target = next.get(choice).copied().flatten();
+                if let Some(message) = target {
+                    say_abs(&disc, &mut dialogue, actor, &flow.context, message);
+                }
+                match choice {
+                    0 if target.is_some() => flow.step = Step::SendPickWait,
+                    1 if target.is_some() => flow.step = Step::SendInfo,
+                    _ => ask_menu(&dialogue, &mut flow),
+                }
+            }
+            Step::SendRetry { next } => {
+                let target = next.get(choice).copied().flatten();
+                if let Some(message) = target {
+                    say_abs(&disc, &mut dialogue, actor, &flow.context, message);
+                }
+                if choice == 0 && target.is_some() {
+                    flow.step = Step::SendPickWait;
+                } else {
+                    ask_menu(&dialogue, &mut flow);
+                }
+            }
+            Step::SendCheck { slot, item, next } => {
+                let target = next.get(choice).copied().flatten();
+                let valid = inventory.pockets.pockets[slot] == item
+                    && inventory.pockets.item_cond(slot) == 0
+                    && password::present_user(item);
+                match (choice, flow.send_to, target) {
+                    (0, Some((town, name)), Some(message)) if valid => {
+                        // mMpswd_make_password; the item leaves the pocket now.
+                        let code = password::make_user_code(&town, &name, item);
+                        inventory.pockets.pockets[slot] = 0;
+                        inventory.pockets.set_item_cond(slot, 0);
+                        password::fill_code_lines(&mut flow.context, &code);
+                        info!("password sent item={item:#06x}");
+                        say_abs(&disc, &mut dialogue, actor, &flow.context, message);
+                        flow.step = Step::Finish;
+                    }
+                    (1, _, Some(message)) => {
+                        say_abs(&disc, &mut dialogue, actor, &flow.context, message);
+                        flow.step = Step::SendInfo;
+                    }
+                    _ => {
+                        say(&disc, &mut dialogue, actor, &flow.context, 308);
+                        ask_menu(&dialogue, &mut flow);
+                    }
                 }
             }
             Step::PasswordPresent { item } => {

@@ -19,6 +19,12 @@ use crate::pockets_disc::Paint;
 
 /// `aNSC_MSG_PSWD_*` (`ac_npc_shop_common.h`), in the shop's own numbering.
 pub(super) mod msg {
+    pub const NO_ITEM: usize = 300;
+    pub const INFO: usize = 301;
+    pub const SAME_NAME: usize = 302;
+    pub const CONFIRM: usize = 303;
+    pub const CANCEL: usize = 305;
+    pub const CHECK: usize = 306;
     pub const INVENTORY_FULL: usize = 311;
     pub const SAY: usize = 312;
     pub const WRONG: usize = 313;
@@ -38,10 +44,30 @@ const NPC_NUM: i32 = 236;
 const SPECIAL_NPC_NUM: i32 = 32;
 const RSV_NO: u16 = 0xFFFF;
 
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+enum Mode {
+    /// The 28-letter code to redeem (`m_passwordChk_ovl`).
+    #[default]
+    Code,
+    /// Who a new code is for: town, then player (`m_passwordMake_ovl`).
+    Receiver,
+}
+
+/// A receiver's town and player name, space padded to eight bytes each.
+pub(super) type Receiver = ([u8; 8], [u8; 8]);
+
 /// The entry window and what the counter remembers between questions.
 #[derive(Resource)]
 pub(crate) struct PasswordUi {
     pub open: bool,
+    mode: Mode,
+    town: [u8; 8],
+    name: [u8; 8],
+    lens: [usize; 2],
+    field: usize,
+    /// Set when the receiver window closes: the names, or `None` when
+    /// the player backed out.
+    pub receiver: Option<Option<Receiver>>,
     lines: [[u8; 14]; 2],
     selected: usize,
     cursor: usize,
@@ -59,6 +85,12 @@ impl Default for PasswordUi {
     fn default() -> Self {
         Self {
             open: false,
+            mode: Mode::Code,
+            town: [pw::PW_CHAR_SPACE; 8],
+            name: [pw::PW_CHAR_SPACE; 8],
+            lens: [0; 2],
+            field: 0,
+            receiver: None,
             lines: [[pw::PW_CHAR_SPACE; 14]; 2],
             selected: 0,
             cursor: 0,
@@ -77,8 +109,28 @@ impl PasswordUi {
         self.text = [pw::PW_CHAR_SPACE; 28];
     }
 
+    /// `mSM_OVL_PASSWORDMAKE`: empty town and player name fields.
+    pub(super) fn begin_receiver(&mut self) {
+        self.mode = Mode::Receiver;
+        self.town = [pw::PW_CHAR_SPACE; 8];
+        self.name = [pw::PW_CHAR_SPACE; 8];
+        self.lens = [0; 2];
+        self.field = 0;
+        self.open = true;
+        self.receiver = None;
+        self.just_opened = true;
+        self.revision += 1;
+    }
+
+    fn finish_receiver(&mut self, accepted: bool) {
+        self.receiver = Some(accepted.then_some((self.town, self.name)));
+        self.open = false;
+        self.revision += 1;
+    }
+
     /// `mSM_OVL_PASSWORDCHK`: both lines start from the remembered text.
     pub(super) fn begin(&mut self) {
+        self.mode = Mode::Code;
         self.lines[0].copy_from_slice(&self.text[..14]);
         self.lines[1].copy_from_slice(&self.text[14..]);
         let filled = self
@@ -104,9 +156,10 @@ impl PasswordUi {
 
     /// Closes the window without a result, as leaving the scene does.
     pub(super) fn close(&mut self) {
-        if self.open {
+        if self.open || self.done.is_some() || self.receiver.is_some() {
             self.open = false;
             self.done = None;
+            self.receiver = None;
             self.revision += 1;
         }
     }
@@ -139,6 +192,44 @@ fn name_bytes(name: &str) -> [u8; 8] {
         *slot = crate::messages::ac_code_opt(ch).unwrap_or(pw::PW_CHAR_SPACE);
     }
     out
+}
+
+/// A text name as eight space-padded game bytes.
+pub(super) fn padded(name: &str) -> [u8; 8] {
+    name_bytes(name)
+}
+
+/// The text of an eight-byte name field.
+pub(super) fn field_text(bytes: &[u8; 8]) -> String {
+    name_text(bytes)
+}
+
+/// `aNSC_check_possession_item_make_password`: pocket items Nook can trade
+/// for a password (plain condition, something he sells).
+pub(super) fn tradeable(pockets: &rustimal_logic::inventory::Inventory) -> bool {
+    pockets
+        .pockets
+        .iter()
+        .enumerate()
+        .any(|(slot, &item)| item != 0 && pockets.item_cond(slot) == 0 && present_user(item))
+}
+
+/// `mMpswd_make_password` for a user code: the two code lines as game
+/// characters, ready for the message fields.
+pub(super) fn make_user_code(town: &[u8; 8], name: &[u8; 8], item: u16) -> [u8; 28] {
+    pw::make_password(pw::PW_TYPE_USER, 1, name, town, item, 0, 0)
+}
+
+/// Fills the message fields a code's two lines use (`aNSC_set_pw_password_str`).
+pub(super) fn fill_code_lines(ctx: &mut crate::messages::MsgContext, code: &[u8; 28]) {
+    let line = |bytes: &[u8]| -> String {
+        bytes
+            .iter()
+            .map(|&b| crate::messages::char_of(b).unwrap_or('?'))
+            .collect()
+    };
+    ctx.items[3] = line(&code[..14]);
+    ctx.items[4] = line(&code[14..]);
 }
 
 fn name_text(bytes: &[u8; 8]) -> String {
@@ -345,6 +436,10 @@ pub(crate) fn input(
         ui.just_opened = false;
         return;
     }
+    if ui.mode == Mode::Receiver {
+        receiver_input(&mut ui, &mut actions, &mut events);
+        return;
+    }
     let mut changed = false;
     for event in events.read() {
         if event.state != ButtonState::Pressed {
@@ -407,12 +502,95 @@ pub(crate) fn input(
     }
 }
 
+/// The receiver window: type the town, Tab to the player name, Enter to
+/// finish (the retail Start button) once the town is not empty.
+fn receiver_input(
+    ui: &mut PasswordUi,
+    actions: &mut Actions,
+    events: &mut MessageReader<KeyboardInput>,
+) {
+    for event in events.read() {
+        if event.state != ButtonState::Pressed {
+            continue;
+        }
+        let field = ui.field;
+        match event.key_code {
+            KeyCode::Escape => {
+                ui.finish_receiver(false);
+                break;
+            }
+            KeyCode::Enter | KeyCode::NumpadEnter => {
+                if ui.lens[0] > 0 {
+                    ui.finish_receiver(true);
+                    break;
+                }
+                continue;
+            }
+            KeyCode::Tab => {
+                ui.field = 1 - field;
+                ui.revision += 1;
+                continue;
+            }
+            KeyCode::Backspace => {
+                if ui.lens[field] > 0 {
+                    ui.lens[field] -= 1;
+                    let at = ui.lens[field];
+                    let text = if field == 0 {
+                        &mut ui.town
+                    } else {
+                        &mut ui.name
+                    };
+                    text[at] = pw::PW_CHAR_SPACE;
+                    ui.revision += 1;
+                }
+                continue;
+            }
+            _ => {}
+        }
+        let typed: Vec<char> = match &event.logical_key {
+            Key::Character(text) => text.chars().collect(),
+            Key::Space => vec![' '],
+            _ => continue,
+        };
+        for ch in typed {
+            let code = (ch.is_ascii_graphic() || ch == ' ')
+                .then(|| crate::messages::ac_code_opt(ch))
+                .flatten();
+            let field = ui.field;
+            if let Some(code) = code.filter(|_| ui.lens[field] < 8) {
+                let at = ui.lens[field];
+                let text = if field == 0 {
+                    &mut ui.town
+                } else {
+                    &mut ui.name
+                };
+                text[at] = code;
+                ui.lens[field] += 1;
+                ui.revision += 1;
+            }
+        }
+    }
+    // Typed keys also map to gameplay actions; none may leak through.
+    for action in [
+        Action::Confirm,
+        Action::Cancel,
+        Action::Back,
+        Action::Interact,
+        Action::Pause,
+    ] {
+        actions.consume(action);
+    }
+}
+
 /// A typed character as a password character: letters, `%`, `&`, `@` and
-/// digits (0 and 1 read as `O` and `l`, as the check does).
+/// digits (0 and 1 read as `O` and `l`, as the check does) and `#` for the
+/// retail grid's 0xD1 symbol.
 fn typed_code(ch: char) -> Option<u8> {
     let code = match ch {
         '0' => b'O',
         '1' => b'l',
+        // The retail grid's 0xD1 symbol prints as a hash.
+        '#' => 0xD1,
         c if c.is_ascii_alphanumeric() || matches!(c, '%' | '&' | '@') => c as u8,
         _ => return None,
     };
@@ -490,6 +668,67 @@ pub(crate) fn draw(
         200.0,
     );
     let ink = [70, 40, 50, 255];
+    let small = format!(
+        "{}{}",
+        crate::messages::markup::LINE_SCALE,
+        crate::messages::markup::arg(16)
+    );
+    if ui.mode == Mode::Receiver {
+        paint.text(
+            &font,
+            "Enter a receiver.",
+            Vec2::new(60.0, 72.0),
+            ink,
+            230.0,
+        );
+        for (row, (label, text)) in [("Town", &ui.town), ("Player", &ui.name)]
+            .into_iter()
+            .enumerate()
+        {
+            let y = 96.0 + row as f32 * 22.0;
+            let active = ui.field == row;
+            let color = if active { [200, 60, 60, 255] } else { ink };
+            paint.text(
+                &font,
+                &format!("{small}{label}"),
+                Vec2::new(60.0, y + 2.0),
+                color,
+                230.0,
+            );
+            for (column, &code) in text.iter().enumerate() {
+                let here = active && column == ui.lens[row].min(7);
+                let shown = if column < ui.lens[row] {
+                    crate::messages::char_of(code).unwrap_or('?').to_string()
+                } else if here {
+                    "_".into()
+                } else {
+                    ".".into()
+                };
+                paint.text(
+                    &font,
+                    &shown,
+                    Vec2::new(116.0 + column as f32 * 14.5, y),
+                    color,
+                    230.0,
+                );
+            }
+        }
+        paint.text(
+            &font,
+            &format!("{small}Type the names   Tab: switch   Enter: finish"),
+            Vec2::new(60.0, 148.0),
+            ink,
+            230.0,
+        );
+        paint.text(
+            &font,
+            &format!("{small}Esc: back"),
+            Vec2::new(60.0, 160.0),
+            ink,
+            230.0,
+        );
+        return;
+    }
     paint.text(&font, "Password", Vec2::new(60.0, 72.0), ink, 230.0);
     for (row, line) in ui.lines.iter().enumerate() {
         for (column, &code) in line.iter().enumerate() {
@@ -513,11 +752,6 @@ pub(crate) fn draw(
             );
         }
     }
-    let small = format!(
-        "{}{}",
-        crate::messages::markup::LINE_SCALE,
-        crate::messages::markup::arg(16)
-    );
     paint.text(
         &font,
         &format!("{small}Type the 28 letters   Backspace: erase"),

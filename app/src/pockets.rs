@@ -32,6 +32,9 @@ pub struct PocketsUi {
     /// Inventory mode for the museum (mSM_IV_OPEN_CURATOR): pick an item
     /// to offer Blathers; the slot comes back in `sell_slot`.
     pub(crate) donating: bool,
+    /// Inventory mode 0x10 at Nook's password counter: pick the item to
+    /// trade in; the slot comes back in `sell_slot`.
+    pub(crate) sending: bool,
     /// Inventory mode for the post office counter (mSM_IV_OPEN_SEND_MAIL):
     /// pick a written letter; its index comes back in `mail_pick`.
     pub(crate) mailing: bool,
@@ -216,7 +219,14 @@ fn can_hold(item: u16, condition: u32) -> bool {
 
 impl PocketsUi {
     pub(crate) fn actions(&self, item: u16, condition: u32) -> Vec<&'static str> {
-        if self.donating {
+        if self.sending {
+            // check_possession_item_make_password: plain pocket items Nook sells.
+            if condition == 0 && crate::shop_nook::password::present_user(item) {
+                vec!["Send", "Quit"]
+            } else {
+                vec!["Quit"]
+            }
+        } else if self.donating {
             // mSM_check_item_for_curator: exhibits and unidentified fossils.
             if condition == 0
                 && (item == rustimal_logic::museum::UNIDENTIFIED_FOSSIL
@@ -430,7 +440,7 @@ fn pockets_input(
         if item == EMPTY_NO {
             return;
         }
-        if ui.donating {
+        if ui.sending || ui.donating {
             if choice == 0 && ui.actions(item, inventory.pockets.item_cond(slot)).len() == 2 {
                 ui.sell_slot = Some(slot);
                 ui.open = false;

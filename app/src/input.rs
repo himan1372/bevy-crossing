@@ -257,7 +257,7 @@ pub(crate) fn update_focus(
         InputFocus::Paused
     } else if room.diary_open() {
         InputFocus::Diary
-    } else if password.open || password.done.is_some() {
+    } else if password.open || password.done.is_some() || password.receiver.is_some() {
         // A finished entry keeps focus until Nook answers, so its last key
         // cannot reach the world (a code ending in P would pause).
         InputFocus::Password
@@ -266,7 +266,8 @@ pub(crate) fn update_focus(
     } else if dialogue.active
         || preview.active.is_some()
         || dialogue.external_result.is_some()
-        || ((pockets.selling || pockets.donating || pockets.mailing) && !pockets.open)
+        || ((pockets.selling || pockets.donating || pockets.sending || pockets.mailing)
+            && !pockets.open)
         || pockets.mailbox_wait
         || pockets.room_request.is_some()
         || (pockets.storing.is_some() && !pockets.open)

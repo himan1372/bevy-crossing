@@ -1169,6 +1169,7 @@ fn draw(
             let compact = mail.menu.is_some()
                 || ui.selling
                 || ui.donating
+                || ui.sending
                 || ui.mailing
                 || ui.storing.is_some()
                 || ui.home;

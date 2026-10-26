@@ -11,9 +11,9 @@ are connected. Legacy saves without an age clock adopt their first observed
 day. Joan's visitor/buying and original global RNG remain separate.
 2026-10-26 claude: the counter's **Say code** check is connected for user and
 popularity-contest passwords (`completed/shop-password-service.md`, codec in
-`logic/src/password.rs`, flow in `app/src/shop_nook/password.rs`). Send direction,
-Famicom/magazine/mini card-e codes and the retail letter grid are in
-`backlog/shop-password-send.md`, unclaimed. The catalog cuckoo-clock preview fit
+`logic/src/password.rs`, flow in `app/src/shop_nook/password.rs`) and the **Send a
+code** direction (same files, `backlog/shop-password-codes.md` has the evidence).
+Famicom/magazine/mini card-e codes and the retail letter grid remain there. The catalog cuckoo-clock preview fit
 (`backlog/nook-tickets-catalog.md`, audit section) is open and unclaimed. Start
 nothing until Philip selects it.
 The original task limits below are historical where these
@@ -41,8 +41,8 @@ commit and push before telling Philip what is next.
 task or required input in a short final sentence, using the current task notes
 and roadmaps rather than stale proposals. If nothing remains, say so. This is
 a status handoff, not authorization to start another task automatically.
-Currently next: password follow-ups (send direction first), the cuckoo catalog
-fit, or Joan's visitor/turnip-buying service; Philip chooses.
+Currently next: Famicom/magazine/mini card-e codes, the cuckoo catalog fit, or
+Joan's visitor/turnip-buying service; Philip chooses.
 
 ## Current state (2026-10-25)
 
@@ -388,6 +388,6 @@ Complete all authorized repository work and confirm publication/status first,
 then tell Philip the next concrete step. End the first catch-up reply with these
 three priorities, in this order (do not start them without a selection):
 
-1. Password send direction and the remaining code types.
+1. Remaining password code types (Famicom, magazine, mini card-e).
 2. Joan's visitor/turnip-buying service.
 3. Remaining seasonal services.

@@ -972,3 +972,10 @@ direction, Famicom, magazine and mini card-e codes plus the retail character gri
 remain (backlog/shop-password-send.md). Counts/parent/M4 and Philip acceptance
 stay open. See completed/shop-password-service.md.
 
+2026-10-26 claude: shop-password-send connects the counter's Send a code
+direction (receiver names window, same-town refusal, confirmation, item picker
+in a new pockets mode, trade-in with the made code shown in Nook's own message).
+Redeeming and sending user codes now both work; Famicom, magazine and mini
+card-e codes, the retail letter grid and hand-over animations remain. See
+backlog/shop-password-send.md. Counts/parent/M4 and Philip acceptance stay open.
+
