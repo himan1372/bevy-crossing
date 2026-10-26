@@ -30,6 +30,7 @@ use crate::town::Town;
 pub(crate) mod bargain;
 pub(crate) mod layout;
 pub(crate) mod schedule;
+pub(crate) mod turnips;
 
 /// Roots owned by the current shop room, replaced on tier/floor changes.
 #[derive(Component)]
@@ -100,6 +101,7 @@ impl StockItem {
 /// Shop runtime data: today's stock plus the decomp-verified sales ledger.
 #[derive(Resource, Default)]
 pub struct ShopData {
+    pub(crate) turnips: turnips::Market,
     pub(crate) events: bargain::Calendar,
     pub(crate) sale_view: bool,
     pub stock: Vec<StockItem>,
@@ -116,6 +118,7 @@ impl ShopData {
     /// Restores stock, sales and tier from a save; stock from before real
     /// item numbers is dropped and laid out again.
     pub fn restore(&mut self, save: &crate::save::SaveData) {
+        self.turnips = save.shop_turnips.clone().unwrap_or_default();
         self.events = save.shop_events.clone().unwrap_or_default();
         self.sale_view = false;
         self.stock = save.shop_stock.clone();
@@ -1394,6 +1397,7 @@ impl Plugin for ShopPlugin {
                     schedule::tick,
                     restock_daily,
                     bargain::tick,
+                    turnips::tick,
                     department_stairs,
                     build_shop_interior,
                 )

@@ -127,6 +127,7 @@ pub mod talk_request;
 pub mod talk_topics;
 mod template_select;
 mod terrain_walls;
+pub mod turnips;
 // Terrain-wall rules used by the Bevy app's ground map.
 pub use attr_walls::{forbid_vectors, MAKE_VECTOR_TABLE};
 pub use audio::{group as audio_group, AudioParam, AudioPort, TrgStartResult, BGM_MUTE_TABLE_FINE};

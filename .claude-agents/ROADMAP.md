@@ -951,3 +951,14 @@ now recognizes the same asset set. Dec26 shop display/purchase/cancel/reload,
 flame captures and all four player-room rotations inspected. See completed task
 for final gates and limits. No stock/calendar/transaction/schema changes; item
 counts, parent/M4 and Philip acceptance remain open.
+
+2026-10-26 codex: shop-turnip-service connects native m_kabu_manager daily
+prices and three weekly trends with saved Sunday/date state; source Other
+things price inquiry for Nook/Timmy and10/50/100-bundle selling. Exact duplicate,
+marked mixed, quest/present, Sunday refusal, zero disposal and atomic overflow
+rules retain existing sale flow. Turnip-specific Town growth hook spoils exposed
+pockets/field/all house layers at Sunday06/backward dates and clears old spoiled
+outdoor goods on forward growth; missing legacy age clock adopts first load.
+PC RNG supplies native probability draws, not original global RNG state. Joan,
+other players/island/gyroid storage and password service remain separate;
+counts/parent/M4 and Philip acceptance stay open. See completed task evidence.

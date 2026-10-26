@@ -80,6 +80,14 @@ impl TryFrom<RoomSaveData> for RoomSave {
     }
 }
 
+impl RoomSave {
+    pub(crate) fn spoil_turnips(&mut self) {
+        for item in self.layers.iter_mut().flatten() {
+            rustimal_logic::turnips::spoil(item);
+        }
+    }
+}
+
 pub(crate) enum PocketRequest {
     Decorate {
         slot: usize,
@@ -176,6 +184,29 @@ fn layer_views(layers: &mut [RoomLayer; 4]) -> [Option<&mut RoomLayer>; 4] {
 }
 
 impl PlayerRoom {
+    pub(crate) fn spoil_turnips(&mut self) {
+        let mut changed = false;
+        for item in self
+            .layers
+            .iter_mut()
+            .flat_map(|l| l.items.iter_mut().flatten())
+        {
+            changed |= rustimal_logic::turnips::spoil(item);
+        }
+        for item in self
+            .runtime
+            .actors
+            .iter_mut()
+            .flatten()
+            .flat_map(|a| &mut a.items)
+        {
+            changed |= rustimal_logic::turnips::spoil(item);
+        }
+        if let Some(original) = &mut self.original {
+            original.spoil_turnips();
+        }
+        self.dirty |= changed;
+    }
     /// The placed actor's switch bit, while this piece still names it.
     pub(crate) fn switch_bit(&self, piece: &RoomPiece) -> Option<u8> {
         self.runtime

@@ -29,6 +29,7 @@ enum Step {
     #[default]
     Idle,
     Request,
+    Other,
     BargainWelcome,
     BargainBalloon,
     SellStart,
@@ -84,6 +85,7 @@ pub(crate) struct Conversation {
     context: ShopContext,
     /// The request menu included the catalog (choice 1).
     catalog_offered: bool,
+    other_offered: bool,
 }
 
 #[derive(Default)]
@@ -194,6 +196,29 @@ fn context(identity: &crate::save::PlayerIdentity, upper: bool) -> ShopContext {
             ..default()
         },
     }
+}
+
+fn request(disc: &GameDisc, dialogue: &mut DialogueState, actor: Entity, flow: &mut Conversation) {
+    say(disc, dialogue, actor, &flow.context, 23);
+    flow.catalog_offered = false;
+    flow.other_offered = false;
+    if let Some(options) = dialogue.choices_for_actor() {
+        if options.len() >= 4 {
+            let mut labels = options[..3].to_vec();
+            labels.push(options.last().cloned().unwrap_or_default());
+            dialogue.set_actor_choices(labels);
+            flow.catalog_offered = true;
+            flow.other_offered = true;
+        } else if options.len() >= 3 {
+            dialogue.set_actor_choices(vec![
+                options[0].clone(),
+                options[1].clone(),
+                options.last().cloned().unwrap_or_default(),
+            ]);
+            flow.catalog_offered = true;
+        }
+    }
+    flow.step = Step::Request;
 }
 
 /// mIN_get_item_article: read the disc tables rather than guessing from
@@ -408,7 +433,9 @@ pub(crate) fn interact(
         *focus = InputFocus::Dialogue;
         let picked = pockets.sale_pick.take();
         pockets.sale_marks = 0;
-        if let Some(sale) = picked.and_then(|mask| sales::Sale::selected(&inventory, mask)) {
+        if let Some(sale) =
+            picked.and_then(|mask| sales::Sale::selected(&inventory, mask, shop.turnips.price()))
+        {
             let item = sale.item();
             flow.context.items[0] = crate::items::name(item);
             flow.context.item_articles[0] = item_article(&disc, item);
@@ -416,6 +443,9 @@ pub(crate) fn interact(
                 // Refuse the whole captured offer; a marked batch must not
                 // bypass the selected item's quest protection.
                 say(&disc, &mut dialogue, actor, &flow.context, 57);
+                flow.step = Step::Finish;
+            } else if sale.fresh_turnips() && crate::clock::now().weekday == 0 {
+                say(&disc, &mut dialogue, actor, &flow.context, 36);
                 flow.step = Step::Finish;
             } else if sale.price == 0 {
                 let plural = sale.slots() > 1;
@@ -532,6 +562,33 @@ pub(crate) fn interact(
                     flow.step = Step::CatalogIntro;
                 }
             }
+            Step::Request if choice == 2 && flow.other_offered => {
+                say(&disc, &mut dialogue, actor, &flow.context, 309);
+                if let Some(options) = dialogue.choices_for_actor() {
+                    if let (Some(first), Some(last)) =
+                        (options.first().cloned(), options.last().cloned())
+                    {
+                        dialogue.set_actor_choices(vec![first, last]);
+                    }
+                }
+                flow.step = Step::Other;
+            }
+            Step::Other if choice == 0 => {
+                flow.context.free[1] = shop.turnips.price().to_string();
+                say(
+                    &disc,
+                    &mut dialogue,
+                    actor,
+                    &flow.context,
+                    if crate::clock::now().weekday == 0 {
+                        36
+                    } else {
+                        25
+                    },
+                );
+                flow.step = Step::Finish;
+            }
+            Step::Other => request(&disc, &mut dialogue, actor, &mut flow),
             Step::CatalogIntro => {
                 catalog_ui.open_from(|item| catalog.collection.has(item));
                 *dialogue = DialogueState::default();
@@ -675,7 +732,7 @@ pub(crate) fn interact(
             }
             Step::Duplicate { one, all } => {
                 let sale = if choice == 0 { all } else { one };
-                if !sale.valid(&inventory) {
+                if !sale.valid(&inventory) || !sale.at_price(shop.turnips.price()) {
                     say(&disc, &mut dialogue, actor, &flow.context, 29);
                     flow.step = Step::Finish;
                 } else {
@@ -694,7 +751,10 @@ pub(crate) fn interact(
                 flow.step = Step::Finish;
             }
             Step::Offer { sale } => {
-                let response = if choice != 0 || !sale.valid(&inventory) {
+                let response = if choice != 0
+                    || !sale.valid(&inventory)
+                    || !sale.at_price(shop.turnips.price())
+                {
                     29
                 } else if let Some(payment) = sale.commit(&mut inventory) {
                     shop.shop.record_sale(sale.price);
@@ -830,25 +890,7 @@ pub(crate) fn interact(
             flow.step = Step::Finish;
             return;
         }
-        say(&disc, &mut dialogue, actor, &flow.context, 23);
-        // Sell, the catalog, and cancel. The turnip and password lines stay
-        // off until those services exist. Choice 1 is the catalog
-        // (aNSC_MSG_SHOW_CATALOGUE).
-        flow.catalog_offered = false;
-        if let Some(options) = dialogue.choices_for_actor() {
-            if options.len() >= 3 {
-                let first = options[0].clone();
-                let catalog_label = options[1].clone();
-                let last = options.last().cloned().unwrap_or_default();
-                dialogue.set_actor_choices(vec![first, catalog_label, last]);
-                flow.catalog_offered = true;
-            } else if let (Some(first), Some(last)) =
-                (options.first().cloned(), options.last().cloned())
-            {
-                dialogue.set_actor_choices(vec![first, last]);
-            }
-        }
-        flow.step = Step::Request;
+        request(&disc, &mut dialogue, actor, &mut flow);
     }
 }
 

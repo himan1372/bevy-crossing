@@ -3,20 +3,22 @@
 ## Latest continuation - 2026-10-26
 
 Halloween stock (`0e0e1e90`) and November grab bags (`cd06b1e0`) are pushed.
-Scheduled bargain sales (`ce5a3583`) are pushed. The festive-candle rendering
-follow-up supplies its missing custom body/fire draw callback and original
-two-frame flame texture loop. Consult `completed/festive-candle-display.md`
-and latest comms/claims for publication/validation. Turnip selling/prices and
-the password service are the next retail services; start only when requested.
+Scheduled bargain sales (`ce5a3583`) and festive-candle rendering (`69a8c092`)
+are pushed. Turnip price inquiry/selling is the latest bounded slice; consult
+`completed/shop-turnip-service.md` and latest comms/claims for publication and
+validation. Native daily weekly-trend prices, bundles and Sunday/date spoilage
+are connected. Legacy saves without an age clock adopt their first observed
+day. Joan's visitor/buying and original global RNG remain separate. Password
+service is next; start only when requested.
 The original task limits below are historical where these
 newer task notes supersede them. Parent retail/M4/Philip acceptance stay open.
 
 Philip's latest Qwen instruction: **optional summaries or explanations only**.
 Explicitly request English every time, give only relevant supplied code, keep
 outputs short and verify against source. Report response time, useful findings
-and errors. A six-second interval check this slice was wrong and discarded;
+and errors. A prior six-second sales interval check was wrong and discarded;
 the earlier broad grab-bag audit took about 6.5 minutes and missed explicit
-duplicate exclusions. No further Qwen calls were useful this slice. Keep code
+duplicate exclusions. Qwen was not needed for the candle or turnip slices. Keep code
 decisions, multi-file reasoning, final review and validation with Codex.
 
 Continue in `C:/Users/phili/game c/bevy-crossing`, Windows PowerShell, branch

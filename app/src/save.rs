@@ -135,6 +135,8 @@ pub struct SaveData {
     pub(crate) shop_progress: Option<crate::shop::schedule::Progress>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) shop_events: Option<crate::shop::bargain::Calendar>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) shop_turnips: Option<crate::shop::turnips::Market>,
     /// Legacy furniture names (pre-pockets); read for conversion only.
     #[serde(default)]
     pub furniture: Vec<String>,
@@ -434,6 +436,7 @@ fn collect_save(
         shop_tier: shop.shop.shop_level as u8,
         shop_progress: Some(crate::shop::schedule::Progress::from(&shop.shop)),
         shop_events: Some(shop.events.clone()),
+        shop_turnips: Some(shop.turnips.clone()),
         furniture: Vec::new(),
         home_furniture: None,
         home_floors: None,

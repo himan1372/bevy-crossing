@@ -130,13 +130,13 @@ recorded in comms.txt after the final gate. No tests added or run.
 
 ## Still open
 
-Updated2026-10-25 at Philip's request. Priority order:
+Updated2026-10-26 after the selected service slices. Priority order:
 
-1. Turnip-price questions and selling, with source date/price/quantity/spoilage.
-2. Repeat-service conversations and password service/validation/item delivery.
-3. Scheduled bargain sales and their event stock/rooms; festive-candle model.
-   November grab bags/opening and Halloween candy are now connected;
-   December furniture substitutions and raffle already exist.
+1. Password service/validation/item delivery and repeat-service conversations.
+2. Joan's visitor/turnip-buying service; price questions and selling are connected.
+3. Original calendar identity/assessment and exact seasonal handover behavior.
+   Bargain sales, festive candle, November bags, Halloween candy, December
+   furniture substitutions and raffle are connected; acceptance remains open.
 4. Twins' full escort/echo behavior, renovation-board presentation and original
    neighboring-field rewrites; original pockets quest-warning presentation, remaining approach/transfer
    poses, cameras and movement blending, plus
@@ -269,3 +269,14 @@ now recognizes the same asset set. Dec26 shop display/purchase/cancel/reload,
 flame captures and all four player-room rotations inspected. See completed task
 for final gates and limits. No stock/calendar/transaction/schema changes; item
 counts, parent/M4 and Philip acceptance remain open.
+
+2026-10-26 codex: shop-turnip-service connects native m_kabu_manager daily
+prices and three weekly trends with saved Sunday/date state; source Other
+things price inquiry for Nook/Timmy and10/50/100-bundle selling. Exact duplicate,
+marked mixed, quest/present, Sunday refusal, zero disposal and atomic overflow
+rules retain existing sale flow. Turnip-specific Town growth hook spoils exposed
+pockets/field/all house layers at Sunday06/backward dates and clears old spoiled
+outdoor goods on forward growth; missing legacy age clock adopts first load.
+PC RNG supplies native probability draws, not original global RNG state. Joan,
+other players/island/gyroid storage and password service remain separate;
+counts/parent/M4 and Philip acceptance stay open. See completed task evidence.

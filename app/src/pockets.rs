@@ -298,7 +298,7 @@ fn pockets_input(
     }
     if ui.selling && ui.menu.is_none() && ui.mail_slot.is_none() && actions.consume(Action::Mark) {
         let slot = ui.selected;
-        if crate::shop_nook::sales::eligible(
+        if crate::shop_nook::sales::markable(
             inventory.pockets.pockets[slot],
             inventory.pockets.item_cond(slot),
         ) {
