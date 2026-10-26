@@ -87,3 +87,21 @@ navigation/cancel preserved complete compared numeric fields and music motion
 was sampled. See completed/catalog-flat-previews.md for final verification.
 This supersedes earlier empty-preview notes. Parent remains open for exact
 clock fitting and Philip's acceptance; ownership unchanged.
+
+## Clock preview fitting audit (2026-10-26, claude)
+
+Scanned all ten catalog clocks in a Temp capture preview (real disc, synthetic
+save, all furniture collected). Nine fill the circle well with the existing
+Aabb fit: grandfather, antique, kiddie, snowman, apple, spooky, alarm, jingle
+and the red tall clock. Only the cabin cuckoo (`sum_log_hatoclk`) is small and
+low. Logged its fitted box: y -3533..19528 (x +-1776, z -1615..3800) against a
+visible body about a third of that height, so something tall and not visibly
+drawn is in its meshes. It is not translucent geometry, not the hands (hand
+anchors sit at y 5150 inside the body) and not skinned-Aabb looseness: exact
+per-joint vertex boxes and waiting for bounds to settle gave identical numbers.
+Both experiments were reverted, so no source changed. A fix needs per-part
+visibility (for example the display-list parts of `sum_log_hatoclk`'s joints
+7/8 area or zero-area triangles); start by dumping that rig's part extents.
+Real save hash unchanged. Parent still open for the cuckoo fit and Philip's
+acceptance. QA lesson: Nook talk needs approach from his north side (message
+0x1092); blind Space presses open the pockets.
