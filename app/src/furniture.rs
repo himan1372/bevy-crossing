@@ -24,6 +24,7 @@ use crate::game_disc::GameDisc;
 use crate::n64_material::N64Material;
 use crate::skeleton::{place_on_joints, Animation, Skeleton};
 
+pub(crate) mod candle;
 pub(crate) mod clocks;
 pub(crate) mod cuckoo;
 pub(crate) mod fan;
@@ -185,6 +186,9 @@ pub(crate) fn can_render(disc: &GameDisc, index: u16) -> bool {
     let Some(p) = read_profile(disc, u32::from(index)) else {
         return false;
     };
+    if p.name == "iam_yaz_candle" {
+        return candle::available(disc);
+    }
     if television::kind(&p.name).is_some() {
         return television::available(disc, &p);
     }
@@ -403,6 +407,10 @@ pub fn spawn_furniture(
         .id();
 
     let mut segs = Segments::default();
+    if profile.name == "iam_yaz_candle" {
+        candle::spawn(commands, disc, parent, (meshes, materials, images));
+        return Some(parent);
+    }
     if slot::is_slot(profile.index as u16) {
         slot::spawn(
             commands,

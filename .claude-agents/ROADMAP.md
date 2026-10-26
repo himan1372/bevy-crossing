@@ -942,3 +942,12 @@ rank0 are explicit adapters pending personal IDs/field assessment. Exact gift
 handover/twin choreography and festive-candle rendering remain follow-ups.
 Parent ownership, item counts, M4 and Philip acceptance remain open. See
 completed/shop-bargain-sales.md for validation and limits.
+
+2026-10-26 codex: festive-candle-display supplies the missing ac_yaz_candle
+custom draw path: native body/fire models, segment9 and two original flame
+textures alternating every two native ticks. Assets are decoded once, reused
+through material handles and gated by GameplaySet. Shared placement availability
+now recognizes the same asset set. Dec26 shop display/purchase/cancel/reload,
+flame captures and all four player-room rotations inspected. See completed task
+for final gates and limits. No stock/calendar/transaction/schema changes; item
+counts, parent/M4 and Philip acceptance remain open.

@@ -1318,6 +1318,7 @@ impl Plugin for PlayerRoomPlugin {
             .add_plugins(floors::FloorsPlugin)
             .add_plugins(diary::DiaryPlugin)
             .add_plugins(music_grid::MusicGridPlugin)
+            .add_systems(Update, crate::furniture::candle::update.in_set(GameplaySet))
             .add_systems(
                 Update,
                 crate::furniture::gong::update

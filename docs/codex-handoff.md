@@ -3,9 +3,12 @@
 ## Latest continuation - 2026-10-26
 
 Halloween stock (`0e0e1e90`) and November grab bags (`cd06b1e0`) are pushed.
-Scheduled bargain sales are the current bounded slice; consult
-`completed/shop-bargain-sales.md` and the latest comms/claims for its final
-publication state. The original task limits below are historical where these
+Scheduled bargain sales (`ce5a3583`) are pushed. The festive-candle rendering
+follow-up supplies its missing custom body/fire draw callback and original
+two-frame flame texture loop. Consult `completed/festive-candle-display.md`
+and latest comms/claims for publication/validation. Turnip selling/prices and
+the password service are the next retail services; start only when requested.
+The original task limits below are historical where these
 newer task notes supersede them. Parent retail/M4/Philip acceptance stay open.
 
 Philip's latest Qwen instruction: **optional summaries or explanations only**.
