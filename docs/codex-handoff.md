@@ -1,4 +1,4 @@
-# Codex handoff - 2026-10-24
+# Codex handoff - 2026-10-25
 
 Continue in `C:/Users/phili/game c/bevy-crossing`, Windows PowerShell, branch
 `main`, identity `codex`. Philip authorizes committing and pushing finished work;
@@ -10,68 +10,82 @@ budget is tight: prefer targeted greps over whole-file reads, and few rebuilds.
 Finish the selected task, validation, task/comms/roadmap updates, claim release,
 commit and push before telling Philip what is next.
 
-## Current state (2026-10-24)
+## Current state (2026-10-25)
 
-Latest pushed commits on `main`:
+Latest gameplay commit **`675ef4df`**, pushed to `origin/main`. All selected
+Codex gameplay tasks are completed and claims closed. Parent `retail-shop-ui`,
+M4, migration and Philip's playtest remain open. Inspect current claims before
+claiming new work; do not revive the old catalog ownership instructions.
 
-- `14ccaae3` grok: catalog page art and a side view of the selected furniture.
-- `2f5db2a8` grok: Nook takes catalog orders from the collected-item screen
-  (`app/src/catalog_screen.rs`).
-- `18d957c5` grok: raffle-day room with the prizes on display, the drum and the ball.
-- `8720668c` and `f5c5d639` claude: collection bits (`logic/src/collection.rs`),
-  `app/src/catalog.rs` (`SaveData.catalog`, start-up ticket and order letters),
-  tickets with purchases (`shop_nook.rs`), and the raffle talk (`app/src/raffle.rs`).
+The only unrelated working-tree changes are modified `.gitignore` and untracked
+`savegame.json`. Preserve both, unstaged. No catalog/furniture source work is
+waiting for review or commitment. The guessed green catalog recolour was removed;
+keep original disc palettes.
 
-Active task: `nook-tickets-catalog`. The note is
-`.claude-agents/backlog/nook-tickets-catalog.md`; the latest status is in
-`comms.txt`. The claim script still lists `claude`, but grok has taken the work
-over. Post in `comms.txt` before you continue it, and claim it as `codex`.
+Philip requests token efficiency: targeted reads, reuse evidence, no unnecessary
+rebuilds or questions. He allowed **at most one subagent**, only where it saves
+tokens; the last implementation used one reused agent for assets/review. Do not
+start a team or resume historical agents automatically.
 
-**Uncommitted work in the tree. It is not yours, so do not discard it.**
+### What was completed since the old handoff
 
-- `app/src/catalog_screen.rs` and `app/src/furniture.rs`, about 210 lines.
-  They come from grok's latest slice: page-cloth tile scrolling (`mCL_set_page_dl`)
-  and a preview camera for the circle (`mSM_change_view`).
-- They also add `green_catalog_leaves`, which recolours the disc's CI4 palette so
-  the leaves look green. That is a guess against fidelity. Check the original
-  combiner and TEV colours (`gc-texture-pipeline` skill) before you keep it.
-- Ask Philip or check `comms.txt` before you commit or revert these files.
-- The `.gitignore` modification also stays untouched and unstaged.
+| Commit | Implemented work |
+|---|---|
+| `372e29bf`, `a51927c9` | Catalog fitting/native palette and transaction verification. Purchase tickets/full-pocket ticket mail, insufficient Bells, five orders full, paid orders and restart delivery checked. |
+| `f6f339e6` | Raffle ball scale/roll onto tray, drum/table placement and player clearance including tray overhang. Preserve these fixes. |
+| `d6a1d96c` | Empty text meshes caused reproduced letter/raffle renderer faults; skip meshes without glyph geometry. |
+| `3a98734d` | Original wallpaper, carpet, stationery and animated music catalog previews. Exact clock preview fitting remains separate. |
+| `29ce59a1`, `b4b896ba` | Original pockets/mail tag artwork, name pointers, edge placement and popup motion/input guards. |
+| `6dd71f34` | [Shop previews](../.claude-agents/completed/shop-category-previews.md): shirt try-on, wallpaper/carpet room previews, native camera/gesture and restoration before final payment. |
+| `d117124f` | [Clothing effects](../.claude-agents/completed/shop-change-effects.md): original sparkle spiral and wear sound on both try-on and return. |
+| `bb3243b8` | [Paint](../.claude-agents/completed/shop-paint-service.md): exact display purchase, no pocket item/ticket, pending roof palette applied on startup/load; bounded own-roof palette cache. |
+| `895ca05b` | [Multi-selling](../.claude-agents/completed/shop-multi-selling.md): M marks/Sell All, duplicate all/one, paper sheets/remainders and atomic wallet/overflow bags. |
+| `42020f3c` | [Selling cases](../.claude-agents/completed/shop-selling-warnings.md): quest refusal, wrapped-slot sale, free junk disposal and mixed priced/junk batches. |
+| `675ef4df` | [Higher tiers](../.claude-agents/completed/shop-higher-tiers.md): all four native tier rooms/exteriors/uniforms/clocks, both department floors/stairs, lower paint and upper Timmy services, saved two-day renovations and native hours. |
 
-Verified:
+### Important current behavior
 
-- Raffle: ask, win (prize given wrapped), another go, loss.
-- Start-up ticket letters: 7 tickets arrive as letters with stacks of 5 and 2.
-- Catalog order (grok): paid order, a fossil refused (0x10A8), Escape cancels (0x10A9).
+- Normal hours: 09:00-22:00; Nook 'n Go 07:00-23:00; monthly raffle opens10:00.
+- Crossing a sales threshold does not instantly upgrade. In town, schedule +2
+  calendar dates, close the intervening day, complete/restock when due in town.
+  Raffle and November-sale lookahead exclusions apply. Optional version1
+  `shop_progress` saves pending/date/notice/visitor. Legacy saves load safely.
+- The original notice letter works. Nookington's visitor gate is retained;
+  foreign-town travel itself is not implemented. Do not silently waive the gate.
+- Paint/tools are downstairs; furniture/clothing upstairs. Upper uses Timmy's
+  original message bank, voice and preview camera. Floor state is transient.
+- Any quest item in an offer refuses the entire batch. Wrapped presents sell
+  directly without invented warning text and are excluded from duplicate totals.
+  Zero-value disposal asks confirmation and pays nothing; mixed batches pay only
+  priced goods. Turnips remain excluded until their separate service is built.
+- All slot/item/condition checks and wallet/removal/bag changes commit together
+  on final Yes. One sheet affects the actual selected stack. Overflow uses
+  30,000-Bell bags, preferring freed sale slots; no capacity means no mutation.
 
-Not yet played:
+### Latest verification and limits
 
-- A ticket with a purchase (0x10AE / 0x10AF).
-- Short on bells (0x10AB).
-- Five order slots full (0x10AC).
-- Order mail at the next start-up.
-- The raffle ball roll.
-- Wallpaper, carpet, stationery and music previews in the catalog circle (empty).
+Latest tier slice passed check3.05s, warnings-denied all-target clippy8.88s, fmt,
+capture19.11s, default19.63s and release4m36s. No test suites added/run.
+Synthetic Temp checks cover all four entry/exits and40 saved fields unchanged
+except position/playtime; both stair directions; renovation dates/closure/notice/
+completion/visitor gate; department paint980; Timmy bed2100 with exact stock,
+pocket, ledger and ticket; wallpaper preview/cancel;07/22/23 hour gates; raffle
+09 closed/10 open; raffle lookahead exclusion; missing-disc numeric retention.
+Screenshots were inspected. Final disc logs had no ERROR/WARN/panic; missing-disc
+warning was expected. Owned previews are closed. Do not rerun these builds for
+this documentation-only handoff.
 
-Next steps:
+Still open: twins' full escort/secondary echo choreography (native echo text
+already works), renovation signs/board presentation, native neighboring-field
+rewrites, original pockets pre-transfer quest-warning window, remaining poses/
+camera/acceptance. Bargain-event calendar and forced chore opening are not yet
+modeled. Full diary/custom patterns/further tool actions and remaining M4 UI/
+audio/render fidelity stay on their existing roadmaps. Title, rename and held-net
+appearance remain deferred by Philip.
 
-1. Finish or review the uncommitted catalog slice.
-2. Play the untested paths above in a `%TEMP%` preview copy.
-3. Close the task: notes, both roadmaps, `comms.txt`, `task-claimer.sh complete`.
-
-Hard rules:
-
-- Never load, stage or overwrite the real `savegame.json`. Its SHA256 starts
-  `C15154C01FE105A3`; hash it before and after runtime work.
-- Previews only under `%TEMP%evy-crossing-room-critters` with an explicit `--disc`.
-  Stop only processes you started.
-- No tests unless Philip asks.
-- Gates: `cargo fmt --check`, then `cargo clippy --workspace --all-targets -j 1 -- -D warnings`,
-  then the capture and release builds, one Cargo process at a time.
-- Assert every patch-script replacement.
-- Raffle testing: set `BEVY_CROSSING_DAY_OFFSET` and `BEVY_CROSSING_HOUR_OFFSET`
-  to reach the last day of the month during opening hours. Enter the shop by
-  walking W+D from about (-15.9, -35.9).
+The real save was only hashed, unchanged throughout the work:
+`C15154C01FE105A33229406AD7D16499D0A79F7961F5D28DFDB20B9A43562FBA`.
+Take a fresh hash for future runtime work; never read/copy/load it for automation.
 
 ## Read before continuing
 
@@ -157,17 +171,9 @@ owner-cell storage and loose-item carry. See their task notes when editing those
 paths. The original blue bureau opens its bottom drawer only; this was verified
 against its model. Do not invent independent upper drawers.
 
-Recent gameplay slices passed check, warnings-denied all-target clippy, fmt and
-capture/default/release builds. The latest clock slice passed check (8.98s),
-clippy (24.90s), fmt, capture (1m01s), default (1m02s) and release (3m25s).
-Disposable checks cover all ten clock variants, F6 hour changes, minute
-continuity, authored motion, exact pause, F5/F9, placement/pickup, hidden/surface
-items, mixed powered-TV state, fresh launch and missing-disc numeric retention.
-Clear screenshots were inspected after repeating initially obscured views.
-Audio diagnostics settled to zero voices/nonfinite samples; this does not
-establish audible acceptance. No tests were added/run
-for these slices. Do not rerun builds for this documentation-only handoff or
-substitute old furniture-pilot test counts for current behavioral evidence.
+Earlier furniture verification remains in the linked completed tasks above.
+The newer shop evidence at the top supersedes the old clock-only build summary.
+Keep bounded development checks distinct from Philip's actual acceptance.
 
 Philip said **"music is good"**, accepting earlier playback. Preserve his earlier
 audio report exactly: **"there is absolutely zero audio overlap."** Voices,
@@ -182,37 +188,18 @@ entrance feedback was specifically that the walkable area is good. Repeated
 "next" authorizes progress, not blanket retail acceptance. M4 and migration
 remain open; M5 follows acceptance/playtest, fixes and release work.
 
-## Next gameplay work
+## Next instance instructions
 
-Follow Philip's current request and prioritize reported defects. The current
-proposal in `docs/roadmap.html`, **planned and not started**, is:
+Read this handoff, both roadmaps and the latest comms first. Then tell Philip you
+are caught up and **end your first reply with the exact three numbered priorities
+at the end of this file**. They are remaining work, not three completed features.
+Do not silently start one; wait for Philip's selection unless his new message
+already selects or directs work. Prioritize reported defects over the list.
 
-1. Audit original room-light controls/illumination and remaining special furniture
-   callbacks, then select a bounded source-correct slice using native kernels.
-   Static lamp callbacks and on/off model names alone do not establish a power
-   action or a Bevy light. Audited clocks do not expose configurable alarms.
-2. Remaining fish/insects/balloons require source audits; custom designs require
-   player-pattern support. Further held-tool actions and full diary calendar,
-   editor presentation/contact pose and other-player locks are separate work.
-3. Further retail comparison of music/toys: exact hardware DSP/rounding/resampling
-   and full warning/choice-window animation remain open. Pinwheel environmental
-   wind depends on weather.
-4. Finish remaining pockets/mail/shop/pause/HUD and audio/render M4 acceptance,
-   then M5 hardening/playtest/release.
-
-**Deferred by Philip:** held-net appearance, title screen and rename. Do not
-resume net appearance just because it remains on the roadmap. Long-furniture
-turning and loose throw/pickup animation are implemented, not the next proposal.
-Exact player root/contact/slip, conservative rotation/player sweeps and special
-per-type furniture behavior still have fidelity limits described in task notes.
-
-Keep both roadmaps, the relevant task and comms current for gameplay changes.
-The HTML distinguishes implemented work from acceptance and proposed work;
-internal skill/handoff maintenance must not inflate gameplay progress counts.
-Current roadmap counts are 79 items: 46 implemented, 6 in progress, 27 planned.
-These are tracked-item counts, not a game completion percentage. Umbrellas,
-decorating, the bounded diary, four TVs and ten clocks are already implemented;
-do not restart those slices from the previous handoff's obsolete proposals.
+Keep both roadmaps, task notes and root comms current for gameplay changes.
+Documentation maintenance does not change gameplay counts or close M4. Do not
+restart implemented previews, paint, selling, tiers, clocks or old room-light
+proposals merely because an older handoff called them missing.
 
 ## Architecture and invariants to preserve
 
@@ -260,6 +247,37 @@ Recent entry points include `app/src/player_room/decorating.rs`,
 `app/src/furniture/clocks.rs`, and the native `logic/src/diary.rs`,
 `logic/src/television.rs`, `logic/src/furniture_clock.rs` kernels.
 
+## Current shop entry points and runtime lessons
+
+- `shop.rs`, `shop/schedule.rs`, `shop/layout.rs`, `shop/layout/follow.rs`:
+  persisted renewal/hours, native rooms/portals/routes and owned-root rebuilding.
+  `upgrading_today` means pending; use the date-aware renovation helper for closure.
+- `disc_town/shop_exterior.rs`, `interior.rs`, `furniture/house_clock.rs`,
+  `shop_display.rs`: native tier assets/footprints/clocks and floor-aware displays.
+- `shop_nook.rs`, `shop_nook/sales.rs`, `shop_nook/preview.rs`, `raffle.rs`:
+  native conversations, exact transactions, temporary previews and tier offsets.
+- Insect category is0x2D; turnips0x2F. Do not accidentally block insects again.
+  `aNSC_item_tanni_type` is a relocated pointer table, not a flat byte table.
+- MovementSet follows Doors/Objects/Tools: ordering room rebuild after movement
+  and before Doors creates a cycle. Initialize ShopObstacles before Update.
+  Keep ownership markers on room/clock/attendant/HUD roots to avoid duplicates.
+- Native door centres and narrow corridors vary by tier. Stop before the portal
+  plane, and guard stair reentry. Allow turning time; a wide U-turn can miss stairs.
+- Match actual final question text before choosing. Hidden/stale Text and prices
+  on earlier pages caused QA to select the wrong thing. Query fresh named entities;
+  the blue-bed model is `sum_blue_bed01`, not a guessed name.
+- Existing disposable helpers/evidence are under
+  `%TEMP%/bevy-crossing-room-critters/higher-tiers-20261025` and the earlier task
+  folders named in their notes. Historical PIDs never authorize future stops.
+  `install.ps1` copies target/debug: rebuild capture before using it, and copy the
+  capture EXE before a default build replaces it. Never launch from repo cwd.
+- Debug HOUR_OFFSET wraps modulo24: negative hours advance across midnight.
+  The latest Temp launcher accepts target Hour and compensates DayOffset. Set
+  explicit dates/opening hours and ISO, not merely BEVY_CROSSING_ISO.
+- Same-size own roof reload is cached; size-changing exterior reload still needs
+  restart. An unrelated fresh-start empty `field_items` list repopulates20
+  records; this was recorded, not fixed by paint work.
+
 ## Working safely and efficiently
 
 Claim one task through the **root** script, using your own identity:
@@ -273,12 +291,12 @@ Claim one task through the **root** script, using your own identity:
 
 Never edit claims manually. Release at handoff. Some historical records use
 `status` rather than `action`; do not rewrite them or infer completion from them.
-Append only to root `comms.txt`. No subagent delegation is authorized by this
-handoff; follow the current session's delegation instructions.
+Append only to root `comms.txt`. Philip allows at most one subagent where it
+saves tokens; prefer direct work for small tasks. Follow current session limits.
 
 Preserve unrelated modified `.gitignore`, untracked `savegame.json` and settings.
 Never load the actual save for automation. Last read-only SHA256:
-`26CD8CBC01402486D1E9CF9A0874ABD59021815688CE8FDD86FF4DB2CB20ADEB`.
+`C15154C01FE105A33229406AD7D16499D0A79F7961F5D28DFDB20B9A43562FBA`.
 Take a fresh baseline for runtime work; user play can legitimately change it.
 Never stage the save or copy it into a synthetic test scenario.
 
@@ -333,5 +351,9 @@ on the selected task; rewrite this file again when requested or when an actual
 handoff needs it. Finish with current evidence, remaining limits and ownership
 released; do not invent acceptance or silently start the next proposal.
 Complete all authorized repository work and confirm publication/status first,
-then tell Philip the next concrete step. At this handoff the next proposal is
-the original room-light control/illumination audit, not another clock alarm UI.
+then tell Philip the next concrete step. End the first catch-up reply with these
+three priorities, in this order (do not start them without a selection):
+
+1. Turnip prices and selling.
+2. Counter/password services.
+3. Remaining seasonal services.
