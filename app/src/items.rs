@@ -250,6 +250,9 @@ fn disc_name(t: &ItemTable, id: ItemId) -> Option<String> {
 /// doesn't trade it, `None` without the disc.
 pub fn price(id: ItemId) -> Option<u32> {
     let t = TABLE.get()?;
+    if id == crate::goods::GRAB_BAG {
+        return Some(u32::from(crate::clock::now().year));
+    }
     if (SHELL0..SHELL0 + 8).contains(&id) {
         return Some(SHELL_PRICES[usize::from(id - SHELL0)]);
     }

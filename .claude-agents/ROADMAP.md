@@ -8,9 +8,9 @@ Remaining priorities after native shop tiers and renovation lifecycle. The visib
 
 1. Turnip price questions and selling: native price/date/quantity/spoilage rules.
 2. Repeat-service conversations and original password validation/item delivery.
-3. November grab bags (including their three-item opening flow) and scheduled
-   bargain sales with native event stock/layouts. Halloween candy is connected;
-   December furniture substitutions and raffle exist.
+3. Scheduled bargain sales with native event stock/layouts and the missing
+   festive-candle model. November grab bags/opening and Halloween candy are
+   connected; December furniture substitutions and raffle exist.
 4. Twins' full escort/echo, renovation-board presentation and neighboring-field
    rewrites; original pockets quest-warning presentation, remaining approach/transfer poses,
    cameras/movement blending and Philip's
@@ -24,6 +24,18 @@ clothing effects, tickets, catalog orders/delivery, raffle, house expansion roof
 selection/basement/statue progression. Do not schedule these again as missing.
 Pause/save screens and special quest/mail tags remain separate UI follow-ups.
 Item counts, parent ownership and M4 acceptance remain unchanged.
+
+2026-10-26 codex: shop-november-grab-bags connects the day after November's
+fourth Thursday, current-year price, native stock6/9/13/18 and ordered reserves
+(all18 downstairs at Nookington's), exact purchase/sold-slot/no-ticket behavior.
+Pockets Open requires three existing free slots, stages three rare ABC goods
+with native seasonal clothing/duplicate exclusion and possible one pinwheel,
+then commits contents/bag removal together. Native six-frame bag icon and
+70tick shrink/staggered growth are transient; wrapped bags unwrap separately.
+Capacity refusal uses original words in the existing message window; full mWR
+panel and unimplemented spotlight rare_item exclusion remain fidelity limits.
+See completed/shop-november-grab-bags.md for source/QA/build evidence and Qwen
+assessment. No roadmap count or parent/M4/Philip acceptance changes.
 
 2026-10-25 codex: shop-seasonal-stock connects October16..30 candy2806 at
 100Bells, quantities2/3/4/5 by tier, with flowers1/1/2/3 moved to FE05 and

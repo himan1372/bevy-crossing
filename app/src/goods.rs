@@ -128,6 +128,7 @@ pub fn set_priorities(p: [[u8; 3]; 5]) {
 pub fn roll_now() -> Roll {
     let now = crate::clock::now();
     Roll {
+        year: now.year,
         priorities: PRIORITIES.lock().map(|g| *g).unwrap_or([[0, 1, 2]; 5]),
         goods_power: 0,
         month: now.month,
@@ -192,6 +193,7 @@ fn cloth_season(month: u8, day: u8) -> usize {
 /// (`mPr_GetGoodsPower`, -30..50) and the date.
 #[derive(Clone, Copy, Debug)]
 pub struct Roll {
+    pub year: u16,
     pub priorities: [[u8; 3]; 5],
     pub goods_power: i32,
     pub month: u8,
@@ -233,6 +235,17 @@ pub fn select(
     exclude: &[ItemId],
     below: &mut dyn FnMut(u32) -> u32,
 ) -> Vec<ItemId> {
+    select_items(roll, kind, count, exclude, below, None)
+}
+
+fn select_items(
+    roll: &Roll,
+    kind: Kind,
+    count: usize,
+    exclude: &[ItemId],
+    below: &mut dyn FnMut(u32) -> u32,
+    rarity: Option<u8>,
+) -> Vec<ItemId> {
     let Some(goods) = LISTS.get() else {
         return vec![DUMMIES[kind as usize]; count];
     };
@@ -243,7 +256,15 @@ pub fn select(
         if guard > 10_000 {
             break;
         }
-        let i = pick_list(roll, kind, below);
+        let i = rarity.map_or_else(
+            || pick_list(roll, kind, below),
+            |r| {
+                roll.priorities[kind as usize]
+                    .iter()
+                    .position(|&p| p == r)
+                    .unwrap_or(0)
+            },
+        );
         let list: &[ItemId] = match kind {
             Kind::Diary => DIARIES.get(i).copied().unwrap_or(DIARIES[0]),
             _ => goods.lists[kind as usize].get(i).map_or(&[], Vec::as_slice),
@@ -303,6 +324,37 @@ const FLOWER_BAG0: ItemId = 0x2902;
 const FLOWER_NUM: u32 = 9;
 /// `ITM_FOOD_CANDY`, stocked in the plant reserves during Halloween.
 pub(crate) const CANDY: ItemId = 0x2806;
+pub(crate) const GRAB_BAG: ItemId = 0x2E00;
+
+pub(crate) fn grab_bag_day(year: u16, month: u8, day: u8) -> bool {
+    rustimal_logic::shop::tanuki_shop_status(year, month, day, false)
+        == rustimal_logic::shop::TanukiShopStatus::HukubukuroSale
+}
+
+/// mTG_hukubukuro_open_proc: one possible pinwheel, otherwise rare ABC goods.
+/// Missing runtime lists refuse rather than consuming a bag for dummy items.
+pub(crate) fn grab_bag_contents(below: &mut dyn FnMut(u32) -> u32) -> Option<[ItemId; 3]> {
+    let lists = LISTS.get()?;
+    let roll = roll_now();
+    let pinwheel_slot = below(3) as usize;
+    let mut items = [0; 3];
+    for i in 0..3 {
+        if i == pinwheel_slot && below(2) == 0 {
+            items[i] = 0x224C + below(8) as ItemId;
+        } else {
+            let kind =
+                [Kind::Cloth, Kind::Carpet, Kind::Wallpaper, Kind::Furniture][below(4) as usize];
+            let index = roll.priorities[kind as usize]
+                .iter()
+                .position(|&p| p == 2)?;
+            if lists.lists.get(kind as usize)?.get(index)?.is_empty() {
+                return None;
+            }
+            items[i] = *select_items(&roll, kind, 1, &items[..i], below, Some(2)).first()?;
+        }
+    }
+    Some(items)
+}
 /// `ITM_RED_PAINT`, `ITM_SIGNBOARD`.
 const RED_PAINT: ItemId = 0x222D;
 const SIGNBOARD: ItemId = 0x251E;
@@ -325,15 +377,24 @@ pub fn make_goods_list(
 ) -> Vec<ItemId> {
     let counts = GOODS_COUNT[tier.min(3)];
     let n = |i: usize| usize::from(counts[i]);
+    let bags = grab_bag_day(roll.year, roll.month, roll.day);
     let mut out = select(roll, Kind::Furniture, n(2), &[], below);
     season_furniture(roll, &mut out, below);
-    out.extend(select(roll, Kind::Paper, n(0), &[], below));
-    if tier >= 2 {
-        out.extend(select(roll, Kind::Diary, 1, &[], below));
+    if !bags {
+        out.extend(select(roll, Kind::Paper, n(0), &[], below));
+        if tier >= 2 {
+            out.extend(select(roll, Kind::Diary, 1, &[], below));
+        }
     }
     out.extend(select(roll, Kind::Cloth, n(1), &[], below));
     out.extend(select(roll, Kind::Carpet, n(4), &[], below));
     out.extend(select(roll, Kind::Wallpaper, n(5), &[], below));
+
+    if bags {
+        let count = n(0) + n(8) + n(9) + n(10) + if tier >= 2 { 3 } else { 0 };
+        out.extend(std::iter::repeat_n(GRAB_BAG, count));
+        return out;
+    }
 
     // Tools (`mSP_SelectTool`).
     let tool_max = if tier > 0 {
@@ -419,6 +480,7 @@ mod tests {
     #[test]
     fn luck_shifts_the_rarity() {
         let roll = Roll {
+            year: 2026,
             priorities: [[0, 1, 2]; 5],
             goods_power: 0,
             month: 1,

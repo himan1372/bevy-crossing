@@ -134,8 +134,8 @@ Updated2026-10-25 at Philip's request. Priority order:
 
 1. Turnip-price questions and selling, with source date/price/quantity/spoilage.
 2. Repeat-service conversations and password service/validation/item delivery.
-3. November grab bags and their three-item opening flow; scheduled bargain
-   sales and their event stock/rooms. Halloween candy is now connected;
+3. Scheduled bargain sales and their event stock/rooms; festive-candle model.
+   November grab bags/opening and Halloween candy are now connected;
    December furniture substitutions and raffle already exist.
 4. Twins' full escort/echo behavior, renovation-board presentation and original
    neighboring-field rewrites; original pockets quest-warning presentation, remaining approach/transfer
@@ -237,3 +237,14 @@ November grab-bag opening and scheduled bargain-event stock/layouts remain
 separate unfinished seasonal services. Parent/M4 and Philip acceptance stay open.
 December26 numeric stock checks also found an existing missing-model warning for
 iam_yaz_candle3298; candle display remains a seasonal rendering follow-up.
+
+2026-10-26 codex: shop-november-grab-bags connects native November sale date,
+year price, stock6/9/13/18, ordered original display reserves and exact no-ticket
+purchase. Department bags stay downstairs. Pockets Open atomically consumes a
+normal bag only with three already empty slots, gives native rare-list goods
+and possible pinwheel, preserves other slots/conditions, and shows source bag
+frames/shrink/staggered-growth timing. Wrapped bags unwrap first. Existing
+same-day lineups are preserved until daily restock. Capacity uses native words
+with the existing message frame; full warning-panel presentation and spotlight
+rare_item exclusion await their corresponding implementation. Scheduled bargain
+sales, festive-candle rendering, parent/M4 and Philip acceptance remain open.

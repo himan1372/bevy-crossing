@@ -13,9 +13,13 @@ use crate::interaction::PlayerInventory;
 use crate::items;
 use crate::states::GameplaySet;
 
+mod grab_bag;
+
 /// Whether the pockets screen is open. Read by `input::update_focus`.
 #[derive(Resource, Default)]
 pub struct PocketsUi {
+    pub(super) opening: Option<grab_bag::Opening>,
+    pub(crate) bag_warning: bool,
     pub open: bool,
     pub selected: usize,
     pub menu: Option<usize>,
@@ -108,6 +112,9 @@ fn toggle_pockets(
     if ui.open && *focus != InputFocus::Pockets {
         return;
     }
+    if ui.open && ui.opening.is_some() {
+        return;
+    }
     if ui.open
         && (actions.just_pressed(Action::Cancel) || actions.just_pressed(Action::Back))
         && (mail.menu.is_some() || mail.grabbed.is_some())
@@ -142,6 +149,8 @@ fn toggle_pockets(
     }
     ui.menu = None;
     ui.grabbed = None;
+    ui.opening = None;
+    ui.bag_warning = false;
     mail.menu = None;
     mail.grabbed = None;
     mail.discard = false;
@@ -190,6 +199,8 @@ pub(crate) fn item_actions(item: u16, condition: u32) -> Vec<&'static str> {
         vec!["Grab", "Open", "Quit"]
     } else if is_paper(item) && condition == 0 {
         vec!["Write", "Grab"]
+    } else if item == crate::goods::GRAB_BAG && condition == 0 {
+        vec!["Grab", "Open", "Quit"]
     } else if can_hold(item, condition) {
         vec!["Hold", "Grab"]
     } else {
@@ -253,15 +264,36 @@ impl PocketsUi {
 
 fn pockets_input(
     mut actions: ResMut<Actions>,
-    focus: Res<InputFocus>,
+    mut focus: ResMut<InputFocus>,
     mut ui: ResMut<PocketsUi>,
     mut inventory: ResMut<PlayerInventory>,
     mut tool: ResMut<crate::ecology::EquippedTool>,
     renderer: Option<Res<crate::pockets_disc::PocketAssets>>,
     mut mail: ResMut<crate::mail::MailUi>,
     mut mailbox: ResMut<crate::mail::Mailbox>,
+    mut dialogue: ResMut<crate::dialogue::DialogueState>,
+    time: Res<Time>,
+    disc: Option<Res<crate::game_disc::GameDisc>>,
 ) {
+    if ui.open && ui.bag_warning {
+        if dialogue.external_result.take().is_some() {
+            ui.bag_warning = false;
+            *focus = InputFocus::Pockets;
+            actions.consume(Action::Confirm);
+            actions.consume(Action::Interact);
+            actions.consume(Action::Advance);
+            actions.consume(Action::Cancel);
+        }
+        return;
+    }
     if !ui.open || *focus != InputFocus::Pockets {
+        return;
+    }
+    if let Some(opening) = ui.opening.as_mut() {
+        opening.ticks += time.delta_secs() * 30.0;
+        if opening.ticks >= 70.0 {
+            ui.opening = None;
+        }
         return;
     }
     if ui.selling && ui.menu.is_none() && ui.mail_slot.is_none() && actions.consume(Action::Mark) {
@@ -461,6 +493,27 @@ fn pockets_input(
         // mTG_present_open_proc: unwrapped where it lies.
         if labels.get(choice) == Some(&"Open") {
             let cond = inventory.pockets.item_cond(slot);
+            if item == crate::goods::GRAB_BAG && cond == 0 {
+                if disc.is_none() {
+                    crate::sound::se(crate::sound::se_id::MENU_EXIT);
+                    return;
+                }
+                match grab_bag::Opening::start(&mut inventory, slot) {
+                    Ok(opening) => ui.opening = Some(opening),
+                    Err(grab_bag::Refusal::Capacity) => {
+                        dialogue.begin_furniture(
+                            "You can't open a bag\nunless you have room\nfor three more items!"
+                                .into(),
+                            None,
+                        );
+                        ui.bag_warning = true;
+                        *focus = InputFocus::Dialogue;
+                    }
+                    Err(grab_bag::Refusal::Unavailable) => {}
+                }
+                crate::sound::se(crate::sound::se_id::MENU_EXIT);
+                return;
+            }
             inventory.pockets.set_item_cond(slot, cond & !1);
             crate::sound::se(0x436);
             return;
@@ -574,6 +627,16 @@ pub struct PocketsPlugin;
 impl Plugin for PocketsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PocketsUi>()
+            .add_systems(
+                Update,
+                reset_bag_presentation
+                    .after(crate::save::LoadSet)
+                    .before(pockets_input),
+            )
+            .add_systems(
+                OnExit(crate::states::AppState::InGame),
+                clear_bag_presentation,
+            )
             .add_systems(Startup, setup_pockets_ui)
             .add_plugins(crate::pockets_disc::PocketDiscPlugin)
             .add_systems(
@@ -590,6 +653,24 @@ impl Plugin for PocketsPlugin {
                     .in_set(GameplaySet),
             );
     }
+}
+
+fn reset_bag_presentation(
+    mut reset: MessageReader<crate::sound::ResetAudio>,
+    mut ui: ResMut<PocketsUi>,
+    mut dialogue: ResMut<crate::dialogue::DialogueState>,
+) {
+    if reset.read().count() > 0 && (ui.opening.is_some() || ui.bag_warning) {
+        if ui.bag_warning {
+            *dialogue = crate::dialogue::DialogueState::default();
+        }
+        *ui = PocketsUi::default();
+    }
+}
+
+fn clear_bag_presentation(mut ui: ResMut<PocketsUi>) {
+    ui.opening = None;
+    ui.bag_warning = false;
 }
 
 #[cfg(test)]

@@ -196,11 +196,36 @@ pub(crate) fn show_goods(
             }
         }
     } else {
+        // aSD_MakeHukubukuroFg: reserve-kind order before FG scan order.
+        // All eighteen department reserves are downstairs; upstairs has none.
+        let bag_slots: Vec<usize> = [
+            RSV_TOOL,
+            RSV_SIGNBOARD,
+            RSV_PAINT,
+            RSV_PAPER,
+            RSV_HALLOWEEN,
+            RSV_PLANT,
+        ]
+        .into_iter()
+        .flat_map(|reserve| {
+            slots
+                .iter()
+                .enumerate()
+                .filter_map(move |(i, s)| (s.0 == reserve).then_some(i))
+        })
+        .collect();
+        let mut bag_slots = bag_slots.into_iter();
         // Infer the saved lineup's plant policy from its candy, including
         // sold units. Old same-day saves retain their original arrangement
         // until the next daily restock rather than losing purchased slots.
         let halloween = shop.stock.iter().any(|s| s.item == crate::goods::CANDY);
         for (index, s) in shop.stock.iter().enumerate() {
+            if s.item == crate::goods::GRAB_BAG {
+                if let Some(i) = bag_slots.next() {
+                    slots[i].2 = Some((index, s.item, s.sold));
+                }
+                continue;
+            }
             let Some(reserve) = reserve_point(s.item, halloween) else {
                 continue;
             };
@@ -231,6 +256,7 @@ pub(crate) fn show_goods(
         };
         let shown = match goods {
             Some((_, item, false)) => item,
+            Some((_, crate::goods::GRAB_BAG, true)) => sold_sign(RSV_PLANT),
             Some((_, _, true)) | None if reserve == RSV_HALLOWEEN => sold_sign(reserve),
             Some((_, _, true)) => sold_sign(reserve),
             None => continue,

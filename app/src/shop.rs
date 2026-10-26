@@ -159,6 +159,7 @@ impl ShopData {
         crate::goods::set_priorities(priorities);
         let now = crate::clock::now();
         let roll = crate::goods::Roll {
+            year: now.year,
             priorities,
             goods_power: 0,
             month: now.month,

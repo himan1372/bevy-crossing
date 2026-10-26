@@ -104,7 +104,7 @@ pub(crate) struct PocketAssets {
     slide_flag: bool,
     was_open: bool,
     hand_at: Vec2,
-    icons: HashMap<(u16, bool), Handle<Image>>,
+    icons: HashMap<(u16, bool, u8), Handle<Image>>,
     root: Option<Entity>,
     dynamic: Option<Entity>,
     white: Handle<Image>,
@@ -151,7 +151,7 @@ fn pointer(disc: &GameDisc, at: u32) -> Option<u32> {
 
 /// mSM_draw_item: 16 category tables, with stationery stack and singleton
 /// exceptions. Table sizes come from the catalog, not an unchecked item index.
-fn icon(disc: &GameDisc, item: u16, present: bool) -> Option<Vec<u8>> {
+fn icon_frame(disc: &GameDisc, item: u16, present: bool, frame: u8) -> Option<Vec<u8>> {
     let named = |name: &str| disc.catalog.get(name).map(|a| a.offset);
     let table = if present {
         named("present_tex_data$762")?
@@ -168,7 +168,8 @@ fn icon(disc: &GameDisc, item: u16, present: bool) -> Option<Vec<u8>> {
         let category = ((item >> 8) & 15) as u32;
         let index = match category {
             0 => (item & 255) as u32 / 64,
-            4 | 6 | 7 | 10 | 11 | 14 => 0,
+            14 => u32::from(frame.min(5)),
+            4 | 6 | 7 | 10 | 11 => 0,
             _ => (item & 255) as u32,
         };
         let tables = named("item_tex_data_table$779")?;
@@ -920,14 +921,26 @@ fn draw(
         materials: &mut materials,
         root: dynamic,
     };
-    for (slot, &item) in inventory.pockets.pockets.iter().enumerate() {
+    for (slot, &saved_item) in inventory.pockets.pockets.iter().enumerate() {
+        let opening = ui.opening.as_ref();
+        let bag = opening.is_some_and(|o| o.bag_slot == slot);
+        let item = if bag {
+            crate::goods::GRAB_BAG
+        } else {
+            saved_item
+        };
         if item == 0 || ui.grabbed == Some(slot) {
             continue;
         }
         let present = inventory.pockets.item_cond(slot) & 1 != 0;
-        let key = (item, present);
+        let frame = if bag {
+            opening.map_or(0, |o| (o.ticks as u8).min(5))
+        } else {
+            0
+        };
+        let key = (item, present, frame);
         if let std::collections::hash_map::Entry::Vacant(entry) = assets.icons.entry(key) {
-            if let Some(rgba) = icon(&disc, item, present) {
+            if let Some(rgba) = icon_frame(&disc, item, present, frame) {
                 entry.insert(images.add(image(rgba, 32, 32)));
             }
         }
@@ -936,8 +949,9 @@ fn draw(
             marks::draw(&assets.marks, &mut paint, at);
         }
         if let Some(tex) = assets.icons.get(&key) {
+            let size = 24.0 * opening.map_or(1.0, |o| o.scale(slot));
             paint.put(
-                quad_mesh(at - Vec2::splat(12.0), Vec2::splat(24.0)),
+                quad_mesh(at - Vec2::splat(size * 0.5), Vec2::splat(size)),
                 tex.clone(),
                 Color::WHITE,
                 120.0,
@@ -998,7 +1012,7 @@ fn draw(
     if let Some(from) = ui.grabbed {
         let item = inventory.pockets.pockets[from];
         let present = inventory.pockets.item_cond(from) & 1 != 0;
-        if let Some(tex) = assets.icons.get(&(item, present)) {
+        if let Some(tex) = assets.icons.get(&(item, present, 0)) {
             let shadow = paint.put(
                 quad_mesh(at + Vec2::splat(4.0) - Vec2::splat(12.0), Vec2::splat(24.0)),
                 tex.clone(),
