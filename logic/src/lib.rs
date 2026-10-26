@@ -97,6 +97,7 @@ pub mod npc;
 pub mod npc_ai;
 mod npc_event_mail;
 pub mod npc_reply;
+pub mod password;
 mod placement;
 mod player_action;
 pub mod player_move;
