@@ -301,6 +301,8 @@ const SAPLING: ItemId = 0x2900;
 const CEDAR_SAPLING: ItemId = 0x2901;
 const FLOWER_BAG0: ItemId = 0x2902;
 const FLOWER_NUM: u32 = 9;
+/// `ITM_FOOD_CANDY`, stocked in the plant reserves during Halloween.
+pub(crate) const CANDY: ItemId = 0x2806;
 /// `ITM_RED_PAINT`, `ITM_SIGNBOARD`.
 const RED_PAINT: ItemId = 0x222D;
 const SIGNBOARD: ItemId = 0x251E;
@@ -311,7 +313,8 @@ const PAINT_NUM: u8 = 12;
 /// (December trees and candles in season), stationery (and a diary from
 /// Nookway), clothing, carpets, wallpaper, then tools (fewer at the
 /// Cranny until its sales unlock them), paint and a sign from Nookway,
-/// an umbrella, saplings and flower bags. `paint` is the next paint
+/// an umbrella, saplings and flower bags. October 16..30 replaces plants
+/// with candy and saplings with flowers. `paint` is the next paint
 /// colour, advanced when sold.
 pub fn make_goods_list(
     roll: &Roll,
@@ -357,14 +360,15 @@ pub fn make_goods_list(
     out.push(UMBRELLA00 + below(UMBRELLA_NUM) as ItemId);
 
     // Plants (`mSP_SelectPlant`).
-    let mut saplings = n(8);
+    let halloween = roll.month == 10 && (16..=30).contains(&roll.day);
+    let mut saplings = if halloween { 0 } else { n(8) };
     if tier >= 2 && saplings > 0 {
         out.push(CEDAR_SAPLING);
         saplings -= 1;
     }
     out.extend(std::iter::repeat_n(SAPLING, saplings));
     let mut used = [false; FLOWER_NUM as usize];
-    let mut flowers = n(10);
+    let mut flowers = if halloween { n(8) } else { n(10) };
     while flowers > 0 {
         let i = below(FLOWER_NUM) as usize;
         if !used[i] {
@@ -372,6 +376,12 @@ pub fn make_goods_list(
             out.push(FLOWER_BAG0 + i as ItemId);
             flowers -= 1;
         }
+    }
+    // Native stores these in flowers_candy_grab_bag_count. The existing
+    // stock vector represents each unit explicitly, retaining its sold flag
+    // and display identity across save/load without another save field.
+    if halloween {
+        out.extend(std::iter::repeat_n(CANDY, n(10)));
     }
     out
 }

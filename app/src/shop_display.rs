@@ -39,8 +39,8 @@ const RSV_UMBRELLA: u16 = 0xFE0A;
 const RSV_PAINT: u16 = 0xFE0B;
 const RSV_SIGNBOARD: u16 = 0xFE0C;
 
-/// `aSD_ItemName2ReservePointName` (ordinary days).
-fn reserve_point(item: ItemId) -> Option<u16> {
+/// `aSD_ItemName2ReservePointName` / `aSD_MakePlantFg_hal`.
+fn reserve_point(item: ItemId, halloween: bool) -> Option<u16> {
     Some(match item {
         0x251E => RSV_SIGNBOARD,
         i if crate::items::is_furniture(i) => RSV_FTR,
@@ -54,7 +54,8 @@ fn reserve_point(item: ItemId) -> Option<u16> {
         // aSD_ItemName2ReservePointName: ordinary-day saplings occupy
         // the Halloween reserve; flower bags use the two plant slots.
         0x2900..=0x2901 => RSV_HALLOWEEN,
-        0x2902..=0x290A => RSV_PLANT,
+        0x2902..=0x290A if halloween => RSV_HALLOWEEN,
+        0x2902..=0x290A | crate::goods::CANDY => RSV_PLANT,
         _ => return None,
     })
 }
@@ -195,8 +196,12 @@ pub(crate) fn show_goods(
             }
         }
     } else {
+        // Infer the saved lineup's plant policy from its candy, including
+        // sold units. Old same-day saves retain their original arrangement
+        // until the next daily restock rather than losing purchased slots.
+        let halloween = shop.stock.iter().any(|s| s.item == crate::goods::CANDY);
         for (index, s) in shop.stock.iter().enumerate() {
-            let Some(reserve) = reserve_point(s.item) else {
+            let Some(reserve) = reserve_point(s.item, halloween) else {
                 continue;
             };
             if let Some(slot) = slots.iter_mut().find(|t| t.0 == reserve && t.2.is_none()) {
@@ -322,12 +327,12 @@ mod tests {
 
     #[test]
     fn goods_find_their_slots() {
-        assert_eq!(reserve_point(0x1004), Some(RSV_FTR));
-        assert_eq!(reserve_point(0x2202), Some(RSV_TOOL));
-        assert_eq!(reserve_point(0x2210), Some(RSV_UMBRELLA));
-        assert_eq!(reserve_point(0x2905), Some(RSV_PLANT));
-        assert_eq!(reserve_point(0x2B03), Some(RSV_PAPER));
-        assert_eq!(reserve_point(0x2800), None);
+        assert_eq!(reserve_point(0x1004, false), Some(RSV_FTR));
+        assert_eq!(reserve_point(0x2202, false), Some(RSV_TOOL));
+        assert_eq!(reserve_point(0x2210, false), Some(RSV_UMBRELLA));
+        assert_eq!(reserve_point(0x2905, false), Some(RSV_PLANT));
+        assert_eq!(reserve_point(0x2B03, false), Some(RSV_PAPER));
+        assert_eq!(reserve_point(0x2800, false), None);
         assert_eq!(sold_sign(RSV_TOOL), 0xFE14);
     }
 }

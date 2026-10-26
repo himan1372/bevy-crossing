@@ -8,7 +8,9 @@ Remaining priorities after native shop tiers and renovation lifecycle. The visib
 
 1. Turnip price questions and selling: native price/date/quantity/spoilage rules.
 2. Repeat-service conversations and original password validation/item delivery.
-3. Remaining seasonal stock/service branches after source audit; raffle exists.
+3. November grab bags (including their three-item opening flow) and scheduled
+   bargain sales with native event stock/layouts. Halloween candy is connected;
+   December furniture substitutions and raffle exist.
 4. Twins' full escort/echo, renovation-board presentation and neighboring-field
    rewrites; original pockets quest-warning presentation, remaining approach/transfer poses,
    cameras/movement blending and Philip's
@@ -22,6 +24,17 @@ clothing effects, tickets, catalog orders/delivery, raffle, house expansion roof
 selection/basement/statue progression. Do not schedule these again as missing.
 Pause/save screens and special quest/mail tags remain separate UI follow-ups.
 Item counts, parent ownership and M4 acceptance remain unchanged.
+
+2026-10-25 codex: shop-seasonal-stock connects October16..30 candy2806 at
+100Bells, quantities2/3/4/5 by tier, with flowers1/1/2/3 moved to FE05 and
+candy in FE08. Explicit saved stock/sold slots reuse existing purchase,
+refusal and no-ticket rules; legacy same-day lineups keep their arrangement
+until daily restock. December source substitutions already match native rules.
+November grab bags require stock plus three-item opening; bargain events need
+saved scheduling, stock and sale rooms. Those services, Philip acceptance and
+M4 remain open; see completed/shop-seasonal-stock.md for verification evidence.
+December26 stock checks also exposed the existing missing iam_yaz_candle3298
+model warning; numeric substitutions pass, candle rendering remains unfinished.
 
 2026-10-25 codex: [shop-higher-tiers](completed/shop-higher-tiers.md) connects
 all four native tier rooms/exteriors/uniforms/clocks, department floors/stairs,

@@ -134,7 +134,9 @@ Updated2026-10-25 at Philip's request. Priority order:
 
 1. Turnip-price questions and selling, with source date/price/quantity/spoilage.
 2. Repeat-service conversations and password service/validation/item delivery.
-3. Remaining seasonal stock/service branches, following original availability.
+3. November grab bags and their three-item opening flow; scheduled bargain
+   sales and their event stock/rooms. Halloween candy is now connected;
+   December furniture substitutions and raffle already exist.
 4. Twins' full escort/echo behavior, renovation-board presentation and original
    neighboring-field rewrites; original pockets quest-warning presentation, remaining approach/transfer
    poses, cameras and movement blending, plus
@@ -226,3 +228,12 @@ both floors, saved state, renovation dates and purchases/previews. Native twin
 escort/secondary-echo choreography, board presentation, neighboring-field
 rewrites and actual foreign-town travel remain future work; no blanket retail
 acceptance or M4 completion. Counts and parent ownership unchanged.
+
+2026-10-25 codex: shop-seasonal-stock connects original October16..30 candy,
+100Bells/no ticket, exact per-tier quantities, flowers moved to sapling reserves
+and saved sold-slot persistence. Legacy same-day lineups are preserved until
+daily restock. December furniture substitutions audited against original C;
+November grab-bag opening and scheduled bargain-event stock/layouts remain
+separate unfinished seasonal services. Parent/M4 and Philip acceptance stay open.
+December26 numeric stock checks also found an existing missing-model warning for
+iam_yaz_candle3298; candle display remains a seasonal rendering follow-up.
