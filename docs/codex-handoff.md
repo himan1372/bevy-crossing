@@ -4,7 +4,7 @@
 
 Halloween stock (`0e0e1e90`) and November grab bags (`cd06b1e0`) are pushed.
 Scheduled bargain sales (`ce5a3583`) and festive-candle rendering (`69a8c092`)
-are pushed. Turnip price inquiry/selling is the latest bounded slice; consult
+are pushed. Turnip price inquiry/selling (`a509cab3`) is pushed; consult
 `completed/shop-turnip-service.md` and latest comms/claims for publication and
 validation. Native daily weekly-trend prices, bundles and Sunday/date spoilage
 are connected. Legacy saves without an age clock adopt their first observed
@@ -30,6 +30,13 @@ budget is tight: prefer targeted greps over whole-file reads, and few rebuilds.
 **NEXT INSTANCE: actually read the relevant `SKILL.md` files before implementation.**
 Finish the selected task, validation, task/comms/roadmap updates, claim release,
 commit and push before telling Philip what is next.
+
+**End every final reply by saying what is needed next.** Name the next concrete
+task or required input in a short final sentence, using the current task notes
+and roadmaps rather than stale proposals. If nothing remains, say so. This is
+a status handoff, not authorization to start another task automatically.
+Currently next: the original password service, including validation and item
+delivery; Joan's visitor/turnip-buying service remains a separate follow-up.
 
 ## Current state (2026-10-25)
 
