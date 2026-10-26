@@ -378,15 +378,18 @@ fn prize_stand(item: u16, tier: usize, disc: Option<&GameDisc>) -> Vec2 {
     Vec2::new(x, z)
 }
 
-fn game_to_world(g: Vec3) -> Vec3 {
+fn game_to_world(g: Vec3, layout: crate::shop::layout::Layout) -> Vec3 {
     // Match the shop shell's (4, 1, 4) centre, including its floor height.
-    let corner = crate::shop::SHOP_ORIGIN - Vec3::new(4.0, 1.0, 4.0);
-    corner + g / 40.0
+    let corner = crate::shop::SHOP_ORIGIN - layout.centre();
+    corner + (g + layout.raffle_shift()) / 40.0
 }
 
 /// The drum's posed footprint, including thin parts that room-height sampling
 /// can miss. Use the existing shop collision radius around these world bounds.
-pub(crate) fn obstacle_bounds(disc: &GameDisc) -> Option<(Vec2, Vec2)> {
+pub(crate) fn obstacle_bounds(
+    disc: &GameDisc,
+    layout: crate::shop::layout::Layout,
+) -> Option<(Vec2, Vec2)> {
     let skeleton =
         crate::skeleton::Skeleton::read(&disc.rom, disc.catalog.get("cKF_bs_r_obj_gara")?.offset)?;
     let animation = crate::skeleton::Animation::read(
@@ -400,7 +403,7 @@ pub(crate) fn obstacle_bounds(disc: &GameDisc) -> Option<(Vec2, Vec2)> {
     let mut min = Vec2::splat(f32::INFINITY);
     let mut max = Vec2::splat(f32::NEG_INFINITY);
     for vertex in sink.parts.iter().flat_map(|part| &part.vertices) {
-        let point = game_to_world(DRUM_GAME + Vec3::from(vertex.pos) * 0.01).xz();
+        let point = game_to_world(DRUM_GAME + Vec3::from(vertex.pos) * 0.01, layout).xz();
         min = min.min(point);
         max = max.max(point);
     }
@@ -410,6 +413,7 @@ pub(crate) fn obstacle_bounds(disc: &GameDisc) -> Option<(Vec2, Vec2)> {
 /// On the raffle day Nook stays at the drum, or at the prize he is fetching.
 pub(crate) fn stage(
     location: Res<State<ShopLocation>>,
+    layout: Res<crate::shop::layout::Layout>,
     raffle: Res<Raffle>,
     mut nook: ResMut<RaffleNook>,
 ) {
@@ -417,7 +421,7 @@ pub(crate) fn stage(
         nook.at = None;
         return;
     }
-    nook.at = Some(raffle.fetch.unwrap_or(NOOK_AT_DRUM));
+    nook.at = Some(raffle.fetch.unwrap_or(NOOK_AT_DRUM) + layout.raffle_shift().xz());
 }
 
 #[derive(Component)]
@@ -603,7 +607,7 @@ fn load_ball_frames(
 fn present(
     mut commands: Commands,
     disc: Option<Res<GameDisc>>,
-    location: Res<State<ShopLocation>>,
+    view: (Res<State<ShopLocation>>, Res<crate::shop::layout::Layout>),
     clock: Res<DrumClock>,
     mut frames: Local<Vec<Vec<(Handle<Mesh>, Handle<N64Material>)>>>,
     mut sim: Local<BallSim>,
@@ -626,6 +630,7 @@ fn present(
     mut materials: ResMut<Assets<N64Material>>,
     mut images: ResMut<Assets<Image>>,
 ) {
+    let (location, layout) = view;
     let inside = disc.is_some() && *location == ShopLocation::Inside && raffle_day();
     if !inside {
         for (e, ..) in &rigs {
@@ -648,7 +653,7 @@ fn present(
                     applied: 0,
                     playing: false,
                 },
-                Transform::from_translation(game_to_world(DRUM_GAME))
+                Transform::from_translation(game_to_world(DRUM_GAME, *layout))
                     .with_scale(Vec3::splat(crate::shop_display::GOODS_SCALE)),
                 Visibility::default(),
             ))
@@ -743,7 +748,7 @@ fn present(
         }
         sim.shown = Some(clock.ball_type);
     }
-    ball_tf.translation = game_to_world(sim.pos);
+    ball_tf.translation = game_to_world(sim.pos, *layout);
     if let Some(cam) = camera.iter().next() {
         let to = cam.translation() - ball_tf.translation;
         ball_tf.rotation = Quat::from_rotation_y(to.x.atan2(to.z));

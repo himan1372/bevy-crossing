@@ -79,9 +79,26 @@ enum Step {
 #[derive(Resource, Default)]
 pub(crate) struct Conversation {
     step: Step,
-    context: MsgContext,
+    context: ShopContext,
     /// The request menu included the catalog (choice 1).
     catalog_offered: bool,
+}
+
+#[derive(Default)]
+struct ShopContext {
+    text: MsgContext,
+    upper: bool,
+}
+impl std::ops::Deref for ShopContext {
+    type Target = MsgContext;
+    fn deref(&self) -> &MsgContext {
+        &self.text
+    }
+}
+impl std::ops::DerefMut for ShopContext {
+    fn deref_mut(&mut self) -> &mut MsgContext {
+        &mut self.text
+    }
 }
 
 /// Seconds inside before Nook raises the house (the door demo's length).
@@ -97,13 +114,30 @@ fn message(n: usize) -> usize {
     }
 }
 
-fn say(disc: &GameDisc, dialogue: &mut DialogueState, actor: Entity, ctx: &MsgContext, n: usize) {
+fn say(disc: &GameDisc, dialogue: &mut DialogueState, actor: Entity, ctx: &ShopContext, n: usize) {
     let Some(text) = disc.text.as_ref() else {
         return;
     };
-    let (pages, choice) = text.talk(message(n), ctx, &mut |_| 0);
-    dialogue.begin_external(actor, pages, choice.map(|c| c.labels));
-    info!("Nook message {:#06x}", message(n));
+    let msg = if ctx.upper {
+        if n == 15 {
+            0x173D
+        } else {
+            n + match n {
+                0..200 => 0x16FD,
+                200..300 => 0x2DE7,
+                _ => 0x3CF0,
+            }
+        }
+    } else {
+        message(n)
+    };
+    let (pages, choice) = text.talk(msg, ctx, &mut |_| 0);
+    if ctx.upper {
+        dialogue.begin_special(actor, "Timmy", (276, 2), pages, choice.map(|c| c.labels));
+    } else {
+        dialogue.begin_external(actor, pages, choice.map(|c| c.labels));
+    }
+    info!("Shop message {msg:#06x}");
 }
 
 /// Show the disc message `msg` (an absolute number); returns its question.
@@ -140,20 +174,23 @@ fn house_say(
     };
 }
 
-fn context(identity: &crate::save::PlayerIdentity) -> MsgContext {
+fn context(identity: &crate::save::PlayerIdentity, upper: bool) -> ShopContext {
     let now = crate::clock::now();
-    MsgContext {
-        player_name: identity.player.clone(),
-        talk_name: "Tom Nook".into(),
-        free: vec![String::new(); 20],
-        items: vec![String::new(); 5],
-        item_articles: vec![0; 5],
-        month: now.month,
-        day: now.day,
-        hour: now.hour,
-        minute: now.minute,
-        weekday: now.weekday,
-        ..default()
+    ShopContext {
+        upper,
+        text: MsgContext {
+            player_name: identity.player.clone(),
+            talk_name: if upper { "Timmy" } else { "Tom Nook" }.into(),
+            free: vec![String::new(); 20],
+            items: vec![String::new(); 5],
+            item_articles: vec![0; 5],
+            month: now.month,
+            day: now.day,
+            hour: now.hour,
+            minute: now.minute,
+            weekday: now.weekday,
+            ..default()
+        },
     }
 }
 
@@ -223,6 +260,7 @@ pub(crate) fn interact(
     mut shop: ResMut<ShopData>,
     mut catalog_ui: ResMut<crate::catalog_screen::CatalogUi>,
     identity: Res<crate::save::PlayerIdentity>,
+    layout: Res<crate::shop::layout::Layout>,
     (mut home, mut inside_for, time, mut catalog, mut preview): (
         Option<ResMut<crate::home::PlayerHouse>>,
         Local<Option<f32>>,
@@ -309,7 +347,7 @@ pub(crate) fn interact(
     let since = inside_for.get_or_insert(0.0);
     let was = *since;
     *since += time.delta_secs();
-    if was < ARRIVAL && *since >= ARRIVAL && matches!(flow.step, Step::Idle) {
+    if !layout.upper && was < ARRIVAL && *since >= ARRIVAL && matches!(flow.step, Step::Idle) {
         if let Some(home) = home.as_mut() {
             let today = crate::home::today();
             if let Some(n) = home.0.nook_greeting(&mut inventory.loan, today) {
@@ -320,7 +358,7 @@ pub(crate) fn interact(
                 if let Ok((_, _, mut loco)) = player.single_mut() {
                     *loco = crate::locomotion::Locomotion::default();
                 }
-                flow.context = context(&identity);
+                flow.context = context(&identity, false);
                 *focus = InputFocus::Dialogue;
                 house_say(&disc, &mut dialogue, actor, &mut flow, message(n), 0);
                 return;
@@ -442,7 +480,6 @@ pub(crate) fn interact(
                         Ok(slot) => {
                             inventory.bells -= price;
                             shop.shop.record_purchase(price);
-                            crate::shop::maybe_upgrade(&mut shop.shop);
                             crate::sound::se(crate::sound::se_id::REGISTER);
                             info!("catalog order slot={slot} item={item:#06x} price={price}");
                             47
@@ -537,7 +574,6 @@ pub(crate) fn interact(
                     inventory.bells -= price;
                     shop.stock[index].sold = true;
                     shop.shop.record_purchase(price);
-                    crate::shop::maybe_upgrade(&mut shop.shop);
                     crate::sound::se(crate::sound::se_id::REGISTER);
                     info!("Nook purchase stock={index} item={item:#06x} price={price}");
                     // aNSC_sell_answer0: a lottery ticket with furniture,
@@ -593,7 +629,6 @@ pub(crate) fn interact(
                     29
                 } else if let Some(payment) = sale.commit(&mut inventory) {
                     shop.shop.record_sale(sale.price);
-                    crate::shop::maybe_upgrade(&mut shop.shop);
                     crate::sound::se(crate::sound::se_id::REGISTER);
                     info!("Nook sale slots={} payout={}", sale.slots(), sale.price);
                     match payment {
@@ -670,7 +705,7 @@ pub(crate) fn interact(
                 .distance_squared(transform.translation)
                 .total_cmp(&b.position.distance_squared(transform.translation))
         });
-    flow.context = context(&identity);
+    flow.context = context(&identity, layout.upper);
     if let Some(display) = display {
         let Some(stock) = shop.stock.get(display.stock_index) else {
             return;
@@ -782,7 +817,7 @@ fn follow(
         let corner = SHOP_ORIGIN - layout.centre().with_y(0.0);
         let pos = (transform.translation - corner) * 40.0;
         let d = Vec3::new(goal.x - pos.x, 0.0, goal.y - pos.z);
-        let at_drum = goal.distance(crate::raffle::NOOK_AT_DRUM) < 1.0;
+        let at_drum = goal.distance(layout.raffle_nook()) < 1.0;
         let desired = if d.length_squared() < 9.0 && at_drum {
             0.0
         } else {
@@ -817,13 +852,31 @@ fn follow(
     let pos = (transform.translation - corner) * 40.0;
     let target = (player.translation - corner) * 40.0;
     let delta = (target - pos).with_y(0.0);
-    let current_zone = zone(pos);
-    let player_zone = zone(target);
-    let can_walk = focus.is_world()
+    let route_zone = |p| {
+        if layout.tier == 0 {
+            zone(p)
+        } else {
+            crate::shop::layout::follow::zone(layout.tier, p)
+        }
+    };
+    let route_next = |c: usize, p: usize| {
+        if layout.tier == 0 {
+            [[0, 1, 1, 1], [0, 1, 2, 2], [1, 1, 2, 3], [2, 2, 2, 3]][c][p]
+        } else {
+            crate::shop::layout::follow::next(layout.tier, c, p)
+        }
+    };
+    let current_zone = route_zone(pos);
+    let player_zone = route_zone(target);
+    let can_walk = !layout.upper
+        && focus.is_world()
         && delta.length() >= 80.0
-        && !(target.z < 120.0 && (current_zone == 2 || current_zone == 3));
+        && if layout.tier == 0 {
+            !(target.z < 120.0 && (current_zone == 2 || current_zone == 3))
+        } else {
+            !crate::shop::layout::follow::safe(layout.tier, target, current_zone)
+        };
     let direction = if can_walk && (current_zone != player_zone || keeper.next_zone.is_some()) {
-        const NEXT: [[usize; 4]; 4] = [[0, 1, 1, 1], [0, 1, 2, 2], [1, 1, 2, 3], [2, 2, 2, 3]];
         const POINTS: [(f32, f32); 4] = [
             (220.0, 140.0),
             (100.0, 140.0),
@@ -832,11 +885,16 @@ fn follow(
         ];
         let next = *keeper
             .next_zone
-            .get_or_insert(NEXT[current_zone][player_zone]);
-        let d = Vec3::new(POINTS[next].0 - pos.x, 0.0, POINTS[next].1 - pos.z);
+            .get_or_insert(route_next(current_zone, player_zone));
+        let point = if layout.tier == 0 {
+            Vec3::new(POINTS[next].0, 0.0, POINTS[next].1)
+        } else {
+            crate::shop::layout::follow::point(layout.tier, next)
+        };
+        let d = (point - pos).with_y(0.0);
         if d.length_squared() < 200.0 {
             keeper.next_zone =
-                (current_zone != player_zone).then_some(NEXT[current_zone][player_zone]);
+                (current_zone != player_zone).then_some(route_next(current_zone, player_zone));
         }
         d
     } else {

@@ -134,11 +134,9 @@ Updated2026-10-25 at Philip's request. Priority order:
 
 1. Turnip-price questions and selling, with source date/price/quantity/spoilage.
 2. Repeat-service conversations and password service/validation/item delivery.
-3. Additional shop layouts/tiers and their opening/closing/service rules,
-   Nookington's paint floor and Nookway clock/uniform/exterior; replace immediate
-   tier upgrade with the original renovation timing.
-4. Remaining seasonal stock/service branches, following original availability.
-5. Original pockets quest-warning presentation, remaining approach/transfer
+3. Remaining seasonal stock/service branches, following original availability.
+4. Twins' full escort/echo behavior, renovation-board presentation and original
+   neighboring-field rewrites; original pockets quest-warning presentation, remaining approach/transfer
    poses, cameras and movement blending, plus
    Philip's comparison of following, turning, targeting, dialogue, selling and
    the recent visual/audio changes.
@@ -217,3 +215,14 @@ goods pay only priced value. Synthetic Temp checks preserve all unrelated saved
 fields and cancellation; quest/gift/junk transactions inspected. Original pockets
 pre-transfer warning-window presentation remains fidelity work, not implemented
 by this slice. Turnips are next; parent ownership/M4/Philip acceptance stay open.
+
+2026-10-25 codex: completed/shop-higher-tiers.md implements native tier shells,
+exteriors, uniforms, clocks, department stairs and merchandise/service floors;
+Timmy message bank/preview camera and lower paint purchase. Immediate upgrade
+removed in favor of saved calendar renewal, intervening closure, notice and
+native hours/visitor gate. Room/clock/attendant roots rebuild without duplicates,
+and native routes/raffle offsets follow each tier. Synthetic checks cover doors,
+both floors, saved state, renovation dates and purchases/previews. Native twin
+escort/secondary-echo choreography, board presentation, neighboring-field
+rewrites and actual foreign-town travel remain future work; no blanket retail
+acceptance or M4 completion. Counts and parent ownership unchanged.

@@ -296,6 +296,7 @@ fn update_building_lights(
     lights: Option<ResMut<BuildingLights>>,
     mut materials: ResMut<Assets<N64Material>>,
     shop: Option<Res<State<crate::shop::ShopLocation>>>,
+    shop_data: Option<Res<crate::shop::ShopData>>,
 ) {
     let Some(mut lights) = lights else { return };
     let hour = clock::now().hour;
@@ -304,7 +305,9 @@ fn update_building_lights(
     // aNW_check_opend / aNW_ctrl_light: closed 02:00–07:00 even at night.
     let tailor_on = night && !(2..7).contains(&hour);
     let cranny_on = night
-        && (rustimal_logic::shop::ShopTier::Zakka.normally_open(hour)
+        && (shop_data
+            .as_ref()
+            .is_some_and(|d| crate::shop::schedule::is_open(&d.shop, clock::now()))
             || shop.is_some_and(|s| *s.get() == crate::shop::ShopLocation::Inside));
     lights.normal.update(night, step, &mut materials);
     lights.tailor.update(tailor_on, step, &mut materials);

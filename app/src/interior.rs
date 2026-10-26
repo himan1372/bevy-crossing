@@ -228,46 +228,41 @@ pub fn spawn_shop_room(
     images: &mut Assets<Image>,
 ) -> bool {
     let list = |name: &str| disc.catalog.get(name).map(|a| a.offset);
-    let (Some(floor), Some(wall)) = (list(layout.floor()), list(layout.wall())) else {
+    let Some(floor) = list(layout.floor()) else {
         return false;
     };
+    if layout.patterned() && list(layout.wall()).is_none() {
+        return false;
+    }
     let table = |name: &str| {
         let a = disc.catalog.get(name)?;
-        let b = disc.rom.slice(
-            RomSource::Rel,
-            a.offset + if layout.nookway { 4 } else { 0 },
-            2,
-        )?;
+        let b = disc
+            .rom
+            .slice(RomSource::Rel, a.offset + layout.index() as u32 * 2, 2)?;
         // `(u8)ITM_*`: the low byte is the pattern number.
         Some((i16::from_be_bytes([b[0], b[1]]) & 0xFF) as usize)
     };
     let floor_no = table("aSI_floor_default_table").unwrap_or(0);
     let wall_no = table("aSI_wall_default_table").unwrap_or(0);
     let mut floors = vec![(floor, false)];
-    floors.extend(
-        list(if layout.nookway {
-            "rom_shop3f_modelT"
-        } else {
-            "rom_shop1f_modelT"
-        })
-        .map(|l| (l, true)),
-    );
-    let mut walls = vec![(wall, false)];
-    walls.extend(
-        list(if layout.nookway {
-            "rom_shop3w_modelT"
-        } else {
-            "rom_shop1w_modelT"
-        })
-        .map(|l| (l, true)),
-    );
+    floors.extend(list(layout.floor_transparent()).map(|l| (l, true)));
+    let mut walls: Vec<_> = list(layout.wall())
+        .map(|l| (l, false))
+        .into_iter()
+        .collect();
+    walls.extend(list(layout.wall_transparent()).map(|l| (l, true)));
     let mut others: Vec<(u32, bool)> = Vec::new();
+    // Depart's ground-floor scene omits SHOP_INDOOR: baked BG textures.
+    if !layout.patterned() {
+        others.append(&mut floors);
+        others.append(&mut walls);
+    }
     if fukubiki {
         floors.clear();
         walls.clear();
         others = [
-            ("rom_shop1_fuku_model", false),
-            ("rom_shop1_fuku_modelT", true),
+            (layout.raffle_model(), false),
+            (layout.raffle_transparent(), true),
         ]
         .iter()
         .filter_map(|&(n, blend)| list(n).map(|l| (l, blend)))
@@ -287,9 +282,10 @@ pub fn spawn_shop_room(
         wall_no,
         assets,
     );
-    commands
-        .entity(shell)
-        .insert(crate::shop_nook::preview::ShopShell);
+    commands.entity(shell).insert((
+        crate::shop_nook::preview::ShopShell,
+        crate::shop::ShopInterior,
+    ));
     info!("shop room from the disc: wallpaper {wall_no}, carpet {floor_no}");
     true
 }

@@ -18,17 +18,12 @@ use crate::items::ItemId;
 use crate::n64_material::N64Material;
 use crate::shop::ShopData;
 
-/// `FG_TYPE_ROM_SHOP1`: Nook's Cranny's layout.
-const SHOP1_FG: u16 = 0x22;
 /// The shop room's floor centre in model cells (see `interior`).
 /// Model units per room cell (`aSI` draws the room at 0.0625; 40 game
 /// units per cell).
 const CELL: f32 = 40.0 / 0.0625;
 /// Goods are drawn at 0.01 (`Shop_Goods_Actor_single_draw`).
 pub(crate) const GOODS_SCALE: f32 = 0.01 / 40.0;
-/// `FG_TYPE_ROM_SHOP1_FUKU`: the raffle day's layout. Its furniture
-/// reserves are the three prize spots (`aSD_MakeLotteryGoodsFg`).
-const SHOP1_FUKU: u16 = 0x014D;
 /// One `aSG_data_c`: item range, four pairs of lists, flags.
 const DSP_ENTRY: u32 = 40;
 
@@ -89,9 +84,9 @@ pub(crate) struct GoodsOnDisplay {
 
 #[derive(PartialEq)]
 enum Shown {
-    Shop(Vec<(ItemId, bool)>),
+    Shop(crate::shop::layout::Layout, Vec<(ItemId, bool)>),
     /// This month's three prizes, in lineup order.
-    Raffle([ItemId; 3]),
+    Raffle(crate::shop::layout::Layout, [ItemId; 3]),
 }
 
 /// Stock identity survives duplicate item IDs and sold-out signs.
@@ -155,9 +150,12 @@ pub(crate) fn show_goods(
     let Some(disc) = disc else { return };
     let raffle = crate::raffle::raffle_day();
     let key = if raffle {
-        Shown::Raffle(catalog.lottery)
+        Shown::Raffle(*layout, catalog.lottery)
     } else {
-        Shown::Shop(shop.stock.iter().map(|s| (s.item, s.sold)).collect())
+        Shown::Shop(
+            *layout,
+            shop.stock.iter().map(|s| (s.item, s.sold)).collect(),
+        )
     };
     if display.shown.as_ref() == Some(&key) {
         return;
@@ -167,16 +165,14 @@ pub(crate) fn show_goods(
     }
     display.shown = Some(key);
     let records = rustimal_logic::parse_fg_records(&disc.fgdata).ok();
-    let wanted = if raffle { SHOP1_FUKU } else { layout.fg() };
-    let fg = records.as_ref().and_then(|r| {
-        r.iter().find(|rec| rec.fg_id == wanted).or_else(|| {
-            if raffle {
-                r.iter().find(|rec| rec.fg_id == SHOP1_FG)
-            } else {
-                None
-            }
-        })
-    });
+    let wanted = if raffle {
+        layout.raffle_fg()
+    } else {
+        layout.fg()
+    };
+    let fg = records
+        .as_ref()
+        .and_then(|r| r.iter().find(|rec| rec.fg_id == wanted));
     let Some(fg) = fg else { return };
     let mut slots: Vec<(u16, (i32, i32), Option<(usize, ItemId, bool)>)> = fg
         .items
@@ -311,8 +307,12 @@ pub struct ShopDisplayPlugin;
 
 impl Plugin for ShopDisplayPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<GoodsOnDisplay>()
-            .add_systems(Update, show_goods.after(crate::raffle::lineup));
+        app.init_resource::<GoodsOnDisplay>().add_systems(
+            Update,
+            show_goods
+                .after(crate::raffle::lineup)
+                .after(crate::shop::build_shop_interior),
+        );
     }
 }
 

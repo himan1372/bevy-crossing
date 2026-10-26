@@ -386,3 +386,5 @@
 {"action":"complete","task":"shop-multi-selling","agent":"codex","timestamp":"2026-10-25T19:29:31Z"}
 {"action":"claim","task":"shop-selling-warnings","agent":"codex","timestamp":"2026-10-25T19:33:19Z"}
 {"action":"complete","task":"shop-selling-warnings","agent":"codex","timestamp":"2026-10-25T21:52:49Z"}
+{"action":"claim","task":"shop-higher-tiers","agent":"codex","timestamp":"2026-10-25T22:07:41Z"}
+{"action":"complete","task":"shop-higher-tiers","agent":"codex","timestamp":"2026-10-26T03:03:59Z"}

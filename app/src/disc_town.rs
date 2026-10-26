@@ -17,6 +17,7 @@ use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
 
 mod player_home_roof;
+mod shop_exterior;
 
 use disc::{rel_bss, AssetCatalog, RomImage, RomSource, Target};
 use rustimal_logic::random_field::{
@@ -605,6 +606,9 @@ fn spawn_buildings(
                 Visibility::default(),
             ))
             .id();
+        if spec.prefix == "shop1" {
+            commands.entity(root).insert(shop_exterior::OriginalShop);
+        }
         if !flow.is_empty() {
             commands.entity(root).insert(FountainFlow {
                 frame: 0.0,
@@ -810,8 +814,15 @@ fn cranny_door_pose(
     Some((list, skeleton, animation))
 }
 
-fn update_cranny_door(time: Res<Time>, mut doors: Query<(&mut CrannyDoor, &mut Transform)>) {
-    let target = if cranny_open() { 16.0 } else { 1.0 };
+fn update_cranny_door(
+    time: Res<Time>,
+    shop: Option<Res<crate::shop::ShopData>>,
+    mut doors: Query<(&mut CrannyDoor, &mut Transform)>,
+) {
+    let open = shop
+        .as_ref()
+        .is_some_and(|d| crate::shop::schedule::is_open(&d.shop, crate::clock::now()));
+    let target = if open { 16.0 } else { 1.0 };
     for (mut door, mut transform) in &mut doors {
         if door.frame == target {
             continue;
@@ -1736,7 +1747,7 @@ pub(crate) fn sink_meshes_scaled(
 
 /// Structure skeletons whose parts are drawn in their idle pose: houses,
 /// player houses and public buildings, summer and winter.
-const POSED_STRUCTURES: [&str; 14] = [
+const POSED_STRUCTURES: [&str; 17] = [
     "house1",
     "house2",
     "house3",
@@ -1747,6 +1758,9 @@ const POSED_STRUCTURES: [&str; 14] = [
     "myhome3",
     "myhome4",
     "shop1",
+    "shop2",
+    "shop3",
+    "shop4",
     "yubinkyoku",
     "kouban",
     "museum",
@@ -2300,6 +2314,13 @@ impl Plugin for DiscTownPlugin {
                 Update,
                 player_home_roof::update
                     .after(crate::save::LoadSet)
+                    .in_set(crate::states::GameplaySet),
+            )
+            .add_systems(
+                Update,
+                shop_exterior::update
+                    .after(crate::save::LoadSet)
+                    .after(crate::shop::schedule::tick)
                     .in_set(crate::states::GameplaySet),
             );
     }

@@ -129,7 +129,7 @@ impl Preview {
 
     pub fn camera(&self, layout: crate::shop::layout::Layout) -> Option<(Vec3, Vec3)> {
         let (_, item) = self.active?;
-        let (center, eye) = match Surface::of(item)? {
+        let (mut center, mut eye) = match Surface::of(item)? {
             Surface::Wall => (
                 Vec3::new(160.0, 85.0, 180.0),
                 Vec3::new(160.0, 235.0, 900.0),
@@ -140,6 +140,14 @@ impl Preview {
             ),
             Surface::Shirt => return None,
         };
+        // aNSC_request_show_camera selects the second native table for DSUPER.
+        if layout.tier == 3 {
+            center.z += 80.0;
+            eye.z += 80.0;
+            if Surface::of(item) == Some(Surface::Wall) {
+                eye.y += 50.0;
+            }
+        }
         let corner = crate::shop::SHOP_ORIGIN - layout.centre();
         Some((corner + center / 40.0, corner + eye / 40.0))
     }

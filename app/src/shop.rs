@@ -11,8 +11,7 @@
 //! `mSP_GetRealShopLevel` thresholds, `mSP_RenewShopLevel`). Stock,
 //! pricing, the UI, and the building itself are Bevy-side; original price
 //! tables are installed at runtime by `items` from the user's disc.
-//! Renovation is simplified — the tier upgrades immediately when the sales
-//! threshold is crossed instead of after the retail 2-day remodel.
+//! Saved renovations and business hours follow the original calendar lifecycle.
 
 use bevy::prelude::*;
 use bevy::text::FontSize;
@@ -29,6 +28,11 @@ use crate::states::{AppState, GameplaySet};
 use crate::town::Town;
 
 pub(crate) mod layout;
+pub(crate) mod schedule;
+
+/// Roots owned by the current shop room, replaced on tier/floor changes.
+#[derive(Component)]
+pub(crate) struct ShopInterior;
 
 /// Town map vs. a public building's interior (the shop, or the post
 /// office). Lives only while in game.
@@ -120,6 +124,14 @@ impl ShopData {
         self.paint = save.shop_paint;
         self.shop.sales_sum = save.shop_sales;
         self.shop.shop_level = ShopTier::from_u8(save.shop_tier).unwrap_or(ShopTier::Zakka);
+        let progress = save.shop_progress.clone().unwrap_or_default();
+        self.shop.visitor_flag = progress.visitor;
+        self.shop.upgrading_today = progress.pending;
+        self.shop.renewal_ymd = progress.renewal;
+        self.shop.send_upgrade_notice = progress.notice;
+        if schedule::advance(&mut self.shop, crate::clock::now()) {
+            self.stock_day = None;
+        }
         if let Some(p) = self.priorities {
             crate::goods::set_priorities(p);
         }
@@ -410,9 +422,9 @@ fn spawn_shop_exterior(
     println!("Shop exterior spawned");
 }
 
-/// Build the shop interior once at the distant origin.
+/// Replace only owned room roots when tier, floor or seasonal layout changes.
 #[allow(clippy::too_many_arguments)]
-fn build_shop_interior(
+pub(crate) fn build_shop_interior(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -420,6 +432,9 @@ fn build_shop_interior(
     mut n64: ResMut<Assets<crate::n64_material::N64Material>>,
     mut images: ResMut<Assets<Image>>,
     shop: Res<ShopData>,
+    active: Res<layout::Layout>,
+    owned: Query<Entity, With<ShopInterior>>,
+    mut built: Local<Option<(layout::Layout, bool, bool)>>,
 ) {
     let ox = SHOP_ORIGIN.x;
     let oz = SHOP_ORIGIN.z;
@@ -429,11 +444,18 @@ fn build_shop_interior(
     let fukubiki =
         rustimal_logic::shop::tanuki_shop_status(today.year, today.month, today.day, false)
             == rustimal_logic::shop::TanukiShopStatus::Fukubiki;
-    // Paint is sold in SUPER. Other new tier rooms and raffle layouts remain
-    // separate work; retain the existing room on those paths.
     let layout = layout::Layout {
-        nookway: shop.shop.shop_level == ShopTier::Super && !fukubiki,
+        tier: shop.shop.shop_level as u8,
+        upper: shop.shop.shop_level == ShopTier::Dsuper && active.upper && !fukubiki,
     };
+    let key = (layout, fukubiki, disc.is_some());
+    if *built == Some(key) {
+        return;
+    }
+    for entity in &owned {
+        commands.entity(entity).despawn();
+    }
+    *built = Some(key);
     commands.insert_resource(layout);
     // The disc's room, or the placeholder; the counter, Nook and the
     // stands keep their arrangement scaled into it.
@@ -450,12 +472,13 @@ fn build_shop_interior(
         )
     });
     // House_Clock_Actor_ct: shops 0-4 have no wall clock on raffle day.
-    if real && !fukubiki && !layout.nookway {
+    if real && !fukubiki {
         if let Some(d) = disc.as_deref() {
             crate::furniture::house_clock::spawn_shop_clock(
                 &mut commands,
                 d,
                 SHOP_ORIGIN,
+                layout,
                 (&mut meshes, &mut n64, &mut images),
             );
         }
@@ -476,6 +499,7 @@ fn build_shop_interior(
     // Placeholder floor, walls and door (the disc room has its own).
     if !real {
         commands.spawn((
+            ShopInterior,
             Mesh3d(meshes.add(Plane3d::default().mesh().size(12.0, 10.0))),
             MeshMaterial3d(floor_mat),
             Transform::from_xyz(ox, 0.02, oz),
@@ -492,6 +516,7 @@ fn build_shop_interior(
         ];
         for (wx, wz, sx, sz) in walls {
             commands.spawn((
+                ShopInterior,
                 Mesh3d(meshes.add(Cuboid::new(sx, wall_h, sz))),
                 MeshMaterial3d(wall_mat.clone()),
                 Transform::from_xyz(wx, wall_h / 2.0, wz),
@@ -500,6 +525,7 @@ fn build_shop_interior(
 
         // Door panel on the south wall (visual only; exit is via E).
         commands.spawn((
+            ShopInterior,
             Mesh3d(meshes.add(Cuboid::new(1.4, 2.4, 0.15))),
             MeshMaterial3d(door_mat),
             Transform::from_xyz(ox, 1.2, oz + 4.85),
@@ -516,6 +542,7 @@ fn build_shop_interior(
     // The disc room has its own counter and tables.
     if !real {
         commands.spawn((
+            ShopInterior,
             Mesh3d(meshes.add(Cuboid::new(4.5 * k, 1.1 * k, 1.0 * k))),
             MeshMaterial3d(counter_mat),
             Transform::from_xyz(ox, 0.55 * k, oz - 3.0 * k),
@@ -524,17 +551,26 @@ fn build_shop_interior(
 
     // Tom Nook behind the counter (his disc model replaces the capsule).
     commands.spawn((
-        Name::new("Tom Nook"),
+        Name::new(if layout.upper { "Timmy" } else { "Tom Nook" }),
         crate::shop_nook::Shopkeeper::default(),
-        crate::character::NpcModel(crate::character::NOOK),
+        ShopInterior,
+        crate::character::NpcModel(layout.npc()),
         Mesh3d(meshes.add(Capsule3d::new(0.4, 1.0))),
         MeshMaterial3d(nook_mat),
-        Transform::from_xyz(
-            if real { ox + 1.5 } else { ox },
-            1.0,
-            if real { oz - 0.5 } else { oz - 4.1 * k },
-        ),
+        Transform::from_translation(if real {
+            SHOP_ORIGIN + layout.npc_position()
+        } else {
+            Vec3::new(ox, 1.0, oz - 4.1 * k)
+        }),
     ));
+    if real && layout.upper {
+        commands.spawn((
+            ShopInterior,
+            Name::new("Tommy"),
+            crate::character::NpcModel(layout.sibling_npc()),
+            Transform::from_translation(SHOP_ORIGIN + layout.sibling_position()),
+        ));
+    }
 
     // Display pedestals with sample goods (colors only; names/prices live
     // in the shop menu).
@@ -555,11 +591,13 @@ fn build_shop_interior(
         let lx = (-3.75 + i as f32 * 2.5) * k;
         let lz = 0.8 * k;
         commands.spawn((
+            ShopInterior,
             Mesh3d(meshes.add(Cuboid::new(0.9, 0.8, 0.9))),
             MeshMaterial3d(materials.add(Color::srgb(0.5, 0.35, 0.2))),
             Transform::from_xyz(ox + lx, 0.4, oz + lz),
         ));
         commands.spawn((
+            ShopInterior,
             Mesh3d(meshes.add(Cuboid::new(0.55, 0.55, 0.55))),
             MeshMaterial3d(materials.add(Color::srgb(*r, *g, *b))),
             Transform::from_xyz(ox + lx, 1.1, oz + lz),
@@ -575,6 +613,7 @@ fn build_shop_interior(
 
     // Persistent "inside shop" indicator (hidden until the player enters).
     commands.spawn((
+        ShopInterior,
         ShopHudText,
         crate::dev_overlay::DevOverlay,
         Text::new(if real {
@@ -625,12 +664,12 @@ impl Default for ShopRoom {
 impl ShopRoom {
     /// Native room bounds and the chosen layout's south-wall doorway.
     fn disc(layout: layout::Layout) -> Self {
-        let half = layout.half();
+        let half = layout.half_z();
         Self {
             k: half / 5.0,
-            walk_x: half - 0.4,
+            walk_x: layout.half_x() - 0.4,
             walk_z: half - 0.4,
-            door_z: half,
+            door_z: layout.door_z(),
             door_x: layout.door_x(),
         }
     }
@@ -742,6 +781,7 @@ fn shop_enter(
     mut player_query: Query<(&mut Transform, &mut Facing, &Locomotion), With<Player>>,
     room: Res<ShopRoom>,
     shop: Res<ShopData>,
+    layout: Res<layout::Layout>,
 ) {
     if *state != ShopLocation::Town || !focus.is_world() {
         return;
@@ -775,8 +815,16 @@ fn shop_enter(
     {
         return;
     }
+    if !schedule::is_open(&shop.shop, crate::clock::now()) {
+        return;
+    }
     commands.insert_resource(ShopReturnPos(transform.translation));
-    transform.translation = SHOP_ORIGIN + Vec3::new(room.door_x, 1.0, room.door_z - 0.8);
+    transform.translation = SHOP_ORIGIN
+        + if building.trigger.is_some() {
+            layout.entry()
+        } else {
+            Vec3::new(room.door_x, 1.0, room.door_z - 0.8)
+        };
     facing.dir = Vec3::new(0.0, 0.0, -1.0);
     crate::sound::door_sound(Some(shop.shop.shop_level), true);
     next_state.set(ShopLocation::Inside);
@@ -794,8 +842,9 @@ fn shop_exit(
     mut player_query: Query<(&mut Transform, &mut Facing), With<Player>>,
     room: Res<ShopRoom>,
     shop: Res<ShopData>,
+    layout: Res<layout::Layout>,
 ) {
-    if *state != ShopLocation::Inside || !focus.is_world() {
+    if *state != ShopLocation::Inside || !focus.is_world() || layout.upper {
         return;
     }
     if !actions.just_pressed(Action::Interact) {
@@ -889,17 +938,6 @@ fn sell_list(inventory: &PlayerInventory) -> Vec<(ItemId, String, u32, u32)> {
     list
 }
 
-/// After a transaction, upgrade the tier if the sales sum earned it
-/// (simplified: immediate instead of the retail 2-day remodel).
-pub(crate) fn maybe_upgrade(shop: &mut shop::ShopState) -> Option<ShopTier> {
-    if shop.real_level() as u8 > shop.shop_level as u8 {
-        shop.renew_level();
-        Some(shop.shop_level)
-    } else {
-        None
-    }
-}
-
 /// Shop menu key handling: 1/2 switch tabs, Up/Down select, Enter confirms.
 fn shop_menu_input(
     actions: Res<Actions>,
@@ -989,11 +1027,7 @@ fn shop_menu_input(
             ui.selected = ui.selected.min(shop.for_sale().len().saturating_sub(1));
             // Full price counts toward the shop upgrade (mSP_PlusSales).
             shop.shop.record_purchase(item.price);
-            let mut msg = format!("Bought {}!", item.name);
-            if let Some(tier) = maybe_upgrade(&mut shop.shop) {
-                msg.push_str(&format!(" Nook's upgraded to {}!", tier_name(tier)));
-            }
-            ui.message = msg;
+            ui.message = format!("Bought {}!", item.name);
             println!("Bought {} for {} bells", item.name, item.price);
         }
         ShopMode::Sell => {
@@ -1010,11 +1044,7 @@ fn shop_menu_input(
             crate::sound::se(crate::sound::se_id::REGISTER);
             // Half of Nook's payout counts toward the upgrade (mSP_PlusSales).
             shop.shop.record_sale(unit);
-            let mut msg = format!("Sold {name} for {unit} bells!");
-            if let Some(tier) = maybe_upgrade(&mut shop.shop) {
-                msg.push_str(&format!(" Nook's upgraded to {}!", tier_name(tier)));
-            }
-            ui.message = msg;
+            ui.message = format!("Sold {name} for {unit} bells!");
             println!("Sold {name} for {unit} bells");
             // Keep the cursor valid if the row emptied out.
             let new_len = sell_list(&inventory).len();
@@ -1110,6 +1140,8 @@ fn shop_interior_movement(
     obstacles: Res<ShopObstacles>,
     time: Res<Time>,
     room: Res<ShopRoom>,
+    layout: Res<layout::Layout>,
+    staff: Query<&Transform, (With<crate::character::NpcModel>, Without<Player>)>,
 ) {
     if *state != ShopLocation::Inside || !focus.is_world() {
         return;
@@ -1119,19 +1151,92 @@ fn shop_interior_movement(
     };
 
     let movement = locomotion::step(&actions, time.delta().as_secs_f32(), &mut facing, &mut loco);
+    // Match the existing Nook BG-check radius (eight game units), keeping
+    // the player clear of the department-store attendants as well.
+    let staff_blocks = |x: f32, z: f32, before: Vec3| {
+        staff.iter().any(|npc| {
+            let next = (npc.translation - Vec3::new(x, npc.translation.y, z)).length_squared();
+            let old = (npc.translation - before).with_y(0.0).length_squared();
+            next < (PLAYER_RADIUS + 0.2).powi(2) && next < old
+        })
+    };
     if movement != Vec3::ZERO {
         let nx = transform.translation.x + movement.x;
-        if (nx - SHOP_ORIGIN.x).abs() <= room.walk_x
+        if walkable(Vec3::new(nx, 0.0, transform.translation.z), &room, *layout)
+            && !staff_blocks(nx, transform.translation.z, transform.translation)
             && !hits_obstacle(nx, transform.translation.z, &obstacles)
         {
             transform.translation.x = nx;
         }
         let nz = transform.translation.z + movement.z;
-        if (nz - SHOP_ORIGIN.z).abs() <= room.walk_z
+        if walkable(Vec3::new(transform.translation.x, 0.0, nz), &room, *layout)
+            && !staff_blocks(transform.translation.x, nz, transform.translation)
             && !hits_obstacle(transform.translation.x, nz, &obstacles)
         {
             transform.translation.z = nz;
         }
+    }
+}
+
+fn walkable(pos: Vec3, room: &ShopRoom, layout: layout::Layout) -> bool {
+    let p = pos - SHOP_ORIGIN;
+    if p.x.abs() <= room.walk_x && p.z.abs() <= room.walk_z {
+        return true;
+    }
+    let native = p + layout.centre().with_y(0.0);
+    // Department stairs and the native south door are narrower than the room.
+    let stair = layout.tier == 3
+        && (6.5 + PLAYER_RADIUS..=9.0 - PLAYER_RADIUS).contains(&native.x)
+        && (1.0 + PLAYER_RADIUS..=3.5).contains(&native.z);
+    let door_x = layout.centre().x + layout.door_x();
+    let door_end = layout.centre().z + layout.door_z();
+    stair
+        || (!layout.upper
+            && (door_x - 1.0 + PLAYER_RADIUS..=door_x + 1.0 - PLAYER_RADIUS).contains(&native.x)
+            && (layout.centre().z + layout.half_z() - 0.625..=door_end - PLAYER_RADIUS)
+                .contains(&native.z))
+}
+
+fn department_stairs(
+    mut layout: ResMut<layout::Layout>,
+    state: Res<State<ShopLocation>>,
+    focus: Res<InputFocus>,
+    disc: Option<Res<crate::game_disc::GameDisc>>,
+    mut player: Query<(&mut Transform, &mut Facing, &mut Locomotion), With<Player>>,
+    mut locked: Local<bool>,
+) {
+    if layout.tier != 3
+        || crate::raffle::raffle_day()
+        || *state != ShopLocation::Inside
+        || !focus.is_world()
+        || disc.is_none()
+    {
+        return;
+    }
+    let Ok((mut transform, mut facing, mut loco)) = player.single_mut() else {
+        return;
+    };
+    let p = transform.translation - SHOP_ORIGIN + layout.centre().with_y(0.0);
+    // The arrival is inside the opposite portal. Leave its landing before
+    // rearming, so a held direction cannot immediately send the player back.
+    if p.z > 2.5 {
+        *locked = false;
+    }
+    if *locked {
+        return;
+    }
+    if p.x >= 7.0
+        && p.x <= 9.0
+        && p.z < 2.0
+        && facing.dir.z < -0.5
+        && loco.state() != rustimal_logic::player_move::LocomotionState::Wait
+    {
+        layout.upper = !layout.upper;
+        *locked = true;
+        transform.translation = SHOP_ORIGIN + layout.stair_arrival();
+        facing.dir = Vec3::Z;
+        *loco = Locomotion::default();
+        crate::sound::door_sound(Some(ShopTier::Dsuper), true);
     }
 }
 
@@ -1150,8 +1255,8 @@ pub(crate) fn blocked_at(x: f32, z: f32, radius: f32, obstacles: &ShopObstacles)
 /// bounds. Both actors collide with the visible furniture, even empty tables.
 fn room_obstacles(disc: &crate::game_disc::GameDisc, layout: layout::Layout) -> Vec<Obstacle> {
     let mut names = vec![layout.floor(), layout.wall()];
-    if !layout.nookway {
-        names.push("rom_shop1_fuku_model");
+    if crate::raffle::raffle_day() {
+        names.push(layout.raffle_model());
     }
     let lists: Vec<u32> = names
         .iter()
@@ -1161,10 +1266,13 @@ fn room_obstacles(disc: &crate::game_disc::GameDisc, layout: layout::Layout) -> 
     let mut out = Vec::new();
     let corner = SHOP_ORIGIN - layout.centre().with_y(0.0);
     let samples = (layout.centre().x * 16.0) as i32;
-    for z in 0..samples {
+    for z in 0..(layout.centre().z * 16.0) as i32 {
         let mut start = None;
         for x in 0..=samples {
             let raised = x < samples
+                && !(layout.tier == 3
+                    && (7.0..9.0).contains(&((x as f32 + 0.5) * 0.125))
+                    && (z as f32 + 0.5) * 0.125 < 3.5)
                 && surface
                     .height_at((x as f32 + 0.5) * 80.0, (z as f32 + 0.5) * 80.0)
                     .is_some_and(|y| y / 640.0 > 1.2);
@@ -1181,7 +1289,7 @@ fn room_obstacles(disc: &crate::game_disc::GameDisc, layout: layout::Layout) -> 
         }
     }
     if crate::raffle::raffle_day() {
-        if let Some((min, max)) = crate::raffle::obstacle_bounds(disc) {
+        if let Some((min, max)) = crate::raffle::obstacle_bounds(disc, layout) {
             info!("raffle drum collision: {min:?}..{max:?}");
             out.push(Obstacle {
                 min_x: min.x,
@@ -1215,6 +1323,7 @@ pub struct ShopPlugin;
 impl Plugin for ShopPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ShopRoom>()
+            .init_resource::<ShopObstacles>()
             .init_resource::<layout::Layout>()
             .add_sub_state::<ShopLocation>()
             .insert_resource(ShopData::default())
@@ -1224,9 +1333,6 @@ impl Plugin for ShopPlugin {
                 Startup,
                 (
                     spawn_shop_exterior.after(find_shop_spot),
-                    build_shop_interior
-                        .after(crate::game_disc::start_disc_load)
-                        .after(apply_loaded_shop),
                     setup_shop_ui,
                     apply_loaded_shop,
                 ),
@@ -1247,7 +1353,19 @@ impl Plugin for ShopPlugin {
                 Update,
                 shop_menu_input.in_set(InteractSet::Ui).in_set(GameplaySet),
             )
-            .add_systems(Update, restock_daily)
+            .add_systems(
+                Update,
+                (
+                    schedule::tick,
+                    restock_daily,
+                    department_stairs,
+                    build_shop_interior,
+                )
+                    .chain()
+                    .after(crate::save::LoadSet)
+                    .after(locomotion::MovementSet)
+                    .in_set(GameplaySet),
+            )
             .add_systems(
                 Update,
                 (

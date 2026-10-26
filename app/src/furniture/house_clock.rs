@@ -5,19 +5,13 @@
 //! cKF clip repeats at speed 0.5 and restarts on the shared 120-frame beat,
 //! which also ticks NA_SE_12D at frames 15 and 45. Joints 5 and 6 hide their
 //! own shapes; the short and long hand lists are drawn at those joints'
-//! origins turned by `90deg - rad_hour/rad_min` (no yaw, no offset). Only
-//! the first shop interior exists in this port, so only shop1 is placed;
+//! origins turned by `90deg - rad_hour/rad_min` (no yaw, no offset). Higher
+//! tiers select their native rig, hand joints and authored position;
 //! on the monthly raffle day (FUKUBIKI) shop.rs does not place it.
 use super::*;
 use crate::shop::ShopLocation;
 use rustimal_logic::furniture_clock as native;
 
-const SHORT_JOINT: usize = 5;
-const LONG_JOINT: usize = 6;
-/// aHC_position_data SCENE_SHOP0, in game units.
-const SHOP1_POSITION: Vec3 = Vec3::new(200.0, 40.0, 40.0);
-/// The shop shell's centre (interior::SHOP_CENTRE), in cells.
-const SHOP_CENTRE: Vec3 = Vec3::new(4.0, 1.0, 4.0);
 /// NA_SE_12D.
 const TICK_SOUND: u16 = 0x12D;
 
@@ -26,22 +20,40 @@ struct Loaded {
     animation: Animation,
     short: u32,
     long: u32,
+    hand_joints: [usize; 2],
 }
 
-fn load(disc: &GameDisc) -> Option<Loaded> {
+fn load(disc: &GameDisc, tier: u8) -> Option<Loaded> {
+    let number = tier.min(3) + 1;
+    let hand_joints = if number == 2 || number == 3 {
+        [3, 4]
+    } else {
+        [5, 6]
+    };
     let skeleton = Skeleton::read(
         &disc.rom,
-        disc.catalog.get("cKF_bs_r_obj_clock_shop1")?.offset,
+        disc.catalog
+            .get(&format!("cKF_bs_r_obj_clock_shop{number}"))?
+            .offset,
     )?;
     let animation = Animation::read(
         &disc.rom,
-        disc.catalog.get("cKF_ba_r_obj_clock_shop1")?.offset,
+        disc.catalog
+            .get(&format!("cKF_ba_r_obj_clock_shop{number}"))?
+            .offset,
         skeleton.joints.len(),
     )?;
-    (skeleton.joints.len() > LONG_JOINT).then_some(())?;
+    (skeleton.joints.len() > hand_joints[1]).then_some(())?;
     Some(Loaded {
-        short: disc.catalog.get("obj_clock_shop1_short_model")?.offset,
-        long: disc.catalog.get("obj_clock_shop1_long_model")?.offset,
+        short: disc
+            .catalog
+            .get(&format!("obj_clock_shop{number}_short_model"))?
+            .offset,
+        long: disc
+            .catalog
+            .get(&format!("obj_clock_shop{number}_long_model"))?
+            .offset,
+        hand_joints,
         skeleton,
         animation,
     })
@@ -55,6 +67,7 @@ pub(crate) struct HouseClock {
     hands: [Entity; 2],
     frame: f32,
     phase: Option<f32>,
+    hand_joints: [usize; 2],
 }
 
 /// Spawn the shop's wall clock in the interior at `origin`.
@@ -62,6 +75,7 @@ pub(crate) fn spawn_shop_clock(
     commands: &mut Commands,
     disc: &GameDisc,
     origin: Vec3,
+    layout: crate::shop::layout::Layout,
     (meshes, materials, images): (
         &mut Assets<Mesh>,
         &mut Assets<N64Material>,
@@ -73,15 +87,23 @@ pub(crate) fn spawn_shop_clock(
         animation,
         short,
         long,
-    }) = load(disc)
+        hand_joints,
+    }) = load(disc, layout.tier)
     else {
         warn!("incomplete shop wall-clock assets");
         return;
     };
+    let native_position = match layout.tier {
+        0 => Vec3::new(200.0, 40.0, 40.0),
+        1 => Vec3::new(240.0, 0.0, 40.0),
+        2 => Vec3::new(160.0, 0.0, 40.0),
+        _ => Vec3::new(240.0, 0.0, 120.0),
+    };
     let root = commands
         .spawn((
             Name::new("shop wall clock"),
-            Transform::from_translation(origin - SHOP_CENTRE + SHOP1_POSITION / UNIT)
+            crate::shop::ShopInterior,
+            Transform::from_translation(origin - layout.centre() + native_position / UNIT)
                 .with_scale(Vec3::splat(0.01 / UNIT)),
             Visibility::default(),
         ))
@@ -90,7 +112,7 @@ pub(crate) fn spawn_shop_clock(
         .joints
         .iter()
         .enumerate()
-        .filter(|(i, _)| *i != SHORT_JOINT && *i != LONG_JOINT)
+        .filter(|(i, _)| !hand_joints.contains(i))
         .filter_map(|(i, j)| Some((i, j.model?, j.flags & 1 != 0)))
         .collect();
     let segments = Segments::default();
@@ -132,6 +154,7 @@ pub(crate) fn spawn_shop_clock(
         hands,
         frame: 1.0,
         phase: None,
+        hand_joints,
     });
 }
 
@@ -183,8 +206,8 @@ fn update(
         }
         let origins = super::cuckoo::joint_origins(&pose, &clock.skeleton);
         for (hand, joint, angle) in [
-            (clock.hands[0], SHORT_JOINT, hour_angle),
-            (clock.hands[1], LONG_JOINT, minute_angle),
+            (clock.hands[0], clock.hand_joints[0], hour_angle),
+            (clock.hands[1], clock.hand_joints[1], minute_angle),
         ] {
             if let Ok(mut transform) = transforms.get_mut(hand) {
                 let turn = 0x4000i16.wrapping_sub(angle);

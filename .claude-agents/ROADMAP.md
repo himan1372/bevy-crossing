@@ -2,26 +2,35 @@
 
 ## Remaining shop services (Philip requested roadmap, 2026-10-25)
 
-Remaining priorities after selling warnings/disposal. The visible checklist is
+Remaining priorities after native shop tiers and renovation lifecycle. The visible checklist is
 [Remaining shop work](../docs/roadmap.html#shop-services-next); detailed scope is
 [retail-shop-ui](backlog/retail-shop-ui.md). Keep that parent/M4 open.
 
 1. Turnip price questions and selling: native price/date/quantity/spoilage rules.
 2. Repeat-service conversations and original password validation/item delivery.
-3. Higher-tier layouts/service access, including Nookington's paint floor and
-   Nookway's clock/uniform/exterior; opening/closing and retail renovation delay
-   instead of the current simplified immediate upgrade.
-4. Remaining seasonal stock/service branches after source audit; raffle exists.
-5. Original pockets quest-warning presentation, remaining approach/transfer poses,
+3. Remaining seasonal stock/service branches after source audit; raffle exists.
+4. Twins' full escort/echo, renovation-board presentation and neighboring-field
+   rewrites; original pockets quest-warning presentation, remaining approach/transfer poses,
    cameras/movement blending and Philip's
    browsing/purchase/selling/audio acceptance.
 
 Already implemented: Nookway paint service and ordinary room/merchandise layout;
+all ordinary shop tier rooms/exteriors/clocks/uniforms, department floors/stairs
+and paint access, native tier hours and persisted two-day renovation lifecycle;
 ordinary purchases and normal single/marked/duplicate-item sales, category previews and
 clothing effects, tickets, catalog orders/delivery, raffle, house expansion roof
 selection/basement/statue progression. Do not schedule these again as missing.
 Pause/save screens and special quest/mail tags remain separate UI follow-ups.
 Item counts, parent ownership and M4 acceptance remain unchanged.
+
+2026-10-25 codex: [shop-higher-tiers](completed/shop-higher-tiers.md) connects
+all four native tier rooms/exteriors/uniforms/clocks, department floors/stairs,
+downstairs paint and upper Timmy service/preview camera. Replaces immediate
+upgrade with persisted +2-date renewal, closed intervening day, native hours,
+leaflet and retained visitor gate. Exact source portals, owned room replacement,
+native lower-tier route tables and raffle offsets; synthetic entry/exit, saved
+state, renovation and department transactions checked. No tests; see task for
+final gates and explicit twin/board/field-rewrite/travel limits. Philip/M4 open.
 
 2026-10-25 codex: [shop-selling-warnings](completed/shop-selling-warnings.md)
 adds native57 quest refusal, wrapped slot sales and56/216 free disposal with
