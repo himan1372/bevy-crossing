@@ -13,6 +13,7 @@ use crate::shop::{ShopData, ShopLocation, SHOP_ORIGIN};
 use crate::shop_display::ShopDisplay;
 use crate::states::GameplaySet;
 
+pub(crate) mod password;
 pub(crate) mod preview;
 pub(crate) mod sales;
 
@@ -61,6 +62,18 @@ enum Step {
         all: sales::Sale,
     },
     Finish,
+    /// The password question (312) is up; the entry window opens next.
+    PasswordSay,
+    /// The entry window is open.
+    PasswordEntry,
+    /// A wrong or foreign code: try again, or give up.
+    PasswordRetry,
+    /// A refusal that returns to the request menu.
+    PasswordBack,
+    /// A valid code: the present arrives when the message ends.
+    PasswordPresent {
+        item: u16,
+    },
     /// 0x10A6 is on screen; the catalog opens when the player continues.
     CatalogIntro,
     /// The catalog screen is up (`mSM_OVL_CATALOG`).
@@ -86,6 +99,8 @@ pub(crate) struct Conversation {
     /// The request menu included the catalog (choice 1).
     catalog_offered: bool,
     other_offered: bool,
+    /// The Other things menu included Enter a password (choice 2 of 4).
+    password_offered: bool,
 }
 
 #[derive(Default)]
@@ -288,13 +303,14 @@ pub(crate) fn interact(
     mut catalog_ui: ResMut<crate::catalog_screen::CatalogUi>,
     identity: Res<crate::save::PlayerIdentity>,
     layout: Res<crate::shop::layout::Layout>,
-    (mut home, mut inside_for, mut inside_actor, time, mut catalog, mut preview): (
+    (mut home, mut inside_for, mut inside_actor, time, mut catalog, mut preview, mut password): (
         Option<ResMut<crate::home::PlayerHouse>>,
         Local<Option<f32>>,
         Local<Option<Entity>>,
         Res<Time>,
         ResMut<crate::catalog::Catalog>,
         ResMut<preview::Preview>,
+        ResMut<password::PasswordUi>,
     ),
 ) {
     let Some(disc) = disc.filter(|d| d.text.is_some()) else {
@@ -302,6 +318,7 @@ pub(crate) fn interact(
     };
     if *location != ShopLocation::Inside {
         preview.clear();
+        password.close();
         if !matches!(flow.step, Step::Idle) {
             flow.step = Step::Idle;
             *dialogue = DialogueState::default();
@@ -321,6 +338,38 @@ pub(crate) fn interact(
     if *inside_actor != Some(actor) {
         *inside_actor = Some(actor);
         *inside_for = Some(0.0);
+    }
+    if matches!(flow.step, Step::PasswordEntry) {
+        if password.open {
+            return;
+        }
+        let Some(text) = password.done.take() else {
+            flow.step = Step::Idle;
+            *focus = InputFocus::World;
+            return;
+        };
+        let (outcome, decoded) = password::check(&disc, &text, &identity.player, &identity.town);
+        if let Some(decoded) = &decoded {
+            password::fill_context(&disc, &mut flow.context, &text, decoded);
+        }
+        let (message, step) = match outcome {
+            password::Outcome::Decline => (password::msg::DECLINE, Step::PasswordBack),
+            password::Outcome::Wrong => (password::msg::WRONG, Step::PasswordRetry),
+            password::Outcome::Bad => (password::msg::BAD, Step::PasswordRetry),
+            password::Outcome::CardE => (password::msg::CARDE, Step::Finish),
+            password::Outcome::Present { npc, item } => (
+                if npc {
+                    password::msg::GOOD_NPC
+                } else {
+                    password::msg::GOOD_USER
+                },
+                Step::PasswordPresent { item },
+            ),
+        };
+        *focus = InputFocus::Dialogue;
+        say(&disc, &mut dialogue, actor, &flow.context, message);
+        flow.step = step;
+        return;
     }
     if let Step::ChangingCloth {
         index,
@@ -564,11 +613,19 @@ pub(crate) fn interact(
             }
             Step::Request if choice == 2 && flow.other_offered => {
                 say(&disc, &mut dialogue, actor, &flow.context, 309);
-                if let Some(options) = dialogue.choices_for_actor() {
+                flow.password_offered = false;
+                if let Some(options) = dialogue.choices_for_actor().cloned() {
                     if let (Some(first), Some(last)) =
                         (options.first().cloned(), options.last().cloned())
                     {
-                        dialogue.set_actor_choices(vec![first, last]);
+                        // Turnip prices, Enter a password and the way back;
+                        // sending a password stays hidden.
+                        if options.len() >= 4 {
+                            flow.password_offered = true;
+                            dialogue.set_actor_choices(vec![first, options[2].clone(), last]);
+                        } else {
+                            dialogue.set_actor_choices(vec![first, last]);
+                        }
                     }
                 }
                 flow.step = Step::Other;
@@ -588,7 +645,60 @@ pub(crate) fn interact(
                 );
                 flow.step = Step::Finish;
             }
-            Step::Other => request(&disc, &mut dialogue, actor, &mut flow),
+            Step::Other if choice == 1 && flow.password_offered => {
+                // aNSC_request_Q_answer_wait2, choice 2: the gift limit, then
+                // a free pocket, before the question.
+                let message = if password.presents >= password::PRESENT_LIMIT {
+                    password::msg::GIFT_OUT
+                } else if !inventory.pockets.pockets.contains(&0) {
+                    password::msg::INVENTORY_FULL
+                } else {
+                    password::msg::SAY
+                };
+                say(&disc, &mut dialogue, actor, &flow.context, message);
+                flow.step = if message == password::msg::SAY {
+                    Step::PasswordSay
+                } else {
+                    Step::PasswordBack
+                };
+            }
+            Step::Other | Step::PasswordBack => request(&disc, &mut dialogue, actor, &mut flow),
+            Step::PasswordSay => {
+                password.clear();
+                password.begin();
+                *dialogue = DialogueState::default();
+                flow.step = Step::PasswordEntry;
+            }
+            Step::PasswordRetry => {
+                if choice == 0 {
+                    password.begin();
+                    *dialogue = DialogueState::default();
+                    flow.step = Step::PasswordEntry;
+                } else {
+                    say(
+                        &disc,
+                        &mut dialogue,
+                        actor,
+                        &flow.context,
+                        password::msg::DECLINE,
+                    );
+                    flow.step = Step::PasswordBack;
+                }
+            }
+            Step::PasswordPresent { item } => {
+                // aNSC_pc_present_trans_takeout_init, once the message ends.
+                if inventory
+                    .pockets
+                    .put(item, password::PRESENT_CONDITION)
+                    .is_some()
+                {
+                    password.presents += 1;
+                    crate::sound::se(crate::sound::se_id::POCKET_RUSTLE);
+                    info!("password present item={item:#06x}");
+                }
+                *dialogue = DialogueState::default();
+                *focus = InputFocus::World;
+            }
             Step::CatalogIntro => {
                 catalog_ui.open_from(|item| catalog.collection.has(item));
                 *dialogue = DialogueState::default();
@@ -1073,6 +1183,8 @@ fn reset(
 impl Plugin for ShopNookPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Conversation>()
+            .init_resource::<password::PasswordUi>()
+            .init_resource::<password::PasswordAssets>()
             .init_resource::<preview::Preview>()
             .init_resource::<preview::Mannequin>()
             .init_resource::<preview::effects::Effects>()
@@ -1091,6 +1203,7 @@ impl Plugin for ShopNookPlugin {
                 (
                     preview::advance.before(interact),
                     interact.in_set(InteractSet::Objects),
+                    (password::input, password::draw).chain().after(interact),
                     preview::textures.after(interact),
                     preview::mannequin
                         .after(interact)

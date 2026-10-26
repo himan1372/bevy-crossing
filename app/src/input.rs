@@ -198,6 +198,8 @@ pub enum InputFocus {
     Paused,
     Furniture,
     Diary,
+    /// The counter's password entry window.
+    Password,
 }
 
 impl InputFocus {
@@ -248,12 +250,17 @@ pub(crate) fn update_focus(
     catalog: Res<crate::catalog_screen::CatalogUi>,
     room: Res<crate::player_room::PlayerRoom>,
     preview: Res<crate::shop_nook::preview::Preview>,
+    password: Res<crate::shop_nook::password::PasswordUi>,
     mut focus: ResMut<InputFocus>,
 ) {
     let next = if pause.is_some_and(|p| *p.get() == PauseState::Paused) {
         InputFocus::Paused
     } else if room.diary_open() {
         InputFocus::Diary
+    } else if password.open || password.done.is_some() {
+        // A finished entry keeps focus until Nook answers, so its last key
+        // cannot reach the world (a code ending in P would pause).
+        InputFocus::Password
     } else if quest.open {
         InputFocus::Quest
     } else if dialogue.active

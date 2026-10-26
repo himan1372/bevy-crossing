@@ -962,3 +962,13 @@ outdoor goods on forward growth; missing legacy age clock adopts first load.
 PC RNG supplies native probability draws, not original global RNG state. Joan,
 other players/island/gyroid storage and password service remain separate;
 counts/parent/M4 and Philip acceptance stay open. See completed task evidence.
+
+2026-10-26 claude: shop-password-service connects the counter's Say code flow
+for user and popularity-contest passwords: typed two-line entry on the disc font,
+native codec/validation (logic/password.rs, app/shop_nook/password.rs), the
+source gift limit, full-pocket and wrong/foreign/declined branches, retry with
+remembered text, and the present delivered with its present condition. Send
+direction, Famicom, magazine and mini card-e codes plus the retail character grid
+remain (backlog/shop-password-send.md). Counts/parent/M4 and Philip acceptance
+stay open. See completed/shop-password-service.md.
+

@@ -1,0 +1,535 @@
+//! The counter's "Enter a password" service: `aNSC_pc_*` in
+//! `ac_npc_shop_common.c`, the `m_passwordChk_ovl` entry window as a typed
+//! two-line field, and `m_mail_password_check.c`'s validation. User and
+//! popularity-contest codes are redeemed; card-e answers with its message.
+//! Famicom, magazine and mini card-e codes are not redeemed yet.
+use bevy::camera::visibility::RenderLayers;
+use bevy::input::keyboard::{Key, KeyboardInput};
+use bevy::input::ButtonState;
+use bevy::prelude::*;
+use rustimal_logic::furniture::room_item_from_furniture;
+use rustimal_logic::password as pw;
+
+use crate::game_disc::GameDisc;
+use crate::goods::{self, Kind};
+use crate::input::{Action, Actions, InputFocus};
+use crate::items;
+use crate::msg_window::{quad_mesh, MsgAssets};
+use crate::pockets_disc::Paint;
+
+/// `aNSC_MSG_PSWD_*` (`ac_npc_shop_common.h`), in the shop's own numbering.
+pub(super) mod msg {
+    pub const INVENTORY_FULL: usize = 311;
+    pub const SAY: usize = 312;
+    pub const WRONG: usize = 313;
+    pub const DECLINE: usize = 314;
+    pub const GOOD_NPC: usize = 316;
+    pub const CARDE: usize = 318;
+    pub const GOOD_USER: usize = 319;
+    pub const GIFT_OUT: usize = 323;
+    pub const BAD: usize = 324;
+}
+
+/// Presents Nook hands over before he refuses more
+/// (`Common_Get(unk_nook_present_count) >= 3`).
+pub(super) const PRESENT_LIMIT: u32 = 3;
+pub(super) const PRESENT_CONDITION: u32 = 1;
+const NPC_NUM: i32 = 236;
+const SPECIAL_NPC_NUM: i32 = 32;
+const RSV_NO: u16 = 0xFFFF;
+
+/// The entry window and what the counter remembers between questions.
+#[derive(Resource)]
+pub(crate) struct PasswordUi {
+    pub open: bool,
+    lines: [[u8; 14]; 2],
+    selected: usize,
+    cursor: usize,
+    /// Set when the window closes: all 28 characters, spaces when unfinished.
+    pub done: Option<[u8; 28]>,
+    /// `shop_common->password_str`, kept so a retry starts from it.
+    text: [u8; 28],
+    /// Presents handed over since the game started.
+    pub presents: u32,
+    just_opened: bool,
+    revision: u64,
+}
+
+impl Default for PasswordUi {
+    fn default() -> Self {
+        Self {
+            open: false,
+            lines: [[pw::PW_CHAR_SPACE; 14]; 2],
+            selected: 0,
+            cursor: 0,
+            done: None,
+            text: [pw::PW_CHAR_SPACE; 28],
+            presents: 0,
+            just_opened: false,
+            revision: 0,
+        }
+    }
+}
+
+impl PasswordUi {
+    /// `aNSC_pc_input_pw_start_wait_init`: a fresh question clears the text.
+    pub(super) fn clear(&mut self) {
+        self.text = [pw::PW_CHAR_SPACE; 28];
+    }
+
+    /// `mSM_OVL_PASSWORDCHK`: both lines start from the remembered text.
+    pub(super) fn begin(&mut self) {
+        self.lines[0].copy_from_slice(&self.text[..14]);
+        self.lines[1].copy_from_slice(&self.text[14..]);
+        let filled = self
+            .text
+            .iter()
+            .position(|&c| c == pw::PW_CHAR_SPACE)
+            .unwrap_or(28);
+        self.selected = usize::from(filled >= 14);
+        self.cursor = if filled == 28 { 14 } else { filled % 14 };
+        self.open = true;
+        self.done = None;
+        self.just_opened = true;
+        self.revision += 1;
+    }
+
+    fn finish(&mut self) {
+        self.text[..14].copy_from_slice(&self.lines[0]);
+        self.text[14..].copy_from_slice(&self.lines[1]);
+        self.done = Some(self.text);
+        self.open = false;
+        self.revision += 1;
+    }
+
+    /// Closes the window without a result, as leaving the scene does.
+    pub(super) fn close(&mut self) {
+        if self.open {
+            self.open = false;
+            self.done = None;
+            self.revision += 1;
+        }
+    }
+}
+
+/// What `aNSC_pc_check_password` decided.
+pub(super) enum Outcome {
+    /// The code was left unfinished (`aNSC_PSW_RES_9`).
+    Decline,
+    /// `aNSC_PSW_RES_0`: not a code the counter takes.
+    Wrong,
+    /// A real code made for another player or town.
+    Bad,
+    /// A card-e code: Nook explains and gives nothing.
+    CardE,
+    /// A valid code for this player.
+    Present { npc: bool, item: u16 },
+}
+
+/// A decoded code's recipient and item for the message fields.
+pub(super) struct Decoded {
+    pub town: String,
+    pub player: String,
+    pub item: u16,
+}
+
+fn name_bytes(name: &str) -> [u8; 8] {
+    let mut out = [pw::PW_CHAR_SPACE; 8];
+    for (slot, ch) in out.iter_mut().zip(name.chars()) {
+        *slot = crate::messages::ac_code_opt(ch).unwrap_or(pw::PW_CHAR_SPACE);
+    }
+    out
+}
+
+fn name_text(bytes: &[u8; 8]) -> String {
+    bytes
+        .iter()
+        .map(|&b| crate::messages::char_of(b).unwrap_or('?'))
+        .collect::<String>()
+        .trim_end()
+        .to_string()
+}
+
+/// `mMpswd_check_name`: both names are this player's and this town's.
+fn names_match(fields: &pw::PwFields, player: &str, town: &str) -> bool {
+    fields.str0 == name_bytes(player) && fields.str1 == name_bytes(town)
+}
+
+/// `mMpswd_check_npc_code`.
+fn npc_code_ok(fields: &pw::PwFields) -> bool {
+    (fields.npc_type == 0 && fields.npc_code < NPC_NUM)
+        || (fields.npc_type == 1 && fields.npc_code < SPECIAL_NPC_NUM)
+}
+
+/// `aNSC_pc_check_password`, for the codes this port redeems.
+pub(super) fn check(
+    disc: &GameDisc,
+    text: &[u8; 28],
+    player: &str,
+    town: &str,
+) -> (Outcome, Option<Decoded>) {
+    if text[27] == pw::PW_CHAR_SPACE {
+        return (Outcome::Decline, None);
+    }
+    let Some(data) = pw::decode_code(text) else {
+        return (Outcome::Wrong, None);
+    };
+    let fields = pw::unpack(&data);
+    if !fields.checksum_ok() || !present_ok(disc, &fields) {
+        return (Outcome::Wrong, None);
+    }
+    let decoded = Decoded {
+        town: name_text(&fields.str1),
+        player: name_text(&fields.str0),
+        item: fields.item,
+    };
+    let outcome = match fields.type_ {
+        pw::PW_TYPE_USER if fields.hit_rate_index == 1 => {
+            if names_match(&fields, player, town) {
+                Outcome::Present {
+                    npc: false,
+                    item: fields.item,
+                }
+            } else {
+                Outcome::Bad
+            }
+        }
+        pw::PW_TYPE_POPULAR if fields.hit_rate_index == 1 && npc_code_ok(&fields) => {
+            if names_match(&fields, player, town) {
+                Outcome::Present {
+                    npc: true,
+                    item: fields.item,
+                }
+            } else {
+                Outcome::Bad
+            }
+        }
+        pw::PW_TYPE_CARD_E => Outcome::CardE,
+        // Famicom, magazine and mini card-e codes are not redeemed yet.
+        _ => Outcome::Wrong,
+    };
+    (outcome, Some(decoded))
+}
+
+/// `mMpswd_check_present`. A reserved item is refused rather than handed over.
+fn present_ok(disc: &GameDisc, fields: &pw::PwFields) -> bool {
+    match fields.type_ {
+        pw::PW_TYPE_FAMICOM => false,
+        pw::PW_TYPE_USER => present_user(fields.item),
+        _ => fields.item != RSV_NO && present_other(disc, fields.item),
+    }
+}
+
+fn listed(kind: Kind, item: u16, lists: &[usize]) -> bool {
+    lists
+        .iter()
+        .any(|&index| goods::list(kind, index).contains(&item))
+}
+
+/// Lists A-C: the common, uncommon and rare lists together.
+const ABC: [usize; 3] = [0, 1, 2];
+/// A-C, event, train, lottery and the event present chumon list.
+const FURNITURE_LISTS: [usize; 7] = [0, 1, 2, 3, 4, 5, 18];
+
+fn price_of(item: u16) -> bool {
+    items::price(item).is_some_and(|price| price != 0)
+}
+
+/// An item1 the shop trades (`mMpswd_check_present_user`'s item1 branch).
+fn item1_sold(item: u16) -> bool {
+    if (0x2400..0x24FF).contains(&item) {
+        return listed(Kind::Cloth, item, &ABC) && price_of(item);
+    }
+    if (0x2204..=0x222B).contains(&item)
+        || (0x2244..=0x224B).contains(&item)
+        || (0x2B00..=0x2B0F).contains(&item)
+        || (0x2254..=0x225B).contains(&item)
+        || (0x224C..=0x2253).contains(&item)
+        || (0x2239..=0x223C).contains(&item)
+        || (0x2200..=0x2203).contains(&item)
+    {
+        return price_of(item);
+    }
+    match (item >> 8) & 0xF {
+        // Fruit.
+        8 => price_of(item),
+        // Stationery: the full stack of four sets the price.
+        0 => {
+            let stack = 0x20C0 + (item & 0x3F);
+            listed(Kind::Paper, stack, &ABC) && price_of(stack)
+        }
+        7 => listed(Kind::Wallpaper, item, &ABC) && price_of(item),
+        6 => listed(Kind::Carpet, item, &ABC) && price_of(item),
+        _ => false,
+    }
+}
+
+/// `mMpswd_check_present_user`: something Nook sells, at a price.
+pub(crate) fn present_user(item: u16) -> bool {
+    match item >> 12 {
+        1 | 3 => match room_item_from_furniture(item) {
+            Some(item1) => item1_sold(item1),
+            None => listed(Kind::Furniture, item, &FURNITURE_LISTS) && price_of(item),
+        },
+        2 => item1_sold(item),
+        _ => false,
+    }
+}
+
+/// `mMpswd_check_present_other`: what other code types may carry.
+fn present_other(disc: &GameDisc, item: u16) -> bool {
+    match item >> 12 {
+        1 | 3 => {
+            let Some(index) = rustimal_logic::collection::furniture_idx(item) else {
+                return false;
+            };
+            let kind = disc
+                .catalog
+                .get("mRmTp_birth_type")
+                .and_then(|a| disc.rom.slice(disc::RomSource::Rel, a.offset, a.size))
+                .and_then(|table| table.get(index).copied());
+            // Clothing, umbrellas, bugs, fish, unobtainable, e-reader,
+            // personal designs, Famicom and diaries are not obtainable.
+            kind.is_some_and(|kind| !matches!(kind, 8..=11 | 16 | 24 | 27 | 28 | 31))
+        }
+        2 => match (item >> 8) & 0xF {
+            2 => {
+                (0x2204..=0x2223).contains(&item)
+                    || (0x2244..=0x224B).contains(&item)
+                    || (0x2254..=0x225B).contains(&item)
+                    || (0x224C..=0x2253).contains(&item)
+            }
+            0 => item >= 0x20C0,
+            3 | 0xD => false,
+            _ => true,
+        },
+        _ => false,
+    }
+}
+
+/// The message fields `aNSC_set_pw_password_str` and `aNSC_set_pw_info_str`
+/// fill: the two code lines, the recipient's town and name, and the item.
+pub(super) fn fill_context(
+    disc: &GameDisc,
+    ctx: &mut crate::messages::MsgContext,
+    text: &[u8; 28],
+    decoded: &Decoded,
+) {
+    let line = |bytes: &[u8]| -> String {
+        bytes
+            .iter()
+            .map(|&b| crate::messages::char_of(b).unwrap_or('?'))
+            .collect()
+    };
+    ctx.items[3] = line(&text[..14]);
+    ctx.items[4] = line(&text[14..]);
+    ctx.free[6] = decoded.town.clone();
+    ctx.free[7] = decoded.player.clone();
+    ctx.items[2] = items::name(decoded.item);
+    ctx.item_articles[2] = super::item_article(disc, decoded.item);
+}
+
+/// Types the code into the two fixed-width lines (`mED_input_pw_chk_line`).
+pub(crate) fn input(
+    mut ui: ResMut<PasswordUi>,
+    mut actions: ResMut<Actions>,
+    mut events: MessageReader<KeyboardInput>,
+    focus: Res<InputFocus>,
+) {
+    if !ui.open || *focus != InputFocus::Password {
+        events.clear();
+        return;
+    }
+    if ui.just_opened {
+        events.clear();
+        ui.just_opened = false;
+        return;
+    }
+    let mut changed = false;
+    for event in events.read() {
+        if event.state != ButtonState::Pressed {
+            continue;
+        }
+        match event.key_code {
+            KeyCode::Escape => {
+                // Cancelling closes with whatever is typed; unfinished text
+                // reaches the counter as a declined code.
+                ui.finish();
+                break;
+            }
+            KeyCode::Backspace => {
+                let state = &mut *ui;
+                let (first, second) = state.lines.split_at_mut(1);
+                pw::backspace(
+                    &mut first[0],
+                    &mut second[0],
+                    &mut state.selected,
+                    &mut state.cursor,
+                );
+                changed = true;
+                continue;
+            }
+            _ => {}
+        }
+        if let Key::Character(text) = &event.logical_key {
+            for ch in text.chars() {
+                let Some(code) = typed_code(ch) else {
+                    continue;
+                };
+                let state = &mut *ui;
+                let selected = state.selected;
+                let mut cursor = state.cursor;
+                let result = pw::line_insert(&mut state.lines[selected], &mut cursor, code);
+                state.cursor = cursor;
+                changed |= result != pw::LineInsert::Rejected;
+                if result == pw::LineInsert::LineFull && selected == 0 {
+                    state.selected = 1;
+                    state.cursor = 0;
+                }
+            }
+        }
+    }
+    if ui.open && changed {
+        ui.revision += 1;
+        if pw::needs_charset_check(&ui.lines[1]) && pw::all_usable(&ui.lines[0], &ui.lines[1]) {
+            ui.finish();
+        }
+    }
+    // Typed keys also map to gameplay actions; none may leak through.
+    for action in [
+        Action::Confirm,
+        Action::Cancel,
+        Action::Back,
+        Action::Interact,
+        Action::Pause,
+    ] {
+        actions.consume(action);
+    }
+}
+
+/// A typed character as a password character: letters, `%`, `&`, `@` and
+/// digits (0 and 1 read as `O` and `l`, as the check does).
+fn typed_code(ch: char) -> Option<u8> {
+    let code = match ch {
+        '0' => b'O',
+        '1' => b'l',
+        c if c.is_ascii_alphanumeric() || matches!(c, '%' | '&' | '@') => c as u8,
+        _ => return None,
+    };
+    pw::usable_letter(code).then_some(code)
+}
+
+#[derive(Resource, Default)]
+pub(crate) struct PasswordAssets {
+    root: Option<Entity>,
+    shown: Option<u64>,
+    white: Option<Handle<Image>>,
+}
+
+/// The entry window: a plain panel, the remembered text in 14-letter rows.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn draw(
+    mut commands: Commands,
+    ui: Res<PasswordUi>,
+    font: Option<Res<MsgAssets>>,
+    mut assets: ResMut<PasswordAssets>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    if !ui.open {
+        if let Some(root) = assets.root.take() {
+            commands.entity(root).despawn();
+        }
+        assets.shown = None;
+        return;
+    }
+    let Some(font) = font else { return };
+    if assets.shown == Some(ui.revision) && assets.root.is_some() {
+        return;
+    }
+    if let Some(root) = assets.root.take() {
+        commands.entity(root).despawn();
+    }
+    let white = assets
+        .white
+        .get_or_insert_with(|| {
+            images.add(Image::new_fill(
+                bevy::render::render_resource::Extent3d {
+                    width: 1,
+                    height: 1,
+                    depth_or_array_layers: 1,
+                },
+                bevy::render::render_resource::TextureDimension::D2,
+                &[255, 255, 255, 255],
+                bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
+                bevy::asset::RenderAssetUsages::RENDER_WORLD,
+            ))
+        })
+        .clone();
+    let root = commands
+        .spawn((
+            Name::new("password entry"),
+            Transform::default(),
+            Visibility::default(),
+            RenderLayers::layer(1),
+        ))
+        .id();
+    assets.root = Some(root);
+    assets.shown = Some(ui.revision);
+    let mut paint = Paint {
+        commands: &mut commands,
+        meshes: &mut meshes,
+        materials: &mut materials,
+        root,
+    };
+    paint.put(
+        quad_mesh(Vec2::new(48.0, 64.0), Vec2::new(224.0, 110.0)),
+        white,
+        Color::srgba(1.0, 0.97, 0.88, 0.96),
+        200.0,
+    );
+    let ink = [70, 40, 50, 255];
+    paint.text(&font, "Password", Vec2::new(60.0, 72.0), ink, 230.0);
+    for (row, line) in ui.lines.iter().enumerate() {
+        for (column, &code) in line.iter().enumerate() {
+            let here = row == ui.selected && column == ui.cursor;
+            let shown = if code == pw::PW_CHAR_SPACE {
+                if here {
+                    '_'.to_string()
+                } else {
+                    '.'.to_string()
+                }
+            } else {
+                crate::messages::char_of(code).unwrap_or('?').to_string()
+            };
+            let color = if here { [200, 60, 60, 255] } else { ink };
+            paint.text(
+                &font,
+                &shown,
+                Vec2::new(60.0 + column as f32 * 14.5, 96.0 + row as f32 * 22.0),
+                color,
+                230.0,
+            );
+        }
+    }
+    let small = format!(
+        "{}{}",
+        crate::messages::markup::LINE_SCALE,
+        crate::messages::markup::arg(16)
+    );
+    paint.text(
+        &font,
+        &format!("{small}Type the 28 letters   Backspace: erase"),
+        Vec2::new(60.0, 148.0),
+        ink,
+        230.0,
+    );
+    paint.text(
+        &font,
+        &format!("{small}Esc: cancel"),
+        Vec2::new(60.0, 160.0),
+        ink,
+        230.0,
+    );
+}
