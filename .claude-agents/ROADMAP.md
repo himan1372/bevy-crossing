@@ -930,3 +930,15 @@ completed/shop-wall-clock.md.
 2026-10-24 codex raffle-ball-scale: ball parent unit scale fixes duplicate4000x shrink; drum/ball coordinate conversion now matches shell centreY1, seating drum atworld0.5. Philip's hat-clipping report addressed by adding exact posed drum footprint to raffle-day shop obstacles, retaining player radius0.4; verified front stopz-2998.38110 vs-2998.59985, held forward stable. Inspected visible ball roll/table contact/clearance; exact five-ticket loss and scene cleanup/reentry pass. See completed/raffle-ball-scale.md. Renderer allocator errors also reproduced on prior winning-prize display refresh; later fixed in mail-render-slab-errors. Existing item counts unchanged; parent/acceptance/previews/clock-fit remain open.
 2026-10-24 codex mail-render-slab-errors: reproduced blank letter line and markup-only raffle reveal submitting zero-vertex indexed text meshes; Bevy0.19.1 skips their allocation but still uploads their keys. Shared builder returns None for no glyphs, all six callers skip asset/entity creation. Same letter and actual third-prize win replayed with no allocator errors; spacing inspected, complete affected letter state comparison and exact five-ticket/wrapped-prize/sold-slot assertions pass. No tests or dependency changes. See completed/mail-render-slab-errors.md and comms.txt for build/runtime evidence. Counts unchanged; parent remains claude-owned/open.
 2026-10-24 codex catalog-flat-previews: original flat mCL display lists for wallpaper/carpet/stationery and shared animated music note now fill catalog preview, separate from existing furniture camera. Correct floor paletteD/textures8-B, wall paletteA, source placement/scales, canonical paper design modulo64 and I4 ruling alpha. Multiple patterns/empty tab/music motion inspected; navigation/cancel numeric comparison passes. See completed/catalog-flat-previews.md and comms.txt for final gates and lifecycle evidence. Item counts unchanged. Next exact clock preview fitting, remaining retail UI, Philip playtest/acceptance; parent claude-owned/open.
+
+2026-10-26 codex: shop-bargain-sales connects saved one-hour special shop
+sales, native preparation/packing closures, source FG layouts for all tiers,
+separate offer/ordinary stock, uncollected-first rare goods, original leaflet,
+intro and wrapped balloon. Active-stock getters preserve exact purchase,
+preview, ledger and normal raffle-ticket behavior. Renovation lookahead now
+also honors the sale date on load. The six-event calendar reserves other
+visitor turns without spawning actors; stable town/resident seed and saved
+rank0 are explicit adapters pending personal IDs/field assessment. Exact gift
+handover/twin choreography and festive-candle rendering remain follow-ups.
+Parent ownership, item counts, M4 and Philip acceptance remain open. See
+completed/shop-bargain-sales.md for validation and limits.

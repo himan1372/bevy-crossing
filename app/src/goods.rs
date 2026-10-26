@@ -326,6 +326,66 @@ const FLOWER_NUM: u32 = 9;
 pub(crate) const CANDY: ItemId = 0x2806;
 pub(crate) const GRAB_BAG: ItemId = 0x2E00;
 
+/// init_sp_bargain: first uncollected rare->uncommon->common, then rare goods.
+pub(crate) fn bargain_stock(
+    kind: u8,
+    count: usize,
+    collection: &rustimal_logic::collection::ItemCollection,
+    below: &mut dyn FnMut(u32) -> u32,
+) -> Option<Vec<ItemId>> {
+    let kind = match kind {
+        0 => Kind::Furniture,
+        2 => Kind::Cloth,
+        3 => Kind::Carpet,
+        4 => Kind::Wallpaper,
+        _ => return None,
+    };
+    let goods = LISTS.get()?;
+    let roll = roll_now();
+    let pool = |rarity: u8| -> Option<Vec<ItemId>> {
+        let index = roll.priorities[kind as usize]
+            .iter()
+            .position(|&p| p == rarity)?;
+        let list = goods.lists.get(kind as usize)?.get(index)?;
+        if kind == Kind::Cloth {
+            let c = goods.cloth_season;
+            let s = cloth_season(roll.month, roll.day);
+            let offset = usize::from(c[0]) + c[1..s].iter().map(|&n| usize::from(n)).sum::<usize>();
+            Some(
+                list.iter()
+                    .take(usize::from(c[0]))
+                    .chain(list.iter().skip(offset).take(usize::from(c[s])))
+                    .copied()
+                    .collect(),
+            )
+        } else {
+            Some(list.clone())
+        }
+    };
+    let mut out = Vec::new();
+    for rarity in [2, 1, 0] {
+        let candidates: Vec<_> = pool(rarity)?
+            .into_iter()
+            .filter(|&item| !collection.has(item))
+            .collect();
+        if !candidates.is_empty() {
+            out.push(candidates[below(candidates.len() as u32) as usize]);
+            break;
+        }
+    }
+    if out.len() < count {
+        out.extend(select_items(
+            &roll,
+            kind,
+            count - out.len(),
+            &out,
+            below,
+            Some(2),
+        ));
+    }
+    (out.len() == count).then_some(out)
+}
+
 pub(crate) fn grab_bag_day(year: u16, month: u8, day: u8) -> bool {
     rustimal_logic::shop::tanuki_shop_status(year, month, day, false)
         == rustimal_logic::shop::TanukiShopStatus::HukubukuroSale

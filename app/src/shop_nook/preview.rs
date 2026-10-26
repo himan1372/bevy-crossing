@@ -162,7 +162,7 @@ pub(super) fn advance(
     if *location != crate::shop::ShopLocation::Inside
         || preview.active.is_some_and(|(index, item)| {
             !shop
-                .stock
+                .goods()
                 .get(index)
                 .is_some_and(|s| s.item == item && !s.sold)
         })

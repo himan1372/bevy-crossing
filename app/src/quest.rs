@@ -594,7 +594,7 @@ fn quest_cooldown_tick(
     }
     let (entity, name) = list[(quest.rng_next() as usize) % list.len()].clone();
     let all_names: Vec<String> = talks.iter().map(|(v, _)| v.name.to_string()).collect();
-    let stock_names: Vec<String> = shop_data.stock.iter().map(|s| s.name.clone()).collect();
+    let stock_names: Vec<String> = shop_data.goods().iter().map(|s| s.name.clone()).collect();
     let rolls = [
         quest.rng_next() as u32,
         quest.rng_next() as u32,

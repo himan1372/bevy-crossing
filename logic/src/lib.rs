@@ -84,7 +84,7 @@ pub mod interaction;
 pub mod inventory;
 pub mod item_prefs;
 pub mod kankyo_env;
-mod leaflet;
+pub mod leaflet;
 pub mod letter_score;
 pub mod lights;
 pub mod mail;

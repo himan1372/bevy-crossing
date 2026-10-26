@@ -27,6 +27,7 @@ use crate::player::Player;
 use crate::states::{AppState, GameplaySet};
 use crate::town::Town;
 
+pub(crate) mod bargain;
 pub(crate) mod layout;
 pub(crate) mod schedule;
 
@@ -86,7 +87,7 @@ pub struct StockItem {
 }
 
 impl StockItem {
-    fn new(item: ItemId) -> Self {
+    pub(crate) fn new(item: ItemId) -> Self {
         Self {
             item,
             name: items::name(item),
@@ -99,6 +100,8 @@ impl StockItem {
 /// Shop runtime data: today's stock plus the decomp-verified sales ledger.
 #[derive(Resource, Default)]
 pub struct ShopData {
+    pub(crate) events: bargain::Calendar,
+    pub(crate) sale_view: bool,
     pub stock: Vec<StockItem>,
     pub shop: shop::ShopState,
     /// Rarity of lists A, B, C per kind; decided with the first stock.
@@ -113,6 +116,8 @@ impl ShopData {
     /// Restores stock, sales and tier from a save; stock from before real
     /// item numbers is dropped and laid out again.
     pub fn restore(&mut self, save: &crate::save::SaveData) {
+        self.events = save.shop_events.clone().unwrap_or_default();
+        self.sale_view = false;
         self.stock = save.shop_stock.clone();
         if self.stock.iter().any(|s| s.item == 0) {
             self.stock.clear();
@@ -129,7 +134,11 @@ impl ShopData {
         self.shop.upgrading_today = progress.pending;
         self.shop.renewal_ymd = progress.renewal;
         self.shop.send_upgrade_notice = progress.notice;
-        if schedule::advance(&mut self.shop, crate::clock::now()) {
+        if schedule::advance(
+            &mut self.shop,
+            crate::clock::now(),
+            self.events.bargain_date(),
+        ) {
             self.stock_day = None;
         }
         if let Some(p) = self.priorities {
@@ -139,9 +148,27 @@ impl ShopData {
 
     /// Indices of the goods still for sale.
     fn for_sale(&self) -> Vec<usize> {
-        (0..self.stock.len())
-            .filter(|&i| !self.stock[i].sold)
+        (0..self.goods().len())
+            .filter(|&i| !self.goods()[i].sold)
             .collect()
+    }
+
+    pub(crate) fn goods(&self) -> &[StockItem] {
+        if self.sale_view {
+            if let Some(offer) = self.events.offer.as_ref() {
+                return &offer.items;
+            }
+        }
+        &self.stock
+    }
+
+    pub(crate) fn goods_mut(&mut self) -> &mut [StockItem] {
+        if self.sale_view {
+            if let Some(offer) = self.events.offer.as_mut() {
+                return &mut offer.items;
+            }
+        }
+        &mut self.stock
     }
 
     /// Lays out the day's goods (`mSP_ExchangeLineUp_InGame`).
@@ -439,8 +466,7 @@ pub(crate) fn build_shop_interior(
 ) {
     let ox = SHOP_ORIGIN.x;
     let oz = SHOP_ORIGIN.z;
-    // mSP_SetTanukiShopStatus for today. The bargain event (OPENEVENT) is
-    // not modelled, and the room is built once per run.
+    // Raffle changes the shell; bargain sales change only native FG placement.
     let today = crate::clock::now();
     let fukubiki =
         rustimal_logic::shop::tanuki_shop_status(today.year, today.month, today.day, false)
@@ -448,6 +474,12 @@ pub(crate) fn build_shop_interior(
     let layout = layout::Layout {
         tier: shop.shop.shop_level as u8,
         upper: shop.shop.shop_level == ShopTier::Dsuper && active.upper && !fukubiki,
+        sale: shop
+            .events
+            .offer
+            .as_ref()
+            .filter(|_| shop.sale_view)
+            .map(|o| o.kind),
     };
     let key = (layout, fukubiki, disc.is_some());
     if *built == Some(key) {
@@ -816,7 +848,9 @@ fn shop_enter(
     {
         return;
     }
-    if !schedule::is_open(&shop.shop, crate::clock::now()) {
+    if !schedule::is_open(&shop.shop, crate::clock::now())
+        || shop.events.closed(crate::clock::now())
+    {
         return;
     }
     commands.insert_resource(ShopReturnPos(transform.translation));
@@ -1004,7 +1038,7 @@ fn shop_menu_input(
             let Some(index) = shop.for_sale().get(ui.selected).copied() else {
                 return;
             };
-            let item = shop.stock[index].clone();
+            let item = shop.goods()[index].clone();
             if inventory.bells < item.price {
                 ui.message = "Not enough bells!".to_string();
                 crate::sound::se(crate::sound::se_id::MENU_EXIT);
@@ -1024,7 +1058,7 @@ fn shop_menu_input(
             inventory.bells -= item.price;
             crate::sound::se(crate::sound::se_id::REGISTER);
             // Each piece on display sells once (`aSD_ReportGoodsSales`).
-            shop.stock[index].sold = true;
+            shop.goods_mut()[index].sold = true;
             ui.selected = ui.selected.min(shop.for_sale().len().saturating_sub(1));
             // Full price counts toward the shop upgrade (mSP_PlusSales).
             shop.shop.record_purchase(item.price);
@@ -1091,7 +1125,7 @@ fn refresh_shop_ui(
                 for (i, item) in shop
                     .for_sale()
                     .into_iter()
-                    .map(|i| &shop.stock[i])
+                    .map(|i| &shop.goods()[i])
                     .enumerate()
                 {
                     let cursor = if i == ui.selected { ">" } else { " " };
@@ -1359,6 +1393,7 @@ impl Plugin for ShopPlugin {
                 (
                     schedule::tick,
                     restock_daily,
+                    bargain::tick,
                     department_stairs,
                     build_shop_interior,
                 )

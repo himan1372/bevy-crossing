@@ -7,6 +7,7 @@ pub(crate) struct Layout {
     /// Zakka, Combini, Super, Depart.
     pub tier: u8,
     pub upper: bool,
+    pub sale: Option<u8>,
 }
 
 impl Layout {
@@ -55,6 +56,18 @@ impl Layout {
         Vec3::new(x, 1.0, z) - self.centre().with_y(0.0)
     }
     pub fn fg(self) -> u16 {
+        if let Some(kind) = self.sale {
+            if self.index() == 3 {
+                return 0x16F;
+            }
+            let offset = match kind {
+                0 => 0,
+                3 => 1,
+                4 => 2,
+                _ => 3,
+            };
+            return [0x163, 0x167, 0x16B, 0x16F, 0x170][self.index()] + offset;
+        }
         0x22 + self.index() as u16
     }
     pub fn raffle_fg(self) -> u16 {

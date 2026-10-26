@@ -59,7 +59,11 @@ pub(crate) fn is_open(s: &ShopState, now: crate::clock::Now) -> bool {
 }
 
 /// Called in town only: no remodel beneath an active shop transaction.
-pub(crate) fn advance(s: &mut ShopState, now: crate::clock::Now) -> bool {
+pub(crate) fn advance(
+    s: &mut ShopState,
+    now: crate::clock::Now,
+    bargain: Option<(u16, u8, u8)>,
+) -> bool {
     let today = date(now);
     if s.upgrading_today && today < shift(s.renewal_ymd, -2) {
         s.upgrading_today = false;
@@ -72,7 +76,7 @@ pub(crate) fn advance(s: &mut ShopState, now: crate::clock::Now) -> bool {
         return changed;
     }
     if !s.upgrading_today && !(0..=2).any(|n| excluded(shift(today, n))) {
-        s.schedule_renewal(today, if s.shop_level as u8 == 1 { 7 } else { 9 }, None);
+        s.schedule_renewal(today, if s.shop_level as u8 == 1 { 7 } else { 9 }, bargain);
     }
     false
 }
@@ -90,7 +94,8 @@ pub(crate) fn tick(
     }
     layout.upper = false;
     let now = crate::clock::now();
-    if advance(&mut shop.shop, now) {
+    let bargain = shop.events.bargain_date();
+    if advance(&mut shop.shop, now, bargain) {
         shop.stock_day = None;
         info!("Shop renovation complete: {:?}", shop.shop.shop_level);
     }

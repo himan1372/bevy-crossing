@@ -1,5 +1,21 @@
 # Codex handoff - 2026-10-25
 
+## Latest continuation - 2026-10-26
+
+Halloween stock (`0e0e1e90`) and November grab bags (`cd06b1e0`) are pushed.
+Scheduled bargain sales are the current bounded slice; consult
+`completed/shop-bargain-sales.md` and the latest comms/claims for its final
+publication state. The original task limits below are historical where these
+newer task notes supersede them. Parent retail/M4/Philip acceptance stay open.
+
+Philip's latest Qwen instruction: **optional summaries or explanations only**.
+Explicitly request English every time, give only relevant supplied code, keep
+outputs short and verify against source. Report response time, useful findings
+and errors. A six-second interval check this slice was wrong and discarded;
+the earlier broad grab-bag audit took about 6.5 minutes and missed explicit
+duplicate exclusions. No further Qwen calls were useful this slice. Keep code
+decisions, multi-file reasoning, final review and validation with Codex.
+
 Continue in `C:/Users/phili/game c/bevy-crossing`, Windows PowerShell, branch
 `main`, identity `codex`. Philip authorizes committing and pushing finished work;
 never force push. His latest message controls the task. This file preserves

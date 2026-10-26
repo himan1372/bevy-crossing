@@ -248,3 +248,15 @@ same-day lineups are preserved until daily restock. Capacity uses native words
 with the existing message frame; full warning-panel presentation and spotlight
 rare_item exclusion await their corresponding implementation. Scheduled bargain
 sales, festive-candle rendering, parent/M4 and Philip acceptance remain open.
+
+2026-10-26 codex: shop-bargain-sales connects saved one-hour special shop
+sales, native preparation/packing closures, source FG layouts for all tiers,
+separate offer/ordinary stock, uncollected-first rare goods, original leaflet,
+intro and wrapped balloon. Active-stock getters preserve exact purchase,
+preview, ledger and normal raffle-ticket behavior. Renovation lookahead now
+also honors the sale date on load. The six-event calendar reserves other
+visitor turns without spawning actors; stable town/resident seed and saved
+rank0 are explicit adapters pending personal IDs/field assessment. Exact gift
+handover/twin choreography and festive-candle rendering remain follow-ups.
+Parent ownership, item counts, M4 and Philip acceptance remain open. See
+completed/shop-bargain-sales.md for validation and limits.

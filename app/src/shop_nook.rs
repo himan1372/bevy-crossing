@@ -29,6 +29,8 @@ enum Step {
     #[default]
     Idle,
     Request,
+    BargainWelcome,
+    BargainBalloon,
     SellStart,
     Pockets,
     ShowQuestion {
@@ -261,9 +263,10 @@ pub(crate) fn interact(
     mut catalog_ui: ResMut<crate::catalog_screen::CatalogUi>,
     identity: Res<crate::save::PlayerIdentity>,
     layout: Res<crate::shop::layout::Layout>,
-    (mut home, mut inside_for, time, mut catalog, mut preview): (
+    (mut home, mut inside_for, mut inside_actor, time, mut catalog, mut preview): (
         Option<ResMut<crate::home::PlayerHouse>>,
         Local<Option<f32>>,
+        Local<Option<Entity>>,
         Res<Time>,
         ResMut<crate::catalog::Catalog>,
         ResMut<preview::Preview>,
@@ -290,6 +293,10 @@ pub(crate) fn interact(
         preview.clear();
         return;
     };
+    if *inside_actor != Some(actor) {
+        *inside_actor = Some(actor);
+        *inside_for = Some(0.0);
+    }
     if let Step::ChangingCloth {
         index,
         item,
@@ -364,6 +371,34 @@ pub(crate) fn interact(
                 return;
             }
         }
+        if shop.sale_view {
+            flow.context = context(&identity, false);
+            *focus = InputFocus::Dialogue;
+            say(
+                &disc,
+                &mut dialogue,
+                actor,
+                &flow.context,
+                if layout.tier == 3 { 16 } else { 37 },
+            );
+            flow.step = Step::BargainWelcome;
+            if let Ok((_, _, mut loco)) = player.single_mut() {
+                *loco = crate::locomotion::Locomotion::default();
+            }
+            return;
+        }
+    }
+    if layout.upper
+        && was < ARRIVAL
+        && *since >= ARRIVAL
+        && matches!(flow.step, Step::Idle)
+        && shop.sale_view
+    {
+        flow.context = context(&identity, true);
+        *focus = InputFocus::Dialogue;
+        say(&disc, &mut dialogue, actor, &flow.context, 37);
+        flow.step = Step::BargainWelcome;
+        return;
     }
     if matches!(flow.step, Step::Pockets) {
         if pockets.open {
@@ -450,6 +485,40 @@ pub(crate) fn interact(
         *focus = InputFocus::Dialogue;
         let step = std::mem::take(&mut flow.step);
         match step {
+            Step::BargainWelcome => {
+                let gift = !layout.upper
+                    && shop.events.offer.as_ref().is_some_and(|o| !o.balloon)
+                    && inventory.pockets.pockets.contains(&0);
+                if gift {
+                    say(
+                        &disc,
+                        &mut dialogue,
+                        actor,
+                        &flow.context,
+                        if layout.tier == 3 { 220 } else { 218 },
+                    );
+                    flow.step = Step::BargainBalloon;
+                } else {
+                    flow.step = Step::Idle;
+                    *focus = InputFocus::World;
+                }
+            }
+            Step::BargainBalloon => {
+                if let Some(slot) = inventory.pockets.pockets.iter().position(|&i| i == 0) {
+                    if let Some(offer) = shop.events.offer.as_mut().filter(|o| !o.balloon) {
+                        let roll = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map_or(0, |d| d.subsec_nanos());
+                        let item = 0x2244 + (roll % 8) as u16;
+                        inventory.pockets.pockets[slot] = item;
+                        inventory.pockets.set_item_cond(slot, 1);
+                        offer.balloon = true;
+                        crate::sound::se(0x69);
+                    }
+                }
+                flow.step = Step::Idle;
+                *focus = InputFocus::World;
+            }
             Step::Request if choice == 0 => {
                 say(&disc, &mut dialogue, actor, &flow.context, 26);
                 flow.step = Step::SellStart;
@@ -503,7 +572,7 @@ pub(crate) fn interact(
             }
             Step::ShowQuestion { index, item, price } => {
                 let valid = shop
-                    .stock
+                    .goods()
                     .get(index)
                     .is_some_and(|s| s.item == item && !s.sold && s.price == price);
                 if choice >= 2 || !valid {
@@ -552,7 +621,7 @@ pub(crate) fn interact(
                 }
                 preview.clear();
                 let valid = shop
-                    .stock
+                    .goods()
                     .get(index)
                     .is_some_and(|s| s.item == item && !s.sold && s.price == price);
                 let paint = (0x222D..=0x2238).contains(&item);
@@ -572,7 +641,7 @@ pub(crate) fn interact(
                         }
                     }
                     inventory.bells -= price;
-                    shop.stock[index].sold = true;
+                    shop.goods_mut()[index].sold = true;
                     shop.shop.record_purchase(price);
                     crate::sound::se(crate::sound::se_id::REGISTER);
                     info!("Nook purchase stock={index} item={item:#06x} price={price}");
@@ -707,7 +776,7 @@ pub(crate) fn interact(
         });
     flow.context = context(&identity, layout.upper);
     if let Some(display) = display {
-        let Some(stock) = shop.stock.get(display.stock_index) else {
+        let Some(stock) = shop.goods().get(display.stock_index) else {
             return;
         };
         if stock.sold {
@@ -756,6 +825,11 @@ pub(crate) fn interact(
         }
         actions.consume(Action::Interact);
         *focus = InputFocus::Dialogue;
+        if shop.sale_view && layout.tier == 3 && !layout.upper {
+            say(&disc, &mut dialogue, actor, &flow.context, 17);
+            flow.step = Step::Finish;
+            return;
+        }
         say(&disc, &mut dialogue, actor, &flow.context, 23);
         // Sell, the catalog, and cancel. The turnip and password lines stay
         // off until those services exist. Choice 1 is the catalog

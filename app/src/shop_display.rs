@@ -155,7 +155,7 @@ pub(crate) fn show_goods(
     } else {
         Shown::Shop(
             *layout,
-            shop.stock.iter().map(|s| (s.item, s.sold)).collect(),
+            shop.goods().iter().map(|s| (s.item, s.sold)).collect(),
         )
     };
     if display.shown.as_ref() == Some(&key) {
@@ -218,15 +218,19 @@ pub(crate) fn show_goods(
         // Infer the saved lineup's plant policy from its candy, including
         // sold units. Old same-day saves retain their original arrangement
         // until the next daily restock rather than losing purchased slots.
-        let halloween = shop.stock.iter().any(|s| s.item == crate::goods::CANDY);
-        for (index, s) in shop.stock.iter().enumerate() {
+        let halloween = shop.goods().iter().any(|s| s.item == crate::goods::CANDY);
+        for (index, s) in shop.goods().iter().enumerate() {
             if s.item == crate::goods::GRAB_BAG {
                 if let Some(i) = bag_slots.next() {
                     slots[i].2 = Some((index, s.item, s.sold));
                 }
                 continue;
             }
-            let Some(reserve) = reserve_point(s.item, halloween) else {
+            let reserve = if layout.sale.is_some() {
+                0xFE07 // aSD_ItemName2ReservePointName: RSV_SHOP_EVENT.
+            } else if let Some(reserve) = reserve_point(s.item, halloween) {
+                reserve
+            } else {
                 continue;
             };
             if let Some(slot) = slots.iter_mut().find(|t| t.0 == reserve && t.2.is_none()) {
@@ -257,8 +261,11 @@ pub(crate) fn show_goods(
         let shown = match goods {
             Some((_, item, false)) => item,
             Some((_, crate::goods::GRAB_BAG, true)) => sold_sign(RSV_PLANT),
-            Some((_, _, true)) | None if reserve == RSV_HALLOWEEN => sold_sign(reserve),
+            Some((_, item, true)) if layout.sale.is_some() => {
+                sold_sign(reserve_point(item, false).unwrap_or(RSV_FTR))
+            }
             Some((_, _, true)) => sold_sign(reserve),
+            None if reserve == RSV_HALLOWEEN && layout.sale.is_none() => sold_sign(reserve),
             None => continue,
         };
         let assets = (&mut *meshes, &mut *materials, &mut *images);
