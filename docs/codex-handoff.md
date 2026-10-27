@@ -1,5 +1,40 @@
 # Codex handoff - 2026-10-25
 
+## Claude continuation - 2026-10-27 (read this first)
+
+Identity `claude`, branch `main`, all work below is committed and pushed (last `0e560660`);
+only `.gitignore` and `savegame.json` are untracked/modified and must NOT be committed.
+Workflow that held all session: read the repo skills; write `.claude-agents/backlog/<slug>.md`
+and `bash task-claimer.sh claim <slug> claude`; sequential `cargo -j 1`; QA only in a Temp
+dir with a copy of the capture exe (`cargo build -p bevy-crossing --features capture`),
+synthetic `savegame.json`, BRP keys/screenshots (never touch the real save); gates =
+`cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -j 1 -- -D warnings`,
+default and `--release` builds; no test runs except a ported kernel's own tests; then update
+roadmap docs/`comms.txt`, move the note to `completed/`, `task-claimer.sh complete`, commit
+explicit files with the `Co-Authored-By: Claude Sonnet 5.5` line, push. Philip's rules: graphics
+from the disc; new logic as disc-independent kernels in `logic/` (check rustimal-crossing
+`rust/src` first); decomp reference is `../shmanimal crossing/ACGC-PC-Port/src` (== ac-decomp).
+QA tips: enter shops by `teleport(-15.9,4,-35.9)` then `KeyW+KeyD` 400 ms, `KeyW` 900 ms
+(teleporting inside breaks state); Nook talk from his north side; launch with `-Hour 14` for
+sale-day tests; never pipe `launch.ps1` (it hangs).
+
+Done this session (each has `completed/<slug>.md`): password service (user/popular/famicom/
+magazine/card-e codes, send, hand-over, arm clips, retail letter grid), Joan the Sunday
+turnip peddler (`app/src/joan.rs`, money/turnip hand-over demos, walks away after a talk),
+generic hand-over (`app/src/shop_nook/handover.rs`: Party/Item/Request; player plays arm clips
+via `NpcClip`), cuckoo catalog fit (`furniture::FitBounds`), sale-day balloon hand-over,
+field rank + player id (`logic/src/field_assessment.rs`, `app/src/field_rank.rs`,
+`PlayerIdentity.id`, saved `dust_flag`; feeds bargain scheduling and insect hatching),
+shop spotlight rare furniture (tiers 2/3, `shop_rare` save field, FE09 display).
+
+Known gaps: villager move-in still a fixed 70% (`roster::init_roster` runs before the town
+exists, so no field rank); fish spawn has no rank scaling; rare-furniture notice letter
+(`mSP_SetShopRareFurnitureChirashi`) and buying-the-rare sold sign not driven; "escort/twin"
+bargain choreography unaudited; grab-bag capacity warning panel; Nook present/hand-over
+frames not eyeballed; bargain RNG still a local adapter. Candidate next tasks: rare-furniture
+notice letter, diary/letters on the retail grid, grid leftovers (accent key, voices, scrolling
+window texture). Parent retail/M4 and Philip's acceptance stay open; Philip chooses the next task.
+
 ## Latest continuation - 2026-10-26
 
 Halloween stock (`0e0e1e90`) and November grab bags (`cd06b1e0`) are pushed.
