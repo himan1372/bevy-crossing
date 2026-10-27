@@ -36,6 +36,8 @@ pub(crate) struct Twins {
     pub(crate) talking: u8,
     /// A keeper has been asked to come and speak: the player is held (`mDemo_TYPE_SPEAK`).
     pub(crate) waiting: bool,
+    /// Timmy's `aNSC_ACTION_SAY_HELLO_APPROACH`: he steps forward while he greets.
+    pub(crate) approach: bool,
     /// `talk_start_tim` ran out: he stops (`aNSC_ACTION_WAIT`) and turns to the player.
     pub(crate) expired: bool,
     /// The goodbye at the stairs (`aNSC_ACTION_GOODBYE_WAIT`), asked for by `department_stairs`.
@@ -92,6 +94,8 @@ enum Step {
     Finish,
     /// The twins' goodbye (35) at the stairs is up.
     Goodbye,
+    /// The twins' normal greeting (22) on arrival is up.
+    Welcome,
     /// A display was asked for; the keeper is on his way to speak. `ticks` is -1 until the first frame.
     Greeting {
         index: usize,
@@ -763,16 +767,18 @@ pub(crate) fn interact(
             return;
         }
     }
-    if layout.upper
-        && was < ARRIVAL
-        && *since >= ARRIVAL
-        && matches!(flow.step, Step::Idle)
-        && shop.sale_view
-    {
+    if layout.upper && was < ARRIVAL && *since >= ARRIVAL && matches!(flow.step, Step::Idle) {
+        // `aNMD_actor_ct`: Timmy starts in `aNSC_start_wait` and greets the player (the sale
+        // greeting on a sale day, else `START_CALL_NORMAL`); Tommy just waits.
         flow.context = context(&identity, true);
         *focus = InputFocus::Dialogue;
-        say(&disc, &mut dialogue, actor, &flow.context, 37);
-        flow.step = Step::BargainWelcome;
+        if shop.sale_view {
+            say(&disc, &mut dialogue, actor, &flow.context, 37);
+            flow.step = Step::BargainWelcome;
+        } else {
+            say(&disc, &mut dialogue, actor, &flow.context, 22);
+            flow.step = Step::Welcome;
+        }
         return;
     }
     if matches!(flow.step, Step::Pockets) {
@@ -1313,11 +1319,14 @@ pub(crate) fn interact(
         return;
     }
     if twins.goodbye == Goodbye::Wanted && matches!(flow.step, Step::Idle) && focus.is_world() {
-        // `aNSC_goodbye_wait`: the selected twin turns and says goodbye (the other, `_WAIT2`, only
-        // turns, which `follow_twins` does for both while a conversation runs).
-        let twin = twins.selected;
-        flow.context = context(&identity, true);
-        set_twin(&mut flow.context, twin);
+        // `aNSC_goodbye_wait`: the keeper turns and says goodbye; upstairs it is the selected twin
+        // (the other, `_WAIT2`, only turns, which `follow_twins` does for both while a
+        // conversation runs).
+        let twin = if layout.upper { twins.selected } else { 0 };
+        flow.context = context(&identity, layout.upper);
+        if layout.upper {
+            set_twin(&mut flow.context, twin);
+        }
         twins.talking = twin;
         let actor = keeper(&nook, twin).map_or(actor, |(entity, _)| entity);
         *focus = InputFocus::Dialogue;
@@ -1570,6 +1579,10 @@ fn hold_player(flow: Res<Conversation>, mut twins: ResMut<Twins>) {
     if twins.waiting != waiting {
         twins.waiting = waiting;
     }
+    let approach = matches!(flow.step, Step::Welcome | Step::BargainWelcome);
+    if twins.approach != approach {
+        twins.approach = approach;
+    }
     if twins.expired != expired {
         twins.expired = expired;
     }
@@ -1622,6 +1635,16 @@ fn follow_twins(
             continue;
         };
         let pos = (transform.translation - corner) * 40.0;
+        if hold.approach && keeper.twin == Some(0) {
+            // `aNSC_say_hello_approach`: walk toward the player until z < 160, then stand.
+            if pos.z >= 160.0 {
+                transform.rotation = Quat::from_rotation_y(std::f32::consts::PI);
+                transform.translation.z =
+                    (transform.translation.z - 1.0 * 30.0 / 40.0 * dt).max(corner.z + 160.0 / 40.0);
+                keeper.walking = true;
+            }
+            continue;
+        }
         let delta = (target - pos).with_y(0.0);
         let distance = delta.length();
         let (zone, player_zone) = (zone_of(pos), zone_of(target));

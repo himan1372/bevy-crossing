@@ -609,6 +609,12 @@ pub(crate) fn build_shop_interior(
             SHOP_ORIGIN + layout.npc_position()
         } else {
             Vec3::new(ox, 1.0, oz - 4.1 * k)
+        })
+        .with_rotation(if layout.upper {
+            // `aNMD_actor_ct`: both twins start facing 180 degrees.
+            Quat::from_rotation_y(std::f32::consts::PI)
+        } else {
+            Quat::IDENTITY
         }),
     ));
     if real && layout.upper {
@@ -622,7 +628,9 @@ pub(crate) fn build_shop_interior(
             crate::character::NpcModel(layout.sibling_npc()),
             crate::character::NpcClip::default(),
             Visibility::default(),
-            Transform::from_translation(SHOP_ORIGIN + layout.sibling_position()),
+            // `aNMD_actor_ct`: both twins start facing 180 degrees.
+            Transform::from_translation(SHOP_ORIGIN + layout.sibling_position())
+                .with_rotation(Quat::from_rotation_y(std::f32::consts::PI)),
         ));
     }
 
@@ -899,11 +907,16 @@ fn shop_exit(
     room: Res<ShopRoom>,
     shop: Res<ShopData>,
     layout: Res<layout::Layout>,
+    disc: Option<Res<crate::game_disc::GameDisc>>,
+    mut twins: ResMut<crate::shop_nook::Twins>,
 ) {
+    use crate::shop_nook::Goodbye;
     if *state != ShopLocation::Inside || !focus.is_world() || layout.upper {
         return;
     }
-    if !actions.just_pressed(Action::Interact) {
+    // The keeper's goodbye (`aNSC_goodbye_wait`, message 35) has ended: go.
+    let said_goodbye = twins.goodbye == Goodbye::Done;
+    if !said_goodbye && !actions.just_pressed(Action::Interact) {
         return;
     }
     let Ok((mut transform, mut facing)) = player_query.single_mut() else {
@@ -916,11 +929,22 @@ fn shop_exit(
         face_z: SHOP_ORIGIN.z + room.door_z,
         into_z: 1.0,
     };
-    if !door.faced_by(transform.translation, facing.dir, DOOR_RANGE_IN, 0.5)
-        || !actions.consume(Action::Interact)
-    {
-        return;
+    if !said_goodbye {
+        if !door.faced_by(transform.translation, facing.dir, DOOR_RANGE_IN, 0.5)
+            || !actions.consume(Action::Interact)
+        {
+            return;
+        }
+        // Facing the exit, the keeper turns and says goodbye first (not on the raffle day, when
+        // the raffle script runs the conversations).
+        if disc.as_ref().is_some_and(|d| d.text.is_some()) && !crate::raffle::raffle_day() {
+            if twins.goodbye == Goodbye::Idle {
+                twins.goodbye = Goodbye::Wanted;
+            }
+            return;
+        }
     }
+    twins.goodbye = Goodbye::Idle;
     transform.translation = return_pos.map(|r| r.0).unwrap_or(Vec3::new(0.0, 1.0, 5.0));
     facing.dir = Vec3::new(0.0, 0.0, 1.0);
     crate::sound::door_sound(Some(shop.shop.shop_level), false);
@@ -1300,7 +1324,8 @@ fn department_stairs(
             _ => {}
         }
     }
-    let goodbye_done = twins.goodbye == Goodbye::Done;
+    // Only the upper floor's goodbye ends in the stairs; downstairs it ends in the door.
+    let goodbye_done = layout.upper && twins.goodbye == Goodbye::Done;
     if at_stairs || goodbye_done {
         twins.goodbye = Goodbye::Idle;
         layout.upper = !layout.upper;
