@@ -178,7 +178,15 @@ pub(super) fn draw(
             let y = if editing { 28.0 } else { 64.0 } + row as f32 * 16.0;
             paint.text(&font, &display(line), Vec2::new(64.0, y), ink, 230.0);
             if editing && view.scroll + row == cursor_line {
-                paint.text(&font, "_", Vec2::new(64.0 + cursor_x as f32, y), ink, 230.0);
+                let at = Vec2::new(64.0 + cursor_x as f32, y);
+                if let Some(caret) =
+                    paint.text(&font, "_", at, crate::shop_nook::editor::CARET_INK, 230.0)
+                {
+                    paint
+                        .commands
+                        .entity(caret)
+                        .insert(crate::shop_nook::editor::Caret(at));
+                }
             }
         }
     }

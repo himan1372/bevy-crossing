@@ -1412,6 +1412,8 @@ impl Plugin for ShopNookPlugin {
             .init_resource::<password::PasswordAssets>()
             .init_resource::<handover::HandOver>()
             .init_resource::<preview::Preview>()
+            .init_resource::<editor::CaretClock>()
+            .add_systems(PostUpdate, editor::pulse)
             .init_resource::<preview::Mannequin>()
             .init_resource::<preview::effects::Effects>()
             .add_systems(

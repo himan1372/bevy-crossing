@@ -36,7 +36,7 @@ verified (`shop-rare-sold-sign`, no code change), villager move-in by field rank
 `logic::ecology::fish_select`), grid leftovers (`grid-leftovers`: Ctrl+X accent exchange with its plate,
 typed-key voices, R face) and the sliding cloth background of the secret-code windows (`grid-window-scroll`).
 
-Known gaps: "escort/twin" bargain choreography unaudited; grab-bag capacity warning panel; Nook
+Known gaps (the grid cursor pulse is done as the text-caret fade, `completed/grid-caret-pulse.md`; the source has no key pulse or editor rumble): "escort/twin" bargain choreography unaudited; grab-bag capacity warning panel; Nook
 present/hand-over frames not eyeballed; bargain RNG still a local adapter; grid cursor pulse and pad
 rumble; accent swap in the secret-code windows; the voices and receiver-window scroll were not
 heard/driven; Rewrite of a letter was not driven; paper roll-in animations. Candidate next tasks: the

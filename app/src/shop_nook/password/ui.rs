@@ -730,12 +730,16 @@ fn window_code(
     let line = line_text(&ui.lines[ui.selected][..ui.cursor.min(14)]);
     let x = 77.0 + text_width(&line, &font.widths);
     let y = 81.0 + ui.selected as f32 * 18.0;
-    paint.put(
+    let caret = paint.put(
         quad_mesh(Vec2::new(x - 0.5, y), Vec2::new(1.5, 14.0)),
         white.clone(),
         Color::srgb_u8(195, 80, 80),
         editor::Z + 0.6,
     );
+    paint
+        .commands
+        .entity(caret)
+        .insert(editor::Caret(Vec2::new(x, y)));
     editor::hint(
         &mut paint,
         font,
@@ -828,12 +832,16 @@ fn window_receiver(
         if selected {
             let before = line_text(&field.text[..field.cursor.min(field.len)]);
             let x = 136.0 + text_width(&before, &font.widths);
-            paint.put(
+            let caret = paint.put(
                 quad_mesh(Vec2::new(x - 0.5, y), Vec2::new(1.5, 14.0)),
                 white.clone(),
                 Color::srgb_u8(195, 80, 80),
                 editor::Z + 0.6,
             );
+            paint
+                .commands
+                .entity(caret)
+                .insert(editor::Caret(Vec2::new(x, y)));
         }
     }
     editor::hint(

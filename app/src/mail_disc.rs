@@ -242,13 +242,15 @@ fn draw(
             let y = 22.0 + row as f32 * 16.0;
             paint.text(&font, text, Vec2::new(64.0, y), *color, 230.0);
             if first + row == line {
-                paint.text(
-                    &font,
-                    "_",
-                    Vec2::new(64.0 + column as f32, y),
-                    *color,
-                    230.0,
-                );
+                let at = Vec2::new(64.0 + column as f32, y);
+                if let Some(caret) =
+                    paint.text(&font, "_", at, crate::shop_nook::editor::CARET_INK, 230.0)
+                {
+                    paint
+                        .commands
+                        .entity(caret)
+                        .insert(crate::shop_nook::editor::Caret(at));
+                }
             }
         }
     }

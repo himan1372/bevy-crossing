@@ -393,6 +393,17 @@ pub fn exchange_code(text: &[u8], cursor: usize) -> Option<u8> {
     (ornament != prev).then_some(ornament)
 }
 
+/// Frames in one fade cycle of the text caret (`cursol_opacity_step` wraps at 35).
+pub const CARET_STEPS: u32 = 35;
+
+/// `mED_cursol_draw`: the caret fades out over the first half of the cycle and
+/// back in over the second; `step` counts 60 Hz frames since the last move.
+pub fn caret_alpha(step: u32) -> u8 {
+    let step = step % CARET_STEPS;
+    let step = if step > 17 { CARET_STEPS - step } else { step };
+    ((17 - step) * 255 / 17) as u8
+}
+
 /// `mED_exchange_code_func`: swaps the character before the cursor in place.
 pub fn exchange(text: &mut [u8], cursor: usize) -> bool {
     match exchange_code(text, cursor) {

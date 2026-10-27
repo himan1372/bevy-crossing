@@ -54,6 +54,48 @@ pub(crate) struct Stores<'a> {
 
 /// Menu depth of the editor over the window behind it.
 pub(crate) const Z: f32 = 210.0;
+
+/// The text caret's ink (`mED_cursol_draw`: 195, 80, 80).
+pub(crate) const CARET_INK: [u8; 4] = [195, 80, 80, 255];
+
+/// A text caret and where it sits; it fades with [`CaretClock`].
+#[derive(Component)]
+pub(crate) struct Caret(pub Vec2);
+
+/// `cursol_opacity_step`: restarts whenever the caret lands somewhere new.
+#[derive(Resource, Default)]
+pub(crate) struct CaretClock {
+    step: u32,
+    accum: f32,
+    at: Option<Vec2>,
+}
+
+/// Advances the fade at 60 steps a second and sets every caret's opacity.
+/// Runs after the hosts rebuild their windows so a new caret never flashes.
+pub(crate) fn pulse(
+    time: Res<Time>,
+    mut clock: ResMut<CaretClock>,
+    carets: Query<(&Caret, &MeshMaterial3d<StandardMaterial>)>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let at = carets.iter().next().map(|(caret, _)| caret.0);
+    if at != clock.at {
+        clock.at = at;
+        clock.step = 0;
+        clock.accum = 0.0;
+    } else if at.is_some() {
+        clock.accum += time.delta_secs() * 60.0;
+        let whole = clock.accum.floor();
+        clock.accum -= whole;
+        clock.step = (clock.step + whole as u32) % kb::CARET_STEPS;
+    }
+    let alpha = f32::from(kb::caret_alpha(clock.step)) / 255.0;
+    for (_, material) in &carets {
+        if let Some(mut material) = materials.get_mut(&material.0) {
+            material.base_color = material.base_color.with_alpha(alpha);
+        }
+    }
+}
 /// Overlay units a screen pixel spans (`msg_window::SCALE`).
 const PX: f32 = 16.0;
 
