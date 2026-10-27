@@ -795,6 +795,7 @@ fn fit_preview(
     bounds: Query<(Option<&bevy::camera::primitives::Aabb>, &GlobalTransform), With<Mesh3d>>,
     globals: Query<&GlobalTransform>,
     children: Query<&Children>,
+    fits: Query<&crate::furniture::FitBounds>,
     time: Res<Time>,
 ) {
     for (root, mut preview, mut transform, mut visibility) in &mut previews {
@@ -830,6 +831,9 @@ fn fit_preview(
                     }
                 }
                 count += 1;
+            }
+            if let Ok(fit) = fits.get(root) {
+                (min, max) = (fit.min, fit.max);
             }
             let size = max - min;
             let radius = size.length() * 0.5;

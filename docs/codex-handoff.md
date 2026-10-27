@@ -23,8 +23,7 @@ pure and disc-free); Nook's transfer/hold arm clips play too
 mid-message start remain. Philip's rule:
 graphics come from the disc, rewritten logic stays disc-independent in `logic/`,
 and check rustimal-crossing/pinned Rustimal for existing kernels first. The catalog cuckoo-clock preview fit
-(`backlog/nook-tickets-catalog.md`, audit section) is open and unclaimed. Start
-nothing until Philip selects it.
+is fixed (`completed/cuckoo-catalog-fit.md`).
 The original task limits below are historical where these
 newer task notes supersede them. Parent retail/M4/Philip acceptance stay open.
 
@@ -50,7 +49,7 @@ commit and push before telling Philip what is next.
 task or required input in a short final sentence, using the current task notes
 and roadmaps rather than stale proposals. If nothing remains, say so. This is
 a status handoff, not authorization to start another task automatically.
-Currently next: the cuckoo catalog fit or the seasonal services; Philip chooses.
+Currently next: the seasonal services; Philip chooses.
 
 ## Current state (2026-10-25)
 
@@ -396,5 +395,4 @@ Complete all authorized repository work and confirm publication/status first,
 then tell Philip the next concrete step. End the first catch-up reply with these
 three priorities, in this order (do not start them without a selection):
 
-1. The cuckoo catalog preview fit.
-2. Remaining seasonal services.
+1. Remaining seasonal services.

@@ -19,6 +19,15 @@ const HAND_FRONT: f32 = 100.0;
 /// `sAdo_OngenTrgStart(0x133)`.
 const CUCKOO_SOUND: u16 = 0x133;
 
+/// What the cabin clock shows: the roof at 7914 down to the pine-cone weight
+/// tips at -3533 (half-width 1777, depth 1615). Its body list also holds
+/// three triangles with a tip at x 19528 that show nothing in this
+/// renderer, which would stretch a bounds fit threefold.
+const VISIBLE_BOX: super::FitBounds = super::FitBounds {
+    min: Vec3::new(-1777.0, -3533.0, -1615.0),
+    max: Vec3::new(1777.0, 7914.0, 1615.0),
+};
+
 pub(crate) fn is_cuckoo(index: u16) -> bool {
     index == 0xC1
 }
@@ -128,14 +137,17 @@ pub(super) fn spawn(
         );
         anchor
     });
-    commands.entity(root).insert(CuckooRig {
-        skeleton,
-        animation,
-        joints,
-        hands,
-        state: None,
-        ticks: 0.0,
-    });
+    commands.entity(root).insert((
+        CuckooRig {
+            skeleton,
+            animation,
+            joints,
+            hands,
+            state: None,
+            ticks: 0.0,
+        },
+        VISIBLE_BOX,
+    ));
 }
 
 /// Joint origins in the furniture's model space (Matrix_Position of each).

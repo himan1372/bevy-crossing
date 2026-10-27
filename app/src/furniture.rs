@@ -37,6 +37,15 @@ pub(crate) mod sprinkler;
 pub(crate) mod storage;
 pub(crate) mod television;
 
+/// The box of a piece that actually draws, in its root's space, for a view
+/// that fits the piece (the catalog circle). A model may hold geometry that
+/// never shows, which would make a fit from mesh bounds shrink the piece.
+#[derive(Component, Clone, Copy)]
+pub(crate) struct FitBounds {
+    pub min: Vec3,
+    pub max: Vec3,
+}
+
 /// Game units per room unit (`mFI_UT_WORLDSIZE_X_F`).
 const UNIT: f32 = 40.0;
 /// Bytes per texture-animation frame we hand segment 8 (a 64x64 4-bit
