@@ -852,7 +852,9 @@ fn mail_ui_input(
                 continue;
             }
             let put = |code: u8, codes: &mut Vec<u8>, cursor: &mut usize| {
-                if !rustimal_logic::diary::insert(codes, cursor, code, widths, limits) {
+                if rustimal_logic::diary::insert(codes, cursor, code, widths, limits) {
+                    crate::shop_nook::editor::speak(code, false);
+                } else {
                     crate::sound::se(GRID_ERROR);
                 }
             };
@@ -880,6 +882,17 @@ fn mail_ui_input(
                 KeyCode::F3 => {
                     ui.write_keyboard.next_mode();
                     crate::sound::se(GRID_TOGGLE);
+                    continue;
+                }
+                KeyCode::KeyX if ctrl => {
+                    // X: the accent twin of the character before the cursor.
+                    match kb::exchange_code(&codes, cursor) {
+                        Some(code) => {
+                            kb::exchange(&mut codes, cursor);
+                            crate::shop_nook::editor::speak(code, true);
+                        }
+                        None => crate::sound::se(GRID_ERROR),
+                    }
                     continue;
                 }
                 KeyCode::F4 => {
@@ -968,6 +981,9 @@ fn mail_ui_input(
             b: keys.pressed(KeyCode::Backspace),
             l: keys.pressed(KeyCode::F1),
             y: keys.pressed(KeyCode::F3),
+            r: keys.pressed(KeyCode::Space),
+            x: ctrl && keys.pressed(KeyCode::KeyX),
+            exchange: kb::exchange_code(&codes, cursor).map(|code| (codes[cursor - 1], code)),
             pad,
             stick,
         };

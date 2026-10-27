@@ -28,6 +28,11 @@ pub(crate) struct Held {
     pub b: bool,
     pub l: bool,
     pub y: bool,
+    pub r: bool,
+    pub x: bool,
+    /// The character before the cursor and what X would swap it for
+    /// (`exchange_code`), which lights the arrow plate.
+    pub exchange: Option<(u8, u8)>,
     pub pad: Option<kb::Direction>,
     pub stick: Option<kb::Direction>,
 }
@@ -278,11 +283,16 @@ pub(crate) fn spawn(
     place(commands, root, &model, at(1.2), false);
 
     // R: space.
+    let r_face = if held.r {
+        "kai_sousa_rbutton2_tex_rgb_ia8"
+    } else {
+        "kai_sousa_rbutton_tex_rgb_ia8"
+    };
     let model = skin.part(
         disc,
         "kai_sousa_rbuttonT_model",
         white,
-        Some("kai_sousa_rbutton_tex_rgb_ia8"),
+        Some(r_face),
         assets,
     );
     place(commands, root, &model, at(1.3), false);
@@ -315,18 +325,25 @@ pub(crate) fn spawn(
         let model = skin.part(disc, list, white, Some(b_face), assets);
         place(commands, root, &model, at(2.1 + n as f32 * 0.1), false);
     }
-    for (n, list) in ["kai_sousa_henkan_model", "kai_sousa_xbuttonT_model"]
-        .into_iter()
-        .enumerate()
-    {
+    // X: the accent exchange. The arrow shows only when the character before
+    // the cursor has a swap (`mED_KeyDraw_X_button`).
+    let x_face = if held.x {
+        "kai_sousa_xbutton2_tex_rgb_ia8"
+    } else {
+        "kai_sousa_xbutton_tex_rgb_ia8"
+    };
+    let x_lists: &[&str] = if held.exchange.is_some() {
+        &[
+            "kai_sousa_henkan_model",
+            "kai_sousa_yajirushi_model",
+            "kai_sousa_xbuttonT_model",
+        ]
+    } else {
+        &["kai_sousa_henkan_model", "kai_sousa_xbuttonT_model"]
+    };
+    for (n, list) in x_lists.iter().enumerate() {
         // These lists draw with the primitive colour the L button left behind.
-        let model = skin.part(
-            disc,
-            list,
-            l_prim,
-            Some("kai_sousa_xbutton_tex_rgb_ia8"),
-            assets,
-        );
+        let model = skin.part(disc, list, l_prim, Some(x_face), assets);
         place(commands, root, &model, at(2.3 + n as f32 * 0.1), false);
     }
     let y_face = if held.y {
@@ -394,7 +411,7 @@ pub(crate) fn spawn(
     );
     place(commands, root, &model, stick_at + Vec3::Z * 0.1, flipped);
 
-    spawn_keys(commands, root, skin, disc, font, keyboard, assets);
+    spawn_keys(commands, root, skin, disc, font, keyboard, held, assets);
 }
 
 /// The keys: their faces from `kai_sousa2_v`, then each key's letter.
@@ -405,6 +422,7 @@ fn spawn_keys(
     disc: &GameDisc,
     font: &MsgAssets,
     keyboard: &kb::Keyboard,
+    held: Held,
     assets: &mut Stores,
 ) {
     let Some(image) = skin.key_image(disc, assets) else {
@@ -518,6 +536,26 @@ fn spawn_keys(
             }
         }
     }
+    // The exchange plate: the character before the cursor, then its swap
+    // (`mED_StringsDraw_ornament`).
+    if let Some((before, after)) = held.exchange {
+        letter(
+            &mut paint,
+            font,
+            before,
+            Vec2::new(261.0, 190.0),
+            [225, 195, 195, 255],
+            Z + 5.0,
+        );
+        letter(
+            &mut paint,
+            font,
+            after,
+            Vec2::new(283.0, 190.0),
+            [255, 255, 255, 255],
+            Z + 5.0,
+        );
+    }
     // The chosen key again on the letter board (`mED_StringsDraw_select`).
     if let Some(code) = keyboard.selected() {
         let origin = Vec2::new(242.0, 180.0);
@@ -567,4 +605,25 @@ pub(crate) fn hint(paint: &mut Paint, font: &MsgAssets, text: &str) {
         [255, 255, 255, 220],
         Z + 6.0,
     );
+}
+
+/// `mED_set_se`: a typed character speaks its voice (`sAdo_VoiceSe(voice, 0xFF,
+/// 0xFF, 0, 32, 1)`); an exchange speaks the new character or, when the list
+/// keeps it quiet, plays the plain refusal sound.
+pub(crate) fn speak(code: u8, exchange: bool) {
+    use rustimal_logic::na_voice::phoneme_of;
+    let voice = if exchange {
+        match kb::exchange_voice(code, phoneme_of(code)) {
+            Some(voice) => voice,
+            None => {
+                crate::sound::se(0x36);
+                return;
+            }
+        }
+    } else {
+        kb::output_voice(phoneme_of(code))
+    };
+    // The editor speaks with whichever voice spec was last selected.
+    crate::sound::voice_begin(2, 0);
+    crate::sound::voice_character([voice, 0xFF, 0xFF], 32, true);
 }

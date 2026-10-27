@@ -332,14 +332,18 @@ pub(crate) fn input(
         match event.key_code {
             KeyCode::Enter | KeyCode::NumpadEnter => {
                 if let Some(code) = ui.keyboard.selected() {
-                    if !ui.put(code) {
+                    if ui.put(code) {
+                        editor::speak(code, false);
+                    } else {
                         crate::sound::se(ERROR);
                     }
                 }
                 continue;
             }
             KeyCode::Space => {
-                if !ui.put(kb::CHAR_SPACE) {
+                if ui.put(kb::CHAR_SPACE) {
+                    editor::speak(kb::CHAR_SPACE, false);
+                } else {
                     crate::sound::se(ERROR);
                 }
                 continue;
@@ -387,7 +391,9 @@ pub(crate) fn input(
                         .flatten(),
                 };
                 if let Some(code) = code {
-                    if !ui.put(code) {
+                    if ui.put(code) {
+                        editor::speak(code, false);
+                    } else {
                         crate::sound::se(ERROR);
                     }
                 }
@@ -445,6 +451,9 @@ pub(crate) fn input(
         b: keys.pressed(KeyCode::Backspace),
         l: keys.pressed(KeyCode::F1),
         y: keys.pressed(KeyCode::F3),
+        r: keys.pressed(KeyCode::Space),
+        x: false,
+        exchange: None,
         pad,
         stick,
     };

@@ -292,7 +292,7 @@ fn draw(
     }
     let hints = if writing {
         vec![
-            format!("To {recipient}   PgUp/PgDn: change"),
+            format!("To {recipient}   PgUp/PgDn: change   Ctrl+X: accent"),
             "Enter: key  Bksp  Ctrl+arrows: cursor  F4: send  Esc: cancel".to_string(),
         ]
     } else {

@@ -189,7 +189,7 @@ pub(super) fn draw(
             "Esc: close".into(),
         ],
         Mode::Edit => vec![
-            "Enter: key   Bksp: erase   Space   F1: Caps   F3: type".into(),
+            "Enter: key  Bksp  Space  F1: Caps  F3: type  Ctrl+X: accent".into(),
             format!(
                 "Ctrl+arrows: cursor   F4: finish   Esc: discard   {}/992  {}/31",
                 view.draft.len(),

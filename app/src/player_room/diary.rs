@@ -71,6 +71,32 @@ fn direction(keys: &ButtonInput<KeyCode>) -> Option<kb::Direction> {
     .map(|(_, direction)| direction)
 }
 
+/// A key typed into the draft: it speaks, or the entry refuses it.
+fn type_code(view: &mut View, code: u8, widths: &[u8; 256]) {
+    if native::insert(
+        &mut view.draft,
+        &mut view.cursor,
+        code,
+        widths,
+        native::DIARY,
+    ) {
+        crate::shop_nook::editor::speak(code, false);
+    } else {
+        crate::sound::se(ERROR);
+    }
+}
+
+/// X: swaps the character before the cursor for its accent twin.
+fn exchange(view: &mut View) {
+    match kb::exchange_code(&view.draft, view.cursor) {
+        Some(code) => {
+            kb::exchange(&mut view.draft, view.cursor);
+            crate::shop_nook::editor::speak(code, true);
+        }
+        None => crate::sound::se(ERROR),
+    }
+}
+
 /// Starts editing: the cursor goes to the end of the entry.
 fn begin_edit(view: &mut View, widths: &[u8; 256]) {
     view.mode = Mode::Edit;
@@ -257,29 +283,13 @@ fn input(
                     KeyCode::Enter | KeyCode::NumpadEnter => {
                         if let Some(code) = view.keyboard.selected() {
                             let v = &mut view;
-                            if !native::insert(
-                                &mut v.draft,
-                                &mut v.cursor,
-                                code,
-                                widths,
-                                native::DIARY,
-                            ) {
-                                crate::sound::se(ERROR);
-                            }
+                            type_code(v, code, widths);
                         }
                         continue;
                     }
                     KeyCode::Space => {
                         let v = &mut view;
-                        if !native::insert(
-                            &mut v.draft,
-                            &mut v.cursor,
-                            kb::CHAR_SPACE,
-                            widths,
-                            native::DIARY,
-                        ) {
-                            crate::sound::se(ERROR);
-                        }
+                        type_code(v, kb::CHAR_SPACE, widths);
                         continue;
                     }
                     KeyCode::F1 => {
@@ -295,6 +305,10 @@ fn input(
                     KeyCode::F3 => {
                         view.keyboard.next_mode();
                         crate::sound::se(TOGGLE);
+                        continue;
+                    }
+                    KeyCode::KeyX if ctrl => {
+                        exchange(&mut view);
                         continue;
                     }
                     KeyCode::F4 => {
@@ -313,15 +327,7 @@ fn input(
                     for ch in chars.chars().filter(|c| !c.is_control()) {
                         if let Some(code) = crate::messages::ac_code_opt(ch) {
                             let v = &mut view;
-                            if !native::insert(
-                                &mut v.draft,
-                                &mut v.cursor,
-                                code,
-                                widths,
-                                native::DIARY,
-                            ) {
-                                crate::sound::se(ERROR);
-                            }
+                            type_code(v, code, widths);
                         }
                     }
                 }
@@ -391,6 +397,10 @@ fn input(
                     b: keys.pressed(KeyCode::Backspace),
                     l: keys.pressed(KeyCode::F1),
                     y: keys.pressed(KeyCode::F3),
+                    r: keys.pressed(KeyCode::Space),
+                    x: ctrl && keys.pressed(KeyCode::KeyX),
+                    exchange: kb::exchange_code(&view.draft, view.cursor)
+                        .map(|code| (view.draft[view.cursor - 1], code)),
                     pad,
                     stick,
                 };
