@@ -34,6 +34,19 @@ pub(crate) struct Shopkeeper {
 pub(crate) struct Twins {
     pub(crate) selected: u8,
     pub(crate) talking: u8,
+    /// The goodbye at the stairs (`aNSC_ACTION_GOODBYE_WAIT`), asked for by `department_stairs`.
+    pub(crate) goodbye: Goodbye,
+}
+
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Goodbye {
+    #[default]
+    Idle,
+    /// The player reached the stairs; the selected twin has not spoken yet.
+    Wanted,
+    Speaking,
+    /// The message ended: the stairs may be taken.
+    Done,
 }
 
 #[derive(Default)]
@@ -73,6 +86,8 @@ enum Step {
         all: sales::Sale,
     },
     Finish,
+    /// The twins' goodbye (35) at the stairs is up.
+    Goodbye,
     /// The password question (312) is up; the entry window opens next.
     PasswordSay,
     /// The entry window is open.
@@ -405,6 +420,7 @@ pub(crate) fn interact(
         return;
     };
     if *location != ShopLocation::Inside {
+        twins.goodbye = Goodbye::Idle;
         preview.clear();
         password.close();
         pockets.sending = false;
@@ -750,6 +766,11 @@ pub(crate) fn interact(
         *focus = InputFocus::Dialogue;
         let step = std::mem::take(&mut flow.step);
         match step {
+            Step::Goodbye => {
+                twins.goodbye = Goodbye::Done;
+                *dialogue = DialogueState::default();
+                *focus = InputFocus::World;
+            }
             Step::BargainWelcome => {
                 let gift = !layout.upper
                     && shop.events.offer.as_ref().is_some_and(|o| !o.balloon)
@@ -1190,6 +1211,20 @@ pub(crate) fn interact(
                 *focus = InputFocus::World;
             }
         }
+        return;
+    }
+    if twins.goodbye == Goodbye::Wanted && matches!(flow.step, Step::Idle) && focus.is_world() {
+        // `aNSC_goodbye_wait`: the selected twin turns and says goodbye (the other, `_WAIT2`, only
+        // turns, which `follow_twins` does for both while a conversation runs).
+        let twin = twins.selected;
+        flow.context = context(&identity, true);
+        set_twin(&mut flow.context, twin);
+        twins.talking = twin;
+        let actor = keeper(&nook, twin).map_or(actor, |(entity, _)| entity);
+        *focus = InputFocus::Dialogue;
+        say(&disc, &mut dialogue, actor, &flow.context, 35);
+        flow.step = Step::Goodbye;
+        twins.goodbye = Goodbye::Speaking;
         return;
     }
     if !matches!(flow.step, Step::Idle)

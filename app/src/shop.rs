@@ -1260,7 +1260,9 @@ fn department_stairs(
     disc: Option<Res<crate::game_disc::GameDisc>>,
     mut player: Query<(&mut Transform, &mut Facing, &mut Locomotion), With<Player>>,
     mut locked: Local<bool>,
+    mut twins: ResMut<crate::shop_nook::Twins>,
 ) {
+    use crate::shop_nook::Goodbye;
     if layout.tier != 3
         || crate::raffle::raffle_day()
         || *state != ShopLocation::Inside
@@ -1281,12 +1283,26 @@ fn department_stairs(
     if *locked {
         return;
     }
-    if p.x >= 7.0
+    let at_stairs = p.x >= 7.0
         && p.x <= 9.0
         && p.z < 2.0
         && facing.dir.z < -0.5
-        && loco.state() != rustimal_logic::player_move::LocomotionState::Wait
-    {
+        && loco.state() != rustimal_logic::player_move::LocomotionState::Wait;
+    // Leaving the upper floor, the selected twin says goodbye first.
+    if layout.upper && disc.as_ref().is_some_and(|d| d.text.is_some()) {
+        match twins.goodbye {
+            Goodbye::Idle if at_stairs => {
+                twins.goodbye = Goodbye::Wanted;
+                *loco = Locomotion::default();
+                return;
+            }
+            Goodbye::Wanted | Goodbye::Speaking => return,
+            _ => {}
+        }
+    }
+    let goodbye_done = twins.goodbye == Goodbye::Done;
+    if at_stairs || goodbye_done {
+        twins.goodbye = Goodbye::Idle;
         layout.upper = !layout.upper;
         *locked = true;
         transform.translation = SHOP_ORIGIN + layout.stair_arrival();
