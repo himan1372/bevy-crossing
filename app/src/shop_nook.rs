@@ -739,6 +739,9 @@ pub(crate) fn interact(
                         inventory.pockets.set_item_cond(slot, 1);
                         offer.balloon = true;
                         crate::sound::se(0x69);
+                        // aNSC_present_balloon_trans_takeout: the wrapped
+                        // balloon is handed over like any present.
+                        handover.start(handover::Request::nook_present());
                     }
                 }
                 flow.step = Step::Idle;

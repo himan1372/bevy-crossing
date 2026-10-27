@@ -1012,3 +1012,5 @@ Philip acceptance stay open.
 2026-10-26 claude: joan-handover-demos. The hand-over is now generic (giver/taker/item): after Joan's sale the player hands her the money bag and she hands back the turnip bundle with the original arm clips, models and curves; she walks to a new nearby spot after each talk. Nook's present uses the same code and the player now plays its give/get arm clips. Exact placement rules remain. See completed/joan-handover-demos.md.
 
 2026-10-26 claude: cuckoo-catalog-fit. The cabin clock's catalog preview now fills the circle: a visible-box override (furniture::FitBounds) replaces its mesh-bounds fit, which three never-drawn spire triangles had inflated threefold. Other pieces unchanged. See completed/cuckoo-catalog-fit.md.
+
+2026-10-27 claude: seasonal-balloon-handover. The sale-day gift balloon is handed over with the generic hand-over (present model and arm clips). Remaining seasonal items are blocked or optional: identity/assessment inputs, spotlight exclusion, escort/twin, grab-bag warning panel. See completed/seasonal-balloon-handover.md.

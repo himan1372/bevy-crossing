@@ -49,7 +49,7 @@ commit and push before telling Philip what is next.
 task or required input in a short final sentence, using the current task notes
 and roadmaps rather than stale proposals. If nothing remains, say so. This is
 a status handoff, not authorization to start another task automatically.
-Currently next: the seasonal services; Philip chooses.
+Currently next: the rest of the seasonal work (identity/assessment inputs, spotlight exclusion, escort/twin, grab-bag warning panel) is blocked or optional; Philip chooses.
 
 ## Current state (2026-10-25)
 
@@ -395,4 +395,4 @@ Complete all authorized repository work and confirm publication/status first,
 then tell Philip the next concrete step. End the first catch-up reply with these
 three priorities, in this order (do not start them without a selection):
 
-1. Remaining seasonal services.
+1. Remaining seasonal work (see Currently next above).
