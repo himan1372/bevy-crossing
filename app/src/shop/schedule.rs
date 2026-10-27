@@ -12,6 +12,8 @@ pub(crate) struct Progress {
     pub pending: bool,
     pub renewal: (u16, u8, u8),
     pub notice: bool,
+    /// Last day the rare-furniture notice ran (`goki.time`): y, m, d, hour.
+    pub played: Option<(u16, u8, u8, u8)>,
 }
 
 impl From<&ShopState> for Progress {
@@ -21,6 +23,7 @@ impl From<&ShopState> for Progress {
             pending: s.upgrading_today,
             renewal: s.renewal_ymd,
             notice: s.send_upgrade_notice,
+            played: None,
         }
     }
 }
@@ -99,6 +102,7 @@ pub(crate) fn tick(
         shop.stock_day = None;
         info!("Shop renovation complete: {:?}", shop.shop.shop_level);
     }
+    rare_notice(&mut shop, now, disc.as_deref(), &identity, &mut mailbox);
     let s = &mut shop.shop;
     if !s.send_upgrade_notice || date(now) < shift(s.renewal_ymd, -1) {
         return;
@@ -132,5 +136,79 @@ pub(crate) fn tick(
             ..default()
         });
         s.send_upgrade_notice = false;
+    }
+}
+
+/// `mSP_SetShopRareFurnitureChirashi` + `mSP_ShopItsumoChirashi`: the first
+/// play of a day mails Nook's rare-furniture handbill when the spotlight piece
+/// (or any furniture in stock) is on the rare list.
+fn rare_notice(
+    shop: &mut ShopData,
+    now: crate::clock::Now,
+    disc: Option<&crate::game_disc::GameDisc>,
+    identity: &crate::save::PlayerIdentity,
+    mailbox: &mut crate::mail::HouseMailbox,
+) {
+    use rustimal_logic::leaflet::{rare_chirashi_template, rare_notice_gate, RareNotice};
+    let today = date(now);
+    // Only after today's goods are laid out.
+    if shop.stock.is_empty() || shop.stock_day.is_none() {
+        return;
+    }
+    let tier = shop.shop.shop_level as usize;
+    let gate = rare_notice_gate(
+        today,
+        now.hour,
+        shop.played,
+        shop.shop.renewal_ymd == today,
+        shop.events.bargain_date() == Some(today),
+        tier,
+    );
+    let rare = match gate {
+        RareNotice::Wait => return,
+        RareNotice::Played => None,
+        RareNotice::Check => {
+            let spotlight = shop.rare_item != 0 && crate::goods::is_rare_furniture(shop.rare_item);
+            let found = if spotlight {
+                Some(shop.rare_item)
+            } else {
+                shop.stock.iter().map(|g| g.item).find(|&item| {
+                    crate::items::is_furniture(item) && crate::goods::is_rare_furniture(item)
+                })
+            };
+            let Some(item) = found else { return };
+            shop.stock
+                .iter()
+                .find(|g| g.item == item)
+                .map(|g| g.name.clone())
+        }
+    };
+    let Some(name) = rare else {
+        shop.played = Some((today.0, today.1, today.2, now.hour));
+        return;
+    };
+    let Some(text) = disc.and_then(|d| d.text.as_ref()) else {
+        return;
+    };
+    shop.played = Some((today.0, today.1, today.2, now.hour));
+    if !mailbox.0.has_room() {
+        return;
+    }
+    let mut ctx = crate::messages::MsgContext {
+        player_name: identity.player.clone(),
+        free: vec![String::new(); 20],
+        ..default()
+    };
+    ctx.free[7] = name;
+    if let Some(letter) = text.letter(rare_chirashi_template(tier, 1) as usize, &ctx) {
+        mailbox.0.push(crate::mail::Letter {
+            sender: "Nook".into(),
+            header: Some(letter.header),
+            body: letter.body,
+            footer: Some(letter.footer),
+            paper: 55,
+            ..default()
+        });
+        info!("Nook's rare furniture notice sent");
     }
 }

@@ -114,6 +114,8 @@ pub struct ShopData {
     pub paint: u8,
     /// `Shop_c.rare_item`: today's spotlight furniture, 0 for none.
     pub rare_item: ItemId,
+    /// The last play time the rare-furniture notice saved (`goki.time`).
+    pub played: Option<(u16, u8, u8, u8)>,
 }
 
 impl ShopData {
@@ -141,6 +143,7 @@ impl ShopData {
         self.shop.upgrading_today = progress.pending;
         self.shop.renewal_ymd = progress.renewal;
         self.shop.send_upgrade_notice = progress.notice;
+        self.played = progress.played;
         if schedule::advance(
             &mut self.shop,
             crate::clock::now(),

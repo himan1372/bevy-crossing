@@ -295,6 +295,60 @@ pub fn rare_chirashi_template(shop_level: usize, rare_type: usize) -> u16 {
     RARE_CHIRASHI[shop_level][rare_type & 1]
 }
 
+/// `mTM_FIELD_RENEW_HOUR`: the hour daily things reset.
+pub const FIELD_RENEW_HOUR: u8 = 6;
+
+/// `shop_close_time_table`: the last hour the rare-furniture notice may go out.
+pub fn rare_notice_close_hour(shop_level: usize) -> u8 {
+    [22, 23, 22, 22][shop_level.min(3)]
+}
+
+/// What `mSP_SetShopRareFurnitureChirashi` does before it looks at the stock.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RareNotice {
+    /// Nothing, and the play time is left alone (`return`).
+    Wait,
+    /// No leaflet today, but the play time is saved (`mCkRh_SavePlayTime`).
+    Played,
+    /// Look for a rare piece in the stock and send the leaflet.
+    Check,
+}
+
+/// The gates of `mSP_SetShopRareFurnitureChirashi`. `played` is the saved
+/// play time (`goki.time`: year, month, day, hour of the last save of it);
+/// `renewed` is the shop renewal day and `bargain` a bargain day.
+pub fn rare_notice_gate(
+    today: (u16, u8, u8),
+    hour: u8,
+    played: Option<(u16, u8, u8, u8)>,
+    renewed: bool,
+    bargain: bool,
+    shop_level: usize,
+) -> RareNotice {
+    if today.2 == crate::game_time::get_days_by_month(today.0, today.1) || renewed || bargain {
+        return RareNotice::Played;
+    }
+    if let Some((y, m, d, h)) = played {
+        if (y, m, d) == today {
+            return RareNotice::Wait;
+        }
+        let mut next = crate::game_time::RtcTime {
+            year: y,
+            month: m,
+            day: d,
+            ..Default::default()
+        };
+        crate::game_time::add_days(&mut next, 1);
+        if (next.year, next.month, next.day) == today && h < FIELD_RENEW_HOUR {
+            return RareNotice::Wait;
+        }
+    }
+    if hour < FIELD_RENEW_HOUR || hour > rare_notice_close_hour(shop_level) {
+        return RareNotice::Wait;
+    }
+    RareNotice::Check
+}
+
 /// Build an event handbill mail (aEvMgr_actor_regist_handbill): handbill
 /// template from ROM, RECV font, paper offset, mail type. Free-string
 /// substitution (item names / dates) happens before this call.

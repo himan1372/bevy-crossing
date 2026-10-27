@@ -465,7 +465,10 @@ fn collect_save(
         shop_stock: shop.stock.clone(),
         shop_sales: shop.shop.sales_sum,
         shop_tier: shop.shop.shop_level as u8,
-        shop_progress: Some(crate::shop::schedule::Progress::from(&shop.shop)),
+        shop_progress: Some(crate::shop::schedule::Progress {
+            played: shop.played,
+            ..crate::shop::schedule::Progress::from(&shop.shop)
+        }),
         shop_events: Some(shop.events.clone()),
         shop_turnips: Some(shop.turnips.clone()),
         furniture: Vec::new(),

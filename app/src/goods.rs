@@ -137,6 +137,22 @@ fn rare_item() -> ItemId {
     RARE_ITEM.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+/// `mSP_SearchItemCategoryPriority(item, furniture, rare)`: the item is on
+/// the furniture list the shop's priorities make rare.
+pub fn is_rare_furniture(item: ItemId) -> bool {
+    let Some(goods) = LISTS.get() else {
+        return false;
+    };
+    let Ok(priorities) = PRIORITIES.lock() else {
+        return false;
+    };
+    priorities[Kind::Furniture as usize]
+        .iter()
+        .position(|&p| p == 2)
+        .and_then(|i| goods.lists[Kind::Furniture as usize].get(i))
+        .is_some_and(|list| list.contains(&item))
+}
+
 /// A roll today with the shop's priorities and no luck either way.
 pub fn roll_now() -> Roll {
     let now = crate::clock::now();
