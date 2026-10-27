@@ -409,3 +409,5 @@
 {"action":"complete","task":"shop-password-send","agent":"claude","timestamp":"2026-10-26T23:55:36Z"}
 {"action":"claim","task":"shop-password-codes","agent":"claude","timestamp":"2026-10-27T00:03:20Z"}
 {"action":"complete","task":"shop-password-codes","agent":"claude","timestamp":"2026-10-27T00:13:36Z"}
+{"action":"claim","task":"shop-password-handover","agent":"claude","timestamp":"2026-10-27T00:22:54Z"}
+{"action":"release","task":"shop-password-handover","agent":"claude","timestamp":"2026-10-27T00:24:12Z"}
