@@ -30,7 +30,7 @@ shop spotlight rare furniture (tiers 2/3, `shop_rare` save field, FE09 display).
 Rare-furniture notice letter done (`completed/shop-rare-notice.md`). Known gaps: villager move-in now uses the field rank (`completed/villager-move-in-rank.md`); fish spawn now scales with the field rank (`completed/fish-spawn-field-rank.md`); rare-furniture notice letter
 (`mSP_SetShopRareFurnitureChirashi`) and buying-the-rare sold sign not driven; "escort/twin"
 bargain choreography unaudited; grab-bag capacity warning panel; Nook present/hand-over
-frames not eyeballed; bargain RNG still a local adapter. Diary and letter writing now use the retail grid (`completed/diary-retail-grid.md`, `completed/letters-retail-grid.md`). Candidate next tasks: grid leftovers (scrolling window texture, cursor pulse, pad rumble; accent key and voices are done, `completed/grid-leftovers.md`). Parent retail/M4 and Philip's acceptance stay open; Philip chooses the next task.
+frames not eyeballed; bargain RNG still a local adapter. Diary and letter writing now use the retail grid (`completed/diary-retail-grid.md`, `completed/letters-retail-grid.md`). Candidate next tasks: grid leftovers (cursor pulse, pad rumble; the scrolling window texture is done too, accent key and voices are done, `completed/grid-leftovers.md`). Parent retail/M4 and Philip's acceptance stay open; Philip chooses the next task.
 
 ## Latest continuation - 2026-10-26
 

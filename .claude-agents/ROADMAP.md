@@ -1032,3 +1032,5 @@ Philip acceptance stay open.
 2026-10-27 claude: shop-rare-sold-sign. Buying the spotlight rare furniture was driven end to end: the SOLD OUT sign replaces it, survives a restart and the next day's restock brings a new piece and notice. No code change. See backlog/shop-rare-sold-sign.md.
 
 2026-10-27 claude: grid-leftovers. The retail letter grid gets its X accent exchange (Ctrl+X in the diary and letters; arrow plate, ornament table kernel), a voice for typed keys and the R pressed face. Scrolling window texture, cursor pulse and pad rumble remain. See backlog/grid-leftovers.md.
+
+2026-10-27 claude: grid-leftovers (scrolling window texture). The secret-code and receiver windows' cloth background now scrolls at the original menu rate. Cursor pulse and pad rumble remain. See backlog/grid-window-scroll.md.

@@ -1429,7 +1429,9 @@ impl Plugin for ShopNookPlugin {
                 (
                     preview::advance.before(interact),
                     interact.in_set(InteractSet::Objects),
-                    (password::input, password::draw).chain().after(interact),
+                    (password::input, password::draw, password::scroll)
+                        .chain()
+                        .after(interact),
                     handover::animate
                         .after(interact)
                         .after(crate::character::CharacterAnimationSet),

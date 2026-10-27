@@ -515,6 +515,10 @@ pub(crate) struct PasswordAssets {
     shown: Option<u64>,
     white: Option<Handle<Image>>,
     skin: Skin,
+    /// The window's background materials, whose texture slides.
+    frame: Vec<Handle<N64Material>>,
+    /// `menu_control.texture_pos`: the background's slide, 0 to 1024.
+    slide: f32,
 }
 
 fn scaled(text: &str, scale: u8) -> String {
@@ -550,6 +554,7 @@ pub(crate) fn draw(
             commands.entity(root).despawn();
         }
         assets.shown = None;
+        assets.frame.clear();
         return;
     }
     let (Some(disc), Some(font)) = (disc, font) else {
@@ -625,6 +630,55 @@ pub(crate) fn draw(
             &white,
             &mut stores,
         ),
+    }
+    // The background model, again from the cache, is the one that slides.
+    let (key, mode) = match ui.mode {
+        Mode::Code => ("pwd", "pwd_win_mode"),
+        Mode::Receiver => ("pas", "pas_win_mode"),
+    };
+    let background = if ui.mode == Mode::Code {
+        "pwd_win_model"
+    } else {
+        "pas_win_model"
+    };
+    let frame = skin.window(&disc, key, &[mode, background], [255; 4], &mut stores);
+    assets.frame = frame.into_iter().map(|(_, material)| material).collect();
+}
+
+/// `gDPSetTileSize_Dolphin(RENDERTILE, -texture_pos * 4, ..)` before the
+/// window's background (`mPC_set_frame_dl`, `mPM_set_frame_dl`): the pattern
+/// creeps with `mSM_menu_control_move`'s 0.3535 per tick, as the pockets'.
+pub(crate) fn scroll(
+    time: Res<Time>,
+    mut assets: ResMut<PasswordAssets>,
+    mut n64: ResMut<Assets<N64Material>>,
+    images: Res<Assets<Image>>,
+) {
+    if assets.frame.is_empty() {
+        return;
+    }
+    assets.slide = (assets.slide + 0.3535 * time.delta_secs() * 60.0).rem_euclid(1024.0);
+    for handle in &assets.frame {
+        let Some(mut material) = n64.get_mut(handle) else {
+            continue;
+        };
+        // Only the cloth pieces (tile 0 the cloth, tile 1 their shape mask)
+        // keep the slid tile; the other parts load their own tile 0.
+        if material.texture1.is_none() {
+            continue;
+        }
+        let Some(size) = material
+            .texture
+            .as_ref()
+            .and_then(|h| images.get(h))
+            .map(|image| image.size_f32())
+        else {
+            continue;
+        };
+        // The tile origin is -s/4 texels with s = -pos * 4: the pattern is
+        // sampled `pos` texels further on.
+        material.combiner.extra.y = (assets.slide / size.x.max(1.0)).fract();
+        material.combiner.extra.z = (assets.slide / size.y.max(1.0)).fract();
     }
 }
 

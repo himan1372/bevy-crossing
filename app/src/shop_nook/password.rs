@@ -44,7 +44,7 @@ const RSV_NO: u16 = 0xFFFF;
 
 mod ui;
 pub(super) use ui::Receiver;
-pub(crate) use ui::{draw, input, PasswordAssets, PasswordUi};
+pub(crate) use ui::{draw, input, scroll, PasswordAssets, PasswordUi};
 
 /// What `aNSC_pc_check_password` decided.
 pub(super) enum Outcome {
