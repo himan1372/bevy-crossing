@@ -391,7 +391,9 @@ pub(crate) fn interact(
             *focus = InputFocus::World;
             return;
         };
-        let (outcome, decoded) = password::check(&disc, &text, &identity.player, &identity.town);
+        let roll = password.next_roll();
+        let (outcome, decoded) =
+            password::check(&disc, &text, &identity.player, &identity.town, roll);
         if let Some(decoded) = &decoded {
             password::fill_context(&disc, &mut flow.context, &text, decoded);
         }
@@ -400,14 +402,10 @@ pub(crate) fn interact(
             password::Outcome::Wrong => (password::msg::WRONG, Step::PasswordRetry),
             password::Outcome::Bad => (password::msg::BAD, Step::PasswordRetry),
             password::Outcome::CardE => (password::msg::CARDE, Step::Finish),
-            password::Outcome::Present { npc, item } => (
-                if npc {
-                    password::msg::GOOD_NPC
-                } else {
-                    password::msg::GOOD_USER
-                },
-                Step::PasswordPresent { item },
-            ),
+            password::Outcome::Present { message, item } => {
+                (message, Step::PasswordPresent { item })
+            }
+            password::Outcome::Lost => (password::msg::GOOD_MAGAZINE_2, Step::Finish),
         };
         *focus = InputFocus::Dialogue;
         say(&disc, &mut dialogue, actor, &flow.context, message);

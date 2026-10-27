@@ -7,7 +7,7 @@ use bevy::camera::visibility::RenderLayers;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::input::ButtonState;
 use bevy::prelude::*;
-use rustimal_logic::furniture::room_item_from_furniture;
+use rustimal_logic::furniture::{ftr_idx_2_item_no, room_item_from_furniture, Direction};
 use rustimal_logic::password as pw;
 
 use crate::game_disc::GameDisc;
@@ -29,9 +29,13 @@ pub(super) mod msg {
     pub const SAY: usize = 312;
     pub const WRONG: usize = 313;
     pub const DECLINE: usize = 314;
+    pub const GOOD_FAMICON: usize = 315;
     pub const GOOD_NPC: usize = 316;
+    pub const GOOD_MAGAZINE_1: usize = 317;
     pub const CARDE: usize = 318;
     pub const GOOD_USER: usize = 319;
+    pub const GOOD_CARDEM: usize = 320;
+    pub const GOOD_MAGAZINE_2: usize = 322;
     pub const GIFT_OUT: usize = 323;
     pub const BAD: usize = 324;
 }
@@ -77,6 +81,7 @@ pub(crate) struct PasswordUi {
     text: [u8; 28],
     /// Presents handed over since the game started.
     pub presents: u32,
+    rng: u32,
     just_opened: bool,
     revision: u64,
 }
@@ -97,6 +102,7 @@ impl Default for PasswordUi {
             done: None,
             text: [pw::PW_CHAR_SPACE; 28],
             presents: 0,
+            rng: 0,
             just_opened: false,
             revision: 0,
         }
@@ -104,6 +110,21 @@ impl Default for PasswordUi {
 }
 
 impl PasswordUi {
+    /// `RANDOM_F(100.0)` for a magazine code. The port keeps its own
+    /// generator, not the original's global state.
+    pub(super) fn next_roll(&mut self) -> f32 {
+        if self.rng == 0 {
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(1, |d| d.subsec_nanos());
+            self.rng = nanos | 1;
+        }
+        self.rng ^= self.rng << 13;
+        self.rng ^= self.rng >> 17;
+        self.rng ^= self.rng << 5;
+        (self.rng >> 8) as f32 / (1u32 << 24) as f32 * 100.0
+    }
+
     /// `aNSC_pc_input_pw_start_wait_init`: a fresh question clears the text.
     pub(super) fn clear(&mut self) {
         self.text = [pw::PW_CHAR_SPACE; 28];
@@ -175,8 +196,10 @@ pub(super) enum Outcome {
     Bad,
     /// A card-e code: Nook explains and gives nothing.
     CardE,
-    /// A valid code for this player.
-    Present { npc: bool, item: u16 },
+    /// A valid code: the message that announces it, and the item.
+    Present { message: usize, item: u16 },
+    /// A magazine code that did not win (`aNSC_PSW_GOOD_MAGAZINE_2`).
+    Lost,
 }
 
 /// A decoded code's recipient and item for the message fields.
@@ -258,6 +281,7 @@ pub(super) fn check(
     text: &[u8; 28],
     player: &str,
     town: &str,
+    roll: f32,
 ) -> (Outcome, Option<Decoded>) {
     if text[27] == pw::PW_CHAR_SPACE {
         return (Outcome::Decline, None);
@@ -274,29 +298,38 @@ pub(super) fn check(
         player: name_text(&fields.str0),
         item: fields.item,
     };
+    let item = fields.item;
+    // The name-checked kinds answer Bad for someone else's code.
+    let named = |message: usize| {
+        if names_match(&fields, player, town) {
+            Outcome::Present { message, item }
+        } else {
+            Outcome::Bad
+        }
+    };
     let outcome = match fields.type_ {
-        pw::PW_TYPE_USER if fields.hit_rate_index == 1 => {
-            if names_match(&fields, player, town) {
-                Outcome::Present {
-                    npc: false,
-                    item: fields.item,
-                }
-            } else {
-                Outcome::Bad
-            }
-        }
+        pw::PW_TYPE_FAMICOM if fields.hit_rate_index == 1 => named(msg::GOOD_FAMICON),
         pw::PW_TYPE_POPULAR if fields.hit_rate_index == 1 && npc_code_ok(&fields) => {
-            if names_match(&fields, player, town) {
-                Outcome::Present {
-                    npc: true,
-                    item: fields.item,
-                }
-            } else {
-                Outcome::Bad
-            }
+            named(msg::GOOD_NPC)
         }
+        pw::PW_TYPE_USER if fields.hit_rate_index == 1 => named(msg::GOOD_USER),
         pw::PW_TYPE_CARD_E => Outcome::CardE,
-        // Famicom, magazine and mini card-e codes are not redeemed yet.
+        pw::PW_TYPE_CARD_E_MINI if fields.hit_rate_index == 1 => Outcome::Present {
+            message: msg::GOOD_CARDEM,
+            item,
+        },
+        // A magazine code wins with the table's chance for its rate.
+        pw::PW_TYPE_MAGAZINE => match usize::try_from(fields.hit_rate_index)
+            .ok()
+            .and_then(|rate| pw::PW_MAGAZINE_HIT_RATE.get(rate))
+        {
+            Some(&chance) if roll < chance => Outcome::Present {
+                message: msg::GOOD_MAGAZINE_1,
+                item,
+            },
+            Some(_) => Outcome::Lost,
+            None => Outcome::Wrong,
+        },
         _ => Outcome::Wrong,
     };
     (outcome, Some(decoded))
@@ -305,10 +338,23 @@ pub(super) fn check(
 /// `mMpswd_check_present`. A reserved item is refused rather than handed over.
 fn present_ok(disc: &GameDisc, fields: &pw::PwFields) -> bool {
     match fields.type_ {
-        pw::PW_TYPE_FAMICOM => false,
+        pw::PW_TYPE_FAMICOM => famicom_item(fields.item),
         pw::PW_TYPE_USER => present_user(fields.item),
         _ => fields.item != RSV_NO && present_other(disc, fields.item),
     }
+}
+
+/// `pswd_famicom_list`: the fifteen Famicom furniture indices, south facing
+/// (`mMpswd_check_present_famicom`).
+const FAMICOM_LIST: [u16; 15] = [
+    0x36a, 0x36b, 0x36c, 0x36d, 0x36e, 0x36f, 0x370, 0x377, 0x371, 0x372, 0x373, 0x374, 0x375,
+    0x376, 0x378,
+];
+
+fn famicom_item(item: u16) -> bool {
+    FAMICOM_LIST
+        .iter()
+        .any(|&index| ftr_idx_2_item_no(index, Direction::South) == item)
 }
 
 fn listed(kind: Kind, item: u16, lists: &[usize]) -> bool {

@@ -979,3 +979,9 @@ Redeeming and sending user codes now both work; Famicom, magazine and mini
 card-e codes, the retail letter grid and hand-over animations remain. See
 backlog/shop-password-send.md. Counts/parent/M4 and Philip acceptance stay open.
 
+2026-10-26 claude: shop-password-codes redeems Famicom, magazine (random win/loss
+by the source hit-rate table) and mini card-e passwords with the original
+messages; every password kind except the retail letter grid and hand-over
+animation now works at the counter. See backlog/shop-password-codes.md.
+Counts/parent/M4 and Philip acceptance stay open.
+
