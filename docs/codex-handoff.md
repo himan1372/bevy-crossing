@@ -2,7 +2,7 @@
 
 ## Claude continuation - 2026-10-27 (read this first)
 
-Identity `claude`, branch `main`, all work below is committed and pushed (last `0e560660`);
+Identity `claude`, branch `main`, all work below is committed and pushed (last `3125bb56`);
 only `.gitignore` and `savegame.json` are untracked/modified and must NOT be committed.
 Workflow that held all session: read the repo skills; write `.claude-agents/backlog/<slug>.md`
 and `bash task-claimer.sh claim <slug> claude`; sequential `cargo -j 1`; QA only in a Temp
@@ -27,10 +27,25 @@ field rank + player id (`logic/src/field_assessment.rs`, `app/src/field_rank.rs`
 `PlayerIdentity.id`, saved `dust_flag`; feeds bargain scheduling and insect hatching),
 shop spotlight rare furniture (tiers 2/3, `shop_rare` save field, FE09 display).
 
-Rare-furniture notice letter done (`completed/shop-rare-notice.md`). Known gaps: villager move-in now uses the field rank (`completed/villager-move-in-rank.md`); fish spawn now scales with the field rank (`completed/fish-spawn-field-rank.md`); rare-furniture notice letter
-(`mSP_SetShopRareFurnitureChirashi`) and buying-the-rare sold sign not driven; "escort/twin"
-bargain choreography unaudited; grab-bag capacity warning panel; Nook present/hand-over
-frames not eyeballed; bargain RNG still a local adapter. Diary and letter writing now use the retail grid (`completed/diary-retail-grid.md`, `completed/letters-retail-grid.md`). Candidate next tasks: grid leftovers (cursor pulse, pad rumble; the scrolling window texture is done too, accent key and voices are done, `completed/grid-leftovers.md`). Parent retail/M4 and Philip's acceptance stay open; Philip chooses the next task.
+Also done after that (each has `completed/<slug>.md`): diary and letter writing on the retail grid
+(`diary-retail-grid`, `letters-retail-grid`; text-cursor kernel `logic/src/diary.rs` with `Limits`; Ctrl+arrows
+text cursor, F4 Start, PgUp/PgDn addressee), rare-furniture notice letter (`shop-rare-notice`,
+`logic/src/leaflet.rs::rare_notice_gate`, saved `shop_progress.played`), rare piece purchase and sold sign
+verified (`shop-rare-sold-sign`, no code change), villager move-in by field rank (`villager-move-in-rank`,
+`field_rank::rank_at_start`), fish spawn by field rank (`fish-spawn-field-rank`, faithful
+`logic::ecology::fish_select`), grid leftovers (`grid-leftovers`: Ctrl+X accent exchange with its plate,
+typed-key voices, R face) and the sliding cloth background of the secret-code windows (`grid-window-scroll`).
+
+Known gaps: "escort/twin" bargain choreography unaudited; grab-bag capacity warning panel; Nook
+present/hand-over frames not eyeballed; bargain RNG still a local adapter; grid cursor pulse and pad
+rumble; accent swap in the secret-code windows; the voices and receiver-window scroll were not
+heard/driven; Rewrite of a letter was not driven; paper roll-in animations. Candidate next tasks: the
+grid cursor pulse, the escort/twin choreography audit, the grab-bag warning panel. Parent retail/M4 and
+Philip's acceptance stay open; Philip chooses the next task.
+QA traps learned: a capture exe is needed for BRP (a default `cargo build` overwrites `target/debug`);
+a first shop visit with a loan starts Nook's house talk and Space on its Yes/No orders a house
+expansion; face a shop display with a short `KeyW` (20 ms) before `E`; a modal (mail notice) can block
+movement keys until Space/Escape.
 
 ## Latest continuation - 2026-10-26
 
