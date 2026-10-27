@@ -252,6 +252,7 @@ pub(crate) fn update_focus(
     preview: Res<crate::shop_nook::preview::Preview>,
     password: Res<crate::shop_nook::password::PasswordUi>,
     handover: Res<crate::shop_nook::handover::HandOver>,
+    twins: Res<crate::shop_nook::Twins>,
     mut focus: ResMut<InputFocus>,
 ) {
     let next = if pause.is_some_and(|p| *p.get() == PauseState::Paused) {
@@ -268,6 +269,7 @@ pub(crate) fn update_focus(
         || preview.active.is_some()
         || dialogue.external_result.is_some()
         || handover.busy()
+        || twins.waiting
         || ((pockets.selling || pockets.donating || pockets.sending || pockets.mailing)
             && !pockets.open)
         || pockets.mailbox_wait

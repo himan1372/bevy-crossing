@@ -34,6 +34,10 @@ pub(crate) struct Shopkeeper {
 pub(crate) struct Twins {
     pub(crate) selected: u8,
     pub(crate) talking: u8,
+    /// A keeper has been asked to come and speak: the player is held (`mDemo_TYPE_SPEAK`).
+    pub(crate) waiting: bool,
+    /// `talk_start_tim` ran out: he stops (`aNSC_ACTION_WAIT`) and turns to the player.
+    pub(crate) expired: bool,
     /// The goodbye at the stairs (`aNSC_ACTION_GOODBYE_WAIT`), asked for by `department_stairs`.
     pub(crate) goodbye: Goodbye,
 }
@@ -88,6 +92,11 @@ enum Step {
     Finish,
     /// The twins' goodbye (35) at the stairs is up.
     Goodbye,
+    /// A display was asked for; the keeper is on his way to speak. `ticks` is -1 until the first frame.
+    Greeting {
+        index: usize,
+        ticks: f32,
+    },
     /// The password question (312) is up; the entry window opens next.
     PasswordSay,
     /// The entry window is open.
@@ -304,6 +313,63 @@ fn set_twin(ctx: &mut ShopContext, twin: u8) {
     ctx.text.talk_name = if twin == 0 { "Timmy" } else { "Tommy" }.into();
 }
 
+/// The display conversation once the keeper has come over (`aNSC_message_ctrl_force_talk_start`).
+fn begin_display_sale(
+    disc: &GameDisc,
+    dialogue: &mut DialogueState,
+    actor: Entity,
+    flow: &mut Conversation,
+    index: usize,
+    stock: &crate::shop::StockItem,
+) {
+    flow.context.items[0] = stock.name.clone();
+    flow.context.item_articles[0] = item_article(disc, stock.item);
+    flow.context.free[4] = stock.price.to_string();
+    say(
+        disc,
+        dialogue,
+        actor,
+        &flow.context,
+        if (0x222D..=0x2238).contains(&stock.item) {
+            202
+        } else if preview::Surface::of(stock.item) == Some(preview::Surface::Shirt) {
+            18
+        } else if preview::Surface::of(stock.item).is_some() {
+            40
+        } else if (0x2000..=0x20FF).contains(&stock.item) {
+            222
+        } else {
+            30
+        },
+    );
+    flow.step = if preview::Surface::of(stock.item).is_some() {
+        Step::ShowQuestion {
+            index,
+            item: stock.item,
+            price: stock.price,
+        }
+    } else {
+        Step::Purchase {
+            index,
+            item: stock.item,
+            price: stock.price,
+        }
+    };
+}
+
+/// `aNSC_message_ctrl`: while the keeper has asked to speak, he keeps following the player; the
+/// talk starts once he is within 85 units (the twins) or 80 (the others) and has turned to the
+/// player, or when `talk_start_tim` (180 frames) runs out.
+const GREETING_FRAMES: f32 = 180.0;
+
+fn greeting_distance(upper: bool) -> f32 {
+    if upper {
+        85.0
+    } else {
+        80.0
+    }
+}
+
 fn request(disc: &GameDisc, dialogue: &mut DialogueState, actor: Entity, flow: &mut Conversation) {
     say(disc, dialogue, actor, &flow.context, 23);
     flow.catalog_offered = false;
@@ -449,6 +515,39 @@ pub(crate) fn interact(
     if *inside_actor != Some(first) {
         *inside_actor = Some(first);
         *inside_for = Some(0.0);
+    }
+    if let Step::Greeting { index, ticks } = flow.step {
+        // -1 marks the request frame: `calc_talk_start_tim` then starts the 180-frame count.
+        let ticks = if ticks < 0.0 {
+            0.0
+        } else {
+            ticks + time.delta_secs() * 60.0
+        };
+        let Some(stock) = shop.goods().get(index).filter(|g| !g.sold).cloned() else {
+            flow.step = Step::Idle;
+            return;
+        };
+        let Ok((player_at, _, _)) = player.single() else {
+            return;
+        };
+        let to_player = (player_at.translation - nook_transform.translation).with_y(0.0);
+        let (yaw, _, _) = nook_transform.rotation.to_euler(EulerRot::YXZ);
+        let turned = (to_player.x.atan2(to_player.z) - yaw + std::f32::consts::PI)
+            .rem_euclid(std::f32::consts::TAU)
+            - std::f32::consts::PI;
+        let near = to_player.length() * 40.0 < greeting_distance(layout.upper);
+        if (near || ticks >= GREETING_FRAMES) && turned.abs() < 12.0_f32.to_radians() {
+            if layout.upper {
+                // The selected twin speaks, then the other is next (`aNMD_selectIdx`).
+                twins.selected ^= 1;
+                info!("Twins: display sale taken by twin {}", flow.context.twin);
+            }
+            *focus = InputFocus::Dialogue;
+            begin_display_sale(&disc, &mut dialogue, actor, &mut flow, index, &stock);
+        } else {
+            flow.step = Step::Greeting { index, ticks };
+        }
+        return;
     }
     if matches!(flow.step, Step::PasswordEntry) {
         if password.open {
@@ -1249,56 +1348,20 @@ pub(crate) fn interact(
     if let Some(display) = display {
         if layout.upper {
             // A display sale goes to the selected twin, then the other is next.
-            let twin = twins.selected;
-            if let Some((chosen, _)) = keeper(&nook, twin) {
-                actor = chosen;
-            }
-            set_twin(&mut flow.context, twin);
-            twins.talking = twin;
-            twins.selected ^= 1;
-            info!("Twins: display sale taken by twin {twin}");
+            set_twin(&mut flow.context, twins.selected);
         }
         let Some(stock) = shop.goods().get(display.stock_index) else {
             return;
         };
+        actions.consume(Action::Interact);
         if stock.sold {
-            actions.consume(Action::Interact);
             return;
         }
-        actions.consume(Action::Interact);
-        *focus = InputFocus::Dialogue;
-        flow.context.items[0] = stock.name.clone();
-        flow.context.item_articles[0] = item_article(&disc, stock.item);
-        flow.context.free[4] = stock.price.to_string();
-        say(
-            &disc,
-            &mut dialogue,
-            actor,
-            &flow.context,
-            if (0x222D..=0x2238).contains(&stock.item) {
-                202
-            } else if preview::Surface::of(stock.item) == Some(preview::Surface::Shirt) {
-                18
-            } else if preview::Surface::of(stock.item).is_some() {
-                40
-            } else if (0x2000..=0x20FF).contains(&stock.item) {
-                222
-            } else {
-                30
-            },
-        );
-        flow.step = if preview::Surface::of(stock.item).is_some() {
-            Step::ShowQuestion {
-                index: display.stock_index,
-                item: stock.item,
-                price: stock.price,
-            }
-        } else {
-            Step::Purchase {
-                index: display.stock_index,
-                item: stock.item,
-                price: stock.price,
-            }
+        // The keeper requests to speak (`mDemo_TYPE_SPEAK`); the player is held until he is close.
+        twins.talking = flow.context.twin;
+        flow.step = Step::Greeting {
+            index: display.stock_index,
+            ticks: -1.0,
         };
     } else {
         // Talking: to whichever twin the player faces.
@@ -1353,6 +1416,7 @@ fn follow(
     focus: Res<InputFocus>,
     time: Res<Time>,
     raffle: Res<crate::raffle::RaffleNook>,
+    twins: Res<Twins>,
     player: Query<&Transform, With<Player>>,
     mut nook: Query<(&mut Transform, &mut Shopkeeper), Without<Player>>,
     obstacles: Res<crate::shop::ShopObstacles>,
@@ -1424,7 +1488,8 @@ fn follow(
     let current_zone = route_zone(pos);
     let player_zone = route_zone(target);
     let can_walk = !layout.upper
-        && focus.is_world()
+        && (focus.is_world() || twins.waiting)
+        && !twins.expired
         && delta.length() >= STOP_DISTANCE
         && if layout.tier == 0 {
             // aNSM_check_safe_zone.
@@ -1499,12 +1564,24 @@ fn follow(
 /// `aNSC_decide_next_move_act`): each follows the player along the route of the floor's sale type,
 /// waits within 80, walks inside 110 and runs beyond.
 #[allow(clippy::too_many_arguments)]
+fn hold_player(flow: Res<Conversation>, mut twins: ResMut<Twins>) {
+    let waiting = matches!(flow.step, Step::Greeting { .. });
+    let expired = matches!(flow.step, Step::Greeting { ticks, .. } if ticks >= GREETING_FRAMES);
+    if twins.waiting != waiting {
+        twins.waiting = waiting;
+    }
+    if twins.expired != expired {
+        twins.expired = expired;
+    }
+}
+
 fn follow_twins(
     disc: Option<Res<GameDisc>>,
     location: Res<State<ShopLocation>>,
     focus: Res<InputFocus>,
     time: Res<Time>,
     shop: Res<ShopData>,
+    hold: Res<Twins>,
     player: Query<&Transform, With<Player>>,
     mut twins: Query<(&mut Transform, &mut Shopkeeper), Without<Player>>,
     obstacles: Res<crate::shop::ShopObstacles>,
@@ -1549,8 +1626,10 @@ fn follow_twins(
         let distance = delta.length();
         let (zone, player_zone) = (zone_of(pos), zone_of(target));
         // The wait cases: the player at the door end of the floor, or close.
-        let waiting =
-            !focus.is_world() || (target.z < 120.0 && (zone == 2 || zone == 3)) || distance < 80.0;
+        let waiting = !(focus.is_world() || hold.waiting)
+            || hold.expired
+            || (target.z < 120.0 && (zone == 2 || zone == 3))
+            || distance < 80.0;
         let travelling = !waiting && zone != player_zone;
         let direction = if travelling {
             let next = *keeper
@@ -1659,6 +1738,7 @@ impl Plugin for ShopNookPlugin {
                 (
                     preview::advance.before(interact),
                     interact.in_set(InteractSet::Objects),
+                    hold_player.after(interact),
                     (password::input, password::draw, password::scroll)
                         .chain()
                         .after(interact),
