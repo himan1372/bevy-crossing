@@ -1016,3 +1016,5 @@ Philip acceptance stay open.
 2026-10-27 claude: seasonal-balloon-handover. The sale-day gift balloon is handed over with the generic hand-over (present model and arm clips). Remaining seasonal items are blocked or optional: identity/assessment inputs, spotlight exclusion, escort/twin, grab-bag warning panel. See completed/seasonal-balloon-handover.md.
 
 2026-10-27 claude: field-rank-player-id. The town's beauty rating is now computed from the live field items (kernel logic/field_assessment.rs, app/field_rank.rs) with a saved trash flag, and the player gets a saved personal ID; both feed the special-event scheduler, and the rating drives insect hatching. Villager move-in, fish, balloons and the shrine remain unwired. See completed/field-rank-player-id.md.
+
+2026-10-27 claude: shop-spotlight-rare. Nookway and Nookington's stock a daily spotlight rare furniture (rolled first from the rare list, shown at its own FE09 spot, saved, excluded from other draws incl. bargains and grab bags). The rare-furniture notice letter is not wired. See completed/shop-spotlight-rare.md.

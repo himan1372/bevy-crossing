@@ -124,6 +124,19 @@ pub fn set_priorities(p: [[u8; 3]; 5]) {
     }
 }
 
+/// The shop's spotlight rare furniture (`Shop_c.rare_item`, 0 when none):
+/// no draw may pick it again (`mSP_SelectRandomItem_New`).
+static RARE_ITEM: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(0);
+
+/// Records the spotlight item.
+pub fn set_rare_item(item: ItemId) {
+    RARE_ITEM.store(item, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn rare_item() -> ItemId {
+    RARE_ITEM.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// A roll today with the shop's priorities and no luck either way.
 pub fn roll_now() -> Roll {
     let now = crate::clock::now();
@@ -291,7 +304,7 @@ fn select_items(
             continue;
         };
         // Duplicates only when the list is too short to avoid them.
-        if (!out.contains(&item) && !exclude.contains(&item))
+        if (!out.contains(&item) && !exclude.contains(&item) && item != rare_item())
             || (n as usize) < count + exclude.len()
         {
             out.push(item);
@@ -300,8 +313,7 @@ fn select_items(
     out
 }
 
-/// Goods per shop tier (the spotlight furniture of the two bigger shops,
-/// `rare_item`, isn't stocked yet) (`l_zakka_goods` .. `l_dsuper_goods`):
+/// Goods per shop tier (`l_zakka_goods` .. `l_dsuper_goods`):
 /// stationery, clothing, furniture, rare furniture, carpets, wallpaper,
 /// -, -, saplings, tools, flower bags.
 const GOODS_COUNT: [[u8; 11]; 4] = [
@@ -366,7 +378,7 @@ pub(crate) fn bargain_stock(
     for rarity in [2, 1, 0] {
         let candidates: Vec<_> = pool(rarity)?
             .into_iter()
-            .filter(|&item| !collection.has(item))
+            .filter(|&item| !collection.has(item) && item != rare_item())
             .collect();
         if !candidates.is_empty() {
             out.push(candidates[below(candidates.len() as u32) as usize]);
@@ -433,13 +445,29 @@ pub fn make_goods_list(
     tier: usize,
     sales_sum: u32,
     paint: &mut u8,
+    rare: &mut ItemId,
     below: &mut dyn FnMut(u32) -> u32,
 ) -> Vec<ItemId> {
     let counts = GOODS_COUNT[tier.min(3)];
     let n = |i: usize| usize::from(counts[i]);
     let bags = grab_bag_day(roll.year, roll.month, roll.day);
+    // `mSP_MakeRandomGoodsList`: the spotlight piece is rolled first, from
+    // the rare list, by the shops that have one, and kept out of every
+    // other draw; it is shown apart from the ordinary furniture.
+    *rare = if n(3) != 0 {
+        select_items(roll, Kind::Furniture, 1, &[], below, Some(2))
+            .first()
+            .copied()
+            .unwrap_or(0)
+    } else {
+        0
+    };
+    set_rare_item(*rare);
     let mut out = select(roll, Kind::Furniture, n(2), &[], below);
     season_furniture(roll, &mut out, below);
+    if *rare != 0 {
+        out.push(*rare);
+    }
     if !bags {
         out.extend(select(roll, Kind::Paper, n(0), &[], below));
         if tier >= 2 {

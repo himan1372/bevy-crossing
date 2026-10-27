@@ -35,6 +35,8 @@ const RSV_WALL: u16 = 0xFE04;
 const RSV_HALLOWEEN: u16 = 0xFE05;
 const RSV_TOOL: u16 = 0xFE06;
 const RSV_PLANT: u16 = 0xFE08;
+/// `RSV_SHOP_RARE`: the spotlight piece.
+const RSV_RARE: u16 = 0xFE09;
 const RSV_UMBRELLA: u16 = 0xFE0A;
 const RSV_PAINT: u16 = 0xFE0B;
 const RSV_SIGNBOARD: u16 = 0xFE0C;
@@ -66,6 +68,7 @@ fn sold_sign(reserve: u16) -> u16 {
         RSV_PAPER => 0xFE0E,
         RSV_CLOTH => 0xFE0F,
         RSV_FTR => 0xFE10,
+        RSV_RARE => 0xFE15,
         RSV_CARPET => 0xFE11,
         RSV_WALL => 0xFE12,
         RSV_PLANT | RSV_HALLOWEEN => 0xFE13,
@@ -228,6 +231,8 @@ pub(crate) fn show_goods(
             }
             let reserve = if layout.sale.is_some() {
                 0xFE07 // aSD_ItemName2ReservePointName: RSV_SHOP_EVENT.
+            } else if s.item == shop.rare_item && shop.rare_item != 0 {
+                RSV_RARE
             } else if let Some(reserve) = reserve_point(s.item, halloween) {
                 reserve
             } else {

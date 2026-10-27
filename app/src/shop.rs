@@ -112,6 +112,8 @@ pub struct ShopData {
     pub stock_day: Option<i64>,
     /// Next paint colour (`shop_info.paint_color`).
     pub paint: u8,
+    /// `Shop_c.rare_item`: today's spotlight furniture, 0 for none.
+    pub rare_item: ItemId,
 }
 
 impl ShopData {
@@ -130,6 +132,8 @@ impl ShopData {
         }
         self.priorities = save.shop_priorities;
         self.paint = save.shop_paint;
+        self.rare_item = save.shop_rare;
+        crate::goods::set_rare_item(self.rare_item);
         self.shop.sales_sum = save.shop_sales;
         self.shop.shop_level = ShopTier::from_u8(save.shop_tier).unwrap_or(ShopTier::Zakka);
         let progress = save.shop_progress.clone().unwrap_or_default();
@@ -200,6 +204,7 @@ impl ShopData {
             self.shop.shop_level as usize,
             self.shop.sales_sum,
             &mut self.paint,
+            &mut self.rare_item,
             &mut below,
         );
         self.stock = goods.into_iter().map(StockItem::new).collect();

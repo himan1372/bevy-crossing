@@ -49,7 +49,7 @@ commit and push before telling Philip what is next.
 task or required input in a short final sentence, using the current task notes
 and roadmaps rather than stale proposals. If nothing remains, say so. This is
 a status handoff, not authorization to start another task automatically.
-Currently next: the rest of the seasonal work (spotlight exclusion, escort/twin, grab-bag warning panel) is blocked or optional; Philip chooses. The field rank and player id inputs are done (`completed/field-rank-player-id.md`).
+Currently next: the rest of the seasonal work (escort/twin, rare-furniture leaflet, grab-bag warning panel) is blocked or optional; Philip chooses. The field rank and player id inputs are done (`completed/field-rank-player-id.md`).
 
 ## Current state (2026-10-25)
 

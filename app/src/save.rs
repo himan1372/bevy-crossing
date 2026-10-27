@@ -70,6 +70,10 @@ fn assign_player_id(mut identity: ResMut<PlayerIdentity>, seed: Res<TownSeed>) {
     }
 }
 
+fn is_zero(n: &u16) -> bool {
+    *n == 0
+}
+
 /// Serializable snapshot of game state.
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub struct SaveData {
@@ -179,6 +183,9 @@ pub struct SaveData {
     /// Next paint colour Nookway sells.
     #[serde(default)]
     pub shop_paint: u8,
+    /// Nook's spotlight rare furniture (`Shop_c.rare_item`); 0 for none.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub shop_rare: u16,
     /// Active quest (added later; defaults to none for old saves).
     #[serde(default)]
     pub quest: Option<crate::quest::ActiveQuest>,
@@ -468,6 +475,7 @@ fn collect_save(
         shop_priorities: shop.priorities,
         shop_stock_day: shop.stock_day,
         shop_paint: shop.paint,
+        shop_rare: shop.rare_item,
         quest: quest.active.clone(),
         player_face: None,
         player_cloth: None,
