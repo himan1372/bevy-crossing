@@ -207,7 +207,7 @@ fn talk(
     mut focus: ResMut<InputFocus>,
     mut actions: ResMut<Actions>,
     player: Query<(&Transform, &Facing), With<Player>>,
-    nook: Query<(Entity, &Transform), With<Shopkeeper>>,
+    nook: Query<(Entity, &Transform, &Shopkeeper)>,
     mut raffle: ResMut<Raffle>,
     mut clock: ResMut<DrumClock>,
     mut dialogue: ResMut<DialogueState>,
@@ -228,7 +228,7 @@ fn talk(
         clock.ticks = None;
         raffle.fetch = None;
     }
-    let Ok((actor, nook_at)) = nook.single() else {
+    let Some((actor, nook_at, _)) = nook.iter().find(|(_, _, k)| k.twin.is_none()) else {
         return;
     };
     let month = crate::clock::now().month;

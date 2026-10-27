@@ -24,7 +24,16 @@ pub(crate) struct Shopkeeper {
     pub walking: bool,
     /// Run clip while he crosses to the drum or a prize (`aNPC_ACT_RUN`).
     pub running: bool,
-    next_zone: Option<usize>,
+    pub(crate) next_zone: Option<usize>,
+    /// The department-store twins: 0 Timmy (`SP_NPC_MAMEDANUKI0`), 1 Tommy.
+    pub(crate) twin: Option<u8>,
+}
+
+/// `aNMD_selectIdx`: which twin takes the next display sale, and the one in the conversation.
+#[derive(Resource, Default)]
+pub(crate) struct Twins {
+    pub(crate) selected: u8,
+    pub(crate) talking: u8,
 }
 
 #[derive(Default)]
@@ -133,6 +142,8 @@ pub(crate) struct Conversation {
 struct ShopContext {
     text: MsgContext,
     upper: bool,
+    /// Which twin speaks upstairs: 0 Timmy, 1 Tommy.
+    twin: u8,
 }
 impl std::ops::Deref for ShopContext {
     type Target = MsgContext;
@@ -183,7 +194,12 @@ fn say(
     let (pages, choice) = text.talk(msg, ctx, &mut |_| 0);
     let labels = choice.as_ref().map(|c| c.labels.clone());
     if ctx.upper {
-        dialogue.begin_special(actor, "Timmy", (276, 2), pages, labels);
+        let (name, npc) = if ctx.twin == 0 {
+            ("Timmy", 276)
+        } else {
+            ("Tommy", 293)
+        };
+        dialogue.begin_special(actor, name, (npc, 2), pages, labels);
     } else {
         dialogue.begin_external(actor, pages, labels);
     }
@@ -241,6 +257,7 @@ fn context(identity: &crate::save::PlayerIdentity, upper: bool) -> ShopContext {
     let now = crate::clock::now();
     ShopContext {
         upper,
+        twin: 0,
         text: MsgContext {
             player_name: identity.player.clone(),
             talk_name: if upper { "Timmy" } else { "Tom Nook" }.into(),
@@ -255,6 +272,21 @@ fn context(identity: &crate::save::PlayerIdentity, upper: bool) -> ShopContext {
             ..default()
         },
     }
+}
+
+/// The keeper entity for a twin index (the only keeper elsewhere).
+fn keeper<'a>(
+    nook: &'a Query<(Entity, &Transform, &Shopkeeper)>,
+    twin: u8,
+) -> Option<(Entity, &'a Transform)> {
+    nook.iter()
+        .find(|(_, _, k)| k.twin.is_none_or(|t| t == twin))
+        .map(|(entity, transform, _)| (entity, transform))
+}
+
+fn set_twin(ctx: &mut ShopContext, twin: u8) {
+    ctx.twin = twin;
+    ctx.text.talk_name = if twin == 0 { "Timmy" } else { "Tommy" }.into();
 }
 
 fn request(disc: &GameDisc, dialogue: &mut DialogueState, actor: Entity, flow: &mut Conversation) {
@@ -337,7 +369,7 @@ pub(crate) fn interact(
     mut focus: ResMut<InputFocus>,
     mut actions: ResMut<Actions>,
     mut player: Query<(&Transform, &Facing, &mut crate::locomotion::Locomotion), With<Player>>,
-    nook: Query<(Entity, &Transform), With<Shopkeeper>>,
+    nook: Query<(Entity, &Transform, &Shopkeeper)>,
     displays: Query<&ShopDisplay>,
     mut flow: ResMut<Conversation>,
     mut dialogue: ResMut<DialogueState>,
@@ -356,6 +388,7 @@ pub(crate) fn interact(
         mut preview,
         mut password,
         mut handover,
+        mut twins,
     ): (
         Option<ResMut<crate::home::PlayerHouse>>,
         Local<Option<f32>>,
@@ -365,6 +398,7 @@ pub(crate) fn interact(
         ResMut<preview::Preview>,
         ResMut<password::PasswordUi>,
         ResMut<handover::HandOver>,
+        ResMut<Twins>,
     ),
 ) {
     let Some(disc) = disc.filter(|d| d.text.is_some()) else {
@@ -386,12 +420,18 @@ pub(crate) fn interact(
         }
         return;
     }
-    let Ok((actor, nook_transform)) = nook.single() else {
+    // The first (or only) keeper is who arrival and the house talk belong to;
+    // a running conversation belongs to the twin that began it.
+    let Some((first, _, _)) = nook.iter().find(|(_, _, k)| k.twin.is_none_or(|t| t == 0)) else {
         preview.clear();
         return;
     };
-    if *inside_actor != Some(actor) {
-        *inside_actor = Some(actor);
+    let Some((actor, nook_transform)) = keeper(&nook, flow.context.twin) else {
+        preview.clear();
+        return;
+    };
+    if *inside_actor != Some(first) {
+        *inside_actor = Some(first);
         *inside_for = Some(0.0);
     }
     if matches!(flow.step, Step::PasswordEntry) {
@@ -1170,7 +1210,19 @@ pub(crate) fn interact(
                 .total_cmp(&b.position.distance_squared(transform.translation))
         });
     flow.context = context(&identity, layout.upper);
+    let (mut actor, mut nook_transform) = (actor, nook_transform);
     if let Some(display) = display {
+        if layout.upper {
+            // A display sale goes to the selected twin, then the other is next.
+            let twin = twins.selected;
+            if let Some((chosen, _)) = keeper(&nook, twin) {
+                actor = chosen;
+            }
+            set_twin(&mut flow.context, twin);
+            twins.talking = twin;
+            twins.selected ^= 1;
+            info!("Twins: display sale taken by twin {twin}");
+        }
         let Some(stock) = shop.goods().get(display.stock_index) else {
             return;
         };
@@ -1214,6 +1266,18 @@ pub(crate) fn interact(
             }
         };
     } else {
+        // Talking: to whichever twin the player faces.
+        let faced = nook.iter().find(|(_, t, k)| {
+            let delta = (t.translation - transform.translation).with_y(0.0);
+            k.twin.is_some()
+                && delta.length() <= 1.8
+                && facing.dir.dot(delta.normalize_or_zero()) >= 0.5
+        });
+        if let Some((entity, t, k)) = faced {
+            (actor, nook_transform) = (entity, t);
+            set_twin(&mut flow.context, k.twin.unwrap_or(0));
+            twins.talking = flow.context.twin;
+        }
         let delta = (nook_transform.translation - transform.translation).with_y(0.0);
         if delta.length() > 1.8 || facing.dir.dot(delta.normalize_or_zero()) < 0.5 {
             return;
@@ -1396,6 +1460,123 @@ fn follow(
     }
 }
 
+/// The twins on the upper floor (`ac_npc_mamedanuki.c`, the `aNSC_MAMEDANUKI` branch of
+/// `aNSC_decide_next_move_act`): each follows the player along the route of the floor's sale type,
+/// waits within 80, walks inside 110 and runs beyond.
+#[allow(clippy::too_many_arguments)]
+fn follow_twins(
+    disc: Option<Res<GameDisc>>,
+    location: Res<State<ShopLocation>>,
+    focus: Res<InputFocus>,
+    time: Res<Time>,
+    shop: Res<ShopData>,
+    player: Query<&Transform, With<Player>>,
+    mut twins: Query<(&mut Transform, &mut Shopkeeper), Without<Player>>,
+    obstacles: Res<crate::shop::ShopObstacles>,
+    layout: Res<crate::shop::layout::Layout>,
+) {
+    use rustimal_logic::twin_route as route;
+    if disc.is_none() || *location != ShopLocation::Inside || !layout.upper {
+        return;
+    }
+    let sale = if shop.events.active(crate::clock::now()) {
+        // `special_sale_type[]` by the offer's kind.
+        match shop.events.offer.as_ref().map(|o| o.kind) {
+            Some(0) => route::SaleType::Furniture,
+            Some(2) => route::SaleType::Clothing,
+            Some(3 | 4) => route::SaleType::Carpet,
+            _ => route::SaleType::Normal,
+        }
+    } else {
+        route::SaleType::Normal
+    };
+    let corner = SHOP_ORIGIN - layout.centre().with_y(0.0);
+    let zone_of = |p: Vec3| {
+        route::zone(
+            sale,
+            (p.x / 40.0).floor() as i32,
+            (p.z / 40.0).floor() as i32,
+        )
+    };
+    let dt = time.delta_secs().min(0.1);
+    let player = player
+        .single()
+        .ok()
+        .map(|t| (t.translation - corner) * 40.0);
+    for (mut transform, mut keeper) in &mut twins {
+        keeper.walking = false;
+        keeper.running = false;
+        let Some(target) = player else {
+            continue;
+        };
+        let pos = (transform.translation - corner) * 40.0;
+        let delta = (target - pos).with_y(0.0);
+        let distance = delta.length();
+        let (zone, player_zone) = (zone_of(pos), zone_of(target));
+        // The wait cases: the player at the door end of the floor, or close.
+        let waiting =
+            !focus.is_world() || (target.z < 120.0 && (zone == 2 || zone == 3)) || distance < 80.0;
+        let travelling = !waiting && zone != player_zone;
+        let direction = if travelling {
+            let next = *keeper
+                .next_zone
+                .get_or_insert_with(|| route::next_zone(sale, player_zone, zone));
+            let (x, z) = route::point(sale, next);
+            let d = (Vec3::new(x, 0.0, z) - pos).with_y(0.0);
+            if d.length_squared() < 200.0 {
+                keeper.next_zone = Some(route::next_zone(sale, player_zone, zone));
+            }
+            d
+        } else {
+            keeper.next_zone = None;
+            delta
+        };
+        if direction.length_squared() <= 0.001 {
+            continue;
+        }
+        let desired = direction.x.atan2(direction.z);
+        let (yaw, _, _) = transform.rotation.to_euler(EulerRot::YXZ);
+        let change = (desired - yaw + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
+            - std::f32::consts::PI;
+        let turn = 11.25_f32.to_radians() * 30.0 * dt;
+        transform.rotation = Quat::from_rotation_y(yaw + change.clamp(-turn, turn));
+        if waiting || change.abs() >= std::f32::consts::FRAC_PI_2 {
+            continue;
+        }
+        let run = distance >= 110.0;
+        let speed = if run { 4.0 } else { 1.0 } * 30.0 / 40.0;
+        let step = transform.rotation * Vec3::Z * (speed * dt).min(direction.length() / 40.0);
+        let before = transform.translation;
+        let x = before.x + step.x;
+        if !crate::shop::blocked_at(x, before.z, 0.2, &obstacles) {
+            transform.translation.x = x;
+        }
+        // `aNMD_actor_move` keeps them off the stair side of the floor (z >= 138).
+        let z = (before.z + step.z).max(corner.z + 138.0 / 40.0);
+        if !crate::shop::blocked_at(transform.translation.x, z, 0.2, &obstacles) {
+            transform.translation.z = z;
+        }
+        keeper.walking = transform.translation.distance_squared(before) > 0.000001;
+        keeper.running = keeper.walking && run;
+    }
+    // Their collision circles (radius 20) keep them apart; the heavier twin (`aNMD_weight_ctrl`:
+    // Timmy 50, Tommy 30) gives way less.
+    let mut pairs = twins.iter_combinations_mut();
+    while let Some([(mut a, ka), (mut b, kb)]) = pairs.fetch_next() {
+        let delta = (b.translation - a.translation).with_y(0.0);
+        let gap = delta.length();
+        if gap >= 1.0 {
+            continue;
+        }
+        let direction = if gap > 0.0001 { delta / gap } else { Vec3::X };
+        let weight = |k: &Shopkeeper| if k.twin == Some(0) { 50.0 } else { 30.0 };
+        let (wa, wb) = (weight(&ka), weight(&kb));
+        let push = 1.0 - gap;
+        a.translation -= direction * push * (wb / (wa + wb));
+        b.translation += direction * push * (wa / (wa + wb));
+    }
+}
+
 pub(crate) struct ShopNookPlugin;
 
 fn reset(
@@ -1419,6 +1600,7 @@ fn reset(
 impl Plugin for ShopNookPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Conversation>()
+            .init_resource::<Twins>()
             .init_resource::<password::PasswordUi>()
             .init_resource::<password::PasswordAssets>()
             .init_resource::<handover::HandOver>()
@@ -1457,6 +1639,12 @@ impl Plugin for ShopNookPlugin {
                         .after(crate::save::LoadSet)
                         .after(crate::player::camera_follow),
                 )
+                    .in_set(GameplaySet),
+            )
+            .add_systems(
+                Update,
+                follow_twins
+                    .after(crate::locomotion::MovementSet)
                     .in_set(GameplaySet),
             )
             .add_systems(

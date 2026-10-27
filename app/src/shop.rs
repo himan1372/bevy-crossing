@@ -596,7 +596,10 @@ pub(crate) fn build_shop_interior(
     // Tom Nook behind the counter (his disc model replaces the capsule).
     commands.spawn((
         Name::new(if layout.upper { "Timmy" } else { "Tom Nook" }),
-        crate::shop_nook::Shopkeeper::default(),
+        crate::shop_nook::Shopkeeper {
+            twin: layout.upper.then_some(0),
+            ..default()
+        },
         ShopInterior,
         crate::character::NpcModel(layout.npc()),
         crate::character::NpcClip::default(),
@@ -612,7 +615,13 @@ pub(crate) fn build_shop_interior(
         commands.spawn((
             ShopInterior,
             Name::new("Tommy"),
+            crate::shop_nook::Shopkeeper {
+                twin: Some(1),
+                ..default()
+            },
             crate::character::NpcModel(layout.sibling_npc()),
+            crate::character::NpcClip::default(),
+            Visibility::default(),
             Transform::from_translation(SHOP_ORIGIN + layout.sibling_position()),
         ));
     }

@@ -172,7 +172,8 @@ pub(crate) fn animate(
     disc: Option<Res<GameDisc>>,
     location: Res<State<ShopLocation>>,
     mut handover: ResMut<HandOver>,
-    shopkeepers: Query<Entity, With<Shopkeeper>>,
+    shopkeepers: Query<(Entity, &Shopkeeper)>,
+    twins: Res<super::Twins>,
     players: Query<Entity, With<Player>>,
     mut clips: Query<&mut NpcClip>,
     rigs: Query<(Entity, &CharacterRig, &ChildOf)>,
@@ -187,7 +188,10 @@ pub(crate) fn animate(
     };
     let resolve = |party: Party| match party {
         Party::Player => players.single().ok(),
-        Party::Nook => shopkeepers.single().ok(),
+        Party::Nook => shopkeepers
+            .iter()
+            .find(|(_, keeper)| keeper.twin.is_none_or(|t| t == twins.talking))
+            .map(|(entity, _)| entity),
         Party::Npc(entity) => Some(entity),
     };
     let nook_away =
