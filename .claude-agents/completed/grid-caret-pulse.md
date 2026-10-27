@@ -13,3 +13,10 @@ Implemented; gates: fmt, clippy -D warnings, check, default build pass. NOT driv
 capture QA); the fade is unverified by eye. Correction to the handoff: the key grid has no pulse and
 the editor has no rumble in the source, so "grid cursor pulse and pad rumble" reduces to this caret.
 Diary/letter carets changed from ink colour to the retail red.
+
+## Runtime check (2026-10-27, claude)
+Capture build in Temp with a synthetic save and the disc, Say-code window at Nook's counter. Ten screenshots
+~0.3 s apart: the caret's red-over-green strength cycled 54..116 (beating against the 35-frame cycle), so it
+fades rather than staying solid; after typing "a" the caret sat right of the letter at near-full opacity.
+No WARN/ERROR in the log. Not driven: diary and letter carets (same code path, different host), by ear/eye
+timing against the retail cycle.
