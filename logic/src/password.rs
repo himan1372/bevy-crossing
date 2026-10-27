@@ -797,6 +797,43 @@ pub fn backspace(
     }
 }
 
+/// `mED_edit_func_pw_chk` CURSOL_LEFT: false (the error click) at the start.
+pub fn cursor_left(cursor: &mut usize) -> bool {
+    if *cursor > 0 {
+        *cursor -= 1;
+        true
+    } else {
+        false
+    }
+}
+
+/// `mED_edit_func_pw_chk` CURSOL_RIGHT: the cursor may sit just past the
+/// fourteenth character; false (the error click) there.
+pub fn cursor_right(cursor: &mut usize) -> bool {
+    if *cursor < 14 {
+        *cursor += 1;
+        true
+    } else {
+        false
+    }
+}
+
+/// `mED_move_pw_chk_table`: Up or Down changes the line being edited; the
+/// cursor index is kept. False when there is no such line.
+pub fn change_line(selected: &mut usize, down: bool) -> bool {
+    let next = if down {
+        *selected + 1
+    } else {
+        selected.wrapping_sub(1)
+    };
+    if next < 2 {
+        *selected = next;
+        true
+    } else {
+        false
+    }
+}
+
 /// `mED_edit_func_pw_chk` completion gate: the charset validation runs only
 /// when the last byte of line 1 is not a space.
 pub fn needs_charset_check(line1: &[u8; 14]) -> bool {

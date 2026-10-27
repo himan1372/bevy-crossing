@@ -995,3 +995,10 @@ during the counter present hand-over (shop master animation table), so the gift 
 his gesture as well as the disc's wrapped present. Frame sync, the spring chase and the
 mid-message start remain. See backlog/shop-password-arm.md.
 
+2026-10-26 claude: shop-password-grid replaces the typed password entry with the retail
+editor grid drawn from the disc (purple controller, buttons, 10x4 keys) over the original
+secret-code and receiver windows, driven by the new disc-free logic/editor_keyboard kernel
+(key tables, cursor repeat, button repeat, name fields). Keyboard and typing both work;
+the exchange (accent) key, voices and scrolling window texture remain. The diary and
+letters can reuse the kernel and editor module. See backlog/shop-password-grid.md.
+

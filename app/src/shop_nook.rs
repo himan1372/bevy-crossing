@@ -13,6 +13,7 @@ use crate::shop::{ShopData, ShopLocation, SHOP_ORIGIN};
 use crate::shop_display::ShopDisplay;
 use crate::states::GameplaySet;
 
+mod editor;
 pub(crate) mod handover;
 pub(crate) mod password;
 pub(crate) mod preview;

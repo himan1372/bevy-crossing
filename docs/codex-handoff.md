@@ -14,7 +14,9 @@ popularity-contest passwords (`completed/shop-password-service.md`, codec in
 `logic/src/password.rs`, flow in `app/src/shop_nook/password.rs`) and the **Send a
 code** direction (same files, `backlog/shop-password-codes.md` has the evidence).
 Famicom, magazine and mini card-e codes redeem too (`backlog/shop-password-codes.md`);
-the retail letter grid remains in `backlog/shop-password-grid.md`. The present
+the retail letter grid is in (`completed/shop-password-grid.md`, kernel
+`logic/src/editor_keyboard.rs`, disc drawing `app/src/shop_nook/editor.rs`) and can be reused
+for the diary and letters. The present
 hand-over now plays (`shop_nook/handover.rs`, kernel `logic/src/hand_over_item.rs`,
 pure and disc-free); Nook's transfer/hold arm clips play too
 (`completed/shop-password-arm.md`). Frame sync with the kernel, the spring chase and the
