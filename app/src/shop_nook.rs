@@ -1229,6 +1229,11 @@ pub(crate) fn interact(
     }
 }
 
+/// `aNSC_decide_next_move_act` for the shop masters: wait within `aNSC_PLAYER_DISTANCE` (60) of
+/// the player, walk inside 90 and run beyond. The twins' own variant uses 80 and 110.
+const STOP_DISTANCE: f32 = 60.0;
+const WALK_DISTANCE: f32 = 90.0;
+
 fn zone(p: Vec3) -> usize {
     if p.x < 120.0 {
         if p.z < 180.0 {
@@ -1321,9 +1326,10 @@ fn follow(
     let player_zone = route_zone(target);
     let can_walk = !layout.upper
         && focus.is_world()
-        && delta.length() >= 80.0
+        && delta.length() >= STOP_DISTANCE
         && if layout.tier == 0 {
-            !(target.z < 120.0 && (current_zone == 2 || current_zone == 3))
+            // aNSM_check_safe_zone.
+            !(target.z > 280.0 && current_zone == 3)
         } else {
             !crate::shop::layout::follow::safe(layout.tier, target, current_zone)
         };
@@ -1362,7 +1368,12 @@ fn follow(
         transform.rotation = Quat::from_rotation_y(yaw + change.clamp(-turn, turn));
         if can_walk && change.abs() < std::f32::consts::FRAC_PI_2 {
             // aNSC_set_walk_spd=1, run_spd=4 game units per 30 Hz frame.
-            let speed = if delta.length() < 110.0 { 1.0 } else { 4.0 } * 30.0 / 40.0;
+            let speed = if delta.length() < WALK_DISTANCE {
+                1.0
+            } else {
+                4.0
+            } * 30.0
+                / 40.0;
             let step = transform.rotation * Vec3::Z * (speed * dt).min(direction.length() / 40.0);
             if (player.translation - transform.translation - step)
                 .with_y(0.0)
