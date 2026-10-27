@@ -985,3 +985,8 @@ messages; every password kind except the retail letter grid and hand-over
 animation now works at the counter. See backlog/shop-password-codes.md.
 Counts/parent/M4 and Philip acceptance stay open.
 
+2026-10-26 claude: shop-password-handover plays the original present hand-over for
+counter passwords: the disc's wrapped present grows out of Nook's left hand and is put
+away into the player's, driven by the ported logic/hand_over_item kernel. Nook's arm
+gesture and the exact mid-message start remain. See backlog/shop-password-handover.md.
+

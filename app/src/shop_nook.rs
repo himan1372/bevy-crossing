@@ -13,6 +13,7 @@ use crate::shop::{ShopData, ShopLocation, SHOP_ORIGIN};
 use crate::shop_display::ShopDisplay;
 use crate::states::GameplaySet;
 
+pub(crate) mod handover;
 pub(crate) mod password;
 pub(crate) mod preview;
 pub(crate) mod sales;
@@ -345,7 +346,16 @@ pub(crate) fn interact(
     mut catalog_ui: ResMut<crate::catalog_screen::CatalogUi>,
     identity: Res<crate::save::PlayerIdentity>,
     layout: Res<crate::shop::layout::Layout>,
-    (mut home, mut inside_for, mut inside_actor, time, mut catalog, mut preview, mut password): (
+    (
+        mut home,
+        mut inside_for,
+        mut inside_actor,
+        time,
+        mut catalog,
+        mut preview,
+        mut password,
+        mut handover,
+    ): (
         Option<ResMut<crate::home::PlayerHouse>>,
         Local<Option<f32>>,
         Local<Option<Entity>>,
@@ -353,6 +363,7 @@ pub(crate) fn interact(
         ResMut<crate::catalog::Catalog>,
         ResMut<preview::Preview>,
         ResMut<password::PasswordUi>,
+        ResMut<handover::HandOver>,
     ),
 ) {
     let Some(disc) = disc.filter(|d| d.text.is_some()) else {
@@ -902,6 +913,7 @@ pub(crate) fn interact(
                     .is_some()
                 {
                     password.presents += 1;
+                    handover.start();
                     crate::sound::se(crate::sound::se_id::POCKET_RUSTLE);
                     info!("password present item={item:#06x}");
                 }
@@ -1394,6 +1406,7 @@ impl Plugin for ShopNookPlugin {
         app.init_resource::<Conversation>()
             .init_resource::<password::PasswordUi>()
             .init_resource::<password::PasswordAssets>()
+            .init_resource::<handover::HandOver>()
             .init_resource::<preview::Preview>()
             .init_resource::<preview::Mannequin>()
             .init_resource::<preview::effects::Effects>()
@@ -1413,6 +1426,9 @@ impl Plugin for ShopNookPlugin {
                     preview::advance.before(interact),
                     interact.in_set(InteractSet::Objects),
                     (password::input, password::draw).chain().after(interact),
+                    handover::animate
+                        .after(interact)
+                        .after(crate::character::CharacterAnimationSet),
                     preview::textures.after(interact),
                     preview::mannequin
                         .after(interact)

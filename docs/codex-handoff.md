@@ -14,9 +14,10 @@ popularity-contest passwords (`completed/shop-password-service.md`, codec in
 `logic/src/password.rs`, flow in `app/src/shop_nook/password.rs`) and the **Send a
 code** direction (same files, `backlog/shop-password-codes.md` has the evidence).
 Famicom, magazine and mini card-e codes redeem too (`backlog/shop-password-codes.md`);
-the retail letter grid and hand-over animation remain: `backlog/shop-password-grid.md`
-and `backlog/shop-password-handover.md` hold findings; the hand-over kernel is
-already ported to `logic/src/hand_over_item.rs` (pure, no disc). Philip's rule:
+the retail letter grid remains in `backlog/shop-password-grid.md`. The present
+hand-over now plays (`shop_nook/handover.rs`, kernel `logic/src/hand_over_item.rs`,
+pure and disc-free); Nook's arm gesture is still missing, see
+`completed/shop-password-handover.md`. Philip's rule:
 graphics come from the disc, rewritten logic stays disc-independent in `logic/`,
 and check rustimal-crossing/pinned Rustimal for existing kernels first. The catalog cuckoo-clock preview fit
 (`backlog/nook-tickets-catalog.md`, audit section) is open and unclaimed. Start

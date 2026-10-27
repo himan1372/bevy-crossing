@@ -307,16 +307,24 @@ impl CharacterRig {
         player: &Transform,
         transforms: &Query<&Transform>,
     ) -> Option<Vec3> {
+        self.left_hand_point(root, player, transforms, Vec3::X * 1100.0)
+    }
+
+    /// A point in joint 16's frame (`aNPC_set_left_hand_item` uses its origin).
+    pub(crate) fn left_hand_point(
+        &self,
+        root: &Transform,
+        player: &Transform,
+        transforms: &Query<&Transform>,
+        local: Vec3,
+    ) -> Option<Vec3> {
         let locals = self
             .joints
             .iter()
             .map(|&j| transforms.get(j).copied().ok())
             .collect::<Option<Vec<_>>>()?;
         let world = self.skeleton.world_from_locals(&locals);
-        Some(
-            (player.to_matrix() * root.to_matrix() * world.get(16)?)
-                .transform_point3(Vec3::X * 1100.0),
-        )
+        Some((player.to_matrix() * root.to_matrix() * world.get(16)?).transform_point3(local))
     }
 }
 
