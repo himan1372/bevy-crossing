@@ -990,3 +990,8 @@ counter passwords: the disc's wrapped present grows out of Nook's left hand and 
 away into the player's, driven by the ported logic/hand_over_item kernel. Nook's arm
 gesture and the exact mid-message start remain. See backlog/shop-password-handover.md.
 
+2026-10-26 claude: shop-password-arm plays Nook's own transfer and hold arm clips
+during the counter present hand-over (shop master animation table), so the gift now has
+his gesture as well as the disc's wrapped present. Frame sync, the spring chase and the
+mid-message start remain. See backlog/shop-password-arm.md.
+

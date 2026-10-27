@@ -6,7 +6,7 @@
 use bevy::prelude::*;
 use rustimal_logic::hand_over_item as hoi;
 
-use crate::character::CharacterRig;
+use crate::character::{CharacterRig, NpcClip};
 use crate::game_disc::GameDisc;
 use crate::n64_material::N64Material;
 use crate::player::Player;
@@ -21,6 +21,12 @@ const ORIGINAL_UNIT: f32 = 1.0 / 40.0;
 /// Seconds the present waits in Nook's hand before the player takes it
 /// (the message script's order in the original).
 const HOLD: f32 = 0.3;
+/// Blend frames into each of his arm clips (`animation_init_proc`).
+const MORPH: f32 = 8.0;
+/// `aNPC_ANIM_TRANSFER1` / `aNPC_ANIM_TRANS_WAIT1` (`ac_npc_data.c_inc`),
+/// the shop master's `aNSC_ACTION_PC_PRESENT_TRANS_TAKEOUT` / `_WAIT` clips.
+const TRANSFER_CLIP: &str = "cKF_ba_r_npc_1_transfer1";
+const TRANS_WAIT_CLIP: &str = "cKF_ba_r_npc_1_trans_wait1";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Phase {
@@ -78,7 +84,7 @@ pub(crate) fn animate(
     disc: Option<Res<GameDisc>>,
     location: Res<State<ShopLocation>>,
     mut handover: ResMut<HandOver>,
-    nook: Query<(Entity, &Transform), With<Shopkeeper>>,
+    mut nook: Query<(Entity, &Transform, &mut NpcClip), With<Shopkeeper>>,
     player: Query<(Entity, &Transform), With<Player>>,
     rigs: Query<(Entity, &CharacterRig, &ChildOf)>,
     transforms: Query<&Transform>,
@@ -91,11 +97,14 @@ pub(crate) fn animate(
         if let Some(entity) = h.active.take().and_then(|a| a.entity) {
             commands.entity(entity).despawn();
         }
+        if let Ok((_, _, mut clip)) = nook.single_mut() {
+            clip.stop(MORPH);
+        }
         h.pending = false;
         return;
     }
-    let (Some(disc), Ok((nook_entity, nook_at)), Ok((player_entity, player_at))) =
-        (disc, nook.single(), player.single())
+    let (Some(disc), Ok((nook_entity, nook_at, mut clip)), Ok((player_entity, player_at))) =
+        (disc, nook.single_mut(), player.single())
     else {
         return;
     };
@@ -144,6 +153,7 @@ pub(crate) fn animate(
             ));
         }
         active.entity = Some(root);
+        clip.start(TRANSFER_CLIP, true, MORPH);
     }
     let Some(entity) = active.entity else { return };
     let master = if matches!(active.phase, Phase::Out | Phase::Wait) {
@@ -216,9 +226,16 @@ pub(crate) fn animate(
             active.phase = next;
             active.count = 0.0;
             active.held = 0.0;
+            match next {
+                Phase::Wait => clip.start(TRANS_WAIT_CLIP, false, MORPH),
+                // aNSC_pc_present_end_wait: back to standing.
+                Phase::Get => clip.stop(MORPH),
+                _ => {}
+            }
         }
         None => {
             commands.entity(entity).despawn();
+            clip.stop(MORPH);
             h.active = None;
         }
     }

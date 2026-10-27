@@ -591,6 +591,7 @@ pub(crate) fn build_shop_interior(
         crate::shop_nook::Shopkeeper::default(),
         ShopInterior,
         crate::character::NpcModel(layout.npc()),
+        crate::character::NpcClip::default(),
         Mesh3d(meshes.add(Capsule3d::new(0.4, 1.0))),
         MeshMaterial3d(nook_mat),
         Transform::from_translation(if real {

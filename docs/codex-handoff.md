@@ -16,8 +16,9 @@ code** direction (same files, `backlog/shop-password-codes.md` has the evidence)
 Famicom, magazine and mini card-e codes redeem too (`backlog/shop-password-codes.md`);
 the retail letter grid remains in `backlog/shop-password-grid.md`. The present
 hand-over now plays (`shop_nook/handover.rs`, kernel `logic/src/hand_over_item.rs`,
-pure and disc-free); Nook's arm gesture is still missing, see
-`completed/shop-password-handover.md`. Philip's rule:
+pure and disc-free); Nook's transfer/hold arm clips play too
+(`completed/shop-password-arm.md`). Frame sync with the kernel, the spring chase and the
+mid-message start remain. Philip's rule:
 graphics come from the disc, rewritten logic stays disc-independent in `logic/`,
 and check rustimal-crossing/pinned Rustimal for existing kernels first. The catalog cuckoo-clock preview fit
 (`backlog/nook-tickets-catalog.md`, audit section) is open and unclaimed. Start
