@@ -253,6 +253,7 @@ pub(crate) fn update_focus(
     password: Res<crate::shop_nook::password::PasswordUi>,
     handover: Res<crate::shop_nook::handover::HandOver>,
     twins: Res<crate::shop_nook::Twins>,
+    warning: Res<crate::warning_panel::WarningPanel>,
     mut focus: ResMut<InputFocus>,
 ) {
     let next = if pause.is_some_and(|p| *p.get() == PauseState::Paused) {
@@ -283,6 +284,9 @@ pub(crate) fn update_focus(
         InputFocus::Shop
     } else if pockets.open || catalog.open {
         InputFocus::Pockets
+    } else if warning.is_open() {
+        // A warning panel (`m_warning_ovl.c`) holds the player until it is answered.
+        InputFocus::Dialogue
     } else if room.manipulating() {
         InputFocus::Furniture
     } else {

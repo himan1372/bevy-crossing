@@ -121,6 +121,8 @@ enum StorageFlow {
     },
     Pockets,
     Notice,
+    /// A warning panel is up (`mTG_open_warning_window`).
+    Warning,
     Music(music::Flow),
 }
 
@@ -674,6 +676,19 @@ fn setup(
     );
 }
 
+/// The retail warning panel for a refusal that has one: no more furniture or no spot for it
+/// (`mTG_room_put_proc`), no spot for a loose item, and a song already in the player.
+fn refusal_warning(message: &str) -> Option<&'static rustimal_logic::warning::Warning> {
+    use rustimal_logic::warning as w;
+    match message {
+        "There's no room for any more furniture." => Some(&w::PUT_MAX_FURNITURE),
+        "There's no room to put that here." => Some(&w::PUT_FURNITURE),
+        loose::NO_ROOM_FOR_ITEM => Some(&w::PUT_ITEM),
+        "That song is already registered." => Some(&w::MUSIC2),
+        _ => None,
+    }
+}
+
 fn notice(
     dialogue: &mut DialogueState,
     room: &mut PlayerRoom,
@@ -719,6 +734,7 @@ fn interact(
     mut ui: ResMut<PocketsUi>,
     mut dialogue: ResMut<DialogueState>,
     rigs: Query<(&RoomPiece, &crate::furniture::storage::StorageRig)>,
+    mut warning: ResMut<crate::warning_panel::WarningPanel>,
 ) {
     room.available = disc.is_some() && crate::house::is_player_room(&current, &state);
     if room.diary_open() {
@@ -818,7 +834,13 @@ fn interact(
         ui.registering = false;
         room.flow = StorageFlow::Idle;
         if let Err(message) = result {
-            notice(&mut dialogue, &mut room, &mut focus, message);
+            if let Some(panel) = refusal_warning(message) {
+                warning.open(panel);
+                room.flow = StorageFlow::Warning;
+                *focus = InputFocus::Dialogue;
+            } else {
+                notice(&mut dialogue, &mut room, &mut focus, message);
+            }
         } else {
             *focus = if room.presentation.busy()
                 || room.decoration_pending
@@ -830,6 +852,17 @@ fn interact(
                 InputFocus::World
             };
             crate::sound::se(crate::sound::se_id::CHOICE_CONFIRM);
+        }
+        return;
+    }
+    if let StorageFlow::Warning = room.flow {
+        if !warning.is_open() {
+            room.flow = StorageFlow::Idle;
+            *focus = if room.storage.busy() {
+                InputFocus::Furniture
+            } else {
+                InputFocus::World
+            };
         }
         return;
     }

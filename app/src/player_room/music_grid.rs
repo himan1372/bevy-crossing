@@ -282,7 +282,7 @@ fn input(
     mut actions: ResMut<Actions>,
     mut focus: ResMut<InputFocus>,
     mut inventory: ResMut<PlayerInventory>,
-    mut dialogue: ResMut<DialogueState>,
+    mut warning_panel: ResMut<crate::warning_panel::WarningPanel>,
     current: Res<CurrentRoom>,
     state: Res<State<HouseState>>,
     time: Res<Time>,
@@ -303,7 +303,7 @@ fn input(
         return;
     }
     if grid.warning {
-        if dialogue.external_result.take().is_some() {
+        if !warning_panel.is_open() {
             grid.warning = false;
             actions.consume(Action::Confirm);
             actions.consume(Action::Interact);
@@ -359,8 +359,9 @@ fn input(
                 } else {
                     take(&mut room, &mut inventory, item)
                 };
-                if let Err(message) = result {
-                    dialogue.begin_furniture(message.into(), None);
+                if result.is_err() {
+                    // `mTG_music_proc`: taking music out with no free pocket.
+                    warning_panel.open(&rustimal_logic::warning::MUSIC);
                     grid.warning = true;
                     grid.menu = None;
                     *focus = InputFocus::Dialogue;

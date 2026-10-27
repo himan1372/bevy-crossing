@@ -47,6 +47,9 @@ pub(super) fn position(room: &PlayerRoom, piece: Piece) -> Vec3 {
     corner() + Vec3::new(piece.x as f32 + 0.5, height, piece.z as f32 + 0.5)
 }
 
+/// A loose item with nowhere to lie (`mWR_WARNING_PUT_ITEM`).
+pub(super) const NO_ROOM_FOR_ITEM: &str = "There's no room to drop that here.";
+
 fn placed(item: u16, layer: usize, x: i32, z: i32) -> Piece {
     Piece {
         item,
@@ -151,7 +154,7 @@ pub(super) fn place(
                 .then_some((cx + dx, cz + dz))
         }))
         .find(|&(x, z)| clear(x, z));
-    let (x, z) = chosen.ok_or("There's no room to put that here.")?;
+    let (x, z) = chosen.ok_or(NO_ROOM_FOR_ITEM)?;
     room.layers[0].set(x, z, item);
     room.dirty = true;
     Ok(placed(item, 0, x, z))

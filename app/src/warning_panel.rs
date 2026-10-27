@@ -7,12 +7,11 @@ use bevy::prelude::*;
 use rustimal_logic::warning::{Panel, Phase, Warning};
 
 use crate::game_disc::GameDisc;
-use crate::input::{Action, Actions, InteractSet};
+use crate::input::{Action, Actions};
 use crate::msg_window::{text_mesh, MsgAssets};
 use crate::n64_material::N64Material;
 use crate::pockets_disc::Paint;
 use crate::shop_nook::editor::{Skin, Stores};
-use crate::states::GameplaySet;
 
 /// Menu depth over the pockets screen.
 const Z: f32 = 260.0;
@@ -24,6 +23,8 @@ const INK: [u8; 4] = [255, 255, 0, 255];
 pub(crate) struct WarningPanel {
     active: Option<Active>,
     skin: Skin,
+    /// The answer of the last panel with a question: 0 Yes, 1 No (`menu_info->data1`).
+    answer: Option<u8>,
 }
 
 struct Active {
@@ -32,19 +33,32 @@ struct Active {
     /// 60 Hz frames not yet spent.
     accum: f32,
     root: Option<Entity>,
-    /// The scale the entities were last built for.
-    built: Option<f32>,
+    /// The scale and answer the entities were last built for.
+    built: Option<(f32, u8)>,
+    /// `warning_ovl->selected`: 1 (No) when it opens.
+    selected: u8,
 }
 
 impl WarningPanel {
     pub(crate) fn open(&mut self, warning: &'static Warning) {
+        // One panel at a time: a second request while it is up changes nothing.
+        if self.active.is_some() {
+            return;
+        }
         self.active = Some(Active {
             warning,
             panel: Panel::new(),
             accum: 0.0,
             root: None,
             built: None,
+            selected: 1,
         });
+        self.answer = None;
+    }
+
+    /// The Yes (0) or No (1) the last question was closed with, once.
+    pub(crate) fn take_answer(&mut self) -> Option<u8> {
+        self.answer.take()
     }
 
     /// True from `open` until the panel has shrunk away.
@@ -78,20 +92,39 @@ fn update(
         return;
     };
     if active.panel.phase == Phase::Waiting {
-        let mut pressed = false;
-        for action in [
-            Action::Confirm,
-            Action::Cancel,
-            Action::Back,
-            Action::Interact,
-            Action::Advance,
-        ] {
-            pressed |= actions.consume(action);
+        let choice = active.warning.has_choice();
+        // `mWR_move_Play`: C-left / C-right move between Yes and No, B answers No, A or Start
+        // answers the selection (the Yes chime is 0x435).
+        if choice {
+            if actions.consume(Action::MoveLeft) && active.selected == 1 {
+                active.selected = 0;
+                crate::sound::se(crate::sound::se_id::CURSOR);
+            }
+            if actions.consume(Action::MoveRight) && active.selected == 0 {
+                active.selected = 1;
+                crate::sound::se(crate::sound::se_id::CURSOR);
+            }
         }
-        if pressed {
+        let back = actions.consume(Action::Cancel) | actions.consume(Action::Back);
+        let mut confirm = false;
+        for action in [Action::Confirm, Action::Interact, Action::Advance] {
+            confirm |= actions.consume(action);
+        }
+        if back || confirm {
+            if back {
+                active.selected = 1;
+            } else if choice && active.selected == 0 {
+                crate::sound::se(0x435);
+            }
+            if choice {
+                state.answer = Some(active.selected);
+            }
             active.panel.dismiss();
         }
     }
+    let Some(active) = state.active.as_mut() else {
+        return;
+    };
     active.accum += time.delta_secs() * 60.0;
     while active.accum >= 1.0 {
         active.accum -= 1.0;
@@ -102,10 +135,10 @@ fn update(
         return;
     }
     let scale = active.panel.scale;
-    if active.built == Some(scale) {
+    if active.built == Some((scale, active.selected)) {
         return;
     }
-    active.built = Some(scale);
+    active.built = Some((scale, active.selected));
     if let Some(root) = active.root.take() {
         commands.entity(root).despawn();
     }
@@ -123,6 +156,7 @@ fn update(
         .id();
     active.root = Some(root);
     let warning = active.warning;
+    let selected = active.selected;
     let mut stores = Stores {
         meshes: &mut meshes,
         n64: &mut n64,
@@ -157,8 +191,43 @@ fn update(
     };
     for (index, line) in warning.lines.iter().enumerate() {
         let (x, y) = warning.line_origin(index);
-        if let Some(mesh) = text_mesh(line.text, Vec2::new(x, y), &font.widths, INK, usize::MAX) {
+        // `col_type0` yellow; the answers are white, the selected one pink (`col_type1/2`).
+        let ink = if !warning.has_choice() || index < 3 {
+            INK
+        } else if index == 3 + usize::from(selected) {
+            [255, 175, 175, 255]
+        } else {
+            [255, 255, 255, 255]
+        };
+        if let Some(mesh) = text_mesh(line.text, Vec2::new(x, y), &font.widths, ink, usize::MAX) {
             paint.put(mesh, font.font.clone(), Color::WHITE, Z + 1.0);
+        }
+    }
+    if warning.has_choice() {
+        // `mWR_set_frame_dl`: the cursor model beside the selected answer.
+        let cursor = state.skin.window(
+            &disc,
+            "warning-cursor",
+            &["att_win_mode", "att_win_cursor_model"],
+            [255, 255, 255, 255],
+            &mut Stores {
+                meshes: &mut meshes,
+                n64: &mut n64,
+                images: &mut images,
+                materials: &mut materials,
+            },
+        );
+        let x = -120.0 * warning.scale_x - 8.0 + warning.lines[3 + usize::from(selected)].x;
+        let down: f32 = warning.lines[..4].iter().map(|l| l.y).sum();
+        let y = 60.0 * warning.scale_y - (down + 8.0);
+        for (index, (mesh, material)) in cursor.iter().enumerate() {
+            commands.spawn((
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(material.clone()),
+                Transform::from_xyz(x * 16.0, y * 16.0, Z + 0.5 + index as f32 * 0.01),
+                RenderLayers::layer(1),
+                ChildOf(root),
+            ));
         }
     }
 }
@@ -167,12 +236,14 @@ pub(crate) struct WarningPanelPlugin;
 
 impl Plugin for WarningPanelPlugin {
     fn build(&self, app: &mut App) {
+        // Right after the actions are read, so the keys that answer a warning never reach the
+        // screen it covers.
         app.init_resource::<WarningPanel>().add_systems(
-            Update,
+            PreUpdate,
             update
-                .before(crate::pockets::pockets_input)
-                .in_set(InteractSet::Ui)
-                .in_set(GameplaySet),
+                .after(crate::input::update_focus)
+                .before(crate::pockets::toggle_pockets)
+                .run_if(in_state(crate::states::PauseState::Running)),
         );
     }
 }

@@ -232,6 +232,8 @@ pub struct MailUi {
     pub(crate) grabbed: Option<usize>,
     /// The letter the menu is for: (written by the player, has a present).
     pub(crate) menu_letter: (bool, bool),
+    /// A warning panel to open (`mTG_open_warning_window`), taken by `show_warnings`.
+    pub(crate) warning: Option<&'static rustimal_logic::warning::Warning>,
     /// Writing on the stationery in this pocket slot (its paper index).
     pub(crate) write_paper: Option<(usize, u8)>,
     /// Rewriting this letter (by index) rather than a new one.
@@ -331,6 +333,8 @@ impl MailUi {
                                 letter.present = 0;
                                 letter.present_mine = false;
                             } else {
+                                // mTG_present_proc: no free pocket for the present.
+                                self.warning = Some(&rustimal_logic::warning::PR_LEAVE);
                                 crate::sound::se(crate::sound::se_id::MENU_EXIT);
                             }
                         }
@@ -609,6 +613,7 @@ fn mailbox_visit(
     mut house_box: ResMut<HouseMailbox>,
     mut mailbox: ResMut<Mailbox>,
     mut ticks: Local<f32>,
+    mut warned: Local<bool>,
 ) {
     let Some(mut b) = boxes.iter_mut().find(|b| b.house == 0) else {
         pockets.mailbox_wait = false;
@@ -629,6 +634,7 @@ fn mailbox_visit(
         return;
     }
     if !pockets.at_mailbox {
+        *warned = false;
         return;
     }
     if !pockets.open {
@@ -636,7 +642,8 @@ fn mailbox_visit(
         b.action = Some((crate::mailbox::BoxAction::Close, 31.0));
         return;
     }
-    if house_box.0.letters.is_empty() {
+    // The full-mailbox warning is shown once per visit.
+    if house_box.0.letters.is_empty() || *warned {
         return;
     }
     // mTG_mailbox_transfer_tick: every third frame.
@@ -647,6 +654,7 @@ fn mailbox_visit(
             // mWR_WARNING_MAILBOX: no room for more letters.
             crate::sound::se(crate::sound::se_id::MENU_EXIT);
             pockets.mailbox_full = true;
+            *warned = true;
             *ticks = 0.0;
             break;
         }
@@ -718,6 +726,31 @@ fn finish_letter(
 
 /// Mail UI keyboard handling: list nav, reading, and composing.
 #[allow(clippy::too_many_arguments)]
+/// Opens the warning panel a letter or mailbox refusal asked for: the present that has no free
+/// pocket (`mWR_WARNING_PR_LEAVE`), or the mailbox that cannot take the letters
+/// (`mWR_WARNING_MAILBOX`, which asks whether to throw some away).
+fn show_warnings(
+    mut ui: ResMut<MailUi>,
+    mut pockets: ResMut<crate::pockets::PocketsUi>,
+    mut panel: ResMut<crate::warning_panel::WarningPanel>,
+) {
+    // The mailbox question's answer changes nothing further here: the letters stay where they
+    // are and "Throw Away" in the letter list is how a slot is freed.
+    if let Some(answer) = panel.take_answer() {
+        info!(
+            "Mailbox warning answered {}",
+            if answer == 0 { "Yes" } else { "No" }
+        );
+    }
+    if let Some(warning) = ui.warning.take() {
+        panel.open(warning);
+    }
+    if pockets.mailbox_full {
+        pockets.mailbox_full = false;
+        panel.open(&rustimal_logic::warning::MAILBOX);
+    }
+}
+
 fn mail_ui_input(
     mut actions: ResMut<Actions>,
     focus: Res<InputFocus>,
@@ -736,8 +769,9 @@ fn mail_ui_input(
     mut panel_query: Query<&mut Visibility, (With<MailPanel>, Without<MailNotifyText>)>,
     font: Option<Res<crate::msg_window::MsgAssets>>,
     renderer: Option<Res<crate::pockets_disc::PocketAssets>>,
+    warning_panel: Res<crate::warning_panel::WarningPanel>,
 ) {
-    if !ui.open || *focus != InputFocus::Mail {
+    if !ui.open || *focus != InputFocus::Mail || warning_panel.is_open() {
         return;
     }
 
@@ -846,6 +880,7 @@ fn mail_ui_input(
         let limits = rustimal_logic::diary::LETTER;
         let ctrl = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
         let mut done = false;
+        let over = std::cell::Cell::new(false);
         // Key presses: A (Enter), the layout keys, Start (F4) and typed letters.
         for ev in key_events.read() {
             if ev.state != ButtonState::Pressed {
@@ -855,6 +890,8 @@ fn mail_ui_input(
                 if rustimal_logic::diary::insert(codes, cursor, code, widths, limits) {
                     crate::shop_nook::editor::speak(code, false);
                 } else {
+                    // mED_input_multi_line: the character does not fit.
+                    over.set(true);
                     crate::sound::se(GRID_ERROR);
                 }
             };
@@ -989,6 +1026,9 @@ fn mail_ui_input(
         };
         if held != ui.write_held {
             ui.write_held = held;
+        }
+        if over.get() {
+            ui.warning = Some(&rustimal_logic::warning::WORD_OVER);
         }
         let text = to_text(&codes);
         if text != ui.write_text {
@@ -1214,6 +1254,7 @@ impl Plugin for MailPlugin {
             .add_systems(
                 Update,
                 (refresh_mail_ui, tick_mail_notify).in_set(GameplaySet),
-            );
+            )
+            .add_systems(Update, show_warnings.in_set(GameplaySet));
     }
 }

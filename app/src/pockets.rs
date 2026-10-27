@@ -53,7 +53,7 @@ pub struct PocketsUi {
 }
 
 #[derive(Component)]
-struct PocketsPanel;
+pub(crate) struct PocketsPanel;
 #[derive(Component)]
 struct PocketsText;
 
@@ -104,14 +104,19 @@ fn setup_pockets_ui(mut commands: Commands) {
 }
 
 /// Open from the world; close with the same key or Cancel.
-fn toggle_pockets(
+pub(crate) fn toggle_pockets(
     mut actions: ResMut<Actions>,
     mut focus: ResMut<InputFocus>,
     mut ui: ResMut<PocketsUi>,
     mut mail: ResMut<crate::mail::MailUi>,
     mut panel: Query<&mut Visibility, With<PocketsPanel>>,
     home: Res<crate::player_room::PlayerRoom>,
+    warning: Res<crate::warning_panel::WarningPanel>,
 ) {
+    // A warning panel answers its own keys; Escape must not also close the screen under it.
+    if warning.is_open() {
+        return;
+    }
     if ui.open && *focus != InputFocus::Pockets {
         return;
     }
@@ -285,7 +290,7 @@ pub(crate) fn pockets_input(
     disc: Option<Res<crate::game_disc::GameDisc>>,
     mut warning: ResMut<crate::warning_panel::WarningPanel>,
 ) {
-    if ui.open && ui.bag_warning {
+    if ui.open && (ui.bag_warning || warning.is_open()) {
         // The retail warning panel: closed by A, B or Start, then the
         // pockets answer again.
         if !warning.is_open() {
@@ -536,6 +541,8 @@ pub(crate) fn pockets_input(
                 mail.write_recipient = 0;
                 crate::sound::se(crate::sound::se_id::CHOICE_OPEN);
             } else {
+                // mTG_write_proc: no free letter slot.
+                warning.open(&rustimal_logic::warning::WRITE);
                 crate::sound::se(crate::sound::se_id::MENU_EXIT);
             }
             return;

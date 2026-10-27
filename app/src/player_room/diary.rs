@@ -49,6 +49,8 @@ pub(super) struct View {
     held: crate::shop_nook::editor::Held,
     /// 60 Hz frames owed to the retail repeat counters.
     ticks: f32,
+    /// A character did not fit: the next frame opens `mWR_WARNING_WORD_OVER`.
+    over: bool,
 }
 
 // `sAdo_SysTrgStart` ids from `m_editor_ovl.c`.
@@ -82,6 +84,7 @@ fn type_code(view: &mut View, code: u8, widths: &[u8; 256]) {
     ) {
         crate::shop_nook::editor::speak(code, false);
     } else {
+        view.over = true;
         crate::sound::se(ERROR);
     }
 }
@@ -162,6 +165,7 @@ pub(super) fn open(room: &mut PlayerRoom) {
         repeat: kb::ButtonRepeat::default(),
         held: Default::default(),
         ticks: 0.0,
+        over: false,
     });
     crate::sound::se(0x5F); // mDI_diary_ovl_init.
 }
@@ -190,6 +194,7 @@ fn input(
     state: Res<State<HouseState>>,
     font: Option<Res<crate::msg_window::MsgAssets>>,
     time: Res<Time>,
+    mut warning: ResMut<crate::warning_panel::WarningPanel>,
 ) {
     if !crate::house::is_player_room(&current, &state) {
         room.diary_ui = None;
@@ -198,6 +203,14 @@ fn input(
         events.clear();
         return;
     };
+    if std::mem::take(&mut view.over) {
+        warning.open(&rustimal_logic::warning::WORD_OVER);
+    }
+    if warning.is_open() {
+        events.clear();
+        room.diary_ui = Some(view);
+        return;
+    }
     if *focus != InputFocus::Diary || view.just_opened {
         events.clear();
         view.just_opened = false;
