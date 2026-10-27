@@ -87,9 +87,6 @@ impl VillagerTables {
 pub const RESIDENTS_MAX: usize = 15;
 /// `mNpc_GROW_MOVE_IN`.
 const GROW_MOVE_IN: i8 = 1;
-/// `npc_grow_prob` at a middling field rank: the chance a day's check lets
-/// someone move in. Town ranking isn't modelled yet, so rank 3 of 0-6.
-const GROW_PERCENT: f32 = 70.0;
 
 /// `mNpc_GetLooks2Sex`: normal, peppy and snooty villagers are female.
 pub(crate) fn looks_female(looks: u8) -> bool {
@@ -133,7 +130,15 @@ impl TownRoster {
     /// `mNpc_CheckGrow` then `mNpc_Grow`: on a new day, with room in
     /// town, once the player has talked to everyone living here, and with
     /// the field-rank chance, a new villager moves in. Returns them.
-    pub fn grow(&mut self, tables: &VillagerTables, day: i64, seed: u32) -> Option<RosterEntry> {
+    /// `rank` gives the town's field rank (`mFAs_GetFieldRank`) and is only
+    /// asked for once the cheaper gates pass.
+    pub fn grow(
+        &mut self,
+        tables: &VillagerTables,
+        day: i64,
+        seed: u32,
+        rank: impl FnOnce() -> Option<u8>,
+    ) -> Option<RosterEntry> {
         if self.residents.len() >= RESIDENTS_MAX {
             return None;
         }
@@ -144,7 +149,14 @@ impl TownRoster {
         };
         let mut rng = Rng((seed ^ (day as u32).wrapping_mul(0x9E37_79B9)) | 1);
         let met_all = self.residents.iter().all(|r| self.met.contains(&r.index));
-        if day <= last || !met_all || rng.next() * 100.0 >= GROW_PERCENT {
+        if day <= last || !met_all {
+            return None;
+        }
+        // `mNpc_CheckGrowFieldRank`: RANDOM(100) < npc_grow_prob[rank].
+        let roll = (rng.next() * 100.0) as u8;
+        if !rank()
+            .is_some_and(|rank| rustimal_logic::check_grow_field_rank(usize::from(rank), roll))
+        {
             return None;
         }
         self.last_grow_day = Some(day);
@@ -305,7 +317,8 @@ fn init_roster(
         last_grow_day: save.and_then(|s| s.last_move_in_day),
         residents,
     };
-    if let Some(new) = roster.grow(&tables, crate::clock::now().day_number, seed.0) {
+    let rank = || crate::field_rank::rank_at_start(disc.as_deref()?, seed.0, save);
+    if let Some(new) = roster.grow(&tables, crate::clock::now().day_number, seed.0, rank) {
         bevy::prelude::info!("{} moved in", new.name);
     }
     commands.insert_resource(roster);
@@ -368,11 +381,11 @@ mod tests {
         let t = tables();
         let mut r = town(&t);
         assert!(
-            r.grow(&t, 100, 1).is_none(),
+            r.grow(&t, 100, 1, || Some(3)).is_none(),
             "first check only starts the clock"
         );
         for day in 101..200 {
-            assert!(r.grow(&t, day, 1).is_none());
+            assert!(r.grow(&t, day, 1, || Some(3)).is_none());
         }
         assert_eq!(r.residents.len(), PERSONALITIES);
     }
@@ -383,9 +396,9 @@ mod tests {
         let mut r = town(&t);
         r.met = r.residents.iter().map(|e| e.index).collect();
         r.last_grow_day = Some(100);
-        assert!(r.grow(&t, 100, 1).is_none(), "same day");
+        assert!(r.grow(&t, 100, 1, || Some(3)).is_none(), "same day");
         let new = (101..200)
-            .find_map(|day| r.grow(&t, day, 1))
+            .find_map(|day| r.grow(&t, day, 1, || Some(3)))
             .expect("someone moves in");
         assert_eq!(r.residents.len(), PERSONALITIES + 1);
         assert!(r.appeared.contains(&new.index));

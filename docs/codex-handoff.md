@@ -27,8 +27,7 @@ field rank + player id (`logic/src/field_assessment.rs`, `app/src/field_rank.rs`
 `PlayerIdentity.id`, saved `dust_flag`; feeds bargain scheduling and insect hatching),
 shop spotlight rare furniture (tiers 2/3, `shop_rare` save field, FE09 display).
 
-Rare-furniture notice letter done (`completed/shop-rare-notice.md`). Known gaps: villager move-in still a fixed 70% (`roster::init_roster` runs before the town
-exists, so no field rank); fish spawn has no rank scaling; rare-furniture notice letter
+Rare-furniture notice letter done (`completed/shop-rare-notice.md`). Known gaps: villager move-in now uses the field rank (`completed/villager-move-in-rank.md`); fish spawn has no rank scaling; rare-furniture notice letter
 (`mSP_SetShopRareFurnitureChirashi`) and buying-the-rare sold sign not driven; "escort/twin"
 bargain choreography unaudited; grab-bag capacity warning panel; Nook present/hand-over
 frames not eyeballed; bargain RNG still a local adapter. Diary and letter writing now use the retail grid (`completed/diary-retail-grid.md`, `completed/letters-retail-grid.md`). Candidate next tasks: grid leftovers (accent key, voices, scrolling

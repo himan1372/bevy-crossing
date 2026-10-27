@@ -94,6 +94,29 @@ fn daily(items: Option<ResMut<FieldItems>>, mut rank: ResMut<FieldRank>) {
     }
 }
 
+/// The rank the move-in check sees at start-up (`mFAs_SetFieldRank` runs
+/// just before `mNpc_Grow`): the town is not built yet, so its field items are
+/// laid out from the retail layout for the seed, with the save's changes and
+/// trash flag on them. Only asked for when a move-in could actually happen.
+pub(crate) fn rank_at_start(
+    disc: &crate::game_disc::GameDisc,
+    seed: u32,
+    save: Option<&crate::save::SaveData>,
+) -> Option<u8> {
+    let pool: Vec<u16> = (0..15).collect();
+    let mut plan = rustimal_logic::town_gen::generate(seed, &pool, 6)?;
+    let (retail, _) = crate::disc_town::build_retail_town(disc, &mut plan, None);
+    let mut items = FieldItems::new(retail.items, plan.seed);
+    if let Some(changes) = save.and_then(|s| s.field_items.as_ref()) {
+        items.restore(changes);
+    }
+    items.dust_flag = save.is_some_and(|s| s.dust_flag);
+    let mut rank = FieldRank::default();
+    rank.refresh(&mut items);
+    info!("move-in check: field rank {:?}", rank.rank);
+    rank.rank
+}
+
 pub struct FieldRankPlugin;
 
 impl Plugin for FieldRankPlugin {

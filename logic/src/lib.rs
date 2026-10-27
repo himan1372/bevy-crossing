@@ -148,6 +148,7 @@ mod tool_resolvers;
 pub mod town_gen;
 mod uki;
 mod villager_home;
+pub use villager_home::{check_grow_field_rank, GROW_PROB};
 mod villager_mail;
 mod wall_hit_dir;
 mod wall_priority;
