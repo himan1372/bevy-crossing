@@ -92,16 +92,39 @@ pub fn confirm_writes(choice: usize) -> bool {
     choice == 0
 }
 
+/// What a multi-line entry may hold: the diary (992 bytes, 31 lines) or a letter
+/// body (`MAIL_BODY_LEN` 192 bytes, `mBD_BODY_LINE_NUM` 6 lines).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Limits {
+    pub bytes: usize,
+    pub lines: usize,
+}
+
+pub const DIARY: Limits = Limits {
+    bytes: ENTRY_SIZE,
+    lines: 31,
+};
+pub const LETTER: Limits = Limits {
+    bytes: 192,
+    lines: 6,
+};
+
 /// mED_input_multi_line: a code goes in at the cursor while the entry still fits
 /// (992 bytes, at most 31 lines).
-pub fn insert(text: &mut Vec<u8>, cursor: &mut usize, code: u8, widths: &[u8; 256]) -> bool {
+pub fn insert(
+    text: &mut Vec<u8>,
+    cursor: &mut usize,
+    code: u8,
+    widths: &[u8; 256],
+    limits: Limits,
+) -> bool {
     let at = (*cursor).min(text.len());
-    if text.len() >= ENTRY_SIZE {
+    if text.len() >= limits.bytes {
         return false;
     }
     let mut candidate = text.clone();
     candidate.insert(at, code);
-    if lines(&candidate, widths).len() > 31 {
+    if lines(&candidate, widths).len() > limits.lines {
         return false;
     }
     *text = candidate;
@@ -130,12 +153,12 @@ pub fn left(cursor: &mut usize) -> bool {
 }
 
 /// mED_move_cursol_right: past the end it adds a space instead.
-pub fn right(text: &mut Vec<u8>, cursor: &mut usize, widths: &[u8; 256]) -> bool {
+pub fn right(text: &mut Vec<u8>, cursor: &mut usize, widths: &[u8; 256], limits: Limits) -> bool {
     if *cursor < text.len() {
         *cursor += 1;
         true
     } else {
-        insert(text, cursor, SPACE, widths)
+        insert(text, cursor, SPACE, widths, limits)
     }
 }
 
@@ -165,14 +188,14 @@ pub fn upper(text: &[u8], cursor: &mut usize, widths: &[u8; 256]) -> bool {
 }
 
 /// mED_move_cursol_lower: one line down; at the very end it adds a newline.
-pub fn lower(text: &mut Vec<u8>, cursor: &mut usize, widths: &[u8; 256]) -> bool {
+pub fn lower(text: &mut Vec<u8>, cursor: &mut usize, widths: &[u8; 256], limits: Limits) -> bool {
     let (line, column) = cursor_line(text, *cursor, widths);
     let ranges = line_ranges(text, widths);
     if line + 1 < ranges.len() {
         *cursor = index_at(text, ranges[line + 1], column, widths);
         true
     } else if *cursor == text.len() {
-        insert(text, cursor, NEWLINE, widths)
+        insert(text, cursor, NEWLINE, widths, limits)
     } else {
         false
     }

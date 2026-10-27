@@ -257,7 +257,13 @@ fn input(
                     KeyCode::Enter | KeyCode::NumpadEnter => {
                         if let Some(code) = view.keyboard.selected() {
                             let v = &mut view;
-                            if !native::insert(&mut v.draft, &mut v.cursor, code, widths) {
+                            if !native::insert(
+                                &mut v.draft,
+                                &mut v.cursor,
+                                code,
+                                widths,
+                                native::DIARY,
+                            ) {
                                 crate::sound::se(ERROR);
                             }
                         }
@@ -265,7 +271,13 @@ fn input(
                     }
                     KeyCode::Space => {
                         let v = &mut view;
-                        if !native::insert(&mut v.draft, &mut v.cursor, kb::CHAR_SPACE, widths) {
+                        if !native::insert(
+                            &mut v.draft,
+                            &mut v.cursor,
+                            kb::CHAR_SPACE,
+                            widths,
+                            native::DIARY,
+                        ) {
                             crate::sound::se(ERROR);
                         }
                         continue;
@@ -301,7 +313,13 @@ fn input(
                     for ch in chars.chars().filter(|c| !c.is_control()) {
                         if let Some(code) = crate::messages::ac_code_opt(ch) {
                             let v = &mut view;
-                            if !native::insert(&mut v.draft, &mut v.cursor, code, widths) {
+                            if !native::insert(
+                                &mut v.draft,
+                                &mut v.cursor,
+                                code,
+                                widths,
+                                native::DIARY,
+                            ) {
                                 crate::sound::se(ERROR);
                             }
                         }
@@ -342,15 +360,21 @@ fn input(
                                     native::backspace(&mut v.draft, &mut v.cursor)
                                 }
                                 kb::Button::CursorLeft => native::left(&mut v.cursor),
-                                kb::Button::CursorRight => {
-                                    native::right(&mut v.draft, &mut v.cursor, widths)
-                                }
+                                kb::Button::CursorRight => native::right(
+                                    &mut v.draft,
+                                    &mut v.cursor,
+                                    widths,
+                                    native::DIARY,
+                                ),
                                 kb::Button::CursorUp => {
                                     native::upper(&v.draft, &mut v.cursor, widths)
                                 }
-                                kb::Button::CursorDown => {
-                                    native::lower(&mut v.draft, &mut v.cursor, widths)
-                                }
+                                kb::Button::CursorDown => native::lower(
+                                    &mut v.draft,
+                                    &mut v.cursor,
+                                    widths,
+                                    native::DIARY,
+                                ),
                             };
                             crate::sound::se(if !done {
                                 ERROR

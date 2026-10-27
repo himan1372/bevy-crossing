@@ -1020,3 +1020,5 @@ Philip acceptance stay open.
 2026-10-27 claude: shop-spotlight-rare. Nookway and Nookington's stock a daily spotlight rare furniture (rolled first from the rare list, shown at its own FE09 spot, saved, excluded from other draws incl. bargains and grab bags). The rare-furniture notice letter is not wired. See completed/shop-spotlight-rare.md.
 
 2026-10-27 claude: diary-retail-grid. The monthly diary's writing mode now uses the retail letter grid (disc controller and keys) with the source's in-text cursor (insert, erase, left/right, line up/down, space and newline at the end), new disc-free kernel functions in logic/diary.rs, and a rolled-up paper showing five lines. Start (F4) leads to Yes/Rewrite. Letters still need their own editor host. See backlog/diary-retail-grid.md.
+
+2026-10-27 claude: letters-retail-grid. Letter writing (new on stationery and Rewrite) uses the retail grid with the shared in-text cursor kernel (logic/diary.rs, now with Limits), a rolled-up paper and 192-byte/6-line limits; Page Up/Down picks the addressee. See backlog/letters-retail-grid.md.

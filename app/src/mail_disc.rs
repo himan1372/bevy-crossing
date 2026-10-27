@@ -17,7 +17,13 @@ type Paper = (Vec<(Handle<Mesh>, Handle<N64Material>)>, [u8; 4]);
 struct MailAssets {
     papers: HashMap<u8, Paper>,
     root: Option<Entity>,
+    skin: crate::shop_nook::editor::Skin,
 }
+
+/// How far the paper rolls up to make room for the keyboard.
+const LIFT: f32 = 100.0;
+/// Body lines that show above the keyboard.
+const EDIT_LINES: usize = 5;
 
 fn pointer(disc: &GameDisc, name: &str, index: u8) -> Option<u32> {
     let table = disc.catalog.get(name)?;
@@ -171,15 +177,37 @@ fn draw(
         ))
         .id();
     assets.root = Some(root);
-    let (model, color) = &assets.papers[&index];
+    let model = assets.papers[&index].0.clone();
+    let color_value = assets.papers[&index].1;
+    let color = &color_value;
+    let writing = ui.writing;
+    let lift = if writing { LIFT } else { 0.0 };
     for (i, (mesh, material)) in model.iter().enumerate() {
         commands.spawn((
             Mesh3d(mesh.clone()),
             MeshMaterial3d(material.clone()),
-            Transform::from_xyz(0.0, 0.0, 200.0 + i as f32 * 0.1),
+            Transform::from_xyz(0.0, lift * 16.0, 200.0 + i as f32 * 0.1),
             RenderLayers::layer(1),
             ChildOf(root),
         ));
+    }
+    if writing {
+        let mut stores = crate::shop_nook::editor::Stores {
+            meshes: &mut meshes,
+            n64: &mut n64,
+            images: &mut images,
+            materials: &mut materials,
+        };
+        crate::shop_nook::editor::spawn(
+            &mut commands,
+            root,
+            &mut assets.skin,
+            &disc,
+            &font,
+            &ui.write_keyboard,
+            ui.write_held,
+            &mut stores,
+        );
     }
     let mut paint = Paint {
         commands: &mut commands,
@@ -198,17 +226,40 @@ fn draw(
     let header = letter
         .and_then(|l| l.header.clone())
         .unwrap_or_else(|| format!("To {recipient}"));
-    paint.text(&font, &header, Vec2::new(64.0, 36.0), *color, 230.0);
-    let draft = format!("{}_", ui.write_text);
-    let body = letter.map_or(draft.as_str(), |l| l.body.as_str());
+    if !writing {
+        paint.text(&font, &header, Vec2::new(64.0, 36.0), *color, 230.0);
+    }
+    let body = letter.map_or(ui.write_text.as_str(), |l| l.body.as_str());
     let wrapped = lines(body, &font.widths);
     let count = wrapped.len().div_ceil(6);
-    let page = if ui.writing {
-        count - 1
-    } else {
-        ui.page.min(count - 1)
-    };
-    for (row, line) in wrapped.iter().skip(page * 6).take(6).enumerate() {
+    if writing {
+        // The cursor's line, with the five lines that fit above the keyboard.
+        let codes = crate::mail::letter_codes(body);
+        let cursor = ui.write_cursor.unwrap_or(codes.len()).min(codes.len());
+        let (line, column) = rustimal_logic::diary::cursor_line(&codes, cursor, &font.widths);
+        let first = (line + 1).saturating_sub(EDIT_LINES);
+        for (row, text) in wrapped.iter().skip(first).take(EDIT_LINES).enumerate() {
+            let y = 22.0 + row as f32 * 16.0;
+            paint.text(&font, text, Vec2::new(64.0, y), *color, 230.0);
+            if first + row == line {
+                paint.text(
+                    &font,
+                    "_",
+                    Vec2::new(64.0 + column as f32, y),
+                    *color,
+                    230.0,
+                );
+            }
+        }
+    }
+    let page = ui.page.min(count - 1);
+    for (row, line) in wrapped
+        .iter()
+        .skip(page * 6)
+        .take(6)
+        .enumerate()
+        .filter(|_| !writing)
+    {
         paint.text(
             &font,
             line,
@@ -221,13 +272,15 @@ fn draw(
     let from = letter
         .and_then(|l| l.footer.clone())
         .unwrap_or_else(|| format!("From {sender}"));
-    paint.text(
-        &font,
-        &from,
-        Vec2::new(256.0 - text_width(&from, &font.widths), 172.0),
-        *color,
-        230.0,
-    );
+    if !writing {
+        paint.text(
+            &font,
+            &from,
+            Vec2::new(256.0 - text_width(&from, &font.widths), 172.0),
+            *color,
+            230.0,
+        );
+    }
     if let Some(letter) = letter.filter(|l| l.header.is_none() && !l.subject.is_empty()) {
         let subject = format!(
             "{}{}{}",
@@ -237,18 +290,32 @@ fn draw(
         );
         paint.text(&font, &subject, Vec2::new(64.0, 52.0), *color, 230.0);
     }
-    let hint = if ui.writing {
-        "Up/Down: recipient  Enter: done  Esc: cancel".to_string()
+    let hints = if writing {
+        vec![
+            format!("To {recipient}   PgUp/PgDn: change"),
+            "Enter: key  Bksp  Ctrl+arrows: cursor  F4: send  Esc: cancel".to_string(),
+        ]
     } else {
-        format!("{}/{}  Left/Right: page  Esc: back", page + 1, count)
+        vec![format!(
+            "{}/{}  Left/Right: page  Esc: back",
+            page + 1,
+            count
+        )]
     };
-    let hint = format!(
-        "{}{}{}",
-        crate::messages::markup::LINE_SCALE,
-        crate::messages::markup::arg(20),
-        hint
-    );
-    paint.text(&font, &hint, Vec2::new(64.0, 186.0), *color, 230.0);
+    for (row, hint) in hints.iter().enumerate() {
+        let hint = format!(
+            "{}{}{}",
+            crate::messages::markup::LINE_SCALE,
+            crate::messages::markup::arg(20),
+            hint
+        );
+        let at = if writing {
+            Vec2::new(64.0, row as f32 * 10.0)
+        } else {
+            Vec2::new(64.0, 186.0)
+        };
+        paint.text(&font, &hint, at, *color, 230.0);
+    }
 }
 
 pub struct MailDiscPlugin;

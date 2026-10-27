@@ -31,8 +31,8 @@ Known gaps: villager move-in still a fixed 70% (`roster::init_roster` runs befor
 exists, so no field rank); fish spawn has no rank scaling; rare-furniture notice letter
 (`mSP_SetShopRareFurnitureChirashi`) and buying-the-rare sold sign not driven; "escort/twin"
 bargain choreography unaudited; grab-bag capacity warning panel; Nook present/hand-over
-frames not eyeballed; bargain RNG still a local adapter. Diary writing now uses the retail grid (`completed/diary-retail-grid.md`). Candidate next tasks: rare-furniture
-notice letter, letters editor on the retail grid, grid leftovers (accent key, voices, scrolling
+frames not eyeballed; bargain RNG still a local adapter. Diary and letter writing now use the retail grid (`completed/diary-retail-grid.md`, `completed/letters-retail-grid.md`). Candidate next tasks: rare-furniture
+notice letter, grid leftovers (accent key, voices, scrolling
 window texture). Parent retail/M4 and Philip's acceptance stay open; Philip chooses the next task.
 
 ## Latest continuation - 2026-10-26

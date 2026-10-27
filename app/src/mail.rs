@@ -22,6 +22,7 @@ use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::input::ButtonState;
 use bevy::prelude::*;
 use bevy::text::FontSize;
+use rustimal_logic::editor_keyboard as kb;
 use rustimal_logic::letter_score::MAIL_BODY_LEN;
 use serde::{Deserialize, Serialize};
 
@@ -39,8 +40,38 @@ pub const MAILBOX_CAP: usize = 10;
 const MAILBOX_RANGE: f32 = 2.2;
 /// Facing-cone cosine threshold (~60° either side).
 const MAILBOX_DOT: f32 = 0.5;
-/// Max characters in a player-written letter.
-const MAX_LETTER_LEN: usize = 200;
+// `sAdo_SysTrgStart` ids from `m_editor_ovl.c`.
+const GRID_MOVE: u16 = 0x411;
+const GRID_BACKSPACE: u16 = 0x1034;
+const GRID_START: u16 = 0x5F;
+const GRID_TOGGLE: u16 = 0x37;
+const GRID_ERROR: u16 = 0x1003;
+
+/// A letter's text as character codes (newline is 205 in the body).
+pub(crate) fn letter_codes(text: &str) -> Vec<u8> {
+    text.chars()
+        .map(|c| {
+            if c == '\n' {
+                rustimal_logic::diary::NEWLINE
+            } else {
+                crate::messages::ac_code(c)
+            }
+        })
+        .collect()
+}
+
+fn to_text(codes: &[u8]) -> String {
+    codes
+        .iter()
+        .map(|&code| {
+            if code == rustimal_logic::diary::NEWLINE {
+                '\n'
+            } else {
+                crate::messages::char_of(code).unwrap_or('?')
+            }
+        })
+        .collect()
+}
 
 /// Whom a written letter is for (Mail_nm_c type PLAYER / NPC / MUSEUM).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -187,6 +218,13 @@ pub struct MailUi {
     pub(crate) writing: bool,
     pub(crate) write_recipient: usize,
     pub(crate) write_text: String,
+    /// Text cursor (a code index into `write_text`); `None` until the compose view starts.
+    pub(crate) write_cursor: Option<usize>,
+    pub(crate) write_keyboard: kb::Keyboard,
+    write_repeat: kb::ButtonRepeat,
+    pub(crate) write_held: crate::shop_nook::editor::Held,
+    /// 60 Hz frames owed to the retail repeat counters.
+    write_ticks: f32,
     pub(crate) page: usize,
     pub(crate) from_pockets: bool,
     pub(crate) menu: Option<usize>,
@@ -648,6 +686,7 @@ fn finish_letter(
         return;
     };
     let text = ui.write_text.trim_end().to_string();
+    ui.write_cursor = None;
     ui.writing = false;
     ui.write_text.clear();
     if let Some(index) = ui.rewriting.take() {
@@ -683,6 +722,8 @@ fn mail_ui_input(
     mut actions: ResMut<Actions>,
     focus: Res<InputFocus>,
     mut key_events: MessageReader<KeyboardInput>,
+    keys: Res<ButtonInput<KeyCode>>,
+    time: Res<Time>,
     mut ui: ResMut<MailUi>,
     mut mailbox: ResMut<Mailbox>,
     villagers: Query<(Entity, &Villager)>,
@@ -726,23 +767,8 @@ fn mail_ui_input(
 
     // --- Compose view ---
     if ui.writing {
-        // Drain typed characters from the key events (printable characters
-        // arrive as `Key::Character`; control keys like Enter are handled
-        // via `Actions` below).
-        for ev in key_events.read() {
-            if ev.state != ButtonState::Pressed {
-                continue;
-            }
-            if let Key::Character(s) = &ev.logical_key {
-                for c in s.chars() {
-                    if c.is_ascii() && !c.is_ascii_control() && ui.write_text.len() < MAX_LETTER_LEN
-                    {
-                        ui.write_text.push(c);
-                    }
-                }
-            }
-        }
         if ui.write_recipients.is_empty() {
+            key_events.clear();
             // The address book: the museum, then villagers who remember
             // the player, in house order.
             let mut known: Vec<(Entity, &Villager)> = villagers
@@ -783,41 +809,186 @@ fn mail_ui_input(
                     .unwrap_or(0);
             }
         }
-        let names = &ui.write_recipients;
         if actions.just_pressed(Action::Cancel) {
+            key_events.clear();
             ui.writing = false;
             ui.write_paper = None;
             ui.rewriting = None;
             ui.write_text.clear();
+            ui.write_cursor = None;
             if ui.from_pockets {
                 ui.open = false;
             }
             crate::sound::se(crate::sound::se_id::MENU_EXIT);
             return;
         }
-        if !names.is_empty() {
-            let count = names.len();
-            if actions.just_pressed(Action::MenuUp) {
-                let before = ui.write_recipient;
-                ui.write_recipient = ui.write_recipient.saturating_sub(1);
-                crate::sound::cursor_changed(before, ui.write_recipient);
-                return;
+        let count = ui.write_recipients.len();
+        if count > 0 {
+            // Arrows drive the grid, so the addressee moves on Page Up/Down.
+            let before = ui.write_recipient;
+            if keys.just_pressed(KeyCode::PageUp) {
+                ui.write_recipient = before.saturating_sub(1);
+            } else if keys.just_pressed(KeyCode::PageDown) {
+                ui.write_recipient = (before + 1).min(count - 1);
             }
-            if actions.just_pressed(Action::MenuDown) {
-                let before = ui.write_recipient;
-                ui.write_recipient = (ui.write_recipient + 1).min(count - 1);
-                crate::sound::cursor_changed(before, ui.write_recipient);
-                return;
+            crate::sound::cursor_changed(before, ui.write_recipient);
+        }
+        let Some(font) = font.as_deref() else {
+            key_events.clear();
+            return;
+        };
+        let widths = &font.widths;
+        let mut codes = letter_codes(&ui.write_text);
+        let mut cursor = ui.write_cursor.unwrap_or(codes.len()).min(codes.len());
+        if ui.write_cursor.is_none() {
+            ui.write_repeat = kb::ButtonRepeat::default();
+        }
+        let limits = rustimal_logic::diary::LETTER;
+        let ctrl = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
+        let mut done = false;
+        // Key presses: A (Enter), the layout keys, Start (F4) and typed letters.
+        for ev in key_events.read() {
+            if ev.state != ButtonState::Pressed {
+                continue;
+            }
+            let put = |code: u8, codes: &mut Vec<u8>, cursor: &mut usize| {
+                if !rustimal_logic::diary::insert(codes, cursor, code, widths, limits) {
+                    crate::sound::se(GRID_ERROR);
+                }
+            };
+            match ev.key_code {
+                KeyCode::Enter | KeyCode::NumpadEnter => {
+                    if let Some(code) = ui.write_keyboard.selected() {
+                        put(code, &mut codes, &mut cursor);
+                    }
+                    continue;
+                }
+                KeyCode::Space => {
+                    put(kb::CHAR_SPACE, &mut codes, &mut cursor);
+                    continue;
+                }
+                KeyCode::F1 => {
+                    ui.write_keyboard.toggle_shift();
+                    crate::sound::se(GRID_TOGGLE);
+                    continue;
+                }
+                KeyCode::F2 => {
+                    ui.write_keyboard.toggle_arrange();
+                    crate::sound::se(GRID_TOGGLE);
+                    continue;
+                }
+                KeyCode::F3 => {
+                    ui.write_keyboard.next_mode();
+                    crate::sound::se(GRID_TOGGLE);
+                    continue;
+                }
+                KeyCode::F4 => {
+                    // Start ends the edit (`mED_COMMAND_END_EDIT`).
+                    done = true;
+                    break;
+                }
+                _ => {}
+            }
+            if ctrl {
+                continue;
+            }
+            if let Key::Character(s) = &ev.logical_key {
+                for c in s.chars().filter(|c| !c.is_control()) {
+                    if let Some(code) = crate::messages::ac_code_opt(c) {
+                        put(code, &mut codes, &mut cursor);
+                    }
+                }
             }
         }
-        if actions.just_pressed(Action::Back) {
-            if ui.write_text.pop().is_some() {
-                crate::sound::se(crate::sound::se_id::CURSOR);
-            }
+        if done {
+            ui.write_text = to_text(&codes);
+            crate::sound::se(GRID_START);
+            finish_letter(&mut ui, &mut mailbox, &mut inventory, &identity.player);
             return;
         }
-        if actions.just_pressed(Action::Confirm) {
-            finish_letter(&mut ui, &mut mailbox, &mut inventory, &identity.player);
+        // Held keys: the grid (arrows), the text cursor (Ctrl+arrows) and
+        // Backspace, counted in 60 Hz frames.
+        let arrow = [
+            (KeyCode::ArrowLeft, kb::Direction::Left),
+            (KeyCode::ArrowRight, kb::Direction::Right),
+            (KeyCode::ArrowUp, kb::Direction::Up),
+            (KeyCode::ArrowDown, kb::Direction::Down),
+        ]
+        .into_iter()
+        .find(|(key, _)| keys.pressed(*key))
+        .map(|(_, direction)| direction);
+        let (stick, pad) = if ctrl { (None, arrow) } else { (arrow, None) };
+        let button = if keys.pressed(KeyCode::Backspace) {
+            Some(kb::Button::Backspace)
+        } else {
+            pad.map(|d| match d {
+                kb::Direction::Left => kb::Button::CursorLeft,
+                kb::Direction::Right => kb::Button::CursorRight,
+                kb::Direction::Up => kb::Button::CursorUp,
+                kb::Direction::Down => kb::Button::CursorDown,
+            })
+        };
+        ui.write_ticks += time.delta_secs() * 60.0;
+        let mut steps = ui.write_ticks.floor() as u32;
+        ui.write_ticks -= steps as f32;
+        // A press never waits for the next whole frame.
+        if steps == 0 && (stick.is_some() || button.is_some()) && ui.write_held.stick != stick {
+            steps = 1;
+        }
+        for _ in 0..steps {
+            if ui.write_keyboard.step(stick) == kb::Moved::Yes {
+                crate::sound::se(GRID_MOVE);
+            }
+            if ui.write_repeat.step(button) {
+                if let Some(button) = button {
+                    use rustimal_logic::diary as text;
+                    let moved = match button {
+                        kb::Button::Backspace => text::backspace(&mut codes, &mut cursor),
+                        kb::Button::CursorLeft => text::left(&mut cursor),
+                        kb::Button::CursorRight => {
+                            text::right(&mut codes, &mut cursor, widths, limits)
+                        }
+                        kb::Button::CursorUp => text::upper(&codes, &mut cursor, widths),
+                        kb::Button::CursorDown => {
+                            text::lower(&mut codes, &mut cursor, widths, limits)
+                        }
+                    };
+                    crate::sound::se(if !moved {
+                        GRID_ERROR
+                    } else if button == kb::Button::Backspace {
+                        GRID_BACKSPACE
+                    } else {
+                        crate::sound::se_id::CURSOR
+                    });
+                }
+            }
+        }
+        let held = crate::shop_nook::editor::Held {
+            a: keys.pressed(KeyCode::Enter),
+            b: keys.pressed(KeyCode::Backspace),
+            l: keys.pressed(KeyCode::F1),
+            y: keys.pressed(KeyCode::F3),
+            pad,
+            stick,
+        };
+        if held != ui.write_held {
+            ui.write_held = held;
+        }
+        let text = to_text(&codes);
+        if text != ui.write_text {
+            ui.write_text = text;
+        }
+        if ui.write_cursor != Some(cursor) {
+            ui.write_cursor = Some(cursor);
+        }
+        // Typed keys also map to gameplay actions; none may leak through.
+        for action in [
+            Action::Confirm,
+            Action::Interact,
+            Action::Back,
+            Action::Pause,
+        ] {
+            actions.consume(action);
         }
         return;
     }
