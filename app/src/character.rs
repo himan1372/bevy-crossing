@@ -890,7 +890,10 @@ const VILLAGER_RUN_MIN: f32 = 2.5;
 #[allow(clippy::too_many_arguments)] // Keep foot contacts tied to the same pose and movement snapshot.
 fn animate_characters(
     time: Res<Time>,
-    players: Query<(&Locomotion, &Facing), With<Player>>,
+    mut players: Query<
+        (&Locomotion, &Facing, Option<&mut NpcClip>),
+        (With<Player>, Without<NpcModel>),
+    >,
     villagers: Query<(&GlobalTransform, &Villager, Option<&VillagerTalk>)>,
     mut npcs: Query<
         (
@@ -898,7 +901,7 @@ fn animate_characters(
             Option<&mut NpcClip>,
             Option<&NpcGait>,
         ),
-        With<NpcModel>,
+        (With<NpcModel>, Without<Player>),
     >,
     disc: Option<Res<GameDisc>>,
     mut rigs: Query<(Entity, &ChildOf, &mut CharacterRig)>,
@@ -915,7 +918,7 @@ fn animate_characters(
     let ticks = dt * 60.0;
     for (root, child_of, mut rig) in &mut rigs {
         let owner = child_of.parent();
-        if let Ok((loco, facing)) = players.get(owner) {
+        if let Ok((loco, facing, mut arm)) = players.get_mut(owner) {
             // Facing angle as the actor's shape rotation: 0 = +z, 90 deg = +x.
             if let Ok(mut t) = transforms.get_mut(root) {
                 if preview.shirt() {
@@ -973,6 +976,29 @@ fn animate_characters(
                 rig.pose_morph = (rig.pose_morph - ticks * 0.5).max(0.0);
                 rig.last_pos = transforms.get(owner).ok().map(|t| t.translation);
                 continue;
+            }
+            // A hand-over clip (give, reach, put away) replaces the locomotion pose.
+            if let Some(arm) = arm.as_deref_mut().filter(|arm| arm.name.is_some()) {
+                let previous = (rig.pose_morph > 0.0).then(|| {
+                    rig.joints
+                        .iter()
+                        .map(|&joint| transforms.get(joint).copied().unwrap_or_default())
+                        .collect::<Vec<_>>()
+                });
+                if play_clip(&mut rig, arm, disc.as_deref(), ticks, &mut transforms) {
+                    if let Some(previous) = previous {
+                        let weight = (ticks / rig.pose_morph).min(1.0);
+                        for (&joint, old) in rig.joints.iter().zip(previous) {
+                            if let Ok(mut t) = transforms.get_mut(joint) {
+                                t.translation = old.translation.lerp(t.translation, weight);
+                                t.rotation = old.rotation.slerp(t.rotation, weight);
+                            }
+                        }
+                        rig.pose_morph = (rig.pose_morph - ticks).max(0.0);
+                    }
+                    rig.last_pos = transforms.get(owner).ok().map(|t| t.translation);
+                    continue;
+                }
             }
             let action = net_models.as_ref().filter(|_| net.busy());
             if rig.net_active != action.is_some() || rig.net_held != net.held {

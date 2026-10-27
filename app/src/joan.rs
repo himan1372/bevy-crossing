@@ -10,7 +10,7 @@
 //! 0x0711 asks again.
 use bevy::prelude::*;
 
-use crate::character::NpcClip;
+use crate::character::{NpcClip, NpcGait};
 use crate::dialogue::DialogueState;
 use crate::game_disc::GameDisc;
 use crate::input::{Action, Actions, InputFocus, InteractSet};
@@ -18,6 +18,7 @@ use crate::interaction::{Facing, PlayerInventory};
 use crate::messages::MsgContext;
 use crate::player::Player;
 use crate::shop::ShopLocation;
+use crate::shop_nook::handover::{HandOver, Item, Party, Request};
 use crate::states::GameplaySet;
 use crate::town::Town;
 use rustimal_logic::town_gen::{ACRE_DEPTH, ACRE_WIDTH};
@@ -25,6 +26,8 @@ use rustimal_logic::town_gen::{ACRE_DEPTH, ACRE_WIDTH};
 /// ALL_NPC_NUM + (SP_NPC_KABUPEDDLER - SP_NPC_START); `l_sp_actor_name` sound 8.
 const JOAN_NPC: u32 = 238 + 7;
 const JOAN_SOUND: u8 = 8;
+/// Her walking pace in world units a second (a villager's `WALK_SPEED`).
+const WALK_SPEED: f32 = 1.6;
 /// First and last hour she is out (`mEv_EVENT_KABU_PEDDLER`).
 const FIRST_HOUR: u8 = 6;
 const LAST_HOUR: u8 = 11;
@@ -33,6 +36,10 @@ const LAST_HOUR: u8 = 11;
 struct Joan {
     /// The game day she came out for.
     day: i64,
+    /// Where she is walking to after a talk.
+    goal: Option<Vec3>,
+    /// Talks so far, to vary where she goes next.
+    talks: u32,
 }
 
 /// Whether Joan is out now: Sunday morning.
@@ -101,8 +108,11 @@ fn visit(
         Name::new("Joan"),
         Joan {
             day: now.day_number,
+            goal: None,
+            talks: 0,
         },
         NpcClip::default(),
+        NpcGait::default(),
         crate::character::NpcModel(JOAN_NPC),
         Mesh3d(meshes.add(Capsule3d::new(0.35, 0.9))),
         Transform::from_translation(at + Vec3::Y),
@@ -168,12 +178,17 @@ enum Step {
     Price { bundle: usize, again: bool },
     /// The last line before she is done.
     Finish,
+    /// The money and then the turnips change hands (`MONEY_GET_DEMO`,
+    /// `KABU_TRANS_DEMO`); the question follows.
+    Demo { stage: u8 },
 }
 
 #[derive(Resource, Default)]
 struct Talk {
     step: Step,
     context: MsgContext,
+    /// The talk is over: she moves on (`turnipbuyer_behind`).
+    leave: bool,
 }
 
 /// She turns to face the player while they talk.
@@ -229,6 +244,7 @@ fn talk(
     mut flow: ResMut<Talk>,
     mut dialogue: ResMut<DialogueState>,
     mut inventory: ResMut<PlayerInventory>,
+    mut handover: ResMut<HandOver>,
     mut shop: ResMut<crate::shop::ShopData>,
     identity: Res<crate::save::PlayerIdentity>,
 ) {
@@ -258,6 +274,7 @@ fn talk(
                 let Some(msg) = target else {
                     *dialogue = DialogueState::default();
                     *focus = InputFocus::World;
+                    flow.leave = true;
                     return;
                 };
                 let asking = say(&disc, &mut dialogue, actor, &flow.context, msg);
@@ -287,7 +304,15 @@ fn talk(
                         inventory.pockets.set_item_cond(slot, 0);
                         crate::sound::se(crate::sound::se_id::REGISTER);
                         info!("Joan sold {count} turnips for {cost}");
-                        MORE
+                        // The money goes across first, then the bundle.
+                        *dialogue = DialogueState::default();
+                        handover.start(Request {
+                            item: Item::Money,
+                            giver: Party::Player,
+                            taker: Party::Npc(actor),
+                        });
+                        flow.step = Step::Demo { stage: 0 };
+                        return;
                     }
                     Some(_) if again => 0x0717,
                     Some(_) => 0x0710,
@@ -297,10 +322,29 @@ fn talk(
                 let asking = say(&disc, &mut dialogue, actor, &flow.context, msg);
                 ask(&mut flow.step, asking);
             }
-            Step::Idle | Step::Finish => {
+            Step::Idle | Step::Finish | Step::Demo { .. } => {
                 *dialogue = DialogueState::default();
                 *focus = InputFocus::World;
+                flow.leave = true;
             }
+        }
+        return;
+    }
+    if let Step::Demo { stage } = flow.step {
+        if handover.busy() {
+            return;
+        }
+        *focus = InputFocus::Dialogue;
+        if stage == 0 {
+            handover.start(Request {
+                item: Item::Turnips,
+                giver: Party::Npc(actor),
+                taker: Party::Player,
+            });
+            flow.step = Step::Demo { stage: 1 };
+        } else {
+            let asking = say(&disc, &mut dialogue, actor, &flow.context, MORE);
+            ask(&mut flow.step, asking);
         }
         return;
     }
@@ -335,12 +379,82 @@ fn talk(
     ask(&mut flow.step, asking);
 }
 
+/// A clear unit a few steps off with a clear line to it, picked from the
+/// talk count (`walk_actor_at_wade` moves her to a new free unit).
+fn wander_goal(
+    town: &Town,
+    items: &crate::field_items::FieldItems,
+    from: Vec3,
+    seed: u32,
+) -> Option<Vec3> {
+    (0..16u32).find_map(|k| {
+        let angle = (seed + k * 5) as f32 * 0.9;
+        let dist = 8.0 - (k / 4) as f32 * 1.5;
+        let at = from + Vec3::new(angle.cos(), 0.0, angle.sin()) * dist;
+        let free = items.at(at).is_some_and(|(_, _, item)| item == 0);
+        let line_clear = (1..=8).all(|i| town.is_clear_ground(from.lerp(at, i as f32 / 8.0)));
+        (free && line_clear).then(|| at.with_y(town.ground_y(at)))
+    })
+}
+
+/// Walks her to a new spot after a talk, at a villager's pace.
+fn walk(
+    time: Res<Time>,
+    town: Res<Town>,
+    items: Option<Res<crate::field_items::FieldItems>>,
+    dialogue: Res<DialogueState>,
+    mut flow: ResMut<Talk>,
+    mut joan: Query<(Entity, &mut Transform, &mut Joan, &mut NpcGait)>,
+) {
+    let (Some(items), Ok((entity, mut transform, mut joan, mut gait))) = (items, joan.single_mut())
+    else {
+        return;
+    };
+    if dialogue.active && dialogue.speaker == Some(entity) {
+        gait.0 = 0;
+        return;
+    }
+    if flow.leave && matches!(flow.step, Step::Idle) {
+        flow.leave = false;
+        joan.talks += 1;
+        let seed = joan
+            .talks
+            .wrapping_add(crate::clock::now().day_number as u32);
+        joan.goal = wander_goal(&town, &items, transform.translation, seed);
+    }
+    let Some(goal) = joan.goal else {
+        gait.0 = 0;
+        return;
+    };
+    let to = (goal - transform.translation).with_y(0.0);
+    let step = WALK_SPEED * time.delta_secs();
+    if to.length() <= step {
+        transform.translation = goal + Vec3::Y;
+        joan.goal = None;
+        gait.0 = 0;
+        return;
+    }
+    let dir = to.normalize();
+    let next = transform.translation + dir * step;
+    if !town.is_clear_ground(next) {
+        joan.goal = None;
+        gait.0 = 0;
+        return;
+    }
+    transform.translation = next.with_y(town.ground_y(next) + 1.0);
+    let want = Quat::from_rotation_y(dir.x.atan2(dir.z));
+    transform.rotation = transform
+        .rotation
+        .slerp(want, (time.delta_secs() * 8.0).min(1.0));
+    gait.0 = 1;
+}
+
 pub struct JoanPlugin;
 
 impl Plugin for JoanPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Talk>()
-            .add_systems(Update, (visit, face).in_set(GameplaySet))
+            .add_systems(Update, (visit, face, walk).in_set(GameplaySet))
             .add_systems(Update, talk.in_set(InteractSet::Talk).in_set(GameplaySet));
     }
 }

@@ -914,7 +914,7 @@ pub(crate) fn interact(
                     .is_some()
                 {
                     password.presents += 1;
-                    handover.start();
+                    handover.start(handover::Request::nook_present());
                     crate::sound::se(crate::sound::se_id::POCKET_RUSTLE);
                     info!("password present item={item:#06x}");
                 }

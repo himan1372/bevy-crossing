@@ -27,6 +27,8 @@ pub fn spawn_player(
         Player,
         Facing::default(),
         Locomotion::default(),
+        // The hand-over arm clips play on the player too.
+        crate::character::NpcClip::default(),
         Mesh3d(player_mesh),
         MeshMaterial3d(player_mat),
         Transform::from_xyz(0.0, 1.0, 0.0),

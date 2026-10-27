@@ -1009,3 +1009,5 @@ who she has spoken to. Her walk-away, the money/turnip hand-over demos and the e
 placement rules remain. See completed/joan-turnip-peddler.md. Counts/parent/M4 and
 Philip acceptance stay open.
 
+2026-10-26 claude: joan-handover-demos. The hand-over is now generic (giver/taker/item): after Joan's sale the player hands her the money bag and she hands back the turnip bundle with the original arm clips, models and curves; she walks to a new nearby spot after each talk. Nook's present uses the same code and the player now plays its give/get arm clips. Exact placement rules remain. See completed/joan-handover-demos.md.
+
