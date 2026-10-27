@@ -4,13 +4,30 @@ use crate::msg_window::MsgAssets;
 use crate::n64_material::N64Material;
 use crate::pockets_disc::Paint;
 use bevy::camera::visibility::RenderLayers;
+use rustimal_logic::editor_keyboard as kb;
 
 #[derive(Resource, Default)]
 pub(super) struct DiaryAssets {
     frame: Option<Vec<(Handle<Mesh>, Handle<N64Material>)>>,
     root: Option<Entity>,
-    shown: Option<(usize, Mode, usize, usize, u64)>,
+    shown: Option<Shown>,
+    skin: crate::shop_nook::editor::Skin,
 }
+
+type Shown = (
+    usize,
+    Mode,
+    usize,
+    usize,
+    u64,
+    usize,
+    kb::Keyboard,
+    crate::shop_nook::editor::Held,
+);
+
+/// How far the paper rolls up to make room for the keyboard
+/// (`diary_ovl->_28` ends at -100).
+const LIFT: f32 = 100.0;
 
 const MONTH_NAMES: [&str; 12] = [
     "January",
@@ -53,6 +70,9 @@ pub(super) fn draw(
         view.scroll,
         view.choice,
         view.revision,
+        view.cursor,
+        view.keyboard,
+        view.held,
     );
     if assets.shown == Some(signature) && assets.root.is_some() {
         return;
@@ -89,16 +109,36 @@ pub(super) fn draw(
         .id();
     assets.root = Some(root);
     assets.shown = Some(signature);
+    let editing = view.mode == Mode::Edit;
+    let lift = if editing { LIFT } else { 0.0 };
     if let Some(frame) = &assets.frame {
         for (i, (mesh, material)) in frame.iter().enumerate() {
             commands.spawn((
                 Mesh3d(mesh.clone()),
                 MeshMaterial3d(material.clone()),
-                Transform::from_xyz(0.0, 0.0, 200.0 + i as f32 * 0.1),
+                Transform::from_xyz(0.0, lift * 16.0, 200.0 + i as f32 * 0.1),
                 RenderLayers::layer(1),
                 ChildOf(root),
             ));
         }
+    }
+    if editing {
+        let mut stores = crate::shop_nook::editor::Stores {
+            meshes: &mut meshes,
+            n64: &mut n64,
+            images: &mut images,
+            materials: &mut materials,
+        };
+        crate::shop_nook::editor::spawn(
+            &mut commands,
+            root,
+            &mut assets.skin,
+            disc,
+            &font,
+            &view.keyboard,
+            view.held,
+            &mut stores,
+        );
     }
     let mut paint = Paint {
         commands: &mut commands,
@@ -110,11 +150,12 @@ pub(super) fn draw(
     paint.text(
         &font,
         &format!("{} diary", MONTH_NAMES[view.month]),
-        Vec2::new(64.0, 36.0),
+        Vec2::new(64.0, 36.0 - lift),
         ink,
         230.0,
     );
     let lines = native::lines(&view.draft, &font.widths);
+    let (cursor_line, cursor_x) = native::cursor_line(&view.draft, view.cursor, &font.widths);
     if view.draft.is_empty() && view.mode == Mode::Read {
         paint.text(
             &font,
@@ -127,20 +168,18 @@ pub(super) fn draw(
         for (row, line) in lines
             .iter()
             .skip(view.scroll)
-            .take(native::VISIBLE_LINES)
+            .take(if editing {
+                EDIT_LINES
+            } else {
+                native::VISIBLE_LINES
+            })
             .enumerate()
         {
-            let mut text = display(line);
-            if view.mode == Mode::Edit && view.scroll + row + 1 == lines.len() {
-                text.push('_');
+            let y = if editing { 28.0 } else { 64.0 } + row as f32 * 16.0;
+            paint.text(&font, &display(line), Vec2::new(64.0, y), ink, 230.0);
+            if editing && view.scroll + row == cursor_line {
+                paint.text(&font, "_", Vec2::new(64.0 + cursor_x as f32, y), ink, 230.0);
             }
-            paint.text(
-                &font,
-                &text,
-                Vec2::new(64.0, 64.0 + row as f32 * 16.0),
-                ink,
-                230.0,
-            );
         }
     }
     let hints: Vec<String> = match view.mode {
@@ -150,10 +189,9 @@ pub(super) fn draw(
             "Esc: close".into(),
         ],
         Mode::Edit => vec![
-            "Type: text   Enter: new line".into(),
-            "Ctrl+Enter: finish   Esc: discard draft".into(),
+            "Enter: key   Bksp: erase   Space   F1: Caps   F3: type".into(),
             format!(
-                "{} / 992 bytes    {} / 31 lines",
+                "Ctrl+arrows: cursor   F4: finish   Esc: discard   {}/992  {}/31",
                 view.draft.len(),
                 lines.len()
             ),
@@ -178,7 +216,7 @@ pub(super) fn draw(
         paint.text(
             &font,
             &small,
-            Vec2::new(64.0, 166.0 + row as f32 * 12.0),
+            Vec2::new(64.0, if editing { 0.0 } else { 166.0 } + row as f32 * 12.0),
             ink,
             230.0,
         );

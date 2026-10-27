@@ -19,11 +19,11 @@ use crate::msg_window::MsgAssets;
 use crate::n64_material::N64Material;
 use crate::pockets_disc::Paint;
 
-pub(super) type Model = Vec<(Handle<Mesh>, Handle<N64Material>)>;
+pub(crate) type Model = Vec<(Handle<Mesh>, Handle<N64Material>)>;
 
 /// What the on-screen controller shows as pressed.
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
-pub(super) struct Held {
+pub(crate) struct Held {
     pub a: bool,
     pub b: bool,
     pub l: bool,
@@ -34,13 +34,13 @@ pub(super) struct Held {
 
 /// Disc-built models, kept between redraws.
 #[derive(Default)]
-pub(super) struct Skin {
+pub(crate) struct Skin {
     models: HashMap<String, Model>,
     key_image: Option<Handle<Image>>,
 }
 
 /// The pieces every draw needs.
-pub(super) struct Stores<'a> {
+pub(crate) struct Stores<'a> {
     pub meshes: &'a mut bevy::asset::Assets<Mesh>,
     pub n64: &'a mut bevy::asset::Assets<N64Material>,
     pub images: &'a mut bevy::asset::Assets<Image>,
@@ -48,7 +48,7 @@ pub(super) struct Stores<'a> {
 }
 
 /// Menu depth of the editor over the window behind it.
-pub(super) const Z: f32 = 210.0;
+pub(crate) const Z: f32 = 210.0;
 /// Overlay units a screen pixel spans (`msg_window::SCALE`).
 const PX: f32 = 16.0;
 
@@ -104,7 +104,7 @@ impl Skin {
     }
 
     /// A window frame: its own mode list and model, run together.
-    pub(super) fn window(
+    pub(crate) fn window(
         &mut self,
         disc: &GameDisc,
         key: &str,
@@ -158,11 +158,11 @@ impl Skin {
 }
 
 /// The window behind the editor (`pwd_win_*` / `pas_win_*`).
-pub(super) fn place_frame(commands: &mut Commands, root: Entity, model: &Model) {
+pub(crate) fn place_frame(commands: &mut Commands, root: Entity, model: &Model) {
     place_frame_at(commands, root, model, 0.0);
 }
 
-pub(super) fn place_frame_at(commands: &mut Commands, root: Entity, model: &Model, dz: f32) {
+pub(crate) fn place_frame_at(commands: &mut Commands, root: Entity, model: &Model, dz: f32) {
     place(
         commands,
         root,
@@ -218,7 +218,7 @@ fn pad_texture(direction: Option<kb::Direction>) -> &'static str {
 }
 
 /// Spawns the whole editor under `root`: panel, buttons, keys and letters.
-pub(super) fn spawn(
+pub(crate) fn spawn(
     commands: &mut Commands,
     root: Entity,
     skin: &mut Skin,
@@ -559,7 +559,7 @@ fn letter(paint: &mut Paint, font: &MsgAssets, code: u8, origin: Vec2, ink: [u8;
 }
 
 /// The one-line key help shown above the window.
-pub(super) fn hint(paint: &mut Paint, font: &MsgAssets, text: &str) {
+pub(crate) fn hint(paint: &mut Paint, font: &MsgAssets, text: &str) {
     paint.text(
         font,
         &small(text),

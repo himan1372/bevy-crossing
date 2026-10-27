@@ -3,6 +3,7 @@ use super::*;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::input::ButtonState;
 use rustimal_logic::diary as native;
+use rustimal_logic::editor_keyboard as kb;
 
 mod render;
 
@@ -41,6 +42,54 @@ pub(super) struct View {
     choice: usize,
     just_opened: bool,
     revision: u64,
+    /// Text cursor in `draft` while editing.
+    cursor: usize,
+    keyboard: kb::Keyboard,
+    repeat: kb::ButtonRepeat,
+    held: crate::shop_nook::editor::Held,
+    /// 60 Hz frames owed to the retail repeat counters.
+    ticks: f32,
+}
+
+// `sAdo_SysTrgStart` ids from `m_editor_ovl.c`.
+const GRID_MOVE: u16 = 0x411;
+const CURSOR: u16 = 0x35;
+const BACKSPACE: u16 = 0x1034;
+const START: u16 = 0x5F;
+const TOGGLE: u16 = 0x37;
+const ERROR: u16 = 0x1003;
+
+fn direction(keys: &ButtonInput<KeyCode>) -> Option<kb::Direction> {
+    [
+        (KeyCode::ArrowLeft, kb::Direction::Left),
+        (KeyCode::ArrowRight, kb::Direction::Right),
+        (KeyCode::ArrowUp, kb::Direction::Up),
+        (KeyCode::ArrowDown, kb::Direction::Down),
+    ]
+    .into_iter()
+    .find(|(key, _)| keys.pressed(*key))
+    .map(|(_, direction)| direction)
+}
+
+/// Starts editing: the cursor goes to the end of the entry.
+fn begin_edit(view: &mut View, widths: &[u8; 256]) {
+    view.mode = Mode::Edit;
+    view.cursor = view.draft.len();
+    view.repeat = kb::ButtonRepeat::default();
+    follow_cursor(view, widths);
+}
+
+/// The paper shows five lines above the keyboard while editing.
+pub(super) const EDIT_LINES: usize = 5;
+
+/// Keeps the cursor's line among the visible ones.
+fn follow_cursor(view: &mut View, widths: &[u8; 256]) {
+    let (line, _) = native::cursor_line(&view.draft, view.cursor, widths);
+    if line < view.scroll {
+        view.scroll = line;
+    } else if line >= view.scroll + EDIT_LINES {
+        view.scroll = line + 1 - EDIT_LINES;
+    }
 }
 
 /// aMR_CheckDiaryOnMe: only a visible diary on a contacted surface opens it.
@@ -82,6 +131,11 @@ pub(super) fn open(room: &mut PlayerRoom) {
         choice: 0,
         just_opened: true,
         revision: 0,
+        cursor: 0,
+        keyboard: kb::Keyboard::default(),
+        repeat: kb::ButtonRepeat::default(),
+        held: Default::default(),
+        ticks: 0.0,
     });
     crate::sound::se(0x5F); // mDI_diary_ovl_init.
 }
@@ -109,6 +163,7 @@ fn input(
     current: Res<CurrentRoom>,
     state: Res<State<HouseState>>,
     font: Option<Res<crate::msg_window::MsgAssets>>,
+    time: Res<Time>,
 ) {
     if !crate::house::is_player_room(&current, &state) {
         room.diary_ui = None;
@@ -134,6 +189,9 @@ fn input(
         view.scroll,
         view.choice,
         view.draft.clone(),
+        view.cursor,
+        view.keyboard,
+        view.held,
     );
     let mut close = false;
     match view.mode {
@@ -142,10 +200,7 @@ fn input(
             if actions.consume(Action::Cancel) || actions.consume(Action::Back) {
                 close = true;
             } else if actions.consume(Action::Confirm) {
-                view.mode = Mode::Edit;
-                view.scroll = native::lines(&view.draft, &font.widths)
-                    .len()
-                    .saturating_sub(native::VISIBLE_LINES);
+                begin_edit(&mut view, &font.widths);
             } else if actions.just_pressed(Action::MoveLeft)
                 || actions.just_pressed(Action::MoveRight)
             {
@@ -181,6 +236,9 @@ fn input(
             }
         }
         Mode::Edit => {
+            let widths = &font.widths;
+            let ctrl = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
+            // Key presses: A (Enter), the layout keys, Start (F4) and typed letters.
             for event in events.read() {
                 if event.state != ButtonState::Pressed {
                     continue;
@@ -196,44 +254,129 @@ fn input(
                         view.scroll = 0;
                         break;
                     }
-                    KeyCode::Enter
-                        if keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]) =>
-                    {
+                    KeyCode::Enter | KeyCode::NumpadEnter => {
+                        if let Some(code) = view.keyboard.selected() {
+                            let v = &mut view;
+                            if !native::insert(&mut v.draft, &mut v.cursor, code, widths) {
+                                crate::sound::se(ERROR);
+                            }
+                        }
+                        continue;
+                    }
+                    KeyCode::Space => {
+                        let v = &mut view;
+                        if !native::insert(&mut v.draft, &mut v.cursor, kb::CHAR_SPACE, widths) {
+                            crate::sound::se(ERROR);
+                        }
+                        continue;
+                    }
+                    KeyCode::F1 => {
+                        view.keyboard.toggle_shift();
+                        crate::sound::se(TOGGLE);
+                        continue;
+                    }
+                    KeyCode::F2 => {
+                        view.keyboard.toggle_arrange();
+                        crate::sound::se(TOGGLE);
+                        continue;
+                    }
+                    KeyCode::F3 => {
+                        view.keyboard.next_mode();
+                        crate::sound::se(TOGGLE);
+                        continue;
+                    }
+                    KeyCode::F4 => {
+                        // Start ends the edit (`mED_COMMAND_END_EDIT`).
                         view.mode = Mode::Confirm;
                         view.choice = 0;
+                        crate::sound::se(START);
                         break;
                     }
-                    KeyCode::Backspace => {
-                        view.draft.pop();
-                    }
-                    KeyCode::Enter => {
-                        if native::can_append(&view.draft, native::NEWLINE, &font.widths) {
-                            view.draft.push(native::NEWLINE);
-                        }
-                    }
-                    _ => {
-                        if let Key::Character(chars) = &event.logical_key {
-                            for ch in chars.chars().filter(|c| !c.is_control()) {
-                                if let Some(code) = crate::messages::ac_code_opt(ch) {
-                                    if native::can_append(&view.draft, code, &font.widths) {
-                                        view.draft.push(code);
-                                    }
-                                }
+                    _ => {}
+                }
+                if ctrl {
+                    continue;
+                }
+                if let Key::Character(chars) = &event.logical_key {
+                    for ch in chars.chars().filter(|c| !c.is_control()) {
+                        if let Some(code) = crate::messages::ac_code_opt(ch) {
+                            let v = &mut view;
+                            if !native::insert(&mut v.draft, &mut v.cursor, code, widths) {
+                                crate::sound::se(ERROR);
                             }
                         }
                     }
                 }
             }
             if view.mode == Mode::Edit {
-                view.scroll = native::lines(&view.draft, &font.widths)
-                    .len()
-                    .saturating_sub(native::VISIBLE_LINES);
+                // Held keys: the grid (arrows), the text cursor (Ctrl+arrows)
+                // and Backspace, counted in 60 Hz frames.
+                let arrow = direction(&keys);
+                let (stick, pad) = if ctrl { (None, arrow) } else { (arrow, None) };
+                let button = if keys.pressed(KeyCode::Backspace) {
+                    Some(kb::Button::Backspace)
+                } else {
+                    pad.map(|d| match d {
+                        kb::Direction::Left => kb::Button::CursorLeft,
+                        kb::Direction::Right => kb::Button::CursorRight,
+                        kb::Direction::Up => kb::Button::CursorUp,
+                        kb::Direction::Down => kb::Button::CursorDown,
+                    })
+                };
+                view.ticks += time.delta_secs() * 60.0;
+                let mut steps = view.ticks.floor() as u32;
+                view.ticks -= steps as f32;
+                // A press never waits for the next whole frame.
+                if steps == 0 && (stick.is_some() || button.is_some()) && view.held.stick != stick {
+                    steps = 1;
+                }
+                for _ in 0..steps {
+                    if view.keyboard.step(stick) == kb::Moved::Yes {
+                        crate::sound::se(GRID_MOVE);
+                    }
+                    if view.repeat.step(button) {
+                        if let Some(button) = button {
+                            let v = &mut view;
+                            let done = match button {
+                                kb::Button::Backspace => {
+                                    native::backspace(&mut v.draft, &mut v.cursor)
+                                }
+                                kb::Button::CursorLeft => native::left(&mut v.cursor),
+                                kb::Button::CursorRight => {
+                                    native::right(&mut v.draft, &mut v.cursor, widths)
+                                }
+                                kb::Button::CursorUp => {
+                                    native::upper(&v.draft, &mut v.cursor, widths)
+                                }
+                                kb::Button::CursorDown => {
+                                    native::lower(&mut v.draft, &mut v.cursor, widths)
+                                }
+                            };
+                            crate::sound::se(if !done {
+                                ERROR
+                            } else if button == kb::Button::Backspace {
+                                BACKSPACE
+                            } else {
+                                CURSOR
+                            });
+                        }
+                    }
+                }
+                view.held = crate::shop_nook::editor::Held {
+                    a: keys.pressed(KeyCode::Enter),
+                    b: keys.pressed(KeyCode::Backspace),
+                    l: keys.pressed(KeyCode::F1),
+                    y: keys.pressed(KeyCode::F3),
+                    pad,
+                    stick,
+                };
+                follow_cursor(&mut view, widths);
             }
         }
         Mode::Confirm => {
             events.clear();
             if actions.consume(Action::Cancel) {
-                view.mode = Mode::Edit;
+                begin_edit(&mut view, &font.widths);
             } else if actions.consume(Action::MoveUp) || actions.consume(Action::MoveDown) {
                 view.choice ^= 1;
             } else if actions.consume(Action::Confirm) {
@@ -242,7 +385,7 @@ fn input(
                         native::entry(&view.draft);
                     close = true;
                 } else {
-                    view.mode = Mode::Edit;
+                    begin_edit(&mut view, &font.widths);
                 }
             }
         }
@@ -258,10 +401,13 @@ fn input(
                 view.scroll,
                 view.choice,
                 view.draft.clone(),
+                view.cursor,
+                view.keyboard,
+                view.held,
             )
         {
             view.revision = view.revision.wrapping_add(1);
-            if view.mode != Mode::Edit {
+            if view.mode != Mode::Edit && (view.mode != before.1 || view.month != before.0) {
                 crate::sound::se(crate::sound::se_id::CURSOR);
             }
         }
