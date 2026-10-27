@@ -85,6 +85,9 @@ pub struct FieldItems {
     pub acres: Vec<[u16; 256]>,
     /// The town's native fruit (Save_Get(fruit)).
     pub fruit: u16,
+    /// `Save_Get(dust_flag)`: five or more pieces of trash were seen, and the
+    /// town stays unrated (`crate::field_rank`) until none is left.
+    pub dust_flag: bool,
     /// The new town's grid: what the save's changes are measured from.
     base: Vec<[u16; 256]>,
     /// Shells waiting to wash up (`l_reserve_set_shell`).
@@ -106,6 +109,7 @@ impl FieldItems {
             fruit,
             base: acres.clone(),
             acres,
+            dust_flag: false,
             reserved_shells: SET_SHELL_NUM,
             shell_mark: false,
             rng: Box::new(rng),
@@ -160,6 +164,10 @@ fn setup_field_items(
     {
         items.restore(changes);
     }
+    items.dust_flag = loaded
+        .as_ref()
+        .and_then(|l| l.0.as_ref())
+        .is_some_and(|s| s.dust_flag);
     commands.insert_resource(items);
 }
 

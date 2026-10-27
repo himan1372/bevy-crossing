@@ -21,6 +21,7 @@ mod ecology;
 mod environment;
 mod face;
 mod field_items;
+mod field_rank;
 mod footsteps;
 mod furniture;
 mod game_disc;
@@ -156,6 +157,7 @@ fn main() {
         .add_plugins(museum_insect::MuseumInsectPlugin)
         .add_plugins(copper::CopperPlugin)
         .add_plugins(joan::JoanPlugin)
+        .add_plugins(field_rank::FieldRankPlugin)
         .add_plugins(post::PostPlugin)
         .add_plugins(catalog::CatalogPlugin)
         .add_plugins(catalog_screen::CatalogScreenPlugin)

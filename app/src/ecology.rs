@@ -426,6 +426,7 @@ fn place_bugs(
     player: Query<&Transform, With<Player>>,
     bugs: Query<(Entity, &Transform), With<Bug>>,
     mut rng: ResMut<EcoRng>,
+    field_rank: Res<crate::field_rank::FieldRank>,
     mut last: Local<Option<(usize, usize)>>,
 ) {
     let (Some(ground), Some(items), Ok(p)) = (&town.ground, items, player.single()) else {
@@ -462,7 +463,9 @@ fn place_bugs(
         offing: false,
         rain: false,
         snow: false,
-        field_rank: 6,
+        // `aSOI_ins_get_idx` reads `mFAs_GetFieldRank`; a perfect town until
+        // the town's items have been rated.
+        field_rank: field_rank.rank.unwrap_or(6),
     };
     let (m, _, h) = today_mdh();
     let table: Vec<_> = species::insect_seasonal_table(m, h)

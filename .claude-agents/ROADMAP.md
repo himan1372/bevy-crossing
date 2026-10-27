@@ -1014,3 +1014,5 @@ Philip acceptance stay open.
 2026-10-26 claude: cuckoo-catalog-fit. The cabin clock's catalog preview now fills the circle: a visible-box override (furniture::FitBounds) replaces its mesh-bounds fit, which three never-drawn spire triangles had inflated threefold. Other pieces unchanged. See completed/cuckoo-catalog-fit.md.
 
 2026-10-27 claude: seasonal-balloon-handover. The sale-day gift balloon is handed over with the generic hand-over (present model and arm clips). Remaining seasonal items are blocked or optional: identity/assessment inputs, spotlight exclusion, escort/twin, grab-bag warning panel. See completed/seasonal-balloon-handover.md.
+
+2026-10-27 claude: field-rank-player-id. The town's beauty rating is now computed from the live field items (kernel logic/field_assessment.rs, app/field_rank.rs) with a saved trash flag, and the player gets a saved personal ID; both feed the special-event scheduler, and the rating drives insect hatching. Villager move-in, fish, balloons and the shrine remain unwired. See completed/field-rank-player-id.md.

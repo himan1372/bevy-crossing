@@ -36,7 +36,7 @@ pub(crate) struct Calendar {
     pub created: Date,
     pub date: Date,
     pub hour: u8,
-    /// Retail assessment is not connected yet; retain a bounded input.
+    /// The field rank the event gap was last rolled with.
     pub rank: u8,
     pub offer: Option<Offer>,
 }
@@ -158,7 +158,8 @@ pub(crate) fn tick(
     location: Res<State<ShopLocation>>,
     disc: Option<Res<crate::game_disc::GameDisc>>,
     identity: Res<crate::save::PlayerIdentity>,
-    seed: Res<crate::town::TownSeed>,
+    mut items: Option<ResMut<crate::field_items::FieldItems>>,
+    mut rank: ResMut<crate::field_rank::FieldRank>,
     catalog: Res<crate::catalog::Catalog>,
     mut mailbox: ResMut<crate::mail::HouseMailbox>,
 ) {
@@ -170,11 +171,18 @@ pub(crate) fn tick(
         return;
     };
     let now = crate::clock::now();
-    let id = identity
-        .player
-        .bytes()
-        .fold(seed.0, |s, b| s.wrapping_mul(31).wrapping_add(u32::from(b)));
+    let id = u32::from(identity.id);
+    if id == 0 {
+        return; // not assigned yet (`save::assign_player_id`)
+    }
     if shop.events.expired(now) {
+        // `mFAs_SetFieldRank` runs just before the gap is rolled.
+        if let Some(items) = items.as_deref_mut() {
+            rank.refresh(items);
+        }
+        if let Some(rank) = rank.rank {
+            shop.events.rank = rank;
+        }
         let renovating = shop.shop.upgrading_today;
         shop.events.schedule(now, id, renovating);
     }

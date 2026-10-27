@@ -41,13 +41,32 @@ const NOTIFY_DURATION_SECS: f32 = 2.5;
 pub(crate) struct PlayerIdentity {
     pub player: String,
     pub town: String,
+    /// `player_ID.player_id` (0xF000 | 0..252); 0 until assigned.
+    #[serde(default)]
+    pub id: u16,
 }
 impl Default for PlayerIdentity {
     fn default() -> Self {
         Self {
             player: "phi".into(),
             town: "woponese".into(),
+            id: 0,
         }
+    }
+}
+
+/// `mPr_SetNewPrivateID`: a player id is made once, `0xF000 | (rand * 253)`,
+/// and kept. The draw here comes from the town's seed and the names, so an
+/// older save is given the same id every time it is opened.
+fn assign_player_id(mut identity: ResMut<PlayerIdentity>, seed: Res<TownSeed>) {
+    if identity.id == 0 {
+        let draw = identity
+            .player
+            .bytes()
+            .chain(identity.town.bytes())
+            .fold(seed.0, |s, b| s.wrapping_mul(31).wrapping_add(u32::from(b)));
+        identity.id = 0xF000 | (draw % 253) as u16;
+        info!("player id {:#06x}", identity.id);
     }
 }
 
@@ -115,6 +134,10 @@ pub struct SaveData {
     /// [acre, cell, item] (`crate::field_items`; added later).
     #[serde(default)]
     pub field_items: Option<Vec<[u16; 3]>>,
+    /// `Save_Get(dust_flag)`: the town was rated down for trash and has not
+    /// been cleared since (`crate::field_rank`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub dust_flag: bool,
     /// Received letters (added later; defaults to empty for old saves).
     #[serde(default)]
     pub letters: Vec<crate::mail::Letter>,
@@ -429,6 +452,7 @@ fn collect_save(
         playtime_secs: playtime.secs,
         picked_items: Vec::new(),
         field_items: field.map(FieldItems::changes),
+        dust_flag: field.is_some_and(|f| f.dust_flag),
         letters: mailbox.letters.clone(),
         sent_letters: mailbox.sent.clone(),
         shop_stock: shop.stock.clone(),
@@ -637,7 +661,7 @@ fn quick_load(
     mut quest: ResMut<crate::quest::QuestState>,
     mut timer: ResMut<NotifyTimer>,
     notify_query: Query<&mut Text, With<NotifyText>>,
-    (home, mut floors, mut commands, lost, museum, post, memory, house_mail, catalog): (
+    (home, mut floors, mut commands, lost, museum, post, memory, house_mail, catalog, mut rank): (
         Option<ResMut<crate::home::PlayerHouse>>,
         ResMut<crate::player_room::floors::HomeFloors>,
         Commands,
@@ -647,6 +671,7 @@ fn quick_load(
         Option<ResMut<crate::villager_memory::VillagerMemory>>,
         Option<ResMut<crate::mail::HouseMailbox>>,
         Option<ResMut<crate::catalog::Catalog>>,
+        ResMut<crate::field_rank::FieldRank>,
     ),
 ) {
     if !actions.just_pressed(Action::QuickLoad)
@@ -708,6 +733,8 @@ fn quick_load(
 
     if let Some(mut field) = field {
         field.restore(save.field_items.as_deref().unwrap_or_default());
+        field.dust_flag = save.dust_flag;
+        rank.day = None;
     }
 
     audio_reset.write(crate::sound::ResetAudio);
@@ -743,6 +770,7 @@ impl Plugin for SavePlugin {
                 Update,
                 (
                     tick_playtime,
+                    assign_player_id,
                     quick_save,
                     quick_load.in_set(LoadSet),
                     tick_notification,
