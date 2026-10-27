@@ -895,8 +895,8 @@ fn shop_enter(
     println!("Entered the shop");
 }
 
-/// E at the interior door: return to the town map. Only when the menu is
-/// closed — an open menu claims the E key.
+/// Facing the interior door starts the keeper's goodbye, after which the player returns to the town
+/// map; E at the door does the same. Only when the menu is closed — an open menu claims the E key.
 fn shop_exit(
     mut actions: ResMut<Actions>,
     focus: Res<InputFocus>,
@@ -916,12 +916,23 @@ fn shop_exit(
     }
     // The keeper's goodbye (`aNSC_goodbye_wait`, message 35) has ended: go.
     let said_goodbye = twins.goodbye == Goodbye::Done;
-    if !said_goodbye && !actions.just_pressed(Action::Interact) {
-        return;
-    }
     let Ok((mut transform, mut facing)) = player_query.single_mut() else {
         return;
     };
+    let keeper_speaks =
+        disc.as_ref().is_some_and(|d| d.text.is_some()) && !crate::raffle::raffle_day();
+    // `Player_actor_check_forward`: the unit 20 game units (half a cell) ahead of the player is the
+    // EXIT_DOOR1 marker, which starts the keeper's goodbye (`aNSC_message_ctrl`) without a button.
+    let ahead = transform.translation + facing.dir.with_y(0.0).normalize_or_zero() * 0.5;
+    let in_front_of_door = (ahead.x - (SHOP_ORIGIN.x + room.door_x)).abs() < 0.5
+        && (ahead.z - (SHOP_ORIGIN.z + room.door_z)).abs() < 0.5;
+    if keeper_speaks && in_front_of_door && twins.goodbye == Goodbye::Idle {
+        twins.goodbye = Goodbye::Wanted;
+        return;
+    }
+    if !said_goodbye && !actions.just_pressed(Action::Interact) {
+        return;
+    }
     // The door panel on the inner face of the south wall.
     let door = DoorPanel {
         center_x: SHOP_ORIGIN.x + room.door_x,
@@ -937,7 +948,7 @@ fn shop_exit(
         }
         // Facing the exit, the keeper turns and says goodbye first (not on the raffle day, when
         // the raffle script runs the conversations).
-        if disc.as_ref().is_some_and(|d| d.text.is_some()) && !crate::raffle::raffle_day() {
+        if keeper_speaks {
             if twins.goodbye == Goodbye::Idle {
                 twins.goodbye = Goodbye::Wanted;
             }
