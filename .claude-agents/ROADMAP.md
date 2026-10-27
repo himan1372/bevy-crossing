@@ -1002,3 +1002,10 @@ secret-code and receiver windows, driven by the new disc-free logic/editor_keybo
 the exchange (accent) key, voices and scrolling window texture remain. The diary and
 letters can reuse the kernel and editor module. See backlog/shop-password-grid.md.
 
+2026-10-26 claude: joan-turnip-peddler brings Joan out in town on Sunday mornings
+(06:00-11:59) with her disc model, voice and full script; she sells 10/50/100 turnip
+bundles at Sunday's saved price with the original refusals and re-ask, and remembers
+who she has spoken to. Her walk-away, the money/turnip hand-over demos and the exact
+placement rules remain. See completed/joan-turnip-peddler.md. Counts/parent/M4 and
+Philip acceptance stay open.
+

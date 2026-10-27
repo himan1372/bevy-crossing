@@ -8,7 +8,7 @@ are pushed. Turnip price inquiry/selling (`a509cab3`) is pushed; consult
 `completed/shop-turnip-service.md` and latest comms/claims for publication and
 validation. Native daily weekly-trend prices, bundles and Sunday/date spoilage
 are connected. Legacy saves without an age clock adopt their first observed
-day. Joan's visitor/buying and original global RNG remain separate.
+day. Joan (`app/src/joan.rs`, `completed/joan-turnip-peddler.md`) now sells turnips on Sunday mornings; her walk-away and hand-over demos remain. Original global RNG remains separate.
 2026-10-26 claude: the counter's **Say code** check is connected for user and
 popularity-contest passwords (`completed/shop-password-service.md`, codec in
 `logic/src/password.rs`, flow in `app/src/shop_nook/password.rs`) and the **Send a
@@ -50,8 +50,8 @@ commit and push before telling Philip what is next.
 task or required input in a short final sentence, using the current task notes
 and roadmaps rather than stale proposals. If nothing remains, say so. This is
 a status handoff, not authorization to start another task automatically.
-Currently next: the cuckoo catalog fit or Joan's visitor/turnip-buying service;
-Philip chooses.
+Currently next: the cuckoo catalog fit, Joan's walk-away/hand-over demos, or the
+seasonal services; Philip chooses.
 
 ## Current state (2026-10-25)
 
@@ -397,6 +397,6 @@ Complete all authorized repository work and confirm publication/status first,
 then tell Philip the next concrete step. End the first catch-up reply with these
 three priorities, in this order (do not start them without a selection):
 
-1. Joan's visitor/turnip-buying service.
-2. The cuckoo catalog preview fit.
+1. The cuckoo catalog preview fit.
+2. Joan's walk-away and money/turnip hand-over demos.
 3. Remaining seasonal services.

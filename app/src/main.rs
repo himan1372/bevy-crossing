@@ -35,6 +35,7 @@ mod input;
 mod interaction;
 mod interior;
 mod items;
+mod joan;
 mod locomotion;
 mod mail;
 mod mail_disc;
@@ -154,6 +155,7 @@ fn main() {
         .add_plugins(museum_fish::MuseumFishPlugin)
         .add_plugins(museum_insect::MuseumInsectPlugin)
         .add_plugins(copper::CopperPlugin)
+        .add_plugins(joan::JoanPlugin)
         .add_plugins(post::PostPlugin)
         .add_plugins(catalog::CatalogPlugin)
         .add_plugins(catalog_screen::CatalogScreenPlugin)

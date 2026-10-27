@@ -13,6 +13,8 @@ pub(crate) struct Market {
     pub week: Date,
     pub growth_day: Option<i64>,
     pub seen_date: Option<Date>,
+    /// The game day Joan last spoke to this player (her weekly memory).
+    pub joan_spoken: Option<i64>,
     #[serde(skip)]
     observed: Option<Date>,
 }

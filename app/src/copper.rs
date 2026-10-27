@@ -311,30 +311,33 @@ fn talk(
         return;
     };
 
-    if let Some(choice) = dialogue.external_result.take() {
-        *focus = InputFocus::Dialogue;
-        match std::mem::take(&mut flow.step) {
-            // aPOL_set_select_after_msg.
-            Step::Menu => {
-                let msg = match choice {
-                    0 => hint(),
-                    1 if lost.count() != 0 => {
-                        flow.context.free[0] = lost.count().to_string();
-                        0x0782
-                    }
-                    1 => 0x0783,
-                    2 => 0x0777,
-                    _ => 0x0776,
-                };
-                say(&disc, &mut dialogue, actor, &flow.context, msg);
-                flow.step = Step::Finish;
+    // Only his own answers: other talkers in town leave theirs to themselves.
+    if dialogue.speaker == Some(actor) {
+        if let Some(choice) = dialogue.external_result.take() {
+            *focus = InputFocus::Dialogue;
+            match std::mem::take(&mut flow.step) {
+                // aPOL_set_select_after_msg.
+                Step::Menu => {
+                    let msg = match choice {
+                        0 => hint(),
+                        1 if lost.count() != 0 => {
+                            flow.context.free[0] = lost.count().to_string();
+                            0x0782
+                        }
+                        1 => 0x0783,
+                        2 => 0x0777,
+                        _ => 0x0776,
+                    };
+                    say(&disc, &mut dialogue, actor, &flow.context, msg);
+                    flow.step = Step::Finish;
+                }
+                _ => {
+                    *dialogue = DialogueState::default();
+                    *focus = InputFocus::World;
+                }
             }
-            _ => {
-                *dialogue = DialogueState::default();
-                *focus = InputFocus::World;
-            }
+            return;
         }
-        return;
     }
 
     // aPOL_talk_request: the first time out of the box he calls out.
