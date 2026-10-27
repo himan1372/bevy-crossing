@@ -76,6 +76,7 @@ mod statue;
 mod talk;
 mod town;
 mod villager_memory;
+mod warning_panel;
 
 use assets::GameAssetsPlugin;
 use clock::ClockPlugin;
@@ -148,6 +149,7 @@ fn main() {
         .add_plugins(msg_window::MsgWindowPlugin)
         .add_plugins(QuestPlugin)
         .add_plugins(PocketsPlugin)
+        .add_plugins(warning_panel::WarningPanelPlugin)
         .add_plugins(ClockPlugin)
         .add_plugins(idle_clock::IdleClockPlugin)
         .add_plugins(post_office::PostOfficePlugin)

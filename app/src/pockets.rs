@@ -272,27 +272,24 @@ impl PocketsUi {
     }
 }
 
-fn pockets_input(
+pub(crate) fn pockets_input(
     mut actions: ResMut<Actions>,
-    mut focus: ResMut<InputFocus>,
+    focus: ResMut<InputFocus>,
     mut ui: ResMut<PocketsUi>,
     mut inventory: ResMut<PlayerInventory>,
     mut tool: ResMut<crate::ecology::EquippedTool>,
     renderer: Option<Res<crate::pockets_disc::PocketAssets>>,
     mut mail: ResMut<crate::mail::MailUi>,
     mut mailbox: ResMut<crate::mail::Mailbox>,
-    mut dialogue: ResMut<crate::dialogue::DialogueState>,
     time: Res<Time>,
     disc: Option<Res<crate::game_disc::GameDisc>>,
+    mut warning: ResMut<crate::warning_panel::WarningPanel>,
 ) {
     if ui.open && ui.bag_warning {
-        if dialogue.external_result.take().is_some() {
+        // The retail warning panel: closed by A, B or Start, then the
+        // pockets answer again.
+        if !warning.is_open() {
             ui.bag_warning = false;
-            *focus = InputFocus::Pockets;
-            actions.consume(Action::Confirm);
-            actions.consume(Action::Interact);
-            actions.consume(Action::Advance);
-            actions.consume(Action::Cancel);
         }
         return;
     }
@@ -511,13 +508,8 @@ fn pockets_input(
                 match grab_bag::Opening::start(&mut inventory, slot) {
                     Ok(opening) => ui.opening = Some(opening),
                     Err(grab_bag::Refusal::Capacity) => {
-                        dialogue.begin_furniture(
-                            "You can't open a bag\nunless you have room\nfor three more items!"
-                                .into(),
-                            None,
-                        );
+                        warning.open(&rustimal_logic::warning::HUKUBUKURO_OPEN);
                         ui.bag_warning = true;
-                        *focus = InputFocus::Dialogue;
                     }
                     Err(grab_bag::Refusal::Unavailable) => {}
                 }
@@ -668,19 +660,23 @@ impl Plugin for PocketsPlugin {
 fn reset_bag_presentation(
     mut reset: MessageReader<crate::sound::ResetAudio>,
     mut ui: ResMut<PocketsUi>,
-    mut dialogue: ResMut<crate::dialogue::DialogueState>,
+    mut warning: ResMut<crate::warning_panel::WarningPanel>,
+    mut commands: Commands,
 ) {
     if reset.read().count() > 0 && (ui.opening.is_some() || ui.bag_warning) {
-        if ui.bag_warning {
-            *dialogue = crate::dialogue::DialogueState::default();
-        }
+        warning.clear(&mut commands);
         *ui = PocketsUi::default();
     }
 }
 
-fn clear_bag_presentation(mut ui: ResMut<PocketsUi>) {
+fn clear_bag_presentation(
+    mut ui: ResMut<PocketsUi>,
+    mut warning: ResMut<crate::warning_panel::WarningPanel>,
+    mut commands: Commands,
+) {
     ui.opening = None;
     ui.bag_warning = false;
+    warning.clear(&mut commands);
 }
 
 #[cfg(test)]

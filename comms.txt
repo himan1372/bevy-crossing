@@ -497,3 +497,4 @@ Source (concept): https://pokeacer.xyz/wii/pdf/OS.pdf (Nintendo SDK OS manual,
 
 [2026-10-27 claude] grid-leftovers (scrolling window texture) complete: the secret-code and receiver windows' cloth background now slides like the original (texture_pos 0.3535/tick via tile-0 UV offset on the masked cloth pieces only). Temp QA on the Say code window: pattern moved between screenshots, outline and controls fixed, no WARN/ERROR. Receiver window shares the path, not driven. Still open: cursor pulse, pad rumble. No tests.
 2026-10-27 claude: editor text caret now fades like mED_cursol_draw (grid-caret-pulse); source has no key-grid pulse or editor rumble. Not driven at runtime.
+2026-10-27 claude: grab-bag-warning-panel complete: retail mWR warning panel (disc att_win frame, yellow lines, grow/shrink) replaces the dialogue stand-in for the grab-bag capacity refusal. Temp QA ok; other mWR warnings not converted.
