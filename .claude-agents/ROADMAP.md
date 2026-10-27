@@ -1026,3 +1026,5 @@ Philip acceptance stay open.
 2026-10-27 claude: shop-rare-notice. Nookway/Nookington's rare spotlight furniture now sends the original rare-furniture handbill on the first play of a day (kernel logic/leaflet.rs rare_notice_gate, saved play time shop_progress.played). See backlog/shop-rare-notice.md.
 
 2026-10-27 claude: villager-move-in-rank. The daily move-in check uses the town's field rank (40-100% by rank, npc_grow_prob) computed at start-up from the retail field items plus the save's changes. See backlog/villager-move-in-rank.md.
+
+2026-10-27 claude: fish-spawn-field-rank. River/sea/pond fish spawns use the original selection with the field-rank rate (0.5, 0.75, 0.875, then 1) and habitat rerolls (logic::ecology::fish_select, ecology.rs place_fish). See backlog/fish-spawn-field-rank.md.

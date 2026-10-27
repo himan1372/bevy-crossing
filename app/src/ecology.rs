@@ -197,23 +197,6 @@ pub(crate) fn today_mdh() -> (u8, u8, u8) {
     (n.month, n.day, n.hour)
 }
 
-/// Weighted pick from (value, weight) pairs. Returns None on empty/zero total.
-fn weighted_pick<T: Copy>(entries: &[(T, u8)], rng: &mut EcoRng) -> Option<T> {
-    let total: u32 = entries.iter().map(|(_, w)| *w as u32).sum();
-    if total == 0 {
-        return None;
-    }
-    let mut roll = rng.next_u32() % total;
-    for (v, w) in entries {
-        let w = *w as u32;
-        if roll < w {
-            return Some(*v);
-        }
-        roll -= w;
-    }
-    None
-}
-
 // ---- spawning ----
 
 /// One fish shadow at `pos` (the critters module dresses it).
@@ -288,6 +271,7 @@ fn place_fish(
     player: Query<&Transform, With<Player>>,
     fish: Query<(Entity, &Transform), With<Fish>>,
     mut rng: ResMut<EcoRng>,
+    field_rank: Res<crate::field_rank::FieldRank>,
     mut last: Local<Option<(usize, usize)>>,
 ) {
     let (Some(ground), Ok(p)) = (&town.ground, player.single()) else {
@@ -314,25 +298,35 @@ fn place_fish(
     // The river table, plus the sea's for coastal acres and the pond's
     // for still water (aSOG_gyoei_make_*_range_data).
     let tables = [(0, true), (1, sea), (2, still)];
-    let entries: Vec<(FishType, u8)> = tables
+    // Every entry stays in the table (`aSOG_gyoei_get_idx_sub`); one whose
+    // water this acre lacks is rerolled, and the town's field rank thins
+    // the whole table (`env_rate_table`: 0.5, 0.75, 0.875, then 1).
+    let entries: Vec<(FishType, bool, f32)> = tables
         .iter()
         .filter(|(_, on)| *on)
         .filter_map(|&(env, _)| species::fish_seasonal_table(m, d, h, env))
         .flat_map(|t| {
-            t.iter()
-                .filter(|e| match e.area {
+            t.iter().map(|e| {
+                let fits = match e.area {
                     FishArea::River | FishArea::RiverMouth => river,
                     FishArea::Pool | FishArea::Pond => still,
                     FishArea::Waterfall => falls,
                     FishArea::Sea => sea,
                     FishArea::Offing => false,
-                })
-                .map(|e| (e.fish, e.weight))
+                };
+                (e.fish, fits, f32::from(e.weight))
+            })
         })
         .collect();
-    let Some(species) = weighted_pick(&entries, &mut rng) else {
+    let weights: Vec<(f32, bool)> = entries.iter().map(|&(_, fits, w)| (w, fits)).collect();
+    // A perfect town until the town's items have been rated.
+    let env_rate = rustimal_logic::field_rank_rate(field_rank.rank.unwrap_or(6));
+    let Some(pick) =
+        rustimal_logic::fish_select(&weights, env_rate, &mut || rng.range_f32(0.0, 1.0))
+    else {
         return;
     };
+    let species = entries[pick].0;
     // Per species as aSOG_gyoei_set_gyoei_data: Large Char in falls, sea
     // fish in deep sea, salmon in either, the whale well out, the rest in
     // fresh water.

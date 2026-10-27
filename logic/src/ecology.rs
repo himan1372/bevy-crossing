@@ -87,19 +87,28 @@ pub mod fish_area {
 /// One fish spawn table entry: (species, area, weight).
 pub type FishSpawnEntry = (u16, u8, f32);
 
-/// Weighted fish selection with field-rank modifier and
-/// without-replacement retry on habitat incompatibility.
-/// weights: candidate (weight, area_ok). Returns selected index or None.
-/// Mirrors aSOG_gyoei_get_idx_sub: total from unmodified weights, then
-/// each candidate subtracts weight*env_rate from the running total.
-pub fn fish_select(weights: &[(f32, bool)], env_rate: f32, roll: f32) -> Option<usize> {
-    let total: f32 = weights.iter().map(|(w, _)| w).sum();
-    if total <= 0.0 {
-        return None;
-    }
+/// `aSOG_gyoei_get_idx`: weighted fish selection with the field-rank
+/// modifier and retry on habitat incompatibility.
+/// weights: candidate (weight, area_ok). `roll` is `fqrand()` in [0, 1).
+/// Mirrors `aSOG_gyoei_get_idx_sub`: the total covers the untried entries,
+/// each one takes weight*env_rate off the running total (a negative result
+/// means no fish this time) and the first with `selected >= running total` is
+/// the pick; an entry whose area does not fit is marked tried and the whole
+/// roll is repeated, at most once per entry. Returns the picked index.
+pub fn fish_select(
+    weights: &[(f32, bool)],
+    env_rate: f32,
+    roll: &mut dyn FnMut() -> f32,
+) -> Option<usize> {
     let mut tried = vec![false; weights.len()];
-    let selected = total * roll;
-    loop {
+    for _ in 0..weights.len() {
+        let total: f32 = weights
+            .iter()
+            .zip(&tried)
+            .filter(|(_, &t)| !t)
+            .map(|((w, _), _)| w)
+            .sum();
+        let selected = total * roll();
         let mut now = total;
         let mut pick = None;
         for (i, (w, _)) in weights.iter().enumerate() {
@@ -107,22 +116,21 @@ pub fn fish_select(weights: &[(f32, bool)], env_rate: f32, roll: f32) -> Option<
                 continue;
             }
             now -= w * env_rate;
+            if now < 0.0 {
+                return None;
+            }
             if selected >= now {
+                tried[i] = true;
                 pick = Some(i);
                 break;
             }
         }
-        {
-            let i = pick?;
-            if weights[i].1 {
-                return Some(i);
-            }
-            tried[i] = true; // habitat incompatible: retry without it
-            if tried.iter().all(|&t| t) {
-                return None;
-            }
+        let i = pick?;
+        if weights[i].1 {
+            return Some(i);
         }
     }
+    None
 }
 
 /// Interior spawn region: x,z in 2..13 (12x12) of the 16x16 acre.
@@ -373,15 +381,15 @@ mod tests {
         // downward, so high rolls pick early entries and low rolls pick
         // late entries.
         let w = [(10.0, true), (10.0, true)];
-        assert_eq!(fish_select(&w, 1.0, 0.0), Some(1));
-        assert_eq!(fish_select(&w, 1.0, 0.99), Some(0));
-        assert_eq!(fish_select(&w, 1.0, 0.1), Some(1));
+        assert_eq!(fish_select(&w, 1.0, &mut || 0.0), Some(1));
+        assert_eq!(fish_select(&w, 1.0, &mut || 0.99), Some(0));
+        assert_eq!(fish_select(&w, 1.0, &mut || 0.1), Some(1));
         // Habitat-incompatible first candidate is skipped via retry.
         let w2 = [(10.0, false), (10.0, true)];
-        assert_eq!(fish_select(&w2, 1.0, 0.0), Some(1));
+        assert_eq!(fish_select(&w2, 1.0, &mut || 0.0), Some(1));
         // All incompatible -> None.
         let w3 = [(10.0, false)];
-        assert_eq!(fish_select(&w3, 1.0, 0.5), None);
+        assert_eq!(fish_select(&w3, 1.0, &mut || 0.5), None);
         // Interior.
         assert!(interior_unit_ok(2, 2));
         assert!(interior_unit_ok(13, 13));
