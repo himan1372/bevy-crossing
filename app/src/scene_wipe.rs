@@ -61,6 +61,8 @@ pub(crate) struct SceneWipe {
     phase: Phase,
     /// The next arrival opens as a circle (`Common_Get(transition).wipe_type`): right or left.
     circle_next: Option<bool>,
+    /// A scene change that is no state change (the museum's room doors) waits for the black.
+    holding: bool,
 }
 
 impl SceneWipe {
@@ -85,6 +87,23 @@ impl SceneWipe {
             info!("scene wipe: out");
             self.phase = Phase::Out(0.0);
         }
+    }
+
+    /// `FADE_TYPE_OUT` for a change the caller applies itself once `black()`: input is frozen
+    /// until `release`. False when the picture is already covered or fading.
+    pub(crate) fn hold(&mut self) -> bool {
+        if !self.clear() {
+            return false;
+        }
+        self.holding = true;
+        self.fade_out();
+        true
+    }
+
+    /// The change made under `hold` is in: the new scene fades in.
+    pub(crate) fn release(&mut self) {
+        self.holding = false;
+        self.arrive();
     }
 
     /// The new scene starts black and fades in.
@@ -436,7 +455,7 @@ fn remember(
 /// While the screen fades out and waits, nothing takes input.
 fn lock(wipe: Res<SceneWipe>, held: Res<HeldDoor>, mut focus: ResMut<InputFocus>) {
     // Only a door's own fade: the job's send-away drives its fade itself.
-    if wipe.locking() && held.waiting {
+    if wipe.locking() && (held.waiting || wipe.holding) {
         *focus = InputFocus::Transition;
     }
 }

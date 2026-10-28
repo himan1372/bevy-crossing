@@ -499,8 +499,26 @@ fn doors(
     return_pos: Option<Res<ShopReturnPos>>,
     mut museum: ResMut<Museum>,
     mut player: Query<(&mut Transform, &mut Facing, &Locomotion), With<Player>>,
+    mut wipe: ResMut<crate::scene_wipe::SceneWipe>,
+    mut held: Local<Option<(usize, Vec3, Vec3)>>,
 ) {
-    if *state != ShopLocation::Museum || !focus.is_world() {
+    if *state != ShopLocation::Museum {
+        return;
+    }
+    // A room door fades the picture out first and goes through once it is black.
+    if let Some((to, at, dir)) = *held {
+        if wipe.black() {
+            if let Ok((mut transform, mut facing, _)) = player.single_mut() {
+                transform.translation = at;
+                facing.dir = dir;
+            }
+            museum.room = to;
+            *held = None;
+            wipe.release();
+        }
+        return;
+    }
+    if !focus.is_world() {
         return;
     }
     let Ok((mut transform, mut facing, loco)) = player.single_mut() else {
@@ -544,10 +562,11 @@ fn doors(
     } else {
         ROOMS[to].arrive
     };
-    museum.room = to;
-    transform.translation = at(to, arrive) + Vec3::Y;
+    if !wipe.hold() {
+        return;
+    }
     // Face away from the door just used.
-    facing.dir = -facing.dir;
+    *held = Some((to, at(to, arrive) + Vec3::Y, -facing.dir));
     crate::sound::door_sound(None, true);
     info!("museum room {room} -> {to}");
 }
