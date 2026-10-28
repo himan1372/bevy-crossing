@@ -347,8 +347,10 @@ pub(super) fn talk(
         };
         state.ask_again = false;
         if kind == Job::DeliverFurniture {
-            // `aNRG2_3rd_job_end_talk_proc`: the guide hands over the map (`map_flag`).
+            // `aNRG2_3rd_job_end_talk_proc`: the guide hands over the map (`map_flag`) when the
+            // message reaches its order (`hand_over_job_item`).
             identity.map_flag = true;
+            state.map_handover = true;
         }
         if kind == Job::PostNotice {
             // `aNRG2_all_job_end_talk_proc`: the last job. The guide sends the player away and
@@ -466,6 +468,8 @@ pub(crate) fn track(
 /// `mDemo_ORDER_NPC0`, and the order the job-start messages raise at the hand-over point
 /// (`aNRG2_demo_start_wait_talk_proc`: index 1, value 4).
 const ORDER_NPC0: u8 = 1;
+/// `ITM_TOWN_MAP`.
+const TOWN_MAP: u16 = 0x251D;
 
 /// `aNRG2_demo_start_wait_talk_proc` .. `aNRG2_demo_end_wait2_talk_proc`: when the guide's
 /// message reaches its hand-over order, he holds out the job's item (already in the pockets),
@@ -474,9 +478,22 @@ pub(crate) fn hand_over_job_item(
     mut orders: ResMut<crate::msg_window::DemoOrders>,
     mut handover: ResMut<super::handover::HandOver>,
     mut dialogue: ResMut<crate::dialogue::DialogueState>,
+    mut state: ResMut<GuideState>,
     identity: Res<crate::save::PlayerIdentity>,
 ) {
     for (kind, index, value) in orders.take_raised() {
+        // `aNRG2_3rd_job_end_talk_proc`: order (NPC0, 9) while the third job's end is spoken.
+        if (kind, index) == (ORDER_NPC0, 9) && value != 0 && state.map_handover {
+            state.map_handover = false;
+            info!("hand-over of the town map");
+            dialogue.held = true;
+            handover.start(super::handover::Request {
+                item: super::handover::Item::Goods(TOWN_MAP),
+                giver: super::handover::Party::Nook,
+                taker: super::handover::Party::Player,
+            });
+            continue;
+        }
         if (kind, index, value) != (ORDER_NPC0, 1, 4) || !identity.events.first_job {
             continue;
         }
@@ -505,6 +522,8 @@ pub(crate) struct GuideState {
     pub greeted: bool,
     /// `can_ask_again_flag`: the letter job's reminder.
     pub ask_again: bool,
+    /// The third job's end talk is up: its order (NPC0, 9) hands the map over.
+    pub map_handover: bool,
     /// Seconds since the last talk ended, once the whole job is over.
     pub ending: Option<f32>,
 }

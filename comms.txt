@@ -541,3 +541,4 @@ Source (concept): https://pokeacer.xyz/wii/pdf/OS.pdf (Nintendo SDK OS manual,
 2026-10-28 claude: job-handover-visuals complete: the guide's job items are handed over with the generic hand-over (Item::Goods from the disc's hand-over tables) at the message's order (1,1,4); the page is held until done. Only the uniform was driven.
 2026-10-28 claude: scene-wipe complete: black fade (out 30 frames, 10 hold, in 30) on every building/room change, full out+in for the job's send-away; circle wipes and the fade out at ordinary doors not built.
 2026-10-28 claude: circle-wipes complete: fbdemo_triforce circle (ef_wipe2_modelT, perspective camera, scrolled texture) opens the town after the job's send-away. Other job items' hand-overs driven (no code change): bag, furniture leaf, paper, carpet, axe.
+2026-10-28 claude: map-handover complete: Nook hands the town map over at the third job's end order (1,9); page held until done. Item model not seen clearly in screenshots.
