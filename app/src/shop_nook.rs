@@ -734,6 +734,28 @@ pub(crate) fn interact(
     let was = *since;
     *since += time.delta_secs();
     if !layout.upper && was < ARRIVAL && *since >= ARRIVAL && matches!(flow.step, Step::Idle) {
+        // `aNSC_start_wait`: the wait type picks the talk. A pending sale-day balloon comes
+        // first and replaces the other talks (`aNSC_MSG_BALLOON`, `_DEPART`); then the house
+        // talk, then the sale or ordinary greeting.
+        if shop.sale_view
+            && shop.events.offer.as_ref().is_some_and(|o| !o.balloon)
+            && inventory.pockets.pockets.contains(&0)
+        {
+            flow.context = context(&identity, false);
+            *focus = InputFocus::Dialogue;
+            say(
+                &disc,
+                &mut dialogue,
+                actor,
+                &flow.context,
+                if layout.tier == 3 { 220 } else { 218 },
+            );
+            flow.step = Step::BargainBalloon;
+            if let Ok((_, _, mut loco)) = player.single_mut() {
+                *loco = crate::locomotion::Locomotion::default();
+            }
+            return;
+        }
         if let Some(home) = home.as_mut() {
             let today = crate::home::today();
             if let Some(n) = home.0.nook_greeting(&mut inventory.loan, today) {
@@ -766,6 +788,15 @@ pub(crate) fn interact(
             }
             return;
         }
+        // `aNSC_get_start_call_msg_no`: no sale, no house talk: START_CALL_NORMAL.
+        flow.context = context(&identity, false);
+        *focus = InputFocus::Dialogue;
+        say(&disc, &mut dialogue, actor, &flow.context, 22);
+        flow.step = Step::Welcome;
+        if let Ok((_, _, mut loco)) = player.single_mut() {
+            *loco = crate::locomotion::Locomotion::default();
+        }
+        return;
     }
     if layout.upper && was < ARRIVAL && *since >= ARRIVAL && matches!(flow.step, Step::Idle) {
         // `aNMD_actor_ct`: Timmy starts in `aNSC_start_wait` and greets the player (the sale
@@ -1475,8 +1506,24 @@ fn follow(
         }
         return;
     }
-    let Ok(player) = player.single() else { return };
     let corner = SHOP_ORIGIN - layout.centre().with_y(0.0);
+    if twins.approach && !layout.upper {
+        // `aNSC_say_hello_approach`: while he greets, the keeper walks forward (+z) until
+        // `aNSC_POS_Z_MAX` (260, 260, 420, 500 by shop) or the talk ends.
+        let limit = [260.0, 260.0, 420.0, 500.0][usize::from(layout.tier.min(3))];
+        let z = (transform.translation.z - corner.z) * 40.0;
+        if z < limit {
+            let dt = time.delta_secs().min(0.1);
+            let next = transform.translation.z + 30.0 / 40.0 * dt;
+            transform.rotation = Quat::IDENTITY;
+            if !crate::shop::blocked_at(transform.translation.x, next, 0.2, &obstacles) {
+                transform.translation.z = next.min(corner.z + limit / 40.0);
+                keeper.walking = true;
+            }
+        }
+        return;
+    }
+    let Ok(player) = player.single() else { return };
     let pos = (transform.translation - corner) * 40.0;
     let target = (player.translation - corner) * 40.0;
     let delta = (target - pos).with_y(0.0);
