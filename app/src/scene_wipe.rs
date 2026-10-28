@@ -4,12 +4,17 @@
 //! 30 frames); the next scene starts black, holds ten frames and fades back in
 //! (`FADE_TYPE_IN`, `fbdemo_fade_startup`'s timer of 10). Every change of building or room
 //! fades in here; the fade out needs the leaving system to wait for it, which the part-time
-//! job's send-away does (`guide::send_away`). The circle wipes (`WIPE_TYPE_CIRCLE_LEFT/RIGHT`,
-//! the triforce wipe's `ef_wipe*` models) are not built: they fade like the others.
+//! job's send-away does (`guide::send_away`), and the town it sends the player to opens as the
+//! circle wipe (`WIPE_TYPE_CIRCLE_LEFT`: `fbdemo_triforce` with `ef_wipe2_modelT`, a 4:3 picture,
+//! black beside it on a wider window). `WIPE_TYPE_CIRCLE_RIGHT` (`ef_wipe3_modelT`) and the
+//! closing direction are not used by anything yet.
 
+use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
 
+use crate::game_disc::GameDisc;
 use crate::house::HouseState;
+use crate::n64_material::N64Material;
 use crate::shop::ShopLocation;
 
 /// `Common_Get(transition).fade_rate`: frames a fade takes.
@@ -18,6 +23,13 @@ const FADE_FRAMES: f32 = 30.0;
 const HOLD_FRAMES: f32 = 10.0;
 /// How long a fade out waits for the scene to change.
 const COVER_LIMIT: f32 = 600.0;
+/// `fbdemo_triforce`: the wipe texture's full scroll (`txt`), in quarter texels.
+const CIRCLE_SCROLL: f32 = 548.0;
+/// `fbdemo_triforce_draw`: the model's scale, and `guLookAt` / `guPerspective`'s camera.
+const CIRCLE_SCALE: f32 = 0.019;
+const CIRCLE_CAMERA_Z: f32 = 400.0;
+/// The render layer the circle wipe's camera shows.
+const CIRCLE_LAYER: usize = 2;
 
 #[derive(Clone, Copy, Default, PartialEq, Debug)]
 enum Phase {
@@ -31,11 +43,15 @@ enum Phase {
     Black(f32),
     /// Fading back in, frames so far.
     In(f32),
+    /// The circle wipe opening on the new scene: the texture's scroll (`txt`), 548 closed.
+    Circle(f32),
 }
 
 #[derive(Resource, Default)]
 pub(crate) struct SceneWipe {
     phase: Phase,
+    /// The next arrival opens as a circle (`Common_Get(transition).wipe_type`).
+    circle_next: bool,
 }
 
 impl SceneWipe {
@@ -60,7 +76,16 @@ impl SceneWipe {
     /// The new scene starts black and fades in.
     fn arrive(&mut self) {
         info!("scene wipe: in");
-        self.phase = Phase::Black(0.0);
+        self.phase = if std::mem::take(&mut self.circle_next) {
+            Phase::Circle(CIRCLE_SCROLL)
+        } else {
+            Phase::Black(0.0)
+        };
+    }
+
+    /// `WIPE_TYPE_CIRCLE_LEFT` for the scene about to load.
+    pub(crate) fn circle_next(&mut self) {
+        self.circle_next = true;
     }
 
     fn alpha(&self) -> f32 {
@@ -68,6 +93,8 @@ impl SceneWipe {
             Phase::Clear => 0.0,
             Phase::Out(f) => (f / FADE_FRAMES).min(1.0),
             Phase::Covered(_) | Phase::Black(_) => 1.0,
+            // The circle's own geometry covers the picture.
+            Phase::Circle(_) => 0.0,
             Phase::In(f) => 1.0 - (f / FADE_FRAMES).min(1.0),
         }
     }
@@ -85,12 +112,26 @@ impl SceneWipe {
             Phase::Black(f) => Phase::Black(f + frames),
             Phase::In(f) if f + frames >= FADE_FRAMES => Phase::Clear,
             Phase::In(f) => Phase::In(f + frames),
+            // `fbdemo_triforce_move`: it opens a little faster as it goes.
+            Phase::Circle(txt) => {
+                let t = 1.0 - txt / CIRCLE_SCROLL;
+                let step = 0.5 * (14.0 + 12.0 * t) * frames;
+                if txt - step <= 0.0 {
+                    Phase::Clear
+                } else {
+                    Phase::Circle(txt - step)
+                }
+            }
         };
     }
 }
 
 #[derive(Component)]
 struct WipeCover;
+
+/// Black beside the 4:3 circle wipe on a wider window.
+#[derive(Component)]
+struct WipeBar;
 
 fn setup(mut commands: Commands) {
     commands.spawn((
@@ -107,6 +148,27 @@ fn setup(mut commands: Commands) {
         GlobalZIndex(i32::MAX - 1),
         Visibility::Hidden,
     ));
+    for right in [false, true] {
+        let mut node = Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(0.0),
+            height: Val::Percent(100.0),
+            width: Val::Px(0.0),
+            ..default()
+        };
+        if right {
+            node.right = Val::Px(0.0);
+        } else {
+            node.left = Val::Px(0.0);
+        }
+        commands.spawn((
+            WipeBar,
+            node,
+            BackgroundColor(Color::BLACK),
+            GlobalZIndex(i32::MAX - 1),
+            Visibility::Hidden,
+        ));
+    }
 }
 
 /// A new building or room: the screen starts black.
@@ -132,9 +194,31 @@ fn arrive(
 fn run(
     time: Res<Time<Real>>,
     mut wipe: ResMut<SceneWipe>,
-    mut cover: Query<(&mut BackgroundColor, &mut Visibility), With<WipeCover>>,
+    windows: Query<&Window>,
+    mut cover: Query<(&mut BackgroundColor, &mut Visibility), (With<WipeCover>, Without<WipeBar>)>,
+    mut bars: Query<(&mut Node, &mut BackgroundColor, &mut Visibility), With<WipeBar>>,
 ) {
     wipe.advance(time.delta_secs() * 60.0);
+    // The circle is a 4:3 picture: the sides of a wider window stay black until it has nearly
+    // opened, then fade away.
+    let side = match (wipe.phase, windows.single()) {
+        (Phase::Circle(txt), Ok(window)) => {
+            let aspect = window.width() / window.height().max(1.0);
+            let width = ((1.0 - (4.0 / 3.0) / aspect) / 2.0).max(0.0) * 100.0;
+            Some((width, (txt / (CIRCLE_SCROLL * 0.35)).min(1.0)))
+        }
+        _ => None,
+    };
+    for (mut node, mut color, mut visibility) in &mut bars {
+        match side {
+            Some((width, alpha)) => {
+                node.width = Val::Percent(width);
+                color.0 = Color::srgba(0.0, 0.0, 0.0, alpha);
+                *visibility = Visibility::Inherited;
+            }
+            None => *visibility = Visibility::Hidden,
+        }
+    }
     let alpha = wipe.alpha();
     for (mut color, mut visibility) in &mut cover {
         color.0 = Color::srgba(0.0, 0.0, 0.0, alpha);
@@ -146,12 +230,126 @@ fn run(
     }
 }
 
+/// The circle wipe's model and entities, built when first needed.
+#[derive(Default)]
+struct CircleState {
+    /// (mesh, material, texels across the wipe texture, the mesh's unscrolled UVs).
+    parts: Vec<(Handle<Mesh>, Handle<N64Material>, f32, Vec<[f32; 2]>)>,
+    camera: Option<Entity>,
+    entity: Option<Entity>,
+}
+
+/// `fbdemo_triforce_draw`: `ef_wipe2_modelT` (circle left) under a 60 degree perspective camera
+/// 400 units out, its texture's visible window scrolled by `txt` (`gfx_tex_scroll2`).
+#[allow(clippy::too_many_arguments)]
+fn circle(
+    mut commands: Commands,
+    wipe: Res<SceneWipe>,
+    disc: Option<Res<GameDisc>>,
+    mut state: Local<CircleState>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<N64Material>>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    let Phase::Circle(txt) = wipe.phase else {
+        if let Some(entity) = state.entity.take() {
+            commands.entity(entity).despawn();
+        }
+        if let Some(entity) = state.camera.take() {
+            commands.entity(entity).despawn();
+        }
+        return;
+    };
+    let Some(disc) = disc else { return };
+    if state.parts.is_empty() {
+        let Some(list) = disc.catalog.get("ef_wipe2_modelT") else {
+            return;
+        };
+        let sink = crate::disc_gfx::run_display_lists(&disc.rom, &[list.offset]);
+        let model = crate::disc_town::sink_meshes_scaled(
+            &disc,
+            &sink,
+            None,
+            true,
+            &crate::disc_gfx::Segments::default(),
+            1.0,
+            (&mut meshes, &mut materials, &mut images),
+        );
+        for (part, (mesh, material)) in sink.parts.iter().zip(model) {
+            // Keep the geometry in the main world: its texture coordinates are rewritten every
+            // frame.
+            let Some(mut copy) = meshes.get(&mesh).cloned() else {
+                continue;
+            };
+            copy.asset_usage = bevy::asset::RenderAssetUsages::default();
+            let uvs = match copy.attribute(Mesh::ATTRIBUTE_UV_0) {
+                Some(bevy::mesh::VertexAttributeValues::Float32x2(v)) => v.clone(),
+                _ => Vec::new(),
+            };
+            let _ = meshes.insert(mesh.id(), copy);
+            let width = part.key.tex.as_ref().map_or(16.0, |k| f32::from(k.width));
+            state.parts.push((mesh, material, width, uvs));
+        }
+    }
+    if state.camera.is_none() {
+        state.camera = Some(
+            commands
+                .spawn((
+                    Name::new("circle wipe camera"),
+                    Camera3d::default(),
+                    Camera {
+                        order: 20,
+                        clear_color: ClearColorConfig::None,
+                        ..default()
+                    },
+                    bevy::core_pipeline::tonemapping::Tonemapping::None,
+                    Projection::Perspective(PerspectiveProjection {
+                        fov: 60f32.to_radians(),
+                        near: 10.0,
+                        far: 12800.0,
+                        ..default()
+                    }),
+                    Transform::from_xyz(0.0, 0.0, CIRCLE_CAMERA_Z),
+                    RenderLayers::layer(CIRCLE_LAYER),
+                ))
+                .id(),
+        );
+    }
+    if state.entity.is_none() {
+        let root = commands
+            .spawn((
+                Name::new("circle wipe"),
+                Transform::from_scale(Vec3::splat(CIRCLE_SCALE)),
+                Visibility::default(),
+                RenderLayers::layer(CIRCLE_LAYER),
+            ))
+            .id();
+        for (mesh, material, _, _) in &state.parts {
+            commands.spawn((
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(material.clone()),
+                RenderLayers::layer(CIRCLE_LAYER),
+                ChildOf(root),
+            ));
+        }
+        state.entity = Some(root);
+    }
+    // The texture window starts `txt` quarter texels in: the picture shifts the other way.
+    for (mesh, _, width, base) in &state.parts {
+        if let Some(mut mesh) = meshes.get_mut(mesh) {
+            let shift = txt / 4.0 / width;
+            let uvs: Vec<[f32; 2]> = base.iter().map(|[u, v]| [u - shift, *v]).collect();
+            mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+        }
+    }
+}
+
 pub struct SceneWipePlugin;
 
 impl Plugin for SceneWipePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SceneWipe>()
             .add_systems(Startup, setup)
-            .add_systems(Update, (arrive, run).chain());
+            .add_systems(Update, (arrive, run, circle).chain());
     }
 }

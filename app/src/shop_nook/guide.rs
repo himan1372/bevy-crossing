@@ -534,6 +534,8 @@ pub(crate) fn send_away(
             wipe.fade_out();
         } else if wipe.black() {
             state.ending = None;
+            // `Common_Get(transition).wipe_type = WIPE_TYPE_CIRCLE_LEFT`: the town opens as a circle.
+            wipe.circle_next();
             twins.goodbye = super::Goodbye::Done;
             payment.begin();
         }
