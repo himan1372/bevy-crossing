@@ -205,6 +205,8 @@ pub enum InputFocus {
     Notice,
     /// The town map.
     Map,
+    /// The screen is fading out for a scene change (`FADE_TYPE_OUT`): nothing takes input.
+    Transition,
     /// The counter's password entry window.
     Password,
 }
@@ -227,7 +229,7 @@ pub enum InteractSet {
     Ui,
 }
 
-fn read_actions(
+pub(crate) fn read_actions(
     keys: Res<ButtonInput<KeyCode>>,
     bindings: Res<KeyBindings>,
     mut actions: ResMut<Actions>,

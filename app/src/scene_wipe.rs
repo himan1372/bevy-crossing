@@ -3,8 +3,9 @@
 //! Leaving a scene fades the picture to black (`FADE_TYPE_OUT`: alpha rises over the fade rate's
 //! 30 frames); the next scene starts black, holds ten frames and fades back in
 //! (`FADE_TYPE_IN`, `fbdemo_fade_startup`'s timer of 10). Every change of building or room
-//! fades in here; the fade out needs the leaving system to wait for it, which the part-time
-//! job's send-away does (`guide::send_away`), and the town it sends the player to opens as the
+//! fades in here. An ordinary door's change is caught after the door system has made it
+//! (`doors`): the player is put back, input is frozen, the picture fades out, then the change is
+//! applied. The part-time job's send-away drives its own fade (`guide::send_away`), and the town it sends the player to opens as the
 //! circle wipe (`WIPE_TYPE_CIRCLE_LEFT`: `fbdemo_triforce` with `ef_wipe2_modelT`, a 4:3 picture,
 //! black beside it on a wider window). `WIPE_TYPE_CIRCLE_RIGHT` (`ef_wipe3_modelT`) and the
 //! closing direction are not used by anything yet.
@@ -14,7 +15,10 @@ use bevy::prelude::*;
 
 use crate::game_disc::GameDisc;
 use crate::house::HouseState;
+use crate::input::InputFocus;
+use crate::interaction::Facing;
 use crate::n64_material::N64Material;
+use crate::player::Player;
 use crate::shop::ShopLocation;
 
 /// `Common_Get(transition).fade_rate`: frames a fade takes.
@@ -55,6 +59,11 @@ pub(crate) struct SceneWipe {
 }
 
 impl SceneWipe {
+    /// The picture is fading out or waiting for the scene change: input is frozen.
+    fn locking(&self) -> bool {
+        matches!(self.phase, Phase::Out(_) | Phase::Covered(_))
+    }
+
     /// Nothing is covering the picture.
     pub(crate) fn clear(&self) -> bool {
         self.phase == Phase::Clear
@@ -344,12 +353,123 @@ fn circle(
     }
 }
 
+/// Where the player stood and faced at the start of the frame.
+#[derive(Resource, Default)]
+struct Before(Option<(Vec3, Vec3)>);
+
+/// A door's scene change held back until the screen is black.
+#[derive(Resource, Default)]
+struct HeldDoor {
+    placed: Option<(Vec3, Vec3)>,
+    shop: Option<ShopLocation>,
+    house: Option<HouseState>,
+    waiting: bool,
+}
+
+fn remember(
+    wipe: Res<SceneWipe>,
+    held: Res<HeldDoor>,
+    player: Query<(&Transform, &Facing), With<Player>>,
+    mut before: ResMut<Before>,
+) {
+    before.0 = match player.single() {
+        Ok((transform, facing)) if wipe.clear() && !held.waiting => {
+            Some((transform.translation, facing.dir))
+        }
+        _ => None,
+    };
+}
+
+/// While the screen fades out and waits, nothing takes input.
+fn lock(wipe: Res<SceneWipe>, held: Res<HeldDoor>, mut focus: ResMut<InputFocus>) {
+    // Only a door's own fade: the job's send-away drives its fade itself.
+    if wipe.locking() && held.waiting {
+        *focus = InputFocus::Transition;
+    }
+}
+
+/// `FADE_TYPE_OUT` at an ordinary door: the door systems change the scene the moment the player
+/// walks in; this puts the player back, holds the change, fades the picture out and applies
+/// the change once it is black (the arrival then fades in).
+#[allow(clippy::too_many_arguments)]
+fn doors(
+    keys: Res<ButtonInput<KeyCode>>,
+    before: Res<Before>,
+    mut held: ResMut<HeldDoor>,
+    mut wipe: ResMut<SceneWipe>,
+    shop: Option<ResMut<NextState<ShopLocation>>>,
+    house: Option<ResMut<NextState<HouseState>>>,
+    mut player: Query<(&mut Transform, &mut Facing), With<Player>>,
+) {
+    let (Some(mut shop), Some(mut house)) = (shop, house) else {
+        return;
+    };
+    let Ok((mut transform, mut facing)) = player.single_mut() else {
+        return;
+    };
+    if held.waiting {
+        // The change goes through once the screen is black.
+        if wipe.black() {
+            if let Some((at, dir)) = held.placed.take() {
+                transform.translation = at;
+                facing.dir = dir;
+            }
+            if let Some(next) = held.shop.take() {
+                shop.set(next);
+            }
+            if let Some(next) = held.house.take() {
+                house.set(next);
+            }
+            held.waiting = false;
+        } else {
+            // A door system fired again on the frozen player: drop its change.
+            *shop = NextState::Unchanged;
+            *house = NextState::Unchanged;
+        }
+        return;
+    }
+    let pending_shop = match &*shop {
+        NextState::Pending(next) => Some(*next),
+        _ => None,
+    };
+    let pending_house = match &*house {
+        NextState::Pending(next) => Some(*next),
+        _ => None,
+    };
+    if pending_shop.is_none() && pending_house.is_none() {
+        return;
+    }
+    // A quick-load, or a change made while the screen is already fading, goes straight through.
+    let Some((at, dir)) = before
+        .0
+        .filter(|_| wipe.clear() && !keys.just_pressed(KeyCode::F9))
+    else {
+        return;
+    };
+    held.placed = Some((transform.translation, facing.dir));
+    held.shop = pending_shop;
+    held.house = pending_house;
+    held.waiting = true;
+    *shop = NextState::Unchanged;
+    *house = NextState::Unchanged;
+    transform.translation = at;
+    facing.dir = dir;
+    wipe.fade_out();
+}
+
 pub struct SceneWipePlugin;
 
 impl Plugin for SceneWipePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SceneWipe>()
             .add_systems(Startup, setup)
-            .add_systems(Update, (arrive, run, circle).chain());
+            .init_resource::<Before>()
+            .init_resource::<HeldDoor>()
+            .add_systems(
+                PreUpdate,
+                (remember, lock).chain().after(crate::input::update_focus),
+            )
+            .add_systems(Update, (arrive, run, circle).chain())
+            .add_systems(Last, doors);
     }
 }

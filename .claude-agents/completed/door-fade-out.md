@@ -1,0 +1,9 @@
+# Fade out at ordinary doors
+
+Philip: "fade out and map handover" (2026-10-28). Doors fade to black before the scene changes (FADE_TYPE_OUT) instead of cutting; input is frozen during the fade. Needs the ten door systems to wait for the fade (`SceneWipe::door`).
+
+## Result (2026-10-28, claude)
+Source: `m_scene.c` / `m_play.c`: a door scene change starts FADE_TYPE_OUT (the picture fades to black, input is locked), the scene loads at black, then the in-fade runs.
+Instead of editing the ten door systems, `scene_wipe.rs::doors` (Last schedule) catches a pending `NextState<ShopLocation>` / `NextState<HouseState>` made by one of them while the screen is clear: it remembers the player's destination, puts the player and the states back, starts `fade_out` and sets `InputFocus::Transition` (nothing takes input, so no door re-fires); when the screen is black it applies the player's destination and the pending states, and the arrival fades in. Quick-load (F9) and changes made while a fade is already running (the job's send-away) go straight through. New `InputFocus::Transition`; `read_actions` / `update_focus` order exposed.
+Verified (Temp capture copy, synthetic saves, disc): walking into the shop door: the town darkens over ~0.5 s, black, the shop fades in (log `scene wipe: out` / `in` 0.5 s apart); leaving after the goodbye: the shop darkens, the town fades in with the player outside; the job send-away still runs fade -> circle -> cheer (screenshots). No panic. Gates: fmt, clippy -D warnings, capture build. Real save unchanged.
+Not covered: the other doors (house, villager houses, museum, police box, post office) use the same states and are caught the same way but were not driven; the museum's inner room doors change no state and still cut; door sounds play at the moment of the walk-in, before the fade; the fade length is 30 frames.
