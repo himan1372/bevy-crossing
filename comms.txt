@@ -517,3 +517,4 @@ Source (concept): https://pokeacer.xyz/wii/pdf/OS.pdf (Nintendo SDK OS manual,
 2026-10-28 claude: town-gen-qrand complete: town_gen's private LCG replaced by logic::qrand::Qrand (same stream, per-seed). Next local generators: roster, face, turnips, grab_bag, raffle.
 2026-10-28 claude: gamerand-adopters complete: grab bag, raffle draw/ball and face blinks use GameRand; roster, turnip week and raffle lineup use per-seed Qrand streams. Wired and run (no panics); grab bag/raffle/blink motion not driven.
 2026-10-28 claude: shop-hratalk complete: logic/src/personal_events.rs + saved flags + Nook HRATALK greeting (0x082A, forward walk) first in the arrival order. The part-time job arc that sets the flags is not in the app. Saved clearing and talk end not driven.
+2026-10-28 claude: shop-hratalk-talk-end complete: HRATALK talk driven to its end (0x082A -> 0x082E -> 0x082B), control returns, cleared flag saved. Other choice branches not driven. No code change.
