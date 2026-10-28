@@ -518,6 +518,7 @@ pub(crate) fn send_away(
     mut state: ResMut<GuideState>,
     mut twins: ResMut<super::Twins>,
     mut payment: ResMut<crate::job_end::CompletePayment>,
+    mut wipe: ResMut<crate::scene_wipe::SceneWipe>,
 ) {
     let Some(waited) = state.ending.as_mut() else {
         return;
@@ -528,8 +529,13 @@ pub(crate) fn send_away(
     }
     *waited += time.delta_secs();
     if *waited >= 1.0 {
-        state.ending = None;
-        twins.goodbye = super::Goodbye::Done;
-        payment.begin();
+        // The picture fades to black before he sends the player out (`FADE_TYPE_OUT`).
+        if wipe.clear() {
+            wipe.fade_out();
+        } else if wipe.black() {
+            state.ending = None;
+            twins.goodbye = super::Goodbye::Done;
+            payment.begin();
+        }
     }
 }

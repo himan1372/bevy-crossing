@@ -69,6 +69,7 @@ mod raffle;
 mod remote;
 mod roster;
 mod save;
+mod scene_wipe;
 mod shop;
 mod shop_display;
 mod shop_nook;
@@ -151,6 +152,7 @@ fn main() {
         .add_plugins(tortimer::TortimerPlugin)
         .add_plugins(town_map::TownMapPlugin)
         .add_plugins(job_end::JobEndPlugin)
+        .add_plugins(scene_wipe::SceneWipePlugin)
         .add_plugins(field_items::FieldItemsPlugin)
         .add_plugins(critters::CrittersPlugin)
         .add_plugins(sound::SoundPlugin)

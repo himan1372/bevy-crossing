@@ -61,6 +61,7 @@ fn cheer(
     mut player: Query<(Entity, Option<&mut NpcClip>), With<Player>>,
     disc: Option<Res<GameDisc>>,
     identity: Res<crate::save::PlayerIdentity>,
+    wipe: Res<crate::scene_wipe::SceneWipe>,
 ) {
     if matches!(payment.stage, Stage::Idle) {
         return;
@@ -74,6 +75,8 @@ fn cheer(
     }
     match payment.stage {
         Stage::Idle => {}
+        // The scene's fade in finishes first.
+        Stage::Wait(_) if !wipe.clear() => {}
         Stage::Wait(waited) => {
             let waited = waited + time.delta_secs();
             payment.stage = if waited >= 0.8 && focus.is_world() {
