@@ -27,6 +27,7 @@ use crate::msg_window::{screen, text_mesh, text_width, MsgAssets};
 use crate::n64_material::N64Material;
 use crate::player::Player;
 use crate::town::{Town, HOUSE_SIZE};
+use rustimal_logic::menu_slide::Slide;
 
 type Model = Vec<(Handle<Mesh>, Handle<N64Material>)>;
 
@@ -67,61 +68,6 @@ struct Resident {
 struct AcreLabel {
     label: Label,
     residents: Vec<Resident>,
-}
-
-/// `mSM_move_menu` for the map: it slides in from the top and leaves upward.
-struct Slide {
-    pos: f32,
-    speed: f32,
-    alternate: bool,
-    ticks: f32,
-    closing: bool,
-}
-
-impl Slide {
-    fn new() -> Self {
-        Self {
-            pos: 300.0,
-            speed: 75.0,
-            alternate: false,
-            ticks: 0.0,
-            closing: false,
-        }
-    }
-
-    /// 60 Hz ticks of `mSM_move_Move`; true when the closing slide has finished.
-    fn advance(&mut self, ticks: f32) -> bool {
-        self.ticks += ticks;
-        while self.ticks >= 1.0 {
-            self.ticks -= 1.0;
-            if !self.closing && self.pos <= 0.0 {
-                self.ticks = 0.0;
-                break;
-            }
-            let (threshold, target, direction, multiplier) = if self.closing {
-                (0.0, 300.0, 1.0, 2.0)
-            } else {
-                (120.0, 0.0, -1.0, 0.5)
-            };
-            if !self.alternate && direction * (self.pos - threshold) >= 0.0 {
-                self.speed = (self.speed * multiplier).clamp(1.0, 75.0);
-            }
-            self.alternate = !self.alternate;
-            self.pos += self.speed * direction * 0.5;
-            if direction * (self.pos - target) > 0.0 {
-                self.pos = target;
-                self.alternate = false;
-                self.ticks = 0.0;
-                return self.closing;
-            }
-        }
-        self.pos = self.pos.trunc();
-        false
-    }
-
-    fn settled(&self) -> bool {
-        !self.closing && self.pos <= 0.0
-    }
 }
 
 /// What the open map holds.
@@ -402,10 +348,7 @@ fn input(
                         closing |= pressed && (action != Action::Map || !view.board);
                     }
                     if closing {
-                        view.slide.closing = true;
-                        view.slide.speed = 1.0;
-                        view.slide.alternate = false;
-                        view.slide.ticks = 0.0;
+                        view.slide.close();
                         crate::sound::se(0x17D);
                     } else {
                         let direction = [

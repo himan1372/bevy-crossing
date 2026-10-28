@@ -38,6 +38,7 @@ type Shown = (
     kb::Keyboard,
     crate::shop_nook::editor::Held,
     usize,
+    (board::Play, usize, usize),
 );
 
 /// How far the paper rolls up to make room for the keyboard.
@@ -74,6 +75,7 @@ pub(super) fn draw(
         view.keyboard,
         view.held,
         post.notices.len(),
+        (view.motion.mode, view.motion.now, view.motion.disp),
     );
     if assets.shown == Some(signature) && assets.root.is_some() {
         return;
@@ -120,28 +122,47 @@ pub(super) fn draw(
     let root = commands
         .spawn((
             Name::new("notice board"),
-            Transform::default(),
+            BoardRoot,
+            Transform::from_xyz(0.0, view.slide.pos * 16.0, 0.0),
             Visibility::default(),
         ))
         .id();
     assets.root = Some(root);
     assets.shown = Some(signature);
-    let editing = view.mode == Mode::Edit;
-    let lift = if editing { LIFT } else { 0.0 };
-    if let Some(frame) = &assets.frame {
-        for (i, (mesh, material)) in frame.iter().enumerate() {
-            commands.spawn((
-                Mesh3d(mesh.clone()),
-                MeshMaterial3d(material.clone()),
-                Transform::from_xyz(0.0, lift * 16.0, 200.0 + i as f32 * 0.1),
-                RenderLayers::layer(1),
-                ChildOf(root),
-            ));
-        }
+    let motion = view.motion;
+    let count = post.notices.len();
+    // The arriving page, and the leaving one while a page turns (`mNT_set_dl`).
+    let mut pages = vec![(motion.now, Slot::Arriving)];
+    if motion.disp != motion.now {
+        pages.push((motion.disp, Slot::Leaving));
     }
-    if let (Some(hints), Mode::Read) = (&assets.hints, view.mode) {
+    for (page, slot) in pages {
+        let group = commands
+            .spawn((
+                slot,
+                Transform::default(),
+                Visibility::default(),
+                ChildOf(root),
+            ))
+            .id();
+        let mut paint = Paint {
+            commands: &mut commands,
+            meshes: &mut meshes,
+            materials: &mut materials,
+            root: group,
+        };
+        spawn_page(&mut paint, &assets.frame, &font, view, &post.notices, page);
+    }
+    if let (Some(hints), true) = (&assets.hints, view.mode == Mode::Read || !motion.idle()) {
         // `mNT_set_key_dl`: the key display, the page arrows that lead somewhere, the stick.
-        let count = post.notices.len();
+        let group = commands
+            .spawn((
+                Slot::Hints,
+                Transform::default(),
+                Visibility::default(),
+                ChildOf(root),
+            ))
+            .id();
         let mut parts: Vec<(&Model, f32, f32)> = vec![(&hints.keys, 0.0, 0.0)];
         if view.page + 1 < count {
             parts.push((&hints.next, 0.1, 0.0));
@@ -158,12 +179,12 @@ pub(super) fn draw(
                     MeshMaterial3d(material.clone()),
                     Transform::from_xyz(x, 0.0, 201.0 + z + i as f32 * 0.01),
                     RenderLayers::layer(1),
-                    ChildOf(root),
+                    ChildOf(group),
                 ));
             }
         }
     }
-    if editing {
+    if view.mode == Mode::Edit && motion.idle() {
         let mut stores = crate::shop_nook::editor::Stores {
             meshes: &mut meshes,
             n64: &mut n64,
@@ -181,138 +202,21 @@ pub(super) fn draw(
             &mut stores,
         );
     }
-    let mut paint = Paint {
-        commands: &mut commands,
-        meshes: &mut meshes,
-        materials: &mut materials,
-        root,
-    };
-    // `mNT_set_page_dl`: the body is dark red at full size, the header blue at three quarters.
     let ink = [30, 0, 0, 255];
-    let blue = [0, 0, 255, 255];
-    let count = post.notices.len();
-    let shown: Option<&Notice> = (view.mode == Mode::Read)
-        .then(|| post.notices.get(view.page))
-        .flatten();
-    let small = |s: &str| {
-        format!(
-            "{}{}{}",
-            crate::messages::markup::LINE_SCALE,
-            crate::messages::markup::arg(24),
-            s
-        )
-    };
-    let entry = if editing || view.mode == Mode::Confirm {
-        (count + 1).min(board::POSTS)
-    } else {
-        view.page + 1
-    };
-    if count > 0 || editing || view.mode == Mode::Confirm {
-        paint.text(
-            &font,
-            &small(&format!("entry {entry:>2}")),
-            Vec2::new(63.0, 46.0 - lift),
-            blue,
-            230.0,
-        );
-    }
-    let when = shown.map(|n| n.time).or_else(|| {
-        (editing || view.mode == Mode::Confirm).then(|| {
-            let now = crate::clock::now();
-            (now.year, now.month, now.day, now.hour, now.minute)
-        })
-    });
-    if let Some((year, month, day, _, _)) = when {
-        // `mNT_set_day_strings_dl`: "Month" ends at x 213, then the day, a comma and the year.
-        const MONTHS: [&str; 13] = [
-            "January",
-            "February",
-            "March",
-            "April",
-            "May",
-            "June",
-            "July",
-            "August",
-            "September",
-            "October",
-            "November",
-            "December",
-            "???",
-        ];
-        let name = MONTHS[usize::from(month.clamp(1, 13)) - 1];
-        let width = crate::msg_window::text_width(name, &font.widths) * 0.75;
-        let y = 46.0 - lift;
-        paint.text(
-            &font,
-            &small(name),
-            Vec2::new(213.0 - width, y),
-            blue,
-            230.0,
-        );
-        paint.text(
-            &font,
-            &small(&format!("{day:>2}")),
-            Vec2::new(215.0, y),
-            blue,
-            230.0,
-        );
-        paint.text(&font, &small(","), Vec2::new(227.0, y), blue, 230.0);
-        paint.text(
-            &font,
-            &small(&format!("{year:04}")),
-            Vec2::new(233.0, y),
-            blue,
-            230.0,
-        );
-    }
-    let text: Vec<u8> = match (view.mode, shown) {
-        (Mode::Read, Some(n)) => {
-            n.message[..native::text_len(&n.message).min(n.message.len())].to_vec()
-        }
-        _ => view.draft.clone(),
-    };
-    let lines = native::lines(&text, &font.widths);
-    let (cursor_line, cursor_x) = native::cursor_line(&text, view.cursor, &font.widths);
-    if view.mode == Mode::Read && count == 0 {
-        paint.text(
-            &font,
-            "(Nothing posted yet.)",
-            Vec2::new(63.0, 63.0),
-            ink,
-            230.0,
-        );
-    } else {
-        for (row, line) in lines
-            .iter()
-            .skip(view.scroll)
-            .take(if editing { EDIT_LINES } else { 6 })
-            .enumerate()
-        {
-            let y = if editing { 28.0 } else { 63.0 } + row as f32 * 16.0;
-            paint.text(&font, &display(line), Vec2::new(63.0, y), ink, 230.0);
-            if editing && view.scroll + row == cursor_line {
-                let at = Vec2::new(63.0 + cursor_x as f32, y);
-                if let Some(caret) =
-                    paint.text(&font, "_", at, crate::shop_nook::editor::CARET_INK, 230.0)
-                {
-                    paint
-                        .commands
-                        .entity(caret)
-                        .insert(crate::shop_nook::editor::Caret(at));
-                }
-            }
-        }
-    }
     let hints: Vec<String> = match view.mode {
+        _ if !motion.idle() => Vec::new(),
         Mode::Read => Vec::new(),
-        Mode::Edit => vec![
-            "Enter: key  Bksp  Space  F1: Caps  F3: type  Ctrl+X: accent".into(),
-            format!(
-                "Ctrl+arrows: cursor   F4: finish   Esc: discard   {}/192  {}/6",
-                view.draft.len(),
-                lines.len()
-            ),
-        ],
+        Mode::Edit => {
+            let lines = native::lines(&view.draft, &font.widths).len();
+            vec![
+                "Enter: key  Bksp  Space  F1: Caps  F3: type  Ctrl+X: accent".into(),
+                format!(
+                    "Ctrl+arrows: cursor   F4: finish   Esc: discard   {}/192  {}/6",
+                    view.draft.len(),
+                    lines
+                ),
+            ]
+        }
         Mode::Confirm => {
             let options = ["Post it", "Keep writing", "Never mind"];
             let mut hints = vec!["Post this notice?".to_string()];
@@ -325,6 +229,12 @@ pub(super) fn draw(
             hints
         }
     };
+    let mut paint = Paint {
+        commands: &mut commands,
+        meshes: &mut meshes,
+        materials: &mut materials,
+        root,
+    };
     for (row, hint) in hints.iter().enumerate() {
         let small = format!(
             "{}{}{}",
@@ -335,9 +245,178 @@ pub(super) fn draw(
         paint.text(
             &font,
             &small,
-            Vec2::new(64.0, if editing { 0.0 } else { 166.0 } + row as f32 * 12.0),
+            Vec2::new(
+                64.0,
+                if view.mode == Mode::Edit { 0.0 } else { 166.0 } + row as f32 * 12.0,
+            ),
             ink,
             230.0,
         );
+    }
+}
+
+/// One page of the board (`mNT_set_page_dl`): the paper, the entry number and date, the text.
+/// `page` is a post's index, or `WRITE_PAGE` for the one being written.
+fn spawn_page(
+    paint: &mut Paint,
+    frame: &Option<Model>,
+    font: &MsgAssets,
+    view: &View,
+    notices: &[Notice],
+    page: usize,
+) {
+    let writing = page == board::WRITE_PAGE;
+    let editing = writing && view.mode == Mode::Edit;
+    let lift = if editing { LIFT } else { 0.0 };
+    if let Some(frame) = frame {
+        for (i, (mesh, material)) in frame.iter().enumerate() {
+            paint.commands.spawn((
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(material.clone()),
+                Transform::from_xyz(0.0, lift * 16.0, 200.0 + i as f32 * 0.1),
+                RenderLayers::layer(1),
+                ChildOf(paint.root),
+            ));
+        }
+    }
+    // `mNT_set_page_dl`: the body is dark red at full size, the header blue at three quarters.
+    let ink = [30, 0, 0, 255];
+    let blue = [0, 0, 255, 255];
+    let shown: Option<&Notice> = if writing { None } else { notices.get(page) };
+    if !writing && shown.is_none() {
+        paint.text(
+            font,
+            "(Nothing posted yet.)",
+            Vec2::new(63.0, 63.0),
+            ink,
+            230.0,
+        );
+        return;
+    }
+    let small = |s: &str| {
+        format!(
+            "{}{}{}",
+            crate::messages::markup::LINE_SCALE,
+            crate::messages::markup::arg(24),
+            s
+        )
+    };
+    let entry = if writing {
+        (notices.len() + 1).min(board::POSTS)
+    } else {
+        page + 1
+    };
+    paint.text(
+        font,
+        &small(&format!("entry {entry:>2}")),
+        Vec2::new(63.0, 46.0 - lift),
+        blue,
+        230.0,
+    );
+    let (year, month, day, _, _) = shown.map(|n| n.time).unwrap_or_else(|| {
+        let now = crate::clock::now();
+        (now.year, now.month, now.day, now.hour, now.minute)
+    });
+    // `mNT_set_day_strings_dl`: "Month" ends at x 213, then the day, a comma and the year.
+    const MONTHS: [&str; 13] = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+        "???",
+    ];
+    let name = MONTHS[usize::from(month.clamp(1, 13)) - 1];
+    let width = crate::msg_window::text_width(name, &font.widths) * 0.75;
+    let y = 46.0 - lift;
+    paint.text(font, &small(name), Vec2::new(213.0 - width, y), blue, 230.0);
+    paint.text(
+        font,
+        &small(&format!("{day:>2}")),
+        Vec2::new(215.0, y),
+        blue,
+        230.0,
+    );
+    paint.text(font, &small(","), Vec2::new(227.0, y), blue, 230.0);
+    paint.text(
+        font,
+        &small(&format!("{year:04}")),
+        Vec2::new(233.0, y),
+        blue,
+        230.0,
+    );
+    let text: Vec<u8> = match shown {
+        Some(n) => n.message[..native::text_len(&n.message).min(n.message.len())].to_vec(),
+        None => view.draft.clone(),
+    };
+    let lines = native::lines(&text, &font.widths);
+    let (cursor_line, cursor_x) = native::cursor_line(&text, view.cursor, &font.widths);
+    let scroll = if writing { view.scroll } else { 0 };
+    for (row, line) in lines
+        .iter()
+        .skip(scroll)
+        .take(if editing { EDIT_LINES } else { 6 })
+        .enumerate()
+    {
+        let y = if editing { 28.0 } else { 63.0 } + row as f32 * 16.0;
+        paint.text(font, &display(line), Vec2::new(63.0, y), ink, 230.0);
+        if editing && scroll + row == cursor_line {
+            let at = Vec2::new(63.0 + cursor_x as f32, y);
+            if let Some(caret) =
+                paint.text(font, "_", at, crate::shop_nook::editor::CARET_INK, 230.0)
+            {
+                paint
+                    .commands
+                    .entity(caret)
+                    .insert(crate::shop_nook::editor::Caret(at));
+            }
+        }
+    }
+}
+
+/// The board itself, and what moves on it each frame.
+#[derive(Component)]
+pub(super) struct BoardRoot;
+
+#[derive(Component, Clone, Copy)]
+pub(super) enum Slot {
+    Arriving,
+    Leaving,
+    Hints,
+}
+
+/// Slides the board and turns its pages (`menu_info->position`, `control_position`); one
+/// pixel is 16 overlay units.
+pub(super) fn animate(
+    ui: Res<NoticeUi>,
+    mut roots: Query<&mut Transform, (With<BoardRoot>, Without<Slot>)>,
+    mut slots: Query<(&Slot, &mut Transform), Without<BoardRoot>>,
+) {
+    let Some(view) = ui.0.as_ref() else { return };
+    let motion = view.motion;
+    for mut transform in &mut roots {
+        transform.translation.y = view.slide.pos * 16.0;
+    }
+    let side = if motion.now > motion.disp {
+        -320.0
+    } else {
+        320.0
+    };
+    for (slot, mut transform) in &mut slots {
+        match slot {
+            Slot::Arriving => transform.translation.x = motion.x * 16.0,
+            Slot::Leaving => transform.translation.x = (motion.x + side) * 16.0,
+            // The hints are drawn from the screen's frame, not the sliding board's.
+            Slot::Hints => {
+                transform.translation.y = (motion.control - 2.0 * view.slide.pos) * 16.0;
+            }
+        }
     }
 }

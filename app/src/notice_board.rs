@@ -11,7 +11,9 @@ use bevy::input::ButtonState;
 use bevy::prelude::*;
 use rustimal_logic::diary as native;
 use rustimal_logic::editor_keyboard as kb;
+use rustimal_logic::menu_slide::Slide;
 use rustimal_logic::notice_board as board;
+use rustimal_logic::notice_board::Motion;
 use serde::{Deserialize, Serialize};
 
 use crate::input::{Action, Actions, InputFocus};
@@ -59,6 +61,11 @@ struct View {
     held: crate::shop_nook::editor::Held,
     ticks: f32,
     over: bool,
+    /// `mSM_move_Move`: the board comes in from the top and leaves upward.
+    slide: Slide,
+    /// `mNT_Play_page_move` and friends: the paper's sideways motion.
+    motion: Motion,
+    anim_ticks: f32,
 }
 
 // `sAdo_SysTrgStart` ids from `m_editor_ovl.c`.
@@ -173,6 +180,9 @@ fn open_board(
         held: Default::default(),
         ticks: 0.0,
         over: false,
+        slide: Slide::new(),
+        motion: Motion::new(board::first_page(post.notices.len())),
+        anim_ticks: 0.0,
     });
     crate::sound::se(0x5F);
 }
@@ -194,6 +204,18 @@ fn input(
         events.clear();
         return;
     };
+    let frames = time.delta_secs() * 60.0;
+    if view.slide.advance(frames) {
+        // The closing slide has finished: the world has the input again.
+        events.clear();
+        *focus = InputFocus::World;
+        return;
+    }
+    view.anim_ticks += frames;
+    while view.anim_ticks >= 1.0 {
+        view.anim_ticks -= 1.0;
+        view.motion.tick(post.notices.len());
+    }
     if std::mem::take(&mut view.over) {
         warning.open(&rustimal_logic::warning::WORD_OVER);
     }
@@ -208,6 +230,12 @@ fn input(
         ui.0 = Some(view);
         return;
     };
+    // Nothing is read while the board slides or a page turns (`mNT_Play_*` take no buttons).
+    if !view.slide.settled() || !view.motion.idle() {
+        events.clear();
+        ui.0 = Some(view);
+        return;
+    }
     let before = (
         view.page,
         view.mode,
@@ -235,6 +263,7 @@ fn input(
                 None
             };
             if let Some(page) = step.and_then(|s| board::move_page(view.page, count, s)) {
+                view.motion.start_move(page as isize - view.page as isize);
                 view.page = page;
             } else if actions.consume(Action::Cancel) || actions.consume(Action::Back) {
                 close = true;
@@ -243,6 +272,7 @@ fn input(
                 view.draft.clear();
                 view.scroll = 0;
                 crate::sound::se(START);
+                view.motion.start_write();
                 begin_edit(&mut view, &font.widths);
             }
         }
@@ -256,7 +286,7 @@ fn input(
                 match event.key_code {
                     KeyCode::Escape => {
                         view.mode = Mode::Read;
-                        view.draft.clear();
+                        view.motion.start_read(view.page);
                         break;
                     }
                     KeyCode::Enter | KeyCode::NumpadEnter => {
@@ -414,16 +444,18 @@ fn input(
                     board::EndChoice::KeepWriting => begin_edit(&mut view, &font.widths),
                     board::EndChoice::Cancel => {
                         view.mode = Mode::Read;
-                        view.draft.clear();
                         view.page = board::first_page(count + 1).min(count.saturating_sub(1));
+                        view.motion.start_read(view.page);
                     }
                 }
             }
         }
     }
     if close {
-        *focus = InputFocus::World;
+        // `mSM_MOVE_OUT_TOP`: the board leaves upward; the world waits for it.
+        view.slide.close();
         crate::sound::se(crate::sound::se_id::MENU_EXIT);
+        ui.0 = Some(view);
     } else {
         if before
             != (
@@ -462,7 +494,8 @@ impl Plugin for NoticeBoardPlugin {
             )
             .add_systems(
                 Update,
-                render::draw
+                (render::draw, render::animate)
+                    .chain()
                     .after(crate::input::InteractSet::Ui)
                     .in_set(crate::states::GameplaySet)
                     .run_if(resource_exists::<crate::msg_window::MsgAssets>),

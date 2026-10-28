@@ -1,5 +1,9 @@
 # Codex handoff - 2026-10-25
 
+## Claude continuation - 2026-10-28, third session (newest)
+
+Philip picked the notice/map animations. Done (`completed/notice-board-animations.md`): shared `logic/src/menu_slide.rs` (slide in/out, also used by the map), `notice_board::Motion` (page turn, to-write, to-read), board slides, page turns and hint drop in `app/src/notice_board/render.rs`. Not built: cursor-following roll, keyboard slide-in, per-hop page sound. The map overlay already had its slide/glide/pulse. Remaining candidates are as in the list below (intro demo, remaining doors, job redirects).
+
 ## Claude continuation - 2026-10-28, second session (read this first)
 
 Identity `claude`, branch `main`, everything below is committed and pushed (last code commit: the circle wipes; `docs/codex-handoff.md` is this update). Only `.gitignore` and `savegame.json` are
