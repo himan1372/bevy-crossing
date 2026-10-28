@@ -2,6 +2,7 @@
 use super::{ShopData, ShopLocation, StockItem};
 use bevy::prelude::*;
 use rustimal_logic::game_time as gt;
+use rustimal_logic::qrand::Qrand;
 use serde::{Deserialize, Serialize};
 
 type Date = (u16, u8, u8);
@@ -94,7 +95,7 @@ impl Calendar {
         let hour = [23, 5, 17, 5, 5, 20][usize::from(self.event)];
         (date(now), now.hour) > (end, hour)
     }
-    fn schedule(&mut self, now: crate::clock::Now, id: u32, renovating: bool) {
+    fn schedule(&mut self, now: crate::clock::Now, id: u32, renovating: bool, rng: &mut Qrand) {
         let mut seed = (id & 0xFFFFFF).wrapping_add(1).wrapping_add(
             u32::from(now.year) - u32::from(now.month) + u32::from(now.day) + u32::from(now.hour),
         );
@@ -138,7 +139,8 @@ impl Calendar {
             self.created = date(now);
             self.date = target;
             self.hour = match event {
-                0 => 12 + (seed % 8) as u8,
+                // `dates[SPECIAL3] = 12 + RANDOM(8)`.
+                0 => 12 + rng.random(8) as u8,
                 2 => 18,
                 5 => 21,
                 _ => 6,
@@ -160,6 +162,7 @@ pub(crate) fn tick(
     identity: Res<crate::save::PlayerIdentity>,
     mut items: Option<ResMut<crate::field_items::FieldItems>>,
     mut rank: ResMut<crate::field_rank::FieldRank>,
+    mut rand: ResMut<crate::game_rand::GameRand>,
     catalog: Res<crate::catalog::Catalog>,
     mut mailbox: ResMut<crate::mail::HouseMailbox>,
 ) {
@@ -184,7 +187,7 @@ pub(crate) fn tick(
             shop.events.rank = rank;
         }
         let renovating = shop.shop.upgrading_today;
-        shop.events.schedule(now, id, renovating);
+        shop.events.schedule(now, id, renovating, &mut rand.0);
     }
     if shop.events.event == 0
         && shop.events.valid()
@@ -195,13 +198,8 @@ pub(crate) fn tick(
         let kind = [0, 3, 4, 2][cat_idx];
         let count =
             (1 + now.day_secs as usize % 60 % 3).min([1, 2, 3, 5][shop.shop.shop_level as usize]);
-        let mut rng = u64::from(id) ^ now.day_number as u64 ^ 0x91E10DA5C79E7B1D;
-        let mut below = |n: u32| {
-            rng ^= rng << 13;
-            rng ^= rng >> 7;
-            rng ^= rng << 17;
-            (rng % u64::from(n.max(1))) as u32
-        };
+        // `RANDOM(n)` on the shared `qrand` state.
+        let mut below = |n: u32| rand.0.random(n.max(1) as i32) as u32;
         if let Some(items) =
             crate::goods::bargain_stock(kind, count, &catalog.collection, &mut below)
         {

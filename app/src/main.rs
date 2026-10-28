@@ -25,6 +25,7 @@ mod field_rank;
 mod footsteps;
 mod furniture;
 mod game_disc;
+mod game_rand;
 mod goods;
 mod ground_map;
 mod gyroid;

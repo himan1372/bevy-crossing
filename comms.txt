@@ -513,3 +513,4 @@ Source (concept): https://pokeacer.xyz/wii/pdf/OS.pdf (Nintendo SDK OS manual,
 2026-10-27 claude: shop-house-messages-drive complete: all ten opening house talks (statue, basement, built, offers) driven on tier 0; messages and walk/no-walk match the source. No code change.
 2026-10-28 claude: shop-start-welcome-tier-0 complete: tier-0 sale-day welcome (EVENT 37, message 0x10A0) driven with the balloon claimed; Nook reaches the walk limit. No code change.
 2026-10-28 claude: shop-handover-frames complete: sale-day balloon present frames eyeballed (present appears, shrinks as put away, no stuck frames); Nook's arm poses hidden by the shop camera. No code change.
+2026-10-28 claude: shop-bargain-rng-kernel complete: logic/src/qrand.rs (libc64 qrand/fqrand/RANDOM) + app GameRand; the bargain sale hour and offer stock draw from it instead of local adapters. Temp-verified sale hours; stock draw not read back.
