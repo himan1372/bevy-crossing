@@ -32,11 +32,15 @@ const VTX_SIZE: usize = 16;
 /// `GfxMemory` over the decompressed REL.
 pub struct RelGfx<'a> {
     rom: &'a RomImage,
+    /// Runtime segments whose display list game code sets with `gSPSegment`:
+    /// (segment, REL offset). A `G_DL` into one calls that list.
+    dl_segments: &'a [(u8, u32)],
 }
 
 impl<'a> RelGfx<'a> {
-    pub fn new(rom: &'a RomImage) -> Self {
-        Self { rom }
+    /// A reader over the REL; `dl_segments` points runtime segments at display lists.
+    pub fn with_dl_segments(rom: &'a RomImage, dl_segments: &'a [(u8, u32)]) -> Self {
+        Self { rom, dl_segments }
     }
 
     fn rel(&self) -> &[u8] {
@@ -74,10 +78,19 @@ impl<'a> RelGfx<'a> {
                 };
                 if gfx.opcode() == op::G_DL && gfx.addr() >> 24 != 0 {
                     // A call into a runtime segment (e.g. the ocean's wave
-                    // list in segment 12) that game code would fill. The
-                    // interpreter ends the task on a missing list, so
-                    // skip the call instead.
-                    gfx = Gfx::new(0, 0);
+                    // list in segment 12) that game code would fill. A
+                    // segment the caller points at a list is followed;
+                    // otherwise the interpreter would end the task on a
+                    // missing list, so skip the call instead.
+                    let target = self
+                        .dl_segments
+                        .iter()
+                        .find(|(seg, _)| u32::from(*seg) == gfx.addr() >> 24)
+                        .map(|(_, base)| base + (gfx.addr() & 0x00FF_FFFF));
+                    gfx = match target {
+                        Some(addr) => Gfx::new(gfx.w0, addr),
+                        None => Gfx::new(0, 0),
+                    };
                 }
                 list.push(gfx);
                 at += GFX_SIZE;
@@ -447,7 +460,17 @@ pub fn run_display_lists_with_page(
     tex: u32,
     pal: u32,
 ) -> TriangleSink {
-    run_lists_config(rom, entries, prim, 255, env, &[], false, Some((tex, pal)))
+    run_lists_config(
+        rom,
+        entries,
+        prim,
+        255,
+        env,
+        &[],
+        false,
+        Some((tex, pal)),
+        &[],
+    )
 }
 
 /// The wet-sand colour field drawing puts in segment C for beach acres
@@ -490,16 +513,39 @@ fn run_lists_full(
     env: [u8; 4],
     tluts: &[(usize, u32)],
 ) -> TriangleSink {
-    run_lists_config(rom, entries, prim, prim_lod, env, tluts, false, None)
+    run_lists_config(rom, entries, prim, prim_lod, env, tluts, false, None, &[])
 }
 
 /// mIV_set_base_frame_dl: two-tile cloth colour and frame coverage.
 /// The pockets renderer composites these at runtime; global TEXEL1 behavior
 /// remains untouched for existing world models.
 pub(crate) fn run_inventory_frame(rom: &RomImage, entries: &[u32]) -> TriangleSink {
-    run_lists_config(rom, entries, [255; 4], 255, [0; 4], &[], true, None)
+    run_lists_config(rom, entries, [255; 4], 255, [0; 4], &[], true, None, &[])
 }
 
+/// As [`run_display_lists_with_colors`], with runtime segments set to display lists
+/// (`gSPSegment(seg, list)`, e.g. the map window's colour list in segment 11):
+/// (segment, REL offset of the list).
+pub fn run_display_lists_with_segment_lists(
+    rom: &RomImage,
+    entries: &[u32],
+    prim: [u8; 4],
+    dl_segments: &[(u8, u32)],
+) -> TriangleSink {
+    run_lists_config(
+        rom,
+        entries,
+        prim,
+        255,
+        [0; 4],
+        &[],
+        false,
+        None,
+        dl_segments,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
 fn run_lists_config(
     rom: &RomImage,
     entries: &[u32],
@@ -509,8 +555,9 @@ fn run_lists_config(
     tluts: &[(usize, u32)],
     inventory_mask: bool,
     page: Option<(u32, u32)>,
+    dl_segments: &[(u8, u32)],
 ) -> TriangleSink {
-    let mem = RelGfx::new(rom);
+    let mem = RelGfx::with_dl_segments(rom, dl_segments);
     let mut emu = Emu64::new();
     for seg in 1..16 {
         emu.segments.set(seg, UNRESOLVED);

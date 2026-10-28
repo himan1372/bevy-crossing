@@ -152,6 +152,7 @@ pub mod nas_bank;
 pub mod nas_seq;
 mod tool_resolvers;
 pub mod town_gen;
+pub mod town_map;
 mod uki;
 mod villager_home;
 pub use ecology::{field_rank_rate, fish_select};
