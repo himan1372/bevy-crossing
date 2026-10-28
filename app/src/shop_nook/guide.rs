@@ -4,8 +4,9 @@
 //! while the job runs (`aNRG2_goods_talk_request`). The job's state and tables are
 //! `rustimal_logic::first_job`; this module is the talk flow.
 //!
-//! Jobs 1 (change clothes) and 2 (plant flowers) are covered; the later jobs need
-//! villager picks and the quest manager and stop at their start.
+//! Jobs 1 (change clothes), 2 (plant flowers), 3 (deliver furniture), 4 (send a
+//! letter) and 11 (the open quest) are covered; the carpet, axe and notice jobs stop
+//! at their start.
 
 use bevy::prelude::*;
 use rustimal_logic::first_job::{self as fj, Cond, FirstJob, Job, Picks};
@@ -17,22 +18,116 @@ pub(super) const GOODS_MESSAGE: usize = 0x081C;
 /// `mPr_ITEM_COND_QUEST`.
 const QUEST: u32 = 2;
 
-/// What the guide says: the messages in order (each starts when the last ends)
-/// and whether he walks forward while speaking.
+/// What the guide says: the messages in order (each starts when the last ends),
+/// the message strings the jobs need (`aNRG2_set_str_proc`: FREE3 acre row, FREE4
+/// acre number, FREE5 recipient, FREE6 post-office acre) and a villager the job
+/// makes the player's acquaintance (`mNpc_SetAnimalPersonalID2Memory`).
+#[derive(Default)]
 pub(super) struct Talk {
     pub chain: Vec<usize>,
+    pub free: Vec<(usize, String)>,
+    pub meet: Option<String>,
 }
 
-/// The residents by villager-table index (`Save_Get(animals)` order).
-pub(super) fn residents(roster: Option<&crate::roster::TownRoster>) -> Vec<u16> {
-    roster.map_or_else(Vec::new, |r| {
-        r.residents.iter().map(|e| e.index as u16).collect()
-    })
+impl Talk {
+    fn said(chain: Vec<usize>) -> Self {
+        Self {
+            chain,
+            ..Self::default()
+        }
+    }
 }
 
-/// Whether the guide runs the shop: the job is on and its first two jobs are in play.
+/// The residents the jobs can name: villager-table index, name and home acre.
+#[derive(Default)]
+pub(super) struct Residents {
+    ids: Vec<u16>,
+    names: Vec<String>,
+    /// (x, z) of the home's acre in the town plan.
+    acres: Vec<(usize, usize)>,
+    /// The post office's acre column (`mFI_BlockKind2BkNum`), 1-based.
+    post_column: usize,
+}
+
+pub(super) fn residents(
+    roster: Option<&crate::roster::TownRoster>,
+    town: Option<&crate::town::Town>,
+) -> Residents {
+    let mut out = Residents::default();
+    let Some(roster) = roster else {
+        return out;
+    };
+    for (i, entry) in roster.residents.iter().enumerate() {
+        out.ids.push(entry.index as u16);
+        out.names.push(entry.name.clone());
+        let acre = town
+            .and_then(|t| t.plan.house_acres.get(i).copied())
+            .map_or(0, usize::from);
+        out.acres.push((
+            acre % rustimal_logic::town_gen::ACRE_WIDTH,
+            acre / rustimal_logic::town_gen::ACRE_WIDTH,
+        ));
+    }
+    if let Some(town) = town {
+        out.post_column = town
+            .plan
+            .acres
+            .iter()
+            .position(|a| a.feature == rustimal_logic::town_gen::Feature::PostOffice as u8)
+            .map_or(1, |i| i % rustimal_logic::town_gen::ACRE_WIDTH + 1);
+    }
+    out
+}
+
+impl Residents {
+    fn name_of(&self, id: u16) -> Option<&str> {
+        let i = self.ids.iter().position(|&r| r == id)?;
+        self.names.get(i).map(String::as_str)
+    }
+
+    /// `aNRG2_set_str_j3` / `_j4`.
+    fn job_strings(&self, job: &FirstJob) -> Vec<(usize, String)> {
+        let Some(kind) = job.job else {
+            return Vec::new();
+        };
+        let letter = matches!(kind, Job::SendLetter | Job::SendLetter2);
+        let delivery = matches!(
+            kind,
+            Job::DeliverFurniture | Job::DeliverCarpet | Job::DeliverAxe | Job::DeliverAxe2
+        );
+        if !(letter || delivery) {
+            return Vec::new();
+        }
+        let Some(id) = job.recipient else {
+            return Vec::new();
+        };
+        let Some(i) = self.ids.iter().position(|&r| r == id) else {
+            return Vec::new();
+        };
+        let (x, z) = self.acres[i];
+        let mut free = vec![
+            (3, ['A', 'B', 'C', 'D', 'E', 'F'][z.min(5)].to_string()),
+            (4, (x + 1).to_string()),
+            (5, self.names[i].clone()),
+        ];
+        if letter {
+            free.push((6, self.post_column.to_string()));
+        }
+        free
+    }
+}
+
+/// Whether the guide runs the shop.
 pub(super) fn active(identity: &crate::save::PlayerIdentity) -> bool {
     identity.events.first_job
+}
+
+/// The jobs the guide can run so far.
+fn handled(kind: Job) -> bool {
+    matches!(
+        kind,
+        Job::ChangeCloth | Job::PlantFlower | Job::DeliverFurniture | Job::SendLetter | Job::Open
+    )
 }
 
 fn free_slots(inventory: &PlayerInventory) -> usize {
@@ -73,14 +168,16 @@ fn grant(
 fn say_hello(
     job: &mut FirstJob,
     inventory: &mut PlayerInventory,
-    residents: &[u16],
+    residents: &Residents,
+    state: &mut GuideState,
+    meet: &mut Option<String>,
     rand: &mut rustimal_logic::qrand::Qrand,
 ) -> Option<usize> {
     if job.progress != 1 {
         return None;
     }
     let kind = job.job?;
-    if kind.index() > Job::DeliverFurniture.index() {
+    if !handled(kind) {
         return None;
     }
     if kind.can_start(free_slots(inventory)) {
@@ -88,19 +185,49 @@ fn say_hello(
             slot: inventory.pockets.find_free_slot().unwrap_or(0),
             ..Picks::default()
         };
+        if matches!(kind, Job::DeliverFurniture | Job::SendLetter) {
+            // `aNRG2_stepup_j3` / `_j4`: an unused villager.
+            picks.villager =
+                fj::pick_other_villager(&residents.ids, &job.used, &mut |n| rand.random(n));
+        }
         if kind == Job::DeliverFurniture {
-            // `aNRG2_stepup_j3`: an unused villager and a rolled piece of furniture.
-            picks.villager = fj::pick_other_villager(residents, &job.used, &mut |n| rand.random(n));
+            // ... and a rolled piece of furniture.
             picks.item =
                 crate::goods::furniture_for_delivery(&fj::NO_DELIVERY_FURNITURE, &mut |n| {
                     rand.random(n as i32) as u32
                 })?;
         }
-        job.step_up(picks)?;
+        let out = job.step_up(picks)?;
+        if kind == Job::SendLetter {
+            // The recipient is put in the address book even if the player never met them.
+            *meet = job
+                .recipient
+                .and_then(|id| residents.name_of(id))
+                .map(str::to_string);
+        }
+        state.ask_again = out.can_ask_again;
         grant(kind, job.item, inventory, rand);
         Some(kind.start_message())
     } else {
         kind.refuse_message()
+    }
+}
+
+/// A talk that ends with the job's start (or refusal) message appended.
+fn with_hello(
+    mut chain: Vec<usize>,
+    job: &mut FirstJob,
+    inventory: &mut PlayerInventory,
+    residents: &Residents,
+    state: &mut GuideState,
+    rand: &mut rustimal_logic::qrand::Qrand,
+) -> Talk {
+    let mut meet = None;
+    chain.extend(say_hello(job, inventory, residents, state, &mut meet, rand));
+    Talk {
+        chain,
+        free: residents.job_strings(job),
+        meet,
     }
 }
 
@@ -110,16 +237,15 @@ pub(super) fn arrival(
     identity: &mut crate::save::PlayerIdentity,
     inventory: &mut PlayerInventory,
     look: &crate::character::PlayerLook,
-    residents: &[u16],
+    residents: &Residents,
+    state: &mut GuideState,
     rand: &mut rustimal_logic::qrand::Qrand,
     first_visit: bool,
 ) -> Option<Talk> {
     let job = identity.first_job.get_or_insert_with(FirstJob::start);
     if cloth_check(job, look) {
         job.wrong_cloth = true;
-        return Some(Talk {
-            chain: vec![0x0832],
-        });
+        return Some(Talk::said(vec![0x0832]));
     }
     if !first_visit {
         return None;
@@ -137,48 +263,63 @@ pub(super) fn arrival(
     } else {
         chain.push(0x07EF);
     }
-    chain.extend(say_hello(job, inventory, residents, rand));
-    Some(Talk { chain })
+    Some(with_hello(chain, job, inventory, residents, state, rand))
 }
 
 /// `aNRG2_norm_talk_request`: the player talks to the guide.
-/// `None` when the job in play is not one of the first two.
+/// `None` when the job in play is not one the guide runs yet.
 pub(super) fn talk(
     identity: &mut crate::save::PlayerIdentity,
     inventory: &mut PlayerInventory,
     look: &crate::character::PlayerLook,
-    residents: &[u16],
+    residents: &Residents,
+    state: &mut GuideState,
     rand: &mut rustimal_logic::qrand::Qrand,
 ) -> Option<Talk> {
     let job = identity.first_job.get_or_insert_with(FirstJob::start);
     if cloth_check(job, look) {
         job.wrong_cloth = true;
-        return Some(Talk {
-            chain: vec![0x0832],
-        });
+        return Some(Talk::said(vec![0x0832]));
     }
     let kind = job.job?;
-    if kind.index() > Job::PlantFlower.index() {
+    if !handled(kind) {
         return None;
     }
     // `aNRG2_talk_start_wait` / `aNRG2_job_start_wait`.
     if job.progress == 1 {
-        let chain = say_hello(job, inventory, residents, rand)
+        let mut meet = None;
+        let chain = say_hello(job, inventory, residents, state, &mut meet, rand)
             .or_else(|| kind.refuse_message())
             .into_iter()
             .collect();
-        return Some(Talk { chain });
+        return Some(Talk {
+            chain,
+            free: residents.job_strings(job),
+            meet,
+        });
     }
     if job.finished() {
-        // The job_end talks (J1_END 0x07F4, J2_END 0x07F9), then the next job.
-        let end = [0x07F4, 0x07F9, 0x0801][kind.index()];
-        let mut chain = vec![end];
+        // The job_end talks (`dt_tbl` J1_END ... J11_END), then the next job.
+        let end = match kind {
+            Job::ChangeCloth => 0x07F4,
+            Job::PlantFlower => 0x07F9,
+            Job::DeliverFurniture => 0x0801,
+            Job::SendLetter => 0x080B,
+            _ => 0x0830, // Job::Open
+        };
+        state.ask_again = false;
         let next = job.next_job(false)?;
         job.setup_job(next);
-        chain.extend(say_hello(job, inventory, residents, rand));
-        return Some(Talk { chain });
+        return Some(with_hello(
+            vec![end],
+            job,
+            inventory,
+            residents,
+            state,
+            rand,
+        ));
     }
-    // The job is running: `aNRG2_setup_j1_cont` / `_j2_cont`.
+    // The job is running: `aNRG2_setup_j*_cont`.
     let chain = match kind {
         Job::ChangeCloth => {
             if inventory.pockets.find_item(fj::WORK_UNIFORM).is_some() {
@@ -192,17 +333,29 @@ pub(super) fn talk(
             }
         }
         Job::PlantFlower => vec![0x07F8],
-        _ => vec![0x07FE],
+        Job::DeliverFurniture => vec![0x07FE],
+        // `aNRG2_setup_j4_cont`: asked again (0x0836) until the flag drops, else the paper talk.
+        Job::SendLetter if state.ask_again => vec![0x0836],
+        Job::SendLetter => vec![0x0807],
+        _ => vec![0x0829], // Job::Open
     };
-    Some(Talk { chain })
+    Some(Talk {
+        chain,
+        free: residents.job_strings(job),
+        meet: None,
+    })
 }
 
 /// The quest manager's per-frame rules for the running job
 /// (`aQMgr_move_own_errand_*`).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn track(
     mut identity: ResMut<crate::save::PlayerIdentity>,
     look: Res<crate::character::PlayerLook>,
     inventory: Res<PlayerInventory>,
+    post: Res<crate::post::Post>,
+    mut quest: ResMut<crate::quest::QuestState>,
+    roster: Option<Res<crate::roster::TownRoster>>,
 ) {
     if !identity.events.first_job {
         return;
@@ -221,6 +374,24 @@ pub(crate) fn track(
                 .iter()
                 .any(|&item| (0x2900..0x2A00).contains(&item)),
         ),
+        // The recipient holds a letter from the player (`letter_info.exists`).
+        Some(Job::SendLetter) => {
+            let name = roster.as_deref().and_then(|r| {
+                let id = next.recipient?;
+                r.residents
+                    .iter()
+                    .find(|e| e.index == u32::from(id))
+                    .map(|e| e.name.clone())
+            });
+            next.check_letter(name.is_some_and(|n| post.sent_to.contains(&n)));
+        }
+        // The villagers use the ordinary quest talks; taking a quest finishes the job.
+        Some(Job::Open) => {
+            if next.open_quest_running() {
+                quest.offer_now();
+            }
+            next.check_open_quest(quest.active.is_some());
+        }
         _ => {}
     }
     if next != *job {
@@ -229,8 +400,10 @@ pub(crate) fn track(
     }
 }
 
-/// A flag kept for the session only (`Common_Get(quest).work`).
+/// Session-only guide state (`Common_Get(quest).work`, `can_ask_again_flag`).
 #[derive(Resource, Default)]
 pub(crate) struct GuideState {
     pub greeted: bool,
+    /// `can_ask_again_flag`: the letter job's reminder.
+    pub ask_again: bool,
 }

@@ -71,6 +71,9 @@ pub struct Post {
     /// force_mail_delivery_flag: the counter was left with a full desk.
     #[serde(default)]
     pub force: bool,
+    /// Villagers holding a letter from the player (`letter_info.exists`).
+    #[serde(default)]
+    pub sent_to: Vec<String>,
 }
 
 impl Post {
@@ -90,6 +93,9 @@ impl Post {
         let today = crate::clock::now().day_number;
         match letter.to.as_ref()? {
             Recipient::Villager(name) => {
+                if !self.sent_to.contains(name) {
+                    self.sent_to.push(name.clone());
+                }
                 // mNpc_SetMailCondThisLand: GOOD and BAD letters are answered.
                 use rustimal_logic::npc_reply;
                 let score =

@@ -286,6 +286,26 @@ fn house_say(
     };
 }
 
+/// A guide talk: its message strings and acquaintance first, then the messages.
+fn run_guide(
+    disc: &GameDisc,
+    dialogue: &mut DialogueState,
+    actor: Entity,
+    flow: &mut Conversation,
+    memory: &mut crate::villager_memory::VillagerMemory,
+    talk: guide::Talk,
+) {
+    for (slot, text) in talk.free {
+        if let Some(free) = flow.context.free.get_mut(slot) {
+            *free = text;
+        }
+    }
+    if let Some(name) = talk.meet {
+        memory.meet(&name);
+    }
+    start_guide(disc, dialogue, actor, flow, talk.chain);
+}
+
 /// The guide's messages, one after the other.
 fn start_guide(
     disc: &GameDisc,
@@ -499,6 +519,8 @@ pub(crate) fn interact(
         mut rand,
         mut guide_state,
         roster,
+        town,
+        mut memory,
     ): (
         Option<ResMut<crate::home::PlayerHouse>>,
         Local<Option<f32>>,
@@ -513,6 +535,8 @@ pub(crate) fn interact(
         ResMut<crate::game_rand::GameRand>,
         ResMut<guide::GuideState>,
         Option<Res<crate::roster::TownRoster>>,
+        Option<Res<crate::town::Town>>,
+        ResMut<crate::villager_memory::VillagerMemory>,
     ),
 ) {
     let Some(disc) = disc.filter(|d| d.text.is_some()) else {
@@ -771,12 +795,13 @@ pub(crate) fn interact(
         if guide::active(&identity) {
             // `aNRG2_think_init_proc`: the guide stands in for the shop master during the job.
             let first = !std::mem::replace(&mut guide_state.greeted, true);
-            let residents = guide::residents(roster.as_deref());
+            let residents = guide::residents(roster.as_deref(), town.as_deref());
             let talk = guide::arrival(
                 &mut identity,
                 &mut inventory,
                 &look,
                 &residents,
+                &mut guide_state,
                 &mut rand.0,
                 first,
             );
@@ -786,7 +811,7 @@ pub(crate) fn interact(
                 if let Ok((_, _, mut loco)) = player.single_mut() {
                     *loco = crate::locomotion::Locomotion::default();
                 }
-                start_guide(&disc, &mut dialogue, actor, &mut flow, talk.chain);
+                run_guide(&disc, &mut dialogue, actor, &mut flow, &mut memory, talk);
             }
             return;
         }
@@ -1515,16 +1540,17 @@ pub(crate) fn interact(
         }
         actions.consume(Action::Interact);
         if guide::active(&identity) {
-            let residents = guide::residents(roster.as_deref());
+            let residents = guide::residents(roster.as_deref(), town.as_deref());
             if let Some(talk) = guide::talk(
                 &mut identity,
                 &mut inventory,
                 &look,
                 &residents,
+                &mut guide_state,
                 &mut rand.0,
             ) {
                 *focus = InputFocus::Dialogue;
-                start_guide(&disc, &mut dialogue, actor, &mut flow, talk.chain);
+                run_guide(&disc, &mut dialogue, actor, &mut flow, &mut memory, talk);
                 return;
             }
         }

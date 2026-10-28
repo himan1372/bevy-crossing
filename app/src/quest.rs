@@ -95,6 +95,13 @@ pub struct QuestState {
     owed: Option<(String, Reward)>,
 }
 
+impl QuestState {
+    /// The first job's open-quest job: the next offer is not made to wait.
+    pub(crate) fn offer_now(&mut self) {
+        self.cooldown = self.cooldown.min(0.0);
+    }
+}
+
 impl Default for QuestState {
     fn default() -> Self {
         Self {

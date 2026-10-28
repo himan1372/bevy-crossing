@@ -160,8 +160,14 @@ fn talk(
         return;
     }
 
-    // A new talk.
-    if !identity.events.first_job || dialogue.active {
+    // A new talk. While the open-quest job runs (FJOPENQUEST) villagers use the ordinary quest talks.
+    if !identity.events.first_job
+        || dialogue.active
+        || identity
+            .first_job
+            .as_ref()
+            .is_some_and(|j| j.open_quest_running())
+    {
         return;
     }
     for entity in talks {

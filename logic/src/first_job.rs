@@ -341,6 +341,19 @@ impl FirstJob {
         }
     }
 
+    /// `aQMgr_talk_quest_finish_firstjob_open_quest`: the player took a villager's quest.
+    pub fn check_open_quest(&mut self, accepted: bool) {
+        if self.job == Some(Job::Open) && self.progress == 2 && accepted {
+            self.progress = 0;
+        }
+    }
+
+    /// Whether the open-quest job is running (`FJOPENQUEST` on): villagers use the
+    /// ordinary quest talks instead of the job greeting.
+    pub fn open_quest_running(&self) -> bool {
+        self.job == Some(Job::Open) && self.progress == 2
+    }
+
     /// `aQMgr_move_own_errand_hello`: the player has met every villager (and
     /// Tortimer's island visit is allowed, `mSC_check_ArbeitPlayer`).
     pub fn check_hello(&mut self, met_everyone: bool) {
@@ -498,6 +511,14 @@ mod tests {
         fj.step_up(Picks::default());
         fj.check_hello(true);
         assert!(fj.finished());
+
+        fj.setup_job(Job::Open);
+        fj.step_up(Picks::default());
+        assert!(fj.open_quest_running());
+        fj.check_open_quest(false);
+        assert_eq!(fj.progress, 2);
+        fj.check_open_quest(true);
+        assert!(fj.finished() && !fj.open_quest_running());
     }
 
     #[test]
