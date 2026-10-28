@@ -67,6 +67,8 @@ fn talk(
     mut claim: ResMut<crate::quest::QuestClaim>,
     mut focus: ResMut<InputFocus>,
     mut rand: ResMut<crate::game_rand::GameRand>,
+    mut roster: Option<ResMut<crate::roster::TownRoster>>,
+    mut memory: ResMut<crate::villager_memory::VillagerMemory>,
     house: Res<State<crate::house::HouseState>>,
     shop: Res<State<crate::shop::ShopLocation>>,
     disc: Option<Res<crate::game_disc::GameDisc>>,
@@ -223,6 +225,13 @@ fn talk(
             pages,
             Some(labels),
         );
+        // Greeting a villager is meeting them (`mNpc_CheckFriendAllAnimal` counts the memory).
+        if let (Some(roster), Some(index)) = (roster.as_deref_mut(), villager.npc_index) {
+            if !roster.met.contains(&index) {
+                roster.met.push(index);
+            }
+        }
+        memory.meet(villager.name);
         *focus = InputFocus::Dialogue;
         claim.0 = Some(entity);
         state.villager = Some(entity);

@@ -795,7 +795,8 @@ pub(crate) fn interact(
         if guide::active(&identity) {
             // `aNRG2_think_init_proc`: the guide stands in for the shop master during the job.
             let first = !std::mem::replace(&mut guide_state.greeted, true);
-            let residents = guide::residents(roster.as_deref(), town.as_deref());
+            let residents =
+                guide::residents(roster.as_deref(), town.as_deref(), identity.arbeit_trophy);
             let talk = guide::arrival(
                 &mut identity,
                 &mut inventory,
@@ -1540,7 +1541,8 @@ pub(crate) fn interact(
         }
         actions.consume(Action::Interact);
         if guide::active(&identity) {
-            let residents = guide::residents(roster.as_deref(), town.as_deref());
+            let residents =
+                guide::residents(roster.as_deref(), town.as_deref(), identity.arbeit_trophy);
             if let Some(talk) = guide::talk(
                 &mut identity,
                 &mut inventory,

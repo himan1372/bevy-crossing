@@ -77,6 +77,7 @@ mod sound_rom;
 mod states;
 mod statue;
 mod talk;
+mod tortimer;
 mod town;
 mod villager_memory;
 mod warning_panel;
@@ -145,6 +146,7 @@ fn main() {
         .add_plugins(shop_nook::ShopNookPlugin)
         .add_plugins(first_job_talk::FirstJobTalkPlugin)
         .add_plugins(notice_board::NoticeBoardPlugin)
+        .add_plugins(tortimer::TortimerPlugin)
         .add_plugins(field_items::FieldItemsPlugin)
         .add_plugins(critters::CrittersPlugin)
         .add_plugins(sound::SoundPlugin)

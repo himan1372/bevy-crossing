@@ -5,8 +5,9 @@
 //! `rustimal_logic::first_job`; this module is the talk flow.
 //!
 //! Jobs 1 (change clothes), 2 (plant flowers), 3 (deliver furniture), 4 (send a
-//! letter), 11 (the open quest), 5 (carpet), 6 (axe) and 7 (post a notice) are covered;
-//! the second letter, second axe and introductions jobs are not.
+//! letter), 10 (introductions), 11 (the open quest), 5 (carpet), 6 (axe) and 7 (post a notice)
+//! are covered; the second letter and second axe jobs, which only the "recipient moved away"
+//! redirects lead to, are not.
 
 use bevy::prelude::*;
 use rustimal_logic::first_job::{self as fj, Cond, FirstJob, Job, Picks};
@@ -47,16 +48,24 @@ pub(super) struct Residents {
     acres: Vec<(usize, usize)>,
     /// The post office's acre column (`mFI_BlockKind2BkNum`), 1-based.
     post_column: usize,
+    /// `mNpc_CheckFriendAllAnimal && mSC_check_ArbeitPlayer`: every resident met and Tortimer talked to.
+    pub met_everyone: bool,
 }
 
 pub(super) fn residents(
     roster: Option<&crate::roster::TownRoster>,
     town: Option<&crate::town::Town>,
+    trophy: bool,
 ) -> Residents {
     let mut out = Residents::default();
     let Some(roster) = roster else {
         return out;
     };
+    out.met_everyone = trophy
+        && roster
+            .residents
+            .iter()
+            .all(|e| roster.met.contains(&e.index));
     for (i, entry) in roster.residents.iter().enumerate() {
         out.ids.push(entry.index as u16);
         out.names.push(entry.name.clone());
@@ -134,6 +143,7 @@ fn handled(kind: Job) -> bool {
             | Job::DeliverCarpet
             | Job::DeliverAxe
             | Job::PostNotice
+            | Job::Introductions
     )
 }
 
@@ -324,6 +334,7 @@ pub(super) fn talk(
             Job::DeliverCarpet => 0x0812,
             Job::DeliverAxe => 0x0818,
             Job::PostNotice => 0x081A,
+            Job::Introductions => 0x0828,
             _ => 0x0830, // Job::Open
         };
         state.ask_again = false;
@@ -334,7 +345,7 @@ pub(super) fn talk(
             identity.first_job = None;
             return Some(Talk::said(vec![end]));
         }
-        let next = job.next_job(false)?;
+        let next = job.next_job(residents.met_everyone)?;
         job.setup_job(next);
         return Some(with_hello(
             vec![end],
@@ -363,6 +374,7 @@ pub(super) fn talk(
         Job::DeliverCarpet => vec![0x080F],
         Job::DeliverAxe => vec![0x0815],
         Job::PostNotice => vec![0x0819],
+        Job::Introductions => vec![0x0822],
         // `aNRG2_setup_j4_cont`: asked again (0x0836) until the flag drops, else the paper talk.
         Job::SendLetter if state.ask_again => vec![0x0836],
         Job::SendLetter => vec![0x0807],
@@ -415,6 +427,13 @@ pub(crate) fn track(
             next.check_letter(name.is_some_and(|n| post.sent_to.contains(&n)));
         }
         // The villagers use the ordinary quest talks; taking a quest finishes the job.
+        // Every resident met and Tortimer talked to (`aQMgr_move_own_errand_hello`).
+        Some(Job::Introductions) => {
+            let met = roster
+                .as_deref()
+                .is_some_and(|r| r.residents.iter().all(|e| r.met.contains(&e.index)));
+            next.check_hello(met && identity.arbeit_trophy);
+        }
         Some(Job::Open) => {
             if next.open_quest_running() {
                 quest.offer_now();

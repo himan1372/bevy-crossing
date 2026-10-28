@@ -50,6 +50,9 @@ pub(crate) struct PlayerIdentity {
     /// Day number of the last daily renewal of those flags.
     #[serde(default)]
     pub events_day: i64,
+    /// `mSC_SPECIAL_EVENT_ARBEIT`: the player has talked to Tortimer for the job.
+    #[serde(default)]
+    pub arbeit_trophy: bool,
     /// The part-time job's errand (`mQst_GetFirstJobData`); absent until the job starts.
     #[serde(
         default,
@@ -141,6 +144,7 @@ impl Default for PlayerIdentity {
             id: 0,
             events: Default::default(),
             events_day: 0,
+            arbeit_trophy: false,
             first_job: None,
         }
     }
