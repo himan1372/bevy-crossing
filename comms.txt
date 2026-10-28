@@ -511,3 +511,4 @@ Source (concept): https://pokeacer.xyz/wii/pdf/OS.pdf (Nintendo SDK OS manual,
 2026-10-27 claude: shop-house-talk-walk complete: the keeper steps forward during the built/statue/basement house talks, not during the expansion offers. Temp-verified with a built-house and an offer case.
 2026-10-27 claude: shop-start-tiers-1-3 complete: ordinary greeting, balloon (218/220), sale welcome (37/16) and the house-talk walk driven on tiers 1-3, all matching the source limits and messages. No code change.
 2026-10-27 claude: shop-house-messages-drive complete: all ten opening house talks (statue, basement, built, offers) driven on tier 0; messages and walk/no-walk match the source. No code change.
+2026-10-28 claude: shop-start-welcome-tier-0 complete: tier-0 sale-day welcome (EVENT 37, message 0x10A0) driven with the balloon claimed; Nook reaches the walk limit. No code change.
