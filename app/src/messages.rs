@@ -61,6 +61,8 @@ pub mod markup {
     pub const STATUS: char = '\u{E003}';
     pub const CHAR_SCALE: char = '\u{E004}';
     pub const LINE_SCALE: char = '\u{E005}';
+    /// `SET_DEMO_ORDER_*`: kind, index, value high byte, value low byte.
+    pub const ORDER: char = '\u{E006}';
     /// Argument characters: `ARG + byte`.
     const ARG: u32 = 0xE100;
 
@@ -82,6 +84,8 @@ pub mod markup {
         Status(u8),
         CharScale(u8),
         LineScale(u8),
+        /// `mDemo_Set_OrderValue(kind, index, value)`; kind 0 player, 1-3 NPC 0-2, 4 quest.
+        Order(u8, u8, u16),
     }
 
     /// The page as characters with their colours, line breaks and pauses.
@@ -102,6 +106,13 @@ pub mod markup {
                 STATUS => out.push(Item::Status(chars.next().map_or(0, value))),
                 CHAR_SCALE => out.push(Item::CharScale(chars.next().map_or(32, value))),
                 LINE_SCALE => out.push(Item::LineScale(chars.next().map_or(32, value))),
+                ORDER => {
+                    let kind = chars.next().map_or(0, value);
+                    let index = chars.next().map_or(0, value);
+                    let hi = chars.next().map_or(0, value);
+                    let lo = chars.next().map_or(0, value);
+                    out.push(Item::Order(kind, index, u16::from_be_bytes([hi, lo])));
+                }
                 '\n' => {
                     line = None;
                     out.push(Item::NewLine);
@@ -127,7 +138,11 @@ pub mod markup {
             .filter_map(|i| match i {
                 Item::Char(c, _) => Some(c),
                 Item::NewLine => Some('\n'),
-                Item::Pause(_) | Item::Status(_) | Item::CharScale(_) | Item::LineScale(_) => None,
+                Item::Pause(_)
+                | Item::Status(_)
+                | Item::CharScale(_)
+                | Item::LineScale(_)
+                | Item::Order(..) => None,
             })
             .collect()
     }
@@ -142,6 +157,8 @@ mod code {
     pub const CONTINUE: u8 = 1;
     pub const CLEAR: u8 = 2;
     pub const CURSOR_SET_TIME: u8 = 3;
+    pub const ORDER_PLAYER: u8 = 8;
+    pub const ORDER_QUEST: u8 = 12;
     pub const COLOR: u8 = 5;
     pub const SET_COLOR_CHAR: u8 = 80;
     pub const CONTENTS_NORMAL: u8 = 75;
@@ -682,6 +699,16 @@ impl GameText {
                         code::CURSOR_SET_TIME => {
                             page.push(markup::PAUSE);
                             page.push(markup::arg(text.get(i + 2).copied().unwrap_or(0)));
+                        }
+                        code::ORDER_PLAYER..=code::ORDER_QUEST => {
+                            let at = |o: usize| text.get(i + o).copied().unwrap_or(0);
+                            page.extend([
+                                markup::ORDER,
+                                markup::arg(k - code::ORDER_PLAYER),
+                                markup::arg(at(2)),
+                                markup::arg(at(3)),
+                                markup::arg(at(4)),
+                            ]);
                         }
                         code::COLOR => {
                             page.push(markup::LINE_COLOR);

@@ -497,3 +497,5 @@
 {"action":"complete","task":"first-job-progress-checks","agent":"claude","timestamp":"2026-10-28T09:16:54Z"}
 {"action":"claim","task":"wear-shirt","agent":"claude","timestamp":"2026-10-28T09:18:03Z"}
 {"action":"complete","task":"wear-shirt","agent":"claude","timestamp":"2026-10-28T09:22:55Z"}
+{"action":"claim","task":"message-order-markers","agent":"claude","timestamp":"2026-10-28T09:23:37Z"}
+{"action":"complete","task":"message-order-markers","agent":"claude","timestamp":"2026-10-28T09:28:25Z"}

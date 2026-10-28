@@ -327,7 +327,7 @@ pub(crate) fn text_mesh(
                 line_scale = f32::from(scale) / 32.0;
                 continue;
             }
-            Item::Pause(_) | Item::Status(_) => continue,
+            Item::Pause(_) | Item::Status(_) | Item::Order(..) => continue,
         };
         let [r, g, b] = rgb.unwrap_or([color[0], color[1], color[2]]);
         let tint = Color::srgba_u8(r, g, b, color[3])
@@ -383,7 +383,7 @@ pub(crate) fn text_width(text: &str, widths: &[u8; 256]) -> f32 {
                 line = 1.0;
                 next = 1.0;
             }
-            Item::Pause(_) | Item::Status(_) => {}
+            Item::Pause(_) | Item::Status(_) | Item::Order(..) => {}
         }
     }
     maximum.max(width)
@@ -420,6 +420,25 @@ impl Reveal {
 
 /// Types the page out: a character every 2 ticks (30 a second), twice as
 /// fast while B (run) is held, waiting out `CURSOR_SET_TIME` pauses.
+/// `mDemo_Set_OrderValue` / `mDemo_Get_OrderValue`: what the text last told the
+/// speaker's actor to do. Values stay until a later code replaces them.
+#[derive(Resource, Default)]
+pub(crate) struct DemoOrders {
+    values: std::collections::HashMap<(u8, u8), u16>,
+}
+
+impl DemoOrders {
+    pub(crate) fn set(&mut self, kind: u8, index: u8, value: u16) {
+        self.values.insert((kind, index), value);
+    }
+
+    /// Read by the first job's guide (`aNRG2_demo_start_wait_talk_proc`).
+    #[allow(dead_code)]
+    pub(crate) fn get(&self, kind: u8, index: u8) -> u16 {
+        self.values.get(&(kind, index)).copied().unwrap_or(0)
+    }
+}
+
 fn advance_reveal(
     time: Res<Time>,
     actions: Res<Actions>,
@@ -427,6 +446,7 @@ fn advance_reveal(
     disc: Option<Res<GameDisc>>,
     mut dialogue: ResMut<DialogueState>,
     mut reveal: ResMut<Reveal>,
+    mut orders: ResMut<DemoOrders>,
 ) {
     let Some(page) = dialogue.page() else {
         if reveal.speaker.is_some() {
@@ -536,6 +556,11 @@ fn advance_reveal(
             }
             Item::CharScale(scale) => reveal.char_scale = scale,
             Item::LineScale(scale) => reveal.line_scale = scale,
+            // The order is raised the moment the text reaches its code.
+            Item::Order(kind, index, value) => {
+                info!("message order kind {kind} index {index} value {value:#06x}");
+                orders.set(kind, index, value)
+            }
         }
         reveal.shown += 1;
     }
@@ -730,6 +755,7 @@ impl Plugin for MsgWindowPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Shown>()
             .init_resource::<Reveal>()
+            .init_resource::<DemoOrders>()
             .add_systems(
                 OnEnter(AppState::InGame),
                 setup.run_if(resource_exists::<GameDisc>),
