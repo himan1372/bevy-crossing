@@ -38,6 +38,8 @@ pub(crate) struct Twins {
     pub(crate) waiting: bool,
     /// Timmy's `aNSC_ACTION_SAY_HELLO_APPROACH`: he steps forward while he greets.
     pub(crate) approach: bool,
+    /// The opening house talk is one whose keeper walks forward (`home::nook_msg::walks`).
+    pub(crate) house_walk: bool,
     /// `talk_start_tim` ran out: he stops (`aNSC_ACTION_WAIT`) and turns to the player.
     pub(crate) expired: bool,
     /// The goodbye at the stairs (`aNSC_ACTION_GOODBYE_WAIT`), asked for by `department_stairs`.
@@ -768,6 +770,7 @@ pub(crate) fn interact(
                 }
                 flow.context = context(&identity, false);
                 *focus = InputFocus::Dialogue;
+                twins.house_walk = crate::home::nook_msg::walks(n);
                 house_say(&disc, &mut dialogue, actor, &mut flow, message(n), 0);
                 return;
             }
@@ -1626,7 +1629,10 @@ fn hold_player(flow: Res<Conversation>, mut twins: ResMut<Twins>) {
     if twins.waiting != waiting {
         twins.waiting = waiting;
     }
-    let approach = matches!(flow.step, Step::Welcome | Step::BargainWelcome);
+    if matches!(flow.step, Step::Idle) && twins.house_walk {
+        twins.house_walk = false;
+    }
+    let approach = matches!(flow.step, Step::Welcome | Step::BargainWelcome) || twins.house_walk;
     if twins.approach != approach {
         twins.approach = approach;
     }

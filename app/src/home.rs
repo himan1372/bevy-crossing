@@ -121,6 +121,22 @@ pub mod nook_msg {
     pub const REHOUSE_LARGE: usize = 0xD1;
     pub const REHOUSE_UPPER: usize = 0xD4;
     pub const UPPER_BUILT: usize = 0xD5;
+
+    /// Whether the keeper walks forward while this opening line plays: the built, statue and
+    /// large-house basement messages carry `SAY_HELLO_APPROACH`; the other offers go to the
+    /// `aNSC_ACTION_CHECK_*` actions instead.
+    pub fn walks(message: usize) -> bool {
+        matches!(
+            message,
+            MEDIUM_BUILT
+                | LARGE_BUILT
+                | UPPER_BUILT
+                | STATUE_BUILT
+                | BASEMENT_BUILT
+                | REHOUSE_STATUE
+                | REHOUSE_BASEMENT
+        )
+    }
 }
 
 impl HouseSave {
