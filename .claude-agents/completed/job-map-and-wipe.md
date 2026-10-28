@@ -9,7 +9,7 @@ Map (`Common(map_flag)`):
   because it is at Bevy's sixteen-parameter limit).
 - The panel is a plain acre grid (rows A-F, columns 1-5, the names the guide's messages use) with the station, shop, post office, police, museum, tailor, well, dock, the player's house and a `*` where the player stands:
   the retail map overlay (`m_map_ovl.c`) is not built.
-- Copper (`aPOL_check_player` / `aPOL_check_select2`): without the map his greeting is the one that offers it (0x0772-0x0775 + 0x1554 = 0x18C6-0x18C9); the first answer gives the map (0x18CA, "Press the X Button to view your map"),
+- Copper (`aPOL_check_player` / `aPOL_check_select2`): without the map his greeting is the one that offers it (0x0772-0x0775 + 0x1154 = 0x18C6-0x18C9); the first answer gives the map (0x18CA, "Press the X Button to view your map"),
   the others are the ordinary answers shifted by one.
 The wipe (`aNRG2_all_job_end` / `aNRG2_send_away_init` / `aID_first_job` / `m_player_main_complete_payment.c_inc`):
 - After the last job's end talk (0x081A) the guide waits a second (`GuideState.ending`, `guide::send_away`), then the player is sent out of the shop through the goodbye's exit path; in town `job_end.rs` waits 0.8 s,
