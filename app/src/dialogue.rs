@@ -40,6 +40,8 @@ pub struct DialogueState {
     pub revealing: bool,
     /// `mDemo_Set_talk_window_color`: a window colour other than the villagers' default.
     pub(crate) window_color: Option<[u8; 4]>,
+    /// `mMsg_SET_LOCKCONTINUE`: the page cannot be continued while an actor's demo runs.
+    pub(crate) held: bool,
     /// Actor controllers own these choices and commit their own transactions.
     pub(crate) external_name: Option<&'static str>,
     /// The special NPC's `npc_draw_data_tbl` index and `l_sp_actor_name`
@@ -591,7 +593,7 @@ fn dialogue_input(
     mut text_query: Query<&mut Text, With<DialogueText>>,
     (disc, mut rng): (Option<Res<crate::game_disc::GameDisc>>, ResMut<TalkRng>),
 ) {
-    if !dialogue.active || dialogue.revealing {
+    if !dialogue.active || dialogue.revealing || dialogue.held {
         return;
     }
     if dialogue.external_name.is_some() {

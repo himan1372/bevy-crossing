@@ -463,6 +463,42 @@ pub(crate) fn track(
     }
 }
 
+/// `mDemo_ORDER_NPC0`, and the order the job-start messages raise at the hand-over point
+/// (`aNRG2_demo_start_wait_talk_proc`: index 1, value 4).
+const ORDER_NPC0: u8 = 1;
+
+/// `aNRG2_demo_start_wait_talk_proc` .. `aNRG2_demo_end_wait2_talk_proc`: when the guide's
+/// message reaches its hand-over order, he holds out the job's item (already in the pockets),
+/// the player takes it, and the message cannot continue until it is put away.
+pub(crate) fn hand_over_job_item(
+    mut orders: ResMut<crate::msg_window::DemoOrders>,
+    mut handover: ResMut<super::handover::HandOver>,
+    mut dialogue: ResMut<crate::dialogue::DialogueState>,
+    identity: Res<crate::save::PlayerIdentity>,
+) {
+    for (kind, index, value) in orders.take_raised() {
+        if (kind, index, value) != (ORDER_NPC0, 1, 4) || !identity.events.first_job {
+            continue;
+        }
+        let Some(job) = identity.first_job.as_ref().and_then(|j| j.job) else {
+            continue;
+        };
+        if let fj::Display::Item(item) = job.display() {
+            info!("hand-over of the job item {item:#06x}");
+            // The lock starts with the order, before the next frame can continue the page.
+            dialogue.held = true;
+            handover.start(super::handover::Request {
+                item: super::handover::Item::Goods(item),
+                giver: super::handover::Party::Nook,
+                taker: super::handover::Party::Player,
+            });
+        }
+    }
+    if dialogue.held && !handover.busy() {
+        dialogue.held = false;
+    }
+}
+
 /// Session-only guide state (`Common_Get(quest).work`, `can_ask_again_flag`).
 #[derive(Resource, Default)]
 pub(crate) struct GuideState {

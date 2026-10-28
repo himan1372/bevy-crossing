@@ -429,11 +429,19 @@ impl Reveal {
 #[derive(Resource, Default)]
 pub(crate) struct DemoOrders {
     values: std::collections::HashMap<(u8, u8), u16>,
+    /// Orders raised and not yet acted on, oldest first.
+    raised: Vec<(u8, u8, u16)>,
 }
 
 impl DemoOrders {
     pub(crate) fn set(&mut self, kind: u8, index: u8, value: u16) {
         self.values.insert((kind, index), value);
+        self.raised.push((kind, index, value));
+    }
+
+    /// Takes the orders raised since the last call.
+    pub(crate) fn take_raised(&mut self) -> Vec<(u8, u8, u16)> {
+        std::mem::take(&mut self.raised)
     }
 
     /// Read by the first job's guide (`aNRG2_demo_start_wait_talk_proc`).

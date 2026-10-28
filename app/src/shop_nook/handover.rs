@@ -71,14 +71,67 @@ pub(crate) enum Item {
     Money,
     /// A turnip bundle (`mNT_ITEM_TYPE_KABU`).
     Turnips,
+    /// Any item, drawn as its `mNT_get_itemTableNo` model (the part-time job's uniform, bag,
+    /// paper, carpet and axe; furniture is a leaf).
+    Goods(u16),
+}
+
+/// `mNT_ITEM_TYPE_LEAF`, what any furniture on the ground and in the hand is drawn as.
+const TYPE_LEAF: usize = 10;
+
+/// `mNT_get_itemTableNo`: the hand-over draw type of an item.
+fn goods_type(disc: &GameDisc, item: u16) -> Option<usize> {
+    let rel_ptr = |at: u32| match disc.rom.pointer_at(disc::RomSource::Rel, at)? {
+        disc::Target::File(disc::RomSource::Rel, p) => Some(p),
+        _ => None,
+    };
+    match item >> 12 {
+        // NAME_TYPE_FTR0 / NAME_TYPE_FTR1.
+        1 | 3 => Some(TYPE_LEAF),
+        // NAME_TYPE_ITEM1: the category's table.
+        2 => {
+            let tables = disc.catalog.get("item1_tableNo$430")?;
+            let category = rel_ptr(tables.offset + u32::from((item >> 8) & 0xF) * 4)?;
+            let at = category + u32::from(item & 0xFF);
+            let no = disc.rom.slice(disc::RomSource::Rel, at, 1)?[0];
+            (no != 0).then_some(usize::from(no))
+        }
+        _ => None,
+    }
 }
 
 impl Item {
-    fn lists(self) -> [&'static str; 2] {
+    /// The REL offsets of the item's material and geometry lists.
+    fn lists(self, disc: &GameDisc) -> Vec<u32> {
+        let named = |names: [&str; 2]| -> Vec<u32> {
+            names
+                .iter()
+                .filter_map(|name| disc.catalog.get(name).map(|s| s.offset))
+                .collect()
+        };
         match self {
-            Item::Present => ["present_DL_mode", "present_DL_vtx"],
-            Item::Money => ["bag_DL_mode", "bag_DL_vtx"],
-            Item::Turnips => ["kabu_DL_mode", "kabu_DL_vtx"],
+            Item::Present => named(["present_DL_mode", "present_DL_vtx"]),
+            Item::Money => named(["bag_DL_mode", "bag_DL_vtx"]),
+            Item::Turnips => named(["kabu_DL_mode", "kabu_DL_vtx"]),
+            Item::Goods(item) => {
+                // `mode_DL_table` / `vtx_DL_table` of `ac_handOverItem.c`, by draw type.
+                let Some(no) = goods_type(disc, item) else {
+                    return Vec::new();
+                };
+                ["mode_DL_table", "vtx_DL_table"]
+                    .iter()
+                    .filter_map(|name| {
+                        let table = disc.catalog.get(name)?;
+                        match disc
+                            .rom
+                            .pointer_at(disc::RomSource::Rel, table.offset + no as u32 * 4)?
+                        {
+                            disc::Target::File(disc::RomSource::Rel, p) => Some(p),
+                            _ => None,
+                        }
+                    })
+                    .collect()
+            }
         }
     }
 }
@@ -239,18 +292,13 @@ pub(crate) fn animate(
     };
     if active.entity.is_none() {
         let model = h.models.entry(request.item).or_insert_with(|| {
-            let lists: Vec<u32> = request
-                .item
-                .lists()
-                .iter()
-                .filter_map(|name| disc.catalog.get(name).map(|s| s.offset))
-                .collect();
+            let lists = request.item.lists(&disc);
             let sink = crate::disc_gfx::run_display_lists(&disc.rom, &lists);
             crate::disc_town::sink_meshes_scaled(
                 &disc,
                 &sink,
                 None,
-                false,
+                matches!(request.item, Item::Goods(_)),
                 &crate::disc_gfx::Segments::default(),
                 1.0,
                 (&mut meshes, &mut materials, &mut images),

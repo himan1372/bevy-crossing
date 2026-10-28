@@ -1939,6 +1939,7 @@ impl Plugin for ShopNookPlugin {
             .init_resource::<guide::GuideState>()
             .add_systems(Update, guide::track.in_set(GameplaySet))
             .add_systems(Update, guide::send_away.in_set(GameplaySet))
+            .add_systems(Update, guide::hand_over_job_item.in_set(GameplaySet))
             .add_systems(PostUpdate, editor::pulse)
             .init_resource::<preview::Mannequin>()
             .init_resource::<preview::effects::Effects>()
