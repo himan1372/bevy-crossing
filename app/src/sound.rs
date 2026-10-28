@@ -581,6 +581,25 @@ impl Default for Bgm {
 /// Town/house/shop arbitration runs after gameplay and while paused.
 /// A single state decision owns both BGM groups, preventing hourly music
 /// from restarting outdoors' song while the player is inside.
+/// A fanfare track that takes the place of the scene music for a while
+/// (`mBGMPsComp_make_ps_fanfare`).
+#[derive(Resource, Default)]
+pub(crate) struct Fanfare {
+    id: Option<u8>,
+    left: f32,
+}
+
+impl Fanfare {
+    pub(crate) fn start(&mut self, id: u8, seconds: f32) {
+        self.id = Some(id);
+        self.left = seconds;
+    }
+
+    pub(crate) fn stop(&mut self) {
+        self.id = None;
+    }
+}
+
 fn update_music(
     sound: Option<Res<Sound>>,
     bgm: Option<ResMut<Bgm>>,
@@ -588,6 +607,7 @@ fn update_music(
     shop: Res<State<crate::shop::ShopLocation>>,
     shop_data: Res<crate::shop::ShopData>,
     identity: Res<crate::save::PlayerIdentity>,
+    mut fanfare: ResMut<Fanfare>,
     focus: Res<crate::input::InputFocus>,
     time: Res<Time<Real>>,
     (room, current, disc, player): (
@@ -648,6 +668,15 @@ fn update_music(
         .then(|| room.music_track())
         .flatten()
     });
+    // A fanfare in progress replaces whatever the scene wants.
+    fanfare.left -= time.delta_secs();
+    if fanfare.left <= 0.0 {
+        fanfare.id = None;
+    }
+    let next = fanfare
+        .id
+        .map(|id| music_policy::Track { id, mute_mask: 0 })
+        .or(next);
     let changed = next != bgm.playing;
     let spatial = if next.is_some_and(|t| t.id >= 128) {
         room.music_source()

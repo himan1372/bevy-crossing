@@ -70,6 +70,9 @@ enum Step {
     Idle,
     /// His question after the greeting.
     Menu,
+    /// The greeting of a player without the map: the first answer asks for one
+    /// (`aPOL_check_select2`).
+    MapMenu,
     Finish,
 }
 
@@ -293,7 +296,7 @@ fn talk(
     mut flow: ResMut<Talk>,
     mut dialogue: ResMut<DialogueState>,
     lost: Res<crate::police_box::LostAndFound>,
-    identity: Res<crate::save::PlayerIdentity>,
+    mut identity: ResMut<crate::save::PlayerIdentity>,
     mut was: Local<Option<ShopLocation>>,
 ) {
     let came_out = was.replace(*state.get()) == Some(ShopLocation::PoliceBox)
@@ -317,7 +320,19 @@ fn talk(
             *focus = InputFocus::Dialogue;
             match std::mem::take(&mut flow.step) {
                 // aPOL_set_select_after_msg.
-                Step::Menu => {
+                // `aPOL_check_select2`: a new map for the first answer, else the ordinary
+                // answers shifted down by one.
+                Step::MapMenu if choice == 0 => {
+                    identity.map_flag = true;
+                    say(&disc, &mut dialogue, actor, &flow.context, 0x18CA);
+                    flow.step = Step::Finish;
+                }
+                step @ (Step::Menu | Step::MapMenu) => {
+                    let choice = if matches!(step, Step::MapMenu) && choice < 3 {
+                        choice - 1
+                    } else {
+                        choice
+                    };
                     let msg = match choice {
                         0 => hint(),
                         1 if lost.count() != 0 => {
@@ -382,8 +397,19 @@ fn talk(
         17.. => 0x0774,
         _ => 0x0775,
     };
+    // `aPOL_check_player`: without the map the greeting is the one that offers it (+4).
+    let missing = !identity.map_flag;
+    let msg = if missing {
+        msg + (0x18C6 - 0x0772)
+    } else {
+        msg
+    };
     let asks = say(&disc, &mut dialogue, actor, &flow.context, msg);
-    flow.step = if asks { Step::Menu } else { Step::Finish };
+    flow.step = match (asks, missing) {
+        (true, true) => Step::MapMenu,
+        (true, false) => Step::Menu,
+        _ => Step::Finish,
+    };
 }
 
 pub struct CopperPlugin;

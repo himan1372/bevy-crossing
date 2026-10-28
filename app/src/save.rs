@@ -53,6 +53,10 @@ pub(crate) struct PlayerIdentity {
     /// `mSC_SPECIAL_EVENT_ARBEIT`: the player has talked to Tortimer for the job.
     #[serde(default)]
     pub arbeit_trophy: bool,
+    /// `Common(map_flag)`: the player has the town map. Off from the new-game intro until the
+    /// guide hands it over; towns that never ran the job always have it.
+    #[serde(default = "map_flag_on")]
+    pub map_flag: bool,
     /// The part-time job's errand (`mQst_GetFirstJobData`); absent until the job starts.
     #[serde(
         default,
@@ -60,6 +64,10 @@ pub(crate) struct PlayerIdentity {
         with = "first_job_serde"
     )]
     pub first_job: Option<rustimal_logic::first_job::FirstJob>,
+}
+
+fn map_flag_on() -> bool {
+    true
 }
 
 /// `FirstJob` as a plain record, since the logic crate has no serde.
@@ -145,6 +153,7 @@ impl Default for PlayerIdentity {
             events: Default::default(),
             events_day: 0,
             arbeit_trophy: false,
+            map_flag: true,
             first_job: None,
         }
     }

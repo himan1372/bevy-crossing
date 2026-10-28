@@ -75,6 +75,8 @@ pub enum Action {
     DebugToys,
     /// Toggle a music take-out mark or a pocket item's sale mark.
     Mark,
+    /// The X button: the town map (`mSM_CHECK_OPEN_MAP`).
+    Map,
     /// The GameCube Z button: the room light switch in the player's house.
     LightSwitch,
     /// Show or hide the development overlay (retail has no field HUD).
@@ -125,6 +127,7 @@ impl Default for KeyBindings {
             (DebugMusic, vec![K::F2]),
             (DebugToys, vec![K::F1]),
             (Mark, vec![K::KeyM]),
+            (Map, vec![K::KeyX]),
             (LightSwitch, vec![K::KeyZ]),
             (DevOverlay, vec![K::F10]),
         ];
@@ -200,6 +203,8 @@ pub enum InputFocus {
     Diary,
     /// The plaza's notice board.
     Notice,
+    /// The town map.
+    Map,
     /// The counter's password entry window.
     Password,
 }
@@ -256,7 +261,10 @@ pub(crate) fn update_focus(
     handover: Res<crate::shop_nook::handover::HandOver>,
     twins: Res<crate::shop_nook::Twins>,
     warning: Res<crate::warning_panel::WarningPanel>,
-    notice: Res<crate::notice_board::NoticeUi>,
+    (notice, map): (
+        Res<crate::notice_board::NoticeUi>,
+        Res<crate::town_map::MapUi>,
+    ),
     mut focus: ResMut<InputFocus>,
 ) {
     let next = if pause.is_some_and(|p| *p.get() == PauseState::Paused) {
@@ -265,6 +273,8 @@ pub(crate) fn update_focus(
         InputFocus::Diary
     } else if notice.open() {
         InputFocus::Notice
+    } else if map.open {
+        InputFocus::Map
     } else if password.open || password.done.is_some() || password.receiver.is_some() {
         // A finished entry keeps focus until Nook answers, so its last key
         // cannot reach the world (a code ending in P would pause).

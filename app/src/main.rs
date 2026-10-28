@@ -39,6 +39,7 @@ mod interaction;
 mod interior;
 mod items;
 mod joan;
+mod job_end;
 mod locomotion;
 mod mail;
 mod mail_disc;
@@ -79,6 +80,7 @@ mod statue;
 mod talk;
 mod tortimer;
 mod town;
+mod town_map;
 mod villager_memory;
 mod warning_panel;
 
@@ -147,6 +149,8 @@ fn main() {
         .add_plugins(first_job_talk::FirstJobTalkPlugin)
         .add_plugins(notice_board::NoticeBoardPlugin)
         .add_plugins(tortimer::TortimerPlugin)
+        .add_plugins(town_map::TownMapPlugin)
+        .add_plugins(job_end::JobEndPlugin)
         .add_plugins(field_items::FieldItemsPlugin)
         .add_plugins(critters::CrittersPlugin)
         .add_plugins(sound::SoundPlugin)

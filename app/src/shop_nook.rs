@@ -812,7 +812,11 @@ pub(crate) fn interact(
                 if let Ok((_, _, mut loco)) = player.single_mut() {
                     *loco = crate::locomotion::Locomotion::default();
                 }
+                let end_job = talk.end_job;
                 run_guide(&disc, &mut dialogue, actor, &mut flow, &mut memory, talk);
+                if end_job {
+                    guide_state.ending = Some(0.0);
+                }
             }
             return;
         }
@@ -1552,7 +1556,11 @@ pub(crate) fn interact(
                 &mut rand.0,
             ) {
                 *focus = InputFocus::Dialogue;
+                let end_job = talk.end_job;
                 run_guide(&disc, &mut dialogue, actor, &mut flow, &mut memory, talk);
+                if end_job {
+                    guide_state.ending = Some(0.0);
+                }
                 return;
             }
         }
@@ -1930,6 +1938,7 @@ impl Plugin for ShopNookPlugin {
             .init_resource::<editor::CaretClock>()
             .init_resource::<guide::GuideState>()
             .add_systems(Update, guide::track.in_set(GameplaySet))
+            .add_systems(Update, guide::send_away.in_set(GameplaySet))
             .add_systems(PostUpdate, editor::pulse)
             .init_resource::<preview::Mannequin>()
             .init_resource::<preview::effects::Effects>()

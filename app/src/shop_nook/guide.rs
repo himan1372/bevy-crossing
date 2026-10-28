@@ -25,6 +25,8 @@ const QUEST: u32 = 2;
 /// makes the player's acquaintance (`mNpc_SetAnimalPersonalID2Memory`).
 #[derive(Default)]
 pub(super) struct Talk {
+    /// The last job's end talk: afterwards the guide sends the player out (`aNRG2_all_job_end`).
+    pub end_job: bool,
     pub chain: Vec<usize>,
     pub free: Vec<(usize, String)>,
     pub meet: Option<String>,
@@ -254,6 +256,7 @@ fn with_hello(
         chain,
         free: residents.job_strings(job),
         meet,
+        ..Talk::default()
     }
 }
 
@@ -268,6 +271,10 @@ pub(super) fn arrival(
     rand: &mut rustimal_logic::qrand::Qrand,
     first_visit: bool,
 ) -> Option<Talk> {
+    if identity.first_job.is_none() {
+        // The new-game intro starts the job without the map (`ac_npc_p_sel_schedule.c_inc`).
+        identity.map_flag = false;
+    }
     let job = identity.first_job.get_or_insert_with(FirstJob::start);
     if cloth_check(job, look) {
         job.wrong_cloth = true;
@@ -322,6 +329,7 @@ pub(super) fn talk(
             chain,
             free: residents.job_strings(job),
             meet,
+            ..Talk::default()
         });
     }
     if job.finished() {
@@ -338,12 +346,19 @@ pub(super) fn talk(
             _ => 0x0830, // Job::Open
         };
         state.ask_again = false;
+        if kind == Job::DeliverFurniture {
+            // `aNRG2_3rd_job_end_talk_proc`: the guide hands over the map (`map_flag`).
+            identity.map_flag = true;
+        }
         if kind == Job::PostNotice {
             // `aNRG2_all_job_end_talk_proc`: the last job. The guide sends the player away and
             // the job is over (`mEv_UnSetFirstJob`): the next day Nook greets them (HRATALK).
             identity.events.unset_first_job();
             identity.first_job = None;
-            return Some(Talk::said(vec![end]));
+            return Some(Talk {
+                end_job: true,
+                ..Talk::said(vec![end])
+            });
         }
         let next = job.next_job(residents.met_everyone)?;
         job.setup_job(next);
@@ -383,7 +398,7 @@ pub(super) fn talk(
     Some(Talk {
         chain,
         free: residents.job_strings(job),
-        meet: None,
+        ..Talk::default()
     })
 }
 
@@ -454,4 +469,31 @@ pub(crate) struct GuideState {
     pub greeted: bool,
     /// `can_ask_again_flag`: the letter job's reminder.
     pub ask_again: bool,
+    /// Seconds since the last talk ended, once the whole job is over.
+    pub ending: Option<f32>,
+}
+
+/// `aNRG2_all_job_end` / `aNRG2_send_away_init`: a second after the last talk the guide sends the
+/// player out of the shop (the goodbye is skipped), and outside the cheer follows
+/// (`crate::job_end`).
+pub(crate) fn send_away(
+    time: Res<Time>,
+    focus: Res<crate::input::InputFocus>,
+    mut state: ResMut<GuideState>,
+    mut twins: ResMut<super::Twins>,
+    mut payment: ResMut<crate::job_end::CompletePayment>,
+) {
+    let Some(waited) = state.ending.as_mut() else {
+        return;
+    };
+    if !focus.is_world() {
+        *waited = 0.0;
+        return;
+    }
+    *waited += time.delta_secs();
+    if *waited >= 1.0 {
+        state.ending = None;
+        twins.goodbye = super::Goodbye::Done;
+        payment.begin();
+    }
 }
