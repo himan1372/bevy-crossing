@@ -179,6 +179,7 @@ pub(super) fn talk(
 pub(crate) fn track(
     mut identity: ResMut<crate::save::PlayerIdentity>,
     look: Res<crate::character::PlayerLook>,
+    inventory: Res<PlayerInventory>,
 ) {
     if !identity.events.first_job {
         return;
@@ -187,8 +188,17 @@ pub(crate) fn track(
         return;
     };
     let mut next = job.clone();
-    if next.job == Some(Job::ChangeCloth) {
-        next.check_cloth(worn(&look));
+    match next.job {
+        Some(Job::ChangeCloth) => next.check_cloth(worn(&look)),
+        // `ITEM1_CAT_PLANT`: saplings and flower bags (0x2900-0x29FF).
+        Some(Job::PlantFlower) => next.check_seed(
+            inventory
+                .pockets
+                .pockets
+                .iter()
+                .any(|&item| (0x2900..0x2A00).contains(&item)),
+        ),
+        _ => {}
     }
     if next != *job {
         info!("first job progress {} -> {}", job.progress, next.progress);
