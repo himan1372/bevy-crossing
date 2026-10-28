@@ -95,6 +95,16 @@ pub struct QuestState {
     owed: Option<(String, Reward)>,
 }
 
+/// `aQMgr_select_talk`: while the part-time job runs villagers talk about the job, not their own
+/// quests, except during the open-quest job (`FJOPENQUEST`), which exists to take one.
+fn job_blocks_quests(identity: &crate::save::PlayerIdentity) -> bool {
+    identity.events.first_job
+        && !identity
+            .first_job
+            .as_ref()
+            .is_some_and(|j| j.open_quest_running())
+}
+
 impl QuestState {
     /// The first job's open-quest job: the next offer is not made to wait.
     pub(crate) fn offer_now(&mut self) {
@@ -555,6 +565,7 @@ fn quest_cooldown_tick(
         (&mut Visibility, &mut Text),
         (With<QuestNotifyText>, Without<QuestPanel>),
     >,
+    identity: Res<crate::save::PlayerIdentity>,
 ) {
     let now = crate::clock::now();
     // Time limit (`quest::limit_days`): past it, the request lapses.
@@ -575,7 +586,7 @@ fn quest_cooldown_tick(
             println!("Quest for {who} expired");
         }
     }
-    if quest.active.is_some() || giver.0.is_some() {
+    if quest.active.is_some() || giver.0.is_some() || job_blocks_quests(&identity) {
         return;
     }
     if *house_state != HouseState::Town || *shop_loc != crate::shop::ShopLocation::Town {
@@ -653,6 +664,7 @@ fn quest_talk_intercept(
     house_state: Res<State<HouseState>>,
     shop_loc: Res<State<crate::shop::ShopLocation>>,
     dialogue: Res<DialogueState>,
+    identity: Res<crate::save::PlayerIdentity>,
     mut claim: ResMut<QuestClaim>,
     mut qui: ResMut<QuestUi>,
     mut inventory: ResMut<PlayerInventory>,
@@ -667,7 +679,7 @@ fn quest_talk_intercept(
     if *house_state != HouseState::Town || *shop_loc != crate::shop::ShopLocation::Town {
         return;
     }
-    if qui.open || dialogue.active {
+    if qui.open || dialogue.active || job_blocks_quests(&identity) {
         return;
     }
     for event in events.read() {
