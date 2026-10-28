@@ -39,8 +39,19 @@ pub struct Track {
 /// The player house does not request a room song. Without a furniture player
 /// it is quiet; the outdoor hourly track must not follow the player inside.
 /// Shop close themes begin five minutes before the tier's nominal closing
-/// hour. Door opening hours/part-time work are separate gameplay follow-ups.
+/// hour. Door opening hours are a separate gameplay follow-up.
 pub fn select(scene: Scene, day_secs: u32, weather: FieldWeather) -> Option<Track> {
+    select_with(scene, day_secs, weather, false)
+}
+
+/// `select` with `mEv_CheckRealArbeit()`: while the part-time job runs (or its
+/// next-day wait), the shop never switches to its closing arrangement.
+pub fn select_with(
+    scene: Scene,
+    day_secs: u32,
+    weather: FieldWeather,
+    real_arbeit: bool,
+) -> Option<Track> {
     let (id, mute_mask) = match scene {
         Scene::PlayerHouse => return None,
         Scene::PostOffice(night) => (crate::post_office::music(night), 0),
@@ -63,10 +74,10 @@ pub fn select(scene: Scene, day_secs: u32, weather: FieldWeather) -> Option<Trac
             let seconds = day_secs % 86400;
             // mBGMRoom_shop_close_check inserts a five-second quiet interval
             // before swapping to the closing arrangement.
-            if (closing_start - 5..closing_start).contains(&seconds) {
+            if !real_arbeit && (closing_start - 5..closing_start).contains(&seconds) {
                 return None;
             }
-            let closing = seconds >= closing_start;
+            let closing = !real_arbeit && seconds >= closing_start;
             let ids = if closing {
                 [79, 80, 81, 82]
             } else {
@@ -150,6 +161,21 @@ impl VolumeRamp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_part_time_job_keeps_the_shop_theme_from_closing() {
+        let late = 22 * 3600 + 30 * 60;
+        let tier = crate::shop::ShopTier::default();
+        let closing = select_with(Scene::Shop(tier), late, FieldWeather::Fine, false).unwrap();
+        let working = select_with(Scene::Shop(tier), late, FieldWeather::Fine, true).unwrap();
+        assert_ne!(closing.id, working.id);
+        assert_eq!(
+            working.id,
+            select(Scene::Shop(tier), 12 * 3600, FieldWeather::Fine)
+                .unwrap()
+                .id
+        );
+    }
 
     #[test]
     fn returning_from_a_quiet_house_uses_the_current_town_hour() {

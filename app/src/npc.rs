@@ -226,7 +226,11 @@ fn villager_house_centres(town: &Town, player_door: Option<Vec3>) -> Vec<Vec3> {
 }
 
 /// Schedule type now for a personality (`mNPS_schedule_manager_sub`).
-fn schedule_now(looks: u8) -> u32 {
+fn schedule_now(looks: u8, chores: bool) -> u32 {
+    // `mNPS_schedule_manager`: during the part-time job everyone is forced outside.
+    if let Some(forced) = npc_ai::global_schedule_override(chores, false) {
+        return forced;
+    }
     let now = crate::clock::now();
     npc_ai::schedule_manager_sub(looks as usize, now.day_secs, 0, 0, 0).1
 }
@@ -272,6 +276,7 @@ pub(crate) fn spawn_villagers(
     town: Res<Town>,
     player_house: Option<Res<crate::house::PlayerHouse>>,
     roster: Option<Res<crate::roster::TownRoster>>,
+    identity: Res<crate::save::PlayerIdentity>,
 ) {
     commands.insert_resource(WanderRng(0x9E3779B97F4A7C15));
     let houses = match roster {
@@ -297,7 +302,7 @@ pub(crate) fn spawn_villagers(
             ),
             None => (FALLBACK_HOMES[i % 4], FALLBACK_HOMES[i % 4]),
         };
-        let schedule = schedule_now(*looks);
+        let schedule = schedule_now(*looks, identity.events.first_job);
         let out = is_out(schedule);
         let mut entity = commands.spawn((
             VillagerTalk::default(),
@@ -352,6 +357,7 @@ fn schedule_name(schedule: u32) -> &'static str {
 fn villager_schedule(
     mut commands: Commands,
     dialogue: Res<DialogueState>,
+    identity: Res<crate::save::PlayerIdentity>,
     mut villagers: Query<(
         Entity,
         &mut Villager,
@@ -365,7 +371,7 @@ fn villager_schedule(
         return;
     }
     for (entity, mut v, mut transform, mut vis, indoors) in villagers.iter_mut() {
-        let out = is_out(schedule_now(v.looks));
+        let out = is_out(schedule_now(v.looks, identity.events.first_job));
         if out && indoors {
             commands.entity(entity).remove::<Indoors>();
             *vis = Visibility::Inherited;
@@ -392,6 +398,7 @@ fn villager_move(
     time: Res<Time>,
     dialogue: Res<DialogueState>,
     player_query: Query<&Transform, With<Player>>,
+    identity: Res<crate::save::PlayerIdentity>,
     mut villagers: Query<
         (
             Entity,
@@ -488,7 +495,7 @@ fn villager_move(
         let arrived = target.is_some_and(|t| transform.translation.xz().distance(t.xz()) < 0.4);
         if v.act != Act::GoHome && (v.timer <= 0.0 || arrived) {
             // aNPC_think_wander_decide_next with the personality borders.
-            let schedule = schedule_now(v.looks);
+            let schedule = schedule_now(v.looks, identity.events.first_job);
             let act = npc_ai::wander_decide_next(
                 v.looks as usize,
                 rng.below(10) as i32,

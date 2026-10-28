@@ -52,6 +52,12 @@ pub(crate) fn in_renovation(s: &ShopState, now: crate::clock::Now) -> bool {
     s.upgrading_today && date(now) >= shift(s.renewal_ymd, -1)
 }
 
+/// `mSP_ShopOpen`: the shop is forcefully open while the part-time job runs
+/// (`mEv_CheckFirstJob`), whatever the hour or a renovation.
+pub(crate) fn open_now(s: &ShopState, now: crate::clock::Now, chores: bool) -> bool {
+    chores || is_open(s, now)
+}
+
 pub(crate) fn is_open(s: &ShopState, now: crate::clock::Now) -> bool {
     !in_renovation(s, now)
         && if now.day == gt::get_days_by_month(now.year, now.month) {

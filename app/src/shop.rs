@@ -844,6 +844,7 @@ fn shop_enter(
     room: Res<ShopRoom>,
     shop: Res<ShopData>,
     layout: Res<layout::Layout>,
+    identity: Res<crate::save::PlayerIdentity>,
 ) {
     if *state != ShopLocation::Town || !focus.is_world() {
         return;
@@ -877,8 +878,9 @@ fn shop_enter(
     {
         return;
     }
-    if !schedule::is_open(&shop.shop, crate::clock::now())
-        || shop.events.closed(crate::clock::now())
+    let chores = identity.events.first_job;
+    if !schedule::open_now(&shop.shop, crate::clock::now(), chores)
+        || (!chores && shop.events.closed(crate::clock::now()))
     {
         return;
     }

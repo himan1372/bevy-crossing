@@ -817,11 +817,12 @@ fn cranny_door_pose(
 fn update_cranny_door(
     time: Res<Time>,
     shop: Option<Res<crate::shop::ShopData>>,
+    identity: Res<crate::save::PlayerIdentity>,
     mut doors: Query<(&mut CrannyDoor, &mut Transform)>,
 ) {
-    let open = shop
-        .as_ref()
-        .is_some_and(|d| crate::shop::schedule::is_open(&d.shop, crate::clock::now()));
+    let open = shop.as_ref().is_some_and(|d| {
+        crate::shop::schedule::open_now(&d.shop, crate::clock::now(), identity.events.first_job)
+    });
     let target = if open { 16.0 } else { 1.0 };
     for (mut door, mut transform) in &mut doors {
         if door.frame == target {

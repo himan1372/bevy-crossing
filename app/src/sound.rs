@@ -587,6 +587,7 @@ fn update_music(
     house: Res<State<crate::house::HouseState>>,
     shop: Res<State<crate::shop::ShopLocation>>,
     shop_data: Res<crate::shop::ShopData>,
+    identity: Res<crate::save::PlayerIdentity>,
     focus: Res<crate::input::InputFocus>,
     time: Res<Time<Real>>,
     (room, current, disc, player): (
@@ -635,10 +636,11 @@ fn update_music(
     };
     // Snow on the ground is not proof that it is snowing. Until weather
     // simulation supplies Common(weather), retain the accepted clear mask.
-    let next = music_policy::select(
+    let next = music_policy::select_with(
         scene,
         crate::clock::now().day_secs,
         music_policy::FieldWeather::Fine,
+        identity.events.real_arbeit(),
     )
     .or_else(|| {
         (scene == music_policy::Scene::PlayerHouse
