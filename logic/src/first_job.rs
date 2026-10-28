@@ -271,6 +271,39 @@ impl FirstJob {
         Some(out)
     }
 
+    /// `aQMgr_move_own_errand_cloth`: running (2) and wearing the errand's shirt
+    /// finishes it; finished (0) and not wearing it any more puts it back to 2.
+    pub fn check_cloth(&mut self, worn: u16) {
+        match self.progress {
+            2 if worn == self.item => self.progress = 0,
+            0 if worn != self.item => self.progress = 2,
+            _ => {}
+        }
+    }
+
+    /// `aQMgr_move_own_errand_seed`: running, and no plant item (flower bag,
+    /// sapling, ...) left in the pockets, finishes it.
+    pub fn check_seed(&mut self, plant_in_pockets: bool) {
+        if self.progress == 2 && !plant_in_pockets {
+            self.progress = 0;
+        }
+    }
+
+    /// `aQMgr_move_own_errand_letter`: the recipient has a letter from the player.
+    pub fn check_letter(&mut self, recipient_has_letter: bool) {
+        if matches!(self.progress, 2 | 3) && recipient_has_letter {
+            self.progress = 0;
+        }
+    }
+
+    /// `aQMgr_move_own_errand_hello`: the player has met every villager (and
+    /// Tortimer's island visit is allowed, `mSC_check_ArbeitPlayer`).
+    pub fn check_hello(&mut self, met_everyone: bool) {
+        if self.progress == 2 && met_everyone {
+            self.progress = 0;
+        }
+    }
+
     /// `aNRG2_job_end_talk_proc`: the job that follows the finished one. After the
     /// planting job, a player who has not met every villager (and Tortimer) goes to
     /// the introductions first.
@@ -387,6 +420,39 @@ mod tests {
         assert_eq!(next(Job::Introductions, true), Job::DeliverFurniture);
         assert_eq!(next(Job::Open, true), Job::DeliverCarpet);
         assert_eq!(next(Job::DeliverAxe2, true), Job::PostNotice);
+    }
+
+    #[test]
+    fn the_quest_manager_finishes_jobs_by_what_the_player_does() {
+        let mut fj = FirstJob::start();
+        fj.setup_job(Job::ChangeCloth);
+        fj.step_up(Picks::default());
+        fj.check_cloth(0x2400);
+        assert_eq!(fj.progress, 2);
+        fj.check_cloth(WORK_UNIFORM);
+        assert!(fj.finished());
+        fj.check_cloth(0x2400);
+        assert_eq!(fj.progress, 2, "taking the uniform off reopens the job");
+
+        fj.setup_job(Job::PlantFlower);
+        fj.step_up(Picks::default());
+        fj.check_seed(true);
+        assert_eq!(fj.progress, 2);
+        fj.check_seed(false);
+        assert!(fj.finished());
+
+        fj.setup_job(Job::SendLetter);
+        fj.step_up(Picks::default());
+        fj.progress = 3;
+        fj.check_letter(false);
+        assert_eq!(fj.progress, 3);
+        fj.check_letter(true);
+        assert!(fj.finished());
+
+        fj.setup_job(Job::Introductions);
+        fj.step_up(Picks::default());
+        fj.check_hello(true);
+        assert!(fj.finished());
     }
 
     #[test]
