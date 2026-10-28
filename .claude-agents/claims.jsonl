@@ -477,3 +477,5 @@
 {"action":"complete","task":"shop-house-messages-drive","agent":"claude","timestamp":"2026-10-28T02:22:49Z"}
 {"action":"claim","task":"shop-start-welcome-tier-0","agent":"claude","timestamp":"2026-10-28T08:10:50Z"}
 {"action":"complete","task":"shop-start-welcome-tier-0","agent":"claude","timestamp":"2026-10-28T08:11:28Z"}
+{"action":"claim","task":"shop-handover-frames","agent":"claude","timestamp":"2026-10-28T08:12:10Z"}
+{"action":"complete","task":"shop-handover-frames","agent":"claude","timestamp":"2026-10-28T08:16:18Z"}
