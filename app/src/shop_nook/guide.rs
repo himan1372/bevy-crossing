@@ -429,53 +429,6 @@ pub(crate) fn track(
     }
 }
 
-/// `mNT_finish_notice_first_job` at the bulletin board: posting a notice finishes the notice job.
-///
-/// Stand-in: the notice editor and overlay (`m_notice_ovl.c`) are not built, so pressing
-/// the action button facing a bulletin board (items 0x0007 / 0x000B) while the job runs
-/// counts as having posted one.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn notice_board(
-    actions: Res<crate::input::Actions>,
-    focus: Res<crate::input::InputFocus>,
-    player: Query<(&Transform, &crate::interaction::Facing), With<crate::player::Player>>,
-    items: Option<Res<crate::field_items::FieldItems>>,
-    mut identity: ResMut<crate::save::PlayerIdentity>,
-    house: Res<State<crate::house::HouseState>>,
-    shop: Res<State<crate::shop::ShopLocation>>,
-) {
-    if !focus.is_world()
-        || *house.get() != crate::house::HouseState::Town
-        || *shop.get() != crate::shop::ShopLocation::Town
-        || !actions.just_pressed(crate::input::Action::Interact)
-    {
-        return;
-    }
-    let running = identity.events.first_job
-        && identity
-            .first_job
-            .as_ref()
-            .is_some_and(|j| j.job == Some(Job::PostNotice) && j.progress == 2);
-    let (Some(items), Ok((at, facing)), true) = (items, player.single(), running) else {
-        return;
-    };
-    let ahead = at.translation + facing.dir * 0.6;
-    let Some((ax, az, cx, cz)) = crate::town::Town::cell_indices_of(ahead) else {
-        return;
-    };
-    let item = items
-        .acres
-        .get(az * rustimal_logic::town_gen::ACRE_WIDTH + ax)
-        .map(|acre| acre[cz * 16 + cx]);
-    if matches!(item, Some(0x0007 | 0x000B)) {
-        if let Some(job) = identity.first_job.as_mut() {
-            job.finish();
-            info!("first job progress 2 -> 0 (notice posted)");
-            crate::sound::se(crate::sound::se_id::CHOICE_CONFIRM);
-        }
-    }
-}
-
 /// Session-only guide state (`Common_Get(quest).work`, `can_ask_again_flag`).
 #[derive(Resource, Default)]
 pub(crate) struct GuideState {

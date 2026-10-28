@@ -1928,7 +1928,6 @@ impl Plugin for ShopNookPlugin {
             .init_resource::<editor::CaretClock>()
             .init_resource::<guide::GuideState>()
             .add_systems(Update, guide::track.in_set(GameplaySet))
-            .add_systems(Update, guide::notice_board.in_set(GameplaySet))
             .add_systems(PostUpdate, editor::pulse)
             .init_resource::<preview::Mannequin>()
             .init_resource::<preview::effects::Effects>()

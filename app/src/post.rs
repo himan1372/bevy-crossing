@@ -74,6 +74,9 @@ pub struct Post {
     /// Villagers holding a letter from the player (`letter_info.exists`).
     #[serde(default)]
     pub sent_to: Vec<String>,
+    /// The plaza's notice board (`Save_Get(noticeboard)`), oldest first.
+    #[serde(default)]
+    pub notices: Vec<crate::notice_board::Notice>,
 }
 
 impl Post {

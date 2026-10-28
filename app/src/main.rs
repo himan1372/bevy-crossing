@@ -50,6 +50,7 @@ mod museum;
 mod museum_fish;
 mod museum_insect;
 mod n64_material;
+mod notice_board;
 mod npc;
 mod pause_menu;
 mod player;
@@ -143,6 +144,7 @@ fn main() {
         .add_plugins(shop_display::ShopDisplayPlugin)
         .add_plugins(shop_nook::ShopNookPlugin)
         .add_plugins(first_job_talk::FirstJobTalkPlugin)
+        .add_plugins(notice_board::NoticeBoardPlugin)
         .add_plugins(field_items::FieldItemsPlugin)
         .add_plugins(critters::CrittersPlugin)
         .add_plugins(sound::SoundPlugin)
