@@ -584,6 +584,9 @@ struct PocketView {
 /// mTG_item_col_pos / line_pos, matching the inv_mwin pocket-quad centers.
 /// Both frame and icons share this orthographic view: applying mSM's separate
 /// item-view X correction here would shift icons away from their circles.
+/// `mTG_TABLE_PLAYER` (col -59, line 63) in screen pixels.
+const PLAYER_AT: Vec2 = Vec2::new(101.0, 57.0);
+
 fn slot_at(slot: usize) -> Vec2 {
     Vec2::new(
         83.0 + 24.0 * (slot % 5) as f32,
@@ -991,7 +994,11 @@ fn draw(
         }
     }
     let mail_slot = selected_mail(&ui, &mail);
-    let at = mail_slot.map_or_else(|| slot_at(ui.selected), mail_at);
+    let at = if ui.on_player {
+        PLAYER_AT
+    } else {
+        mail_slot.map_or_else(|| slot_at(ui.selected), mail_at)
+    };
     if let Some(letter) = mail
         .grabbed
         .and_then(|slot| mailbox.letter_index(slot))

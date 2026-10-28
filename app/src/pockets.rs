@@ -24,6 +24,8 @@ pub struct PocketsUi {
     pub selected: usize,
     pub menu: Option<usize>,
     pub grabbed: Option<usize>,
+    /// The hand carrying a wearable item has moved up onto the player (`mTG_TABLE_PLAYER`).
+    pub(crate) on_player: bool,
     pub mail_slot: Option<usize>,
     /// Inventory mode 0x5: return selected slots to Nook, never transact here.
     pub(crate) selling: bool,
@@ -138,6 +140,7 @@ pub(crate) fn toggle_pockets(
     {
         ui.menu = None;
         ui.grabbed = None;
+        ui.on_player = false;
         crate::sound::se(crate::sound::se_id::MENU_EXIT);
         return;
     }
@@ -157,6 +160,7 @@ pub(crate) fn toggle_pockets(
     }
     ui.menu = None;
     ui.grabbed = None;
+    ui.on_player = false;
     ui.opening = None;
     ui.bag_warning = false;
     mail.menu = None;
@@ -214,6 +218,15 @@ pub(crate) fn item_actions(item: u16, condition: u32) -> Vec<&'static str> {
     } else {
         vec!["Grab"]
     }
+}
+
+/// `ITM_CLOTH_START`; the clothing bank has 255 shirts.
+const SHIRT_START: u16 = 0x2400;
+
+/// A shirt a hand can drop on the player (`mTG_move_check_hand_item_on_player`
+/// for the cloth category, in normal condition).
+fn wearable_shirt(item: u16, condition: u32) -> bool {
+    condition == 0 && (SHIRT_START..SHIRT_START + 255).contains(&item)
 }
 
 fn can_hold(item: u16, condition: u32) -> bool {
@@ -290,6 +303,7 @@ pub(crate) fn pockets_input(
     disc: Option<Res<crate::game_disc::GameDisc>>,
     mut warning: ResMut<crate::warning_panel::WarningPanel>,
     mut rand: ResMut<crate::game_rand::GameRand>,
+    mut look: ResMut<crate::character::PlayerLook>,
 ) {
     if ui.open && (ui.bag_warning || warning.is_open()) {
         // The retail warning panel: closed by A, B or Start, then the
@@ -399,6 +413,39 @@ pub(crate) fn pockets_input(
         }
         mail.letter_actions(&mut actions, &mut mailbox, slot, true, &mut inventory);
         return;
+    }
+    // mTG_move_cursol_between_table_inventory_upper/lower: a hand carrying a shirt
+    // moves from the top row up onto the player, and back down.
+    if let Some(from) = ui.grabbed {
+        let wearable = wearable_shirt(
+            inventory.pockets.pockets[from],
+            inventory.pockets.item_cond(from),
+        );
+        if ui.on_player && dy > 0 {
+            ui.on_player = false;
+            crate::sound::se(crate::sound::se_id::CURSOR);
+            return;
+        }
+        if !ui.on_player && wearable && dy < 0 && ui.selected < 5 && ui.menu.is_none() {
+            ui.on_player = true;
+            crate::sound::se(crate::sound::se_id::CURSOR);
+            return;
+        }
+        if ui.on_player {
+            if !(actions.consume(Action::Confirm) || actions.consume(Action::Interact)) {
+                return;
+            }
+            // mTG_drop_item on the player: the shirt is worn, the old one takes its place.
+            let item = inventory.pockets.pockets[from];
+            let old = SHIRT_START + look.cloth as u16;
+            look.cloth = usize::from(item - SHIRT_START);
+            inventory.pockets.pockets[from] = old;
+            inventory.pockets.set_item_cond(from, 0);
+            ui.grabbed = None;
+            ui.on_player = false;
+            crate::sound::se(crate::sound::se_id::WEAR);
+            return;
+        }
     }
     if dx != 0 || dy != 0 {
         if let Some(choice) = ui.menu {

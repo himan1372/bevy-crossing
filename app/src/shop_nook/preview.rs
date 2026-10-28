@@ -179,6 +179,7 @@ pub(super) fn advance(
 pub(super) fn textures(
     disc: Option<Res<GameDisc>>,
     preview: Res<Preview>,
+    look: Res<crate::character::PlayerLook>,
     shells: Query<(), With<ShopShell>>,
     mut parts: Query<(&ChildOf, &MeshMaterial3d<N64Material>, &mut PreviewTexture)>,
     mut materials: ResMut<Assets<N64Material>>,
@@ -189,7 +190,10 @@ pub(super) fn textures(
         if part.surface != Surface::Shirt && !shells.contains(parent.parent()) {
             continue;
         }
-        let wanted = preview.texture_item(part.surface);
+        // Without a preview the shirt is the one the player wears (`PlayerLook`).
+        let wanted = preview
+            .texture_item(part.surface)
+            .or_else(|| (part.surface == Surface::Shirt).then(|| 0x2400 + look.cloth as u16));
         if wanted == part.applied {
             continue;
         }
