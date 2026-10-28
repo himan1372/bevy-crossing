@@ -102,7 +102,7 @@ struct GridAssets {
 #[derive(Default)]
 struct Drawn {
     root: Option<Entity>,
-    key: Option<(usize, Option<usize>, [u32; 2], [u32; 2], bool)>,
+    key: Option<(usize, Option<usize>, [u32; 2], [u32; 2], bool, bool)>,
     meshes: Vec<Handle<Mesh>>,
     materials: Vec<Handle<StandardMaterial>>,
 }
@@ -427,10 +427,16 @@ fn draw(
     if assets.is_none() && room.music_grid.is_some() {
         return;
     }
-    let key = room
-        .music_grid
-        .as_ref()
-        .map(|g| (g.selected, g.menu, room.music_box, g.marks, g.closing));
+    let key = room.music_grid.as_ref().map(|g| {
+        (
+            g.selected,
+            g.menu,
+            room.music_box,
+            g.marks,
+            g.closing,
+            g.warning,
+        )
+    });
     if drawn.key == key {
         return;
     }

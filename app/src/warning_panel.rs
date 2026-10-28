@@ -209,7 +209,7 @@ fn update(
             &disc,
             "warning-cursor",
             &["att_win_mode", "att_win_cursor_model"],
-            [255, 255, 255, 255],
+            [255, 0, 0, 255],
             &mut Stores {
                 meshes: &mut meshes,
                 n64: &mut n64,
