@@ -1,6 +1,45 @@
 # Codex handoff - 2026-10-25
 
-## Claude continuation - 2026-10-27 (read this first)
+## Claude continuation - 2026-10-28 (read this first)
+
+Identity `claude`, branch `main`, everything below is committed and pushed (last commit: the map and wipe, then a one-line note fix);
+only `.gitignore` and `savegame.json` are untracked/modified and must NOT be committed. The workflow, gates and QA rules of the
+2026-10-27 section still hold (read the repo skills, claim with `task-claimer.sh`, `cargo -j 1`, QA only in a Temp copy of the capture exe with a
+synthetic save, commit explicit files with the `Co-Authored-By: Claude Sonnet 5.5` line). Each task has `.claude-agents/completed/<slug>.md`.
+
+Done this session, in order:
+- Shop start audit follow-ups, driven with no code change: sale-day welcome on tier 0 (`shop-start-welcome-tier-0`), the present hand-over frames (`shop-handover-frames`).
+- Randomness: `logic/src/qrand.rs` is the source's `qrand/fqrand/RANDOM(n)`; the app's `GameRand` resource wraps it (`game_rand.rs`). The bargain sale hour and stock, grab bag, raffle and face blinks draw from `GameRand`;
+  `town_gen`, the villager roster, the turnip week and the raffle lineup use per-seed `Qrand` streams so a reload gives the same result (`shop-bargain-rng-kernel`, `town-gen-qrand`, `gamerand-adopters`).
+- HRATALK: `logic/src/personal_events.rs` (FIRSTJOB / HRAWAIT / HRATALK flags), saved in `PlayerIdentity.events`, daily renewal in `save.rs`, Nook's day-after greeting 0x082A first in the arrival order
+  (`shop-hratalk`, `shop-hratalk-talk-end`).
+- The whole new-game part-time job, built piece by piece and then driven in one run (`first-job-full-run`). Kernel: `logic/src/first_job.rs` (the eleven jobs, errand record, tables, finish rules, villager picker;
+  eight own tests). App: `shop_nook/guide.rs` (Nook is the guide while `identity.events.first_job`), `first_job_talk.rs` (villagers' greeting and the delivery), `tortimer.rs`, `notice_board.rs`, `town_map.rs`, `job_end.rs`.
+  Saved in `PlayerIdentity`: `events`, `events_day`, `first_job`, `arbeit_trophy`, `map_flag`; `Post.sent_to` and `Post.notices`.
+  Chain as played: change clothes -> plant -> introductions (until every resident is met and Tortimer talked to) -> furniture -> letter -> open quest -> carpet -> axe -> notice -> the job ends
+  (HRAWAIT, next day HRATALK). Restrictions while it runs: villagers forced outside, shop always open, no closing music (`part-time-job-core`), and no app quest offers except in the open-quest job (`quest.rs::job_blocks_quests`).
+  Prerequisites built on the way: wearing a shirt by carrying it onto the player in the pockets (`wear-shirt`), demo-order codes kept as page markers and raised as the text types (`DemoOrders` in `msg_window.rs`),
+  the fanfare override (`sound::Fanfare`), `Action::Map` (X) and `InputFocus::Notice` / `Map`.
+  Details and exact message numbers: `completed/first-job-*.md`, `notice-board.md`, `job-map-and-wipe.md`.
+
+How to start the job in a test: write a savegame with `identity.events = [true, false, false]` (and `identity.first_job` absent for the start) BEFORE launching: a new game's shirt and look come from the
+savegame present at launch, F9 does not reset them. For a mid-job state write the `first_job` record (`job` is the index in `Job` order, `progress` 1 chosen / 2 running / 0 done).
+
+QA traps learned (add to the earlier list):
+- A system may not read and write the same message (B0002): use `ResMut<Messages<T>>` with a `MessageCursor`.
+- To intercept a talk, order the system `.after(interact)` as well as in `QuestInputSet`, or the ordinary talk wins.
+- `update_focus` is at Bevy's sixteen-parameter limit: bundle new modal flags into a tuple parameter.
+- F5 only saves in world focus; a dialogue, a quest panel or a villager standing in front keeps it from saving. Teleport the player away before pressing Space to finish a dialogue, or Space starts a new talk.
+- Do not pipe a long QA script into `tail` (the output is lost on a timeout); run it in the background (`nohup python -u ... > out`) and poll the file.
+- Villagers wander: retry the teleport-and-E several times; one of them stands on a cliff acre.
+- `python -B` and `rm -rf skills/gc-iso-reader/__pycache__` when importing the disc reader.
+
+Known gaps (job): no hand-over visuals for the job items (they are given directly); the notice board and map use plain panels (retail overlays not built); the second letter / second axe jobs and the "recipient moved away"
+redirects; the axe delivery's reply-letter display; the intro demo itself (the job is started by a save edit, Philip deferred the introduction); the fanfare length (14 s) and the 0x17B6 window colour; the scene wipe.
+Other open items: visitor / foreign-town paths, the lighthouse and island, the other mWR warnings with no trigger, Nook's arm poses (the shop camera hides them), the pockets portrait not updating its shirt.
+Candidate next tasks: the intro demo (arrival, name entry, house choice) now that its job exists; the retail map and notice overlays; drive the remaining paths listed above. Parent retail/M4 and Philip's acceptance stay open; Philip chooses the next task.
+
+## Claude continuation - 2026-10-27 (earlier the same day)
 
 Identity `claude`, branch `main`, all work below is committed and pushed (last `3125bb56`);
 only `.gitignore` and `savegame.json` are untracked/modified and must NOT be committed.
