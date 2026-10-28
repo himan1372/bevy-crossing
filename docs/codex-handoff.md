@@ -1,6 +1,45 @@
 # Codex handoff - 2026-10-25
 
-## Claude continuation - 2026-10-28 (read this first)
+## Claude continuation - 2026-10-28, second session (read this first)
+
+Identity `claude`, branch `main`, everything below is committed and pushed (last code commit: the circle wipes; `docs/codex-handoff.md` is this update). Only `.gitignore` and `savegame.json` are
+untracked/modified and must NOT be committed (real save hash `C15154C0...`, unchanged all session). Workflow unchanged (repo skills, `task-claimer.sh claim <slug> claude` after writing
+`.claude-agents/backlog/<slug>.md`, `cargo -j 1`, QA only in a Temp copy of the capture exe, gates fmt / `clippy --workspace --all-targets -D warnings` / capture build, explicit-file commits with the
+`Co-Authored-By: Claude Sonnet 5.5` line, push). Every task below has `.claude-agents/completed/<slug>.md` with source references, evidence and what was not done.
+
+Done, in order:
+- **Town map overlay** (`map-overlay-retail`): `app/src/town_map.rs` draws the retail `m_map_ovl.c` from disc display lists (window `kan_win_model`, acre pictures `kan_tizu_model` with `l_map_texture` / `l_map_pal`
+  in segments 8/9, label bubble, house marks, cursor glide and pulse, slide in/out); kernel `logic/src/town_map.rs` (own tests). Opened by X (needs `map_flag`) or by the action button facing a map
+  signboard (field items 0x000C/D, `map-from-pause`: `data0 == 0`, colour list 0, magenta town name, X does not close it; the source has no pause-menu map). The plain text grid is the no-disc fallback.
+- **Notice board overlay** (`notice-overlay-retail`): `notice_board/render.rs` uses `kei_win_model`, "entry NN" and date header, key display, page arrows, stick marker.
+- **Display-list reader** (`app/src/disc_gfx.rs`): `run_display_lists_with_segment_lists` follows `G_DL` into runtime segments that game code points at lists (segment B colour list, A waku list).
+- **Job gaps**: the end-of-job cheer window is green (`DialogueState.window_color`); the fanfare (sequence 232) loops until the message is read; hand-over of every job item (`shop_nook/handover.rs`
+  `Item::Goods` from the disc's `mode_DL_table` / `vtx_DL_table`; `guide::hand_over_job_item` at message order (1,1,4); `DialogueState.held` = `mMsg_SET_LOCKCONTINUE`; `DemoOrders::take_raised`);
+  the town map hand-over at the third job's end (order (1,9)). Drove bag, furniture (a leaf), paper, carpet, axe. Message order kinds in this port: NPC0 is kind 1.
+- **Scene wipe** (`app/src/scene_wipe.rs`): black fade (out 30 frames, 10 held, in 30) on every `ShopLocation` / `HouseState` change; ordinary doors are caught late in the frame (`doors` in `Last`):
+  the player and the pending states are put back, `InputFocus::Transition` freezes input, the picture fades out, then the change is applied. F9 and changes made while a fade runs pass through.
+  The job's send-away does its own fade out (`guide::send_away`), then the town opens as the CIRCLE_LEFT wipe (`ef_wipe2_modelT`, its own perspective camera on render layer 2, texture window scrolled by
+  rewriting U each frame, black bars beside the 4:3 picture on wide windows). `circle_next(right)` / `circle_out(right)` also build circle right and a closing circle; nothing in the source calls them.
+  Driven: shop, museum, police, post office, player house (in and out).
+
+QA recipes and traps learned (add to the earlier lists):
+- Several scripts live in `%TEMP%/bevy-crossing-room-critters/higher-tiers-20261025` (`wipeqa.py`, `guideqa.py`, `introqa.py`, `tiers_qa.py`, `qa.py` ...) and `map-overlay-20261028` (door, wipe, hand-over and map drivers: `doors_qa.py`,
+  `wipe4.py`, `map3.py`, `items_one.py`). Copy `qa.py`, `tiers_qa.py`, `preview_qa.py`, `sales_qa.py` together; they import each other.
+- A new game's shirt comes from the savegame present at launch: write `player_cloth: 16` BEFORE launching or the guide sees the wrong shirt (job start/end talks go wrong).
+- After an F9 reload later door tests can silently fail; relaunch between door tests. A door E-press needs a short key tap and a 0.6 s wait before E (turning arc); walking-trigger doors (museum, police, shop) need
+  the walk itself. The player house door faces east: stand 0.2-0.4 east of `Player house door at` (stdout log) facing west.
+- Screenshots saved in a burst are written asynchronously: frames can land out of order in a contact sheet.
+- A system with `Query<&mut BackgroundColor>` twice needs `With`/`Without` filters or Bevy panics at runtime (cargo check does not catch it). Resources and states do not exist before the game state starts:
+  take them as `Option<Res<..>>` in always-running systems. A `RENDER_WORLD`-only mesh cannot be modified in the main world after its first frame (keep a main-world copy).
+- Do not pipe `launch.ps1` (hangs); start it with `(powershell -File launch.ps1 > launch.out 2>&1 &)` and poll BRP.
+
+Known gaps now: the player-to-guide give-back hand-over and the second letter / second axe jobs (they belong to the "recipient moved away" redirects, which need a villager leaving mid-job); the item models in the
+hand-overs are the disc's (uniform shirt texture and the map's own look not inspected); a villager's house door fade-out not driven; the museum's inner room doors still cut; the door sound plays before the fade;
+the fade length and hold are the PC port's reading (30 / 10 frames); the mark-index bias `HOUSE_UT_Z_BIAS` and `tier_height` of the town map were not compared with retail; the notice board has no slide in/out or page-turn
+animation and its paper does not roll while editing; the bridge picture (`pluss_bridge`) is never swapped (no built-bridge state); intro demo, visitor / foreign-town paths, lighthouse and island, parent retail/M4 and
+Philip's acceptance stay open. Candidate next tasks: the intro demo (arrival, name entry, house choice) now that its job and wipes exist; the notice/map animations; the remaining doors. Philip chooses the next task.
+
+## Claude continuation - 2026-10-28 (earlier the same day)
 
 Identity `claude`, branch `main`, everything below is committed and pushed (last commit: the map and wipe, then a one-line note fix);
 only `.gitignore` and `savegame.json` are untracked/modified and must NOT be committed. The workflow, gates and QA rules of the

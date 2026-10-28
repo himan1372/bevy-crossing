@@ -47,15 +47,20 @@ enum Phase {
     Black(f32),
     /// Fading back in, frames so far.
     In(f32),
-    /// The circle wipe opening on the new scene: the texture's scroll (`txt`), 548 closed.
-    Circle(f32),
+    /// A circle wipe: the texture's scroll (`txt`, 548 closed). Opening on the new scene, or
+    /// `closing` on the old one; `right` is `ef_wipe3_modelT` (`WIPE_TYPE_CIRCLE_RIGHT`).
+    Circle {
+        txt: f32,
+        closing: bool,
+        right: bool,
+    },
 }
 
 #[derive(Resource, Default)]
 pub(crate) struct SceneWipe {
     phase: Phase,
-    /// The next arrival opens as a circle (`Common_Get(transition).wipe_type`).
-    circle_next: bool,
+    /// The next arrival opens as a circle (`Common_Get(transition).wipe_type`): right or left.
+    circle_next: Option<bool>,
 }
 
 impl SceneWipe {
@@ -85,16 +90,32 @@ impl SceneWipe {
     /// The new scene starts black and fades in.
     fn arrive(&mut self) {
         info!("scene wipe: in");
-        self.phase = if std::mem::take(&mut self.circle_next) {
-            Phase::Circle(CIRCLE_SCROLL)
-        } else {
-            Phase::Black(0.0)
+        self.phase = match self.circle_next.take() {
+            Some(right) => Phase::Circle {
+                txt: CIRCLE_SCROLL,
+                closing: false,
+                right,
+            },
+            None => Phase::Black(0.0),
         };
     }
 
-    /// `WIPE_TYPE_CIRCLE_LEFT` for the scene about to load.
-    pub(crate) fn circle_next(&mut self) {
-        self.circle_next = true;
+    /// `WIPE_TYPE_CIRCLE_LEFT` (or `_RIGHT`) for the scene about to load.
+    pub(crate) fn circle_next(&mut self, right: bool) {
+        self.circle_next = Some(right);
+    }
+
+    /// The fade out as a closing circle (`fbdemo_triforce` with direction 1), once.
+    #[allow(dead_code)] // No scene change in the source leaves by a circle yet.
+    pub(crate) fn circle_out(&mut self, right: bool) {
+        if self.clear() {
+            info!("scene wipe: circle out");
+            self.phase = Phase::Circle {
+                txt: 0.0,
+                closing: true,
+                right,
+            };
+        }
     }
 
     fn alpha(&self) -> f32 {
@@ -103,7 +124,7 @@ impl SceneWipe {
             Phase::Out(f) => (f / FADE_FRAMES).min(1.0),
             Phase::Covered(_) | Phase::Black(_) => 1.0,
             // The circle's own geometry covers the picture.
-            Phase::Circle(_) => 0.0,
+            Phase::Circle { .. } => 0.0,
             Phase::In(f) => 1.0 - (f / FADE_FRAMES).min(1.0),
         }
     }
@@ -122,13 +143,32 @@ impl SceneWipe {
             Phase::In(f) if f + frames >= FADE_FRAMES => Phase::Clear,
             Phase::In(f) => Phase::In(f + frames),
             // `fbdemo_triforce_move`: it opens a little faster as it goes.
-            Phase::Circle(txt) => {
+            Phase::Circle {
+                txt,
+                closing,
+                right,
+            } => {
                 let t = 1.0 - txt / CIRCLE_SCROLL;
                 let step = 0.5 * (14.0 + 12.0 * t) * frames;
-                if txt - step <= 0.0 {
+                if closing {
+                    // Closed, the scene change follows.
+                    if txt + step >= CIRCLE_SCROLL {
+                        Phase::Covered(0.0)
+                    } else {
+                        Phase::Circle {
+                            txt: txt + step,
+                            closing,
+                            right,
+                        }
+                    }
+                } else if txt - step <= 0.0 {
                     Phase::Clear
                 } else {
-                    Phase::Circle(txt - step)
+                    Phase::Circle {
+                        txt: txt - step,
+                        closing,
+                        right,
+                    }
                 }
             }
         };
@@ -211,7 +251,7 @@ fn run(
     // The circle is a 4:3 picture: the sides of a wider window stay black until it has nearly
     // opened, then fade away.
     let side = match (wipe.phase, windows.single()) {
-        (Phase::Circle(txt), Ok(window)) => {
+        (Phase::Circle { txt, .. }, Ok(window)) => {
             let aspect = window.width() / window.height().max(1.0);
             let width = ((1.0 - (4.0 / 3.0) / aspect) / 2.0).max(0.0) * 100.0;
             Some((width, (txt / (CIRCLE_SCROLL * 0.35)).min(1.0)))
@@ -246,6 +286,8 @@ struct CircleState {
     parts: Vec<(Handle<Mesh>, Handle<N64Material>, f32, Vec<[f32; 2]>)>,
     camera: Option<Entity>,
     entity: Option<Entity>,
+    /// Which model the parts are (`ef_wipe3_modelT` when right).
+    right: bool,
 }
 
 /// `fbdemo_triforce_draw`: `ef_wipe2_modelT` (circle left) under a 60 degree perspective camera
@@ -260,7 +302,7 @@ fn circle(
     mut materials: ResMut<Assets<N64Material>>,
     mut images: ResMut<Assets<Image>>,
 ) {
-    let Phase::Circle(txt) = wipe.phase else {
+    let Phase::Circle { txt, right, .. } = wipe.phase else {
         if let Some(entity) = state.entity.take() {
             commands.entity(entity).despawn();
         }
@@ -270,8 +312,19 @@ fn circle(
         return;
     };
     let Some(disc) = disc else { return };
+    if state.right != right {
+        // The other side's model.
+        state.parts.clear();
+        state.right = right;
+        if let Some(entity) = state.entity.take() {
+            commands.entity(entity).despawn();
+        }
+    }
     if state.parts.is_empty() {
-        let Some(list) = disc.catalog.get("ef_wipe2_modelT") else {
+        let Some(list) = disc
+            .catalog
+            .get(["ef_wipe2_modelT", "ef_wipe3_modelT"][usize::from(right)])
+        else {
             return;
         };
         let sink = crate::disc_gfx::run_display_lists(&disc.rom, &[list.offset]);
