@@ -5,8 +5,8 @@
 //! `rustimal_logic::first_job`; this module is the talk flow.
 //!
 //! Jobs 1 (change clothes), 2 (plant flowers), 3 (deliver furniture), 4 (send a
-//! letter) and 11 (the open quest) are covered; the carpet, axe and notice jobs stop
-//! at their start.
+//! letter), 11 (the open quest), 5 (carpet), 6 (axe) and 7 (post a notice) are covered;
+//! the second letter, second axe and introductions jobs are not.
 
 use bevy::prelude::*;
 use rustimal_logic::first_job::{self as fj, Cond, FirstJob, Job, Picks};
@@ -126,7 +126,14 @@ pub(super) fn active(identity: &crate::save::PlayerIdentity) -> bool {
 fn handled(kind: Job) -> bool {
     matches!(
         kind,
-        Job::ChangeCloth | Job::PlantFlower | Job::DeliverFurniture | Job::SendLetter | Job::Open
+        Job::ChangeCloth
+            | Job::PlantFlower
+            | Job::DeliverFurniture
+            | Job::SendLetter
+            | Job::Open
+            | Job::DeliverCarpet
+            | Job::DeliverAxe
+            | Job::PostNotice
     )
 }
 
@@ -185,17 +192,26 @@ fn say_hello(
             slot: inventory.pockets.find_free_slot().unwrap_or(0),
             ..Picks::default()
         };
-        if matches!(kind, Job::DeliverFurniture | Job::SendLetter) {
-            // `aNRG2_stepup_j3` / `_j4`: an unused villager.
+        if matches!(
+            kind,
+            Job::DeliverFurniture | Job::SendLetter | Job::DeliverCarpet
+        ) {
+            // `aNRG2_stepup_j3` / `_j4` / `_j5`: an unused villager.
             picks.villager =
                 fj::pick_other_villager(&residents.ids, &job.used, &mut |n| rand.random(n));
         }
-        if kind == Job::DeliverFurniture {
-            // ... and a rolled piece of furniture.
+        if matches!(kind, Job::DeliverFurniture | Job::DeliverCarpet) {
+            // ... and a rolled piece of furniture (the walk-on ones excluded) or carpet.
+            let (goods, exclude) = if kind == Job::DeliverFurniture {
+                (
+                    crate::goods::Kind::Furniture,
+                    &fj::NO_DELIVERY_FURNITURE[..],
+                )
+            } else {
+                (crate::goods::Kind::Carpet, &[][..])
+            };
             picks.item =
-                crate::goods::furniture_for_delivery(&fj::NO_DELIVERY_FURNITURE, &mut |n| {
-                    rand.random(n as i32) as u32
-                })?;
+                crate::goods::delivery_item(goods, exclude, &mut |n| rand.random(n as i32) as u32)?;
         }
         let out = job.step_up(picks)?;
         if kind == Job::SendLetter {
@@ -305,9 +321,19 @@ pub(super) fn talk(
             Job::PlantFlower => 0x07F9,
             Job::DeliverFurniture => 0x0801,
             Job::SendLetter => 0x080B,
+            Job::DeliverCarpet => 0x0812,
+            Job::DeliverAxe => 0x0818,
+            Job::PostNotice => 0x081A,
             _ => 0x0830, // Job::Open
         };
         state.ask_again = false;
+        if kind == Job::PostNotice {
+            // `aNRG2_all_job_end_talk_proc`: the last job. The guide sends the player away and
+            // the job is over (`mEv_UnSetFirstJob`): the next day Nook greets them (HRATALK).
+            identity.events.unset_first_job();
+            identity.first_job = None;
+            return Some(Talk::said(vec![end]));
+        }
         let next = job.next_job(false)?;
         job.setup_job(next);
         return Some(with_hello(
@@ -334,6 +360,9 @@ pub(super) fn talk(
         }
         Job::PlantFlower => vec![0x07F8],
         Job::DeliverFurniture => vec![0x07FE],
+        Job::DeliverCarpet => vec![0x080F],
+        Job::DeliverAxe => vec![0x0815],
+        Job::PostNotice => vec![0x0819],
         // `aNRG2_setup_j4_cont`: asked again (0x0836) until the flag drops, else the paper talk.
         Job::SendLetter if state.ask_again => vec![0x0836],
         Job::SendLetter => vec![0x0807],
@@ -397,6 +426,53 @@ pub(crate) fn track(
     if next != *job {
         info!("first job progress {} -> {}", job.progress, next.progress);
         identity.first_job = Some(next);
+    }
+}
+
+/// `mNT_finish_notice_first_job` at the bulletin board: posting a notice finishes the notice job.
+///
+/// Stand-in: the notice editor and overlay (`m_notice_ovl.c`) are not built, so pressing
+/// the action button facing a bulletin board (items 0x0007 / 0x000B) while the job runs
+/// counts as having posted one.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn notice_board(
+    actions: Res<crate::input::Actions>,
+    focus: Res<crate::input::InputFocus>,
+    player: Query<(&Transform, &crate::interaction::Facing), With<crate::player::Player>>,
+    items: Option<Res<crate::field_items::FieldItems>>,
+    mut identity: ResMut<crate::save::PlayerIdentity>,
+    house: Res<State<crate::house::HouseState>>,
+    shop: Res<State<crate::shop::ShopLocation>>,
+) {
+    if !focus.is_world()
+        || *house.get() != crate::house::HouseState::Town
+        || *shop.get() != crate::shop::ShopLocation::Town
+        || !actions.just_pressed(crate::input::Action::Interact)
+    {
+        return;
+    }
+    let running = identity.events.first_job
+        && identity
+            .first_job
+            .as_ref()
+            .is_some_and(|j| j.job == Some(Job::PostNotice) && j.progress == 2);
+    let (Some(items), Ok((at, facing)), true) = (items, player.single(), running) else {
+        return;
+    };
+    let ahead = at.translation + facing.dir * 0.6;
+    let Some((ax, az, cx, cz)) = crate::town::Town::cell_indices_of(ahead) else {
+        return;
+    };
+    let item = items
+        .acres
+        .get(az * rustimal_logic::town_gen::ACRE_WIDTH + ax)
+        .map(|acre| acre[cz * 16 + cx]);
+    if matches!(item, Some(0x0007 | 0x000B)) {
+        if let Some(job) = identity.first_job.as_mut() {
+            job.finish();
+            info!("first job progress 2 -> 0 (notice posted)");
+            crate::sound::se(crate::sound::se_id::CHOICE_CONFIRM);
+        }
     }
 }
 

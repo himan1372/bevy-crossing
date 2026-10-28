@@ -354,14 +354,15 @@ const FLOWER_NUM: u32 = 9;
 pub(crate) const CANDY: ItemId = 0x2806;
 pub(crate) const GRAB_BAG: ItemId = 0x2E00;
 
-/// `mSP_SelectRandomItem_New(.., mSP_KIND_FURNITURE, mSP_LISTTYPE_ABC, ..)` for one piece of
-/// furniture other than `exclude` (the first job's delivery).
-pub(crate) fn furniture_for_delivery(
+/// `mSP_SelectRandomItem_New(.., kind, mSP_LISTTYPE_ABC, ..)` for one piece of `kind` other than
+/// `exclude` (the first job's furniture and carpet deliveries).
+pub(crate) fn delivery_item(
+    kind: Kind,
     exclude: &[ItemId],
     below: &mut dyn FnMut(u32) -> u32,
 ) -> Option<ItemId> {
     let roll = roll_now();
-    select_items(&roll, Kind::Furniture, 1, exclude, below, None)
+    select_items(&roll, kind, 1, exclude, below, None)
         .first()
         .copied()
 }
