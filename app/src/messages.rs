@@ -522,6 +522,11 @@ impl GameText {
         })
     }
 
+    /// Choice-bank (`select_data`) entry as plain text.
+    pub fn choice(&self, i: usize) -> Option<String> {
+        self.choices.get(i).map(plain)
+    }
+
     /// String-bank entry as plain text.
     pub fn string(&self, i: usize) -> Option<String> {
         self.strings.get(i).map(plain)

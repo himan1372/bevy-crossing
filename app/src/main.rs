@@ -22,6 +22,7 @@ mod environment;
 mod face;
 mod field_items;
 mod field_rank;
+mod first_job_talk;
 mod footsteps;
 mod furniture;
 mod game_disc;
@@ -141,6 +142,7 @@ fn main() {
         .add_plugins(ShopPlugin)
         .add_plugins(shop_display::ShopDisplayPlugin)
         .add_plugins(shop_nook::ShopNookPlugin)
+        .add_plugins(first_job_talk::FirstJobTalkPlugin)
         .add_plugins(field_items::FieldItemsPlugin)
         .add_plugins(critters::CrittersPlugin)
         .add_plugins(sound::SoundPlugin)

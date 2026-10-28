@@ -526,3 +526,4 @@ Source (concept): https://pokeacer.xyz/wii/pdf/OS.pdf (Nintendo SDK OS manual,
 2026-10-28 claude: guide-stage-1 complete: Nook is the job's guide (job 1 change clothes and the start of job 2), shop goods locked (0x081C), uniform tracking. Jobs 3+, hand-over visual and plant check not done.
 2026-10-28 claude: guide-stage-2-finish complete: the plant job finishes when no plant item is left; end talk moves the chain to Introductions (met_everyone still false). Stage 3 (delivery jobs) not built.
 2026-10-28 claude: first-job-villager-picks complete: job 3 starts (resident picked, furniture rolled and given with the quest condition, 0x07FB). Villager side of the delivery, map hand-over not built.
+2026-10-28 claude: first-job-delivery complete: villagers' job greeting (3 answers), Delivery! with the errand's personality messages, errand finished, item kept. Pockets hand-over UI/visuals, letter/carpet/axe jobs, map hand-over not done.

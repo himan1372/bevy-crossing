@@ -26,6 +26,30 @@ pub const USED_VILLAGERS: usize = 2;
 /// `FTR_START(FTR_TAK_HOLE01)` and `FTR_START(FTR_KON_MAT)`: the furniture the delivery never rolls
 /// (`ng_list` of `aNRG2_stepup_j3`).
 pub const NO_DELIVERY_FURNITURE: [u16; 2] = [0x1444, 0x154C];
+/// The message and choice-string numbers of a villager's job greeting
+/// (`aQMgr_talk_fj_select_talk`, `aQMgr_talk_fj_hint_or_*`); the greeting and the hint add the
+/// villager's `looks * 2`.
+pub struct JobGreeting {
+    /// The question: "So, you must have had some reason for coming to see me...".
+    pub greeting: usize,
+    /// "Oh. All right, ...": the answer to the third choice.
+    pub hint: usize,
+    /// Choice "Delivery!" (select bank).
+    pub delivery: usize,
+    /// Choice "Any tips?".
+    pub tips: usize,
+    /// The first of five "Uh, sorry..." choices (`0x16A + RANDOM(5)`).
+    pub sorry: usize,
+}
+
+pub const FIRST_JOB_GREETING: JobGreeting = JobGreeting {
+    greeting: 0x02A6,
+    hint: 0x254A,
+    delivery: 0x68,
+    tips: 0x2F,
+    sorry: 0x16A,
+};
+
 /// `FTR_START(FTR_NOG_FAN01)`, shown while the furniture job is offered.
 pub const FAN: u16 = 0x1088;
 

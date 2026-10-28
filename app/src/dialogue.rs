@@ -439,7 +439,7 @@ fn on_talk(
 /// What the game fills into a villager's message: names, their
 /// catchphrase (`npc_def_list[id].catchphrase_str_idx` in the string bank),
 /// the topic's item, and the date and time.
-fn disc_message_context(
+pub(crate) fn disc_message_context(
     disc: &crate::game_disc::GameDisc,
     villager: &Villager,
     item: Option<&str>,
