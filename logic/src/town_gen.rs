@@ -30,6 +30,7 @@
 //! are semantic selectors; no acre artwork or authored byte tables are
 //! reproduced.
 
+use crate::qrand::Qrand;
 use std::slice;
 
 pub const ACRE_WIDTH: usize = 5;
@@ -633,17 +634,17 @@ pub struct TownAssessment {
     pub trash_outside_dump: u16,
 }
 
+/// The town seed drives its own `qrand` stream, so a seed always yields the same town.
 #[derive(Clone, Copy)]
-struct Rng(u32);
+struct Rng(Qrand);
 
 impl Rng {
     fn new(seed: u32) -> Self {
-        Self(seed)
+        Self(Qrand::new(seed))
     }
 
     fn fraction(&mut self) -> f32 {
-        self.0 = self.0.wrapping_mul(0x0019_660D).wrapping_add(0x3C6E_F35F);
-        f32::from_bits((self.0 >> 9) | 0x3F80_0000) - 1.0
+        self.0.fqrand()
     }
 
     fn below(&mut self, bound: usize) -> usize {
@@ -1607,7 +1608,12 @@ mod tests {
     fn random_state_uses_the_source_lcg_constants() {
         let mut rng = Rng::new(0);
         let fraction = rng.fraction();
-        assert_eq!(rng.0, 0x3C6E_F35F);
+        assert_eq!(
+            rng.0.qrand(),
+            0x3C6E_F35Fu32
+                .wrapping_mul(0x0019_660D)
+                .wrapping_add(0x3C6E_F35F)
+        );
         assert_eq!(
             fraction,
             f32::from_bits(0x3F80_0000 | (0x3C6E_F35F >> 9)) - 1.0
