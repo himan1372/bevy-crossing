@@ -1431,7 +1431,6 @@ pub struct ShopPlugin;
 impl Plugin for ShopPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ShopRoom>()
-            .init_resource::<crate::game_rand::GameRand>()
             .init_resource::<ShopObstacles>()
             .init_resource::<layout::Layout>()
             .add_sub_state::<ShopLocation>()

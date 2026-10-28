@@ -1,5 +1,6 @@
 //! Saved Stalk Market and the existing world's Sunday-growth adapter.
 use super::*;
+use rustimal_logic::qrand::Qrand;
 use rustimal_logic::{game_time as gt, turnips};
 use serde::{Deserialize, Serialize};
 
@@ -67,16 +68,14 @@ impl Market {
         let elapsed = i64::from(delta) * 86400 + i64::from(now.day_secs);
         let same_sunday = valid && today == self.week;
         if !valid || same_sunday || !(-7 * 86400..7 * 86400).contains(&elapsed) {
-            let mut state = u64::from(seed)
+            // The week's prices come from the town seed and the date, so they
+            // stay the same across a reload: their own `qrand` stream.
+            let mix = u64::from(seed)
                 ^ (now.day_number as u64).wrapping_mul(0x9E3779B97F4A7C15)
                 ^ u64::from(now.day_secs)
                 ^ 0xA0761D6478BD642F;
-            let mut random = || {
-                state ^= state << 13;
-                state ^= state >> 7;
-                state ^= state << 17;
-                ((state >> 40) as u32) as f32 / 16777216.0
-            };
+            let mut stream = Qrand::new((mix ^ (mix >> 32)) as u32);
+            let mut random = || stream.fqrand();
             let (trend, prices) = turnips::schedule(
                 self.trend,
                 same_sunday.then_some(self.prices[0]),

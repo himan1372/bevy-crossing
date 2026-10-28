@@ -126,6 +126,7 @@ fn main() {
             N64MaterialPlugin,
             DiscTownPlugin,
         ))
+        .init_resource::<game_rand::GameRand>()
         .add_plugins(SavePlugin)
         .add_plugins(dev_overlay::DevOverlayPlugin)
         .add_plugins(TownPlugin)

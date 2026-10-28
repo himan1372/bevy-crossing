@@ -515,3 +515,4 @@ Source (concept): https://pokeacer.xyz/wii/pdf/OS.pdf (Nintendo SDK OS manual,
 2026-10-28 claude: shop-handover-frames complete: sale-day balloon present frames eyeballed (present appears, shrinks as put away, no stuck frames); Nook's arm poses hidden by the shop camera. No code change.
 2026-10-28 claude: shop-bargain-rng-kernel complete: logic/src/qrand.rs (libc64 qrand/fqrand/RANDOM) + app GameRand; the bargain sale hour and offer stock draw from it instead of local adapters. Temp-verified sale hours; stock draw not read back.
 2026-10-28 claude: town-gen-qrand complete: town_gen's private LCG replaced by logic::qrand::Qrand (same stream, per-seed). Next local generators: roster, face, turnips, grab_bag, raffle.
+2026-10-28 claude: gamerand-adopters complete: grab bag, raffle draw/ball and face blinks use GameRand; roster, turnip week and raffle lineup use per-seed Qrand streams. Wired and run (no panics); grab bag/raffle/blink motion not driven.

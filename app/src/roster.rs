@@ -6,6 +6,7 @@
 //! town keeps the same villagers; the game saves its list instead.
 
 use disc::RomSource;
+use rustimal_logic::qrand::Qrand;
 
 use crate::game_disc::GameDisc;
 
@@ -55,7 +56,7 @@ impl VillagerTables {
 
     /// The starting villagers for a town seeded with `seed`.
     pub fn starters(&self, seed: u32) -> Vec<RosterEntry> {
-        let mut rng = Rng(seed.wrapping_mul(0x2545_F491) | 1);
+        let mut rng = Rng::new(seed.wrapping_mul(0x2545_F491) | 1);
         let order = rand_table(NPC_NUM, NPC_NUM, &mut rng);
         let mut seen = 0u8;
         let mut out = Vec::with_capacity(PERSONALITIES);
@@ -147,7 +148,7 @@ impl TownRoster {
             self.last_grow_day = Some(day);
             return None;
         };
-        let mut rng = Rng((seed ^ (day as u32).wrapping_mul(0x9E37_79B9)) | 1);
+        let mut rng = Rng::new((seed ^ (day as u32).wrapping_mul(0x9E37_79B9)) | 1);
         let met_all = self.residents.iter().all(|r| self.met.contains(&r.index));
         if day <= last || !met_all {
             return None;
@@ -253,7 +254,7 @@ pub fn home_spot_order(count: usize, seed: u32) -> Vec<usize> {
     if count == 0 {
         return Vec::new();
     }
-    let mut rng = Rng(seed.wrapping_mul(0x85EB_CA6B) | 1);
+    let mut rng = Rng::new(seed.wrapping_mul(0x85EB_CA6B) | 1);
     rand_table(count, 30, &mut rng)
 }
 
@@ -268,16 +269,18 @@ fn decode_name(raw: &[u8]) -> String {
         .to_string()
 }
 
-/// xorshift standing in for `fqrand()`.
-struct Rng(u32);
+/// `fqrand()` on a stream derived from the town seed (and day), so a town's
+/// residents and move-in picks do not reroll when the save is reloaded.
+struct Rng(Qrand);
 
 impl Rng {
+    fn new(seed: u32) -> Self {
+        Self(Qrand::new(seed))
+    }
+
     /// Uniform in [0, 1).
     fn next(&mut self) -> f32 {
-        self.0 ^= self.0 << 13;
-        self.0 ^= self.0 >> 17;
-        self.0 ^= self.0 << 5;
-        (self.0 >> 8) as f32 / (1u32 << 24) as f32
+        self.0.fqrand()
     }
 }
 

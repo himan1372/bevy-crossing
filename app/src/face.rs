@@ -14,6 +14,7 @@
 //!   talking the mouth runs one of three open/close sequences.
 
 use bevy::prelude::*;
+use rustimal_logic::qrand::Qrand;
 
 use crate::dialogue::DialogueState;
 use crate::n64_material::N64Material;
@@ -52,7 +53,6 @@ pub struct Face {
     player_timer: f32,
     player_blinks: u32,
     shown: (u8, u8),
-    rng: u32,
 }
 
 impl Face {
@@ -67,16 +67,7 @@ impl Face {
             player_blinks: 0,
             shown: (u8::MAX, u8::MAX),
             // Any non-zero seed; differ per character so blinks don't sync.
-            rng: owner.index_u32().wrapping_mul(0x9E37_79B9) | 1,
         }
-    }
-
-    /// `fqrand()`: uniform in [0, 1).
-    fn rand(&mut self) -> f32 {
-        self.rng ^= self.rng << 13;
-        self.rng ^= self.rng >> 17;
-        self.rng ^= self.rng << 5;
-        (self.rng >> 8) as f32 / (1u32 << 24) as f32
     }
 }
 
@@ -148,9 +139,9 @@ impl Sequence {
     }
 }
 
-fn step_villager_eyes(face: &mut Face, frames: f32) {
+fn step_villager_eyes(face: &mut Face, frames: f32, rng: &mut Qrand) {
     if !face.eye.running {
-        let loops = 1 + (face.rand() * 3.0) as u8;
+        let loops = 1 + (rng.fqrand() * 3.0) as u8;
         face.eye.start(EYE_BLINK, EYE_SEQ_COUNT, None, loops);
         return;
     }
@@ -158,8 +149,8 @@ fn step_villager_eyes(face: &mut Face, frames: f32) {
         let loops = face.eye.loops.saturating_sub(1);
         if loops == 0 {
             // Done blinking: eyes open for 32-48 ticks.
-            let wait = 32.0 + (face.rand() * 16.0).floor();
-            let loops = 1 + (face.rand() * 3.0) as u8;
+            let wait = 32.0 + (rng.fqrand() * 16.0).floor();
+            let loops = 1 + (rng.fqrand() * 3.0) as u8;
             face.eye.start(EYE_BLINK, EYE_SEQ_COUNT, Some(wait), loops);
         } else {
             face.eye.start(EYE_BLINK, EYE_SEQ_COUNT, None, loops);
@@ -167,34 +158,34 @@ fn step_villager_eyes(face: &mut Face, frames: f32) {
     }
 }
 
-fn step_mouth(face: &mut Face, talking: bool, frames: f32) {
+fn step_mouth(face: &mut Face, talking: bool, frames: f32, rng: &mut Qrand) {
     if !talking {
         face.mouth.running = false;
         face.mouth.pattern = 0;
         return;
     }
-    let pick = |face: &mut Face| MOUTH_MOVES[((face.rand() * 3.0) as usize).min(2)];
+    let pick = |rng: &mut Qrand| MOUTH_MOVES[((rng.fqrand() * 3.0) as usize).min(2)];
     if !face.mouth.running {
-        let (table, count) = pick(face);
+        let (table, count) = pick(rng);
         face.mouth.start(table, count, Some(0.0), 1);
         return;
     }
     if face.mouth.step(frames) {
         // `aNPC_tex_anm_ctrl_rnd_seq_mouth`: next sequence straight away.
-        let (table, count) = pick(face);
-        let loops = 1 + (face.rand() * 3.0) as u8;
+        let (table, count) = pick(rng);
+        let loops = 1 + (rng.fqrand() * 3.0) as u8;
         face.mouth.start(table, count, Some(0.0), loops);
     }
 }
 
-fn step_player_eyes(face: &mut Face, frames: f32) -> u8 {
+fn step_player_eyes(face: &mut Face, frames: f32, rng: &mut Qrand) -> u8 {
     if face.player_timer > 0.0 {
         face.player_timer = (face.player_timer - frames).max(0.0);
     }
     if face.player_timer <= 0.0 {
         if face.player_blinks == 0 {
-            face.player_blinks = (face.rand() * 3.0) as u32;
-            face.player_timer = 60.0 + (face.rand() * 120.0).floor();
+            face.player_blinks = (rng.fqrand() * 3.0) as u32;
+            face.player_timer = 60.0 + (rng.fqrand() * 120.0).floor();
         } else {
             face.player_timer = 16.0;
             face.player_blinks -= 1;
@@ -210,18 +201,20 @@ fn animate_faces(
     dialogue: Res<DialogueState>,
     mut faces: Query<&mut Face>,
     mut materials: ResMut<Assets<N64Material>>,
+    mut rand: ResMut<crate::game_rand::GameRand>,
 ) {
     let frames = time.delta_secs() * 60.0;
+    let rng = &mut rand.0;
     for mut face in &mut faces {
         let eye = match face.kind {
-            FaceKind::Player => step_player_eyes(&mut face, frames),
+            FaceKind::Player => step_player_eyes(&mut face, frames, rng),
             FaceKind::Villager => {
-                step_villager_eyes(&mut face, frames);
+                step_villager_eyes(&mut face, frames, rng);
                 face.eye.pattern
             }
         };
         let talking = dialogue.active && dialogue.speaker == Some(face.owner);
-        step_mouth(&mut face, talking, frames);
+        step_mouth(&mut face, talking, frames, rng);
         let shown = (eye, face.mouth.pattern);
         if shown == face.shown {
             continue;

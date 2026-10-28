@@ -13,7 +13,11 @@ pub(super) enum Refusal {
 }
 
 impl Opening {
-    pub(super) fn start(inventory: &mut PlayerInventory, slot: usize) -> Result<Self, Refusal> {
+    pub(super) fn start(
+        inventory: &mut PlayerInventory,
+        slot: usize,
+        rand: &mut rustimal_logic::qrand::Qrand,
+    ) -> Result<Self, Refusal> {
         let free: Vec<usize> = inventory
             .pockets
             .pockets
@@ -28,16 +32,8 @@ impl Opening {
         {
             return Err(Refusal::Unavailable);
         }
-        let mut state = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(1, |d| d.as_nanos() as u64)
-            | 1;
-        let mut below = |n: u32| {
-            state ^= state << 13;
-            state ^= state >> 7;
-            state ^= state << 17;
-            (state % u64::from(n.max(1))) as u32
-        };
+        // `RANDOM(n)` on the shared `qrand` state.
+        let mut below = |n: u32| rand.random(n.max(1) as i32) as u32;
         let items = crate::goods::grab_bag_contents(&mut below).ok_or(Refusal::Unavailable)?;
         let mut staged = inventory.pockets.clone();
         staged.pockets[slot] = 0;

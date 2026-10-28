@@ -19,6 +19,7 @@
 //! the ball (`act_fukutama`) rolls out.
 use bevy::prelude::*;
 use rustimal_logic::furniture::FurnitureSize;
+use rustimal_logic::qrand::Qrand;
 use rustimal_logic::special_delivery as sd;
 
 use crate::dialogue::DialogueState;
@@ -83,22 +84,16 @@ struct DrumClock {
 }
 
 /// mSP_MakeLotteryList, once a month.
-pub(crate) fn lineup(mut catalog: ResMut<crate::catalog::Catalog>, mut seed: Local<u32>) {
+pub(crate) fn lineup(mut catalog: ResMut<crate::catalog::Catalog>) {
     let month = crate::clock::now().month;
     if catalog.lottery_month == month
         || crate::goods::list(crate::goods::Kind::Furniture, 5).is_empty()
     {
         return;
     }
-    if *seed == 0 {
-        *seed = 0x2F6B_7A11 ^ u32::from(month);
-    }
-    let mut rand = |n: usize| {
-        *seed ^= *seed << 13;
-        *seed ^= *seed >> 17;
-        *seed ^= *seed << 5;
-        *seed as usize % n.max(1)
-    };
+    // The month fixes the lineup, so it keeps its own stream rather than the global one.
+    let mut stream = Qrand::new(0x2F6B_7A11 ^ u32::from(month));
+    let mut rand = |n: usize| stream.random(n.max(1) as i32) as usize;
     let list = crate::goods::list(crate::goods::Kind::Furniture, 5);
     let unheld: Vec<u16> = list
         .iter()
@@ -214,7 +209,7 @@ fn talk(
     mut inventory: ResMut<PlayerInventory>,
     mut catalog: ResMut<crate::catalog::Catalog>,
     identity: Res<crate::save::PlayerIdentity>,
-    mut seed: Local<u32>,
+    mut rand: ResMut<crate::game_rand::GameRand>,
 ) {
     let Some(disc) = disc.filter(|d| d.text.is_some()) else {
         clock.ticks = None;
@@ -243,16 +238,10 @@ fn talk(
     let draw = |raffle: &mut Raffle,
                 inventory: &mut PlayerInventory,
                 catalog: &crate::catalog::Catalog,
-                seed: &mut u32| {
+                rand: &mut Qrand| {
         // fukubiki_before_process.
         take_tickets(inventory, month);
-        if *seed == 0 {
-            *seed = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0x5EED, |d| d.subsec_nanos() | 1);
-        }
-        *seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12_345);
-        let roll = sd::lottery_roll(((*seed >> 16) % 100) as u8) as usize;
+        let roll = sd::lottery_roll(rand.random(100) as u8) as usize;
         raffle.result = if roll < 3 && !sd::prize_available(catalog.lottery[roll]) {
             3
         } else {
@@ -321,7 +310,7 @@ fn talk(
             // aSHM_talk_try / aSHM_talk_retry.
             (Step::Ask, 0) if has_tickets(&inventory, month) => {
                 say(&disc, &mut dialogue, actor, 0x10D4, &ctx);
-                draw(&mut raffle, &mut inventory, &catalog, &mut seed);
+                draw(&mut raffle, &mut inventory, &catalog, &mut rand.0);
                 clock.ticks = Some(0);
                 clock.ball_type = raffle.result.min(3) as u8;
             }
@@ -473,24 +462,19 @@ impl Default for BallSim {
     }
 }
 
-fn rand_unit(seed: &mut u32) -> f32 {
-    *seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
-    (*seed >> 8) as f32 / 16_777_216.0
-}
-
 /// `aGRBL_make` then one 60 Hz step of `aGRBL_move`.
-fn ball_make(sim: &mut BallSim, seed: &mut u32) {
+fn ball_make(sim: &mut BallSim, rand: &mut Qrand) {
     let src = DRUM_GAME;
     sim.pos = src + Vec3::new(10.0, 10.0, 0.0);
     sim.on_ground = false;
     sim.old_on_ground = false;
     sim.hit_wall = false;
-    sim.vel_y = -0.15 - rand_unit(seed) * 0.1;
+    sim.vel_y = -0.15 - rand.fqrand() * 0.1;
     sim.acc_y = -0.15;
     sim.max_vel_y = -1.0;
-    sim.vel_xz = 0.225 + rand_unit(seed) * 0.1;
+    sim.vel_xz = 0.225 + rand.fqrand() * 0.1;
     let span = 22.5_f32.to_radians();
-    sim.angle = std::f32::consts::FRAC_PI_2 + rand_unit(seed) * span - span * 0.5;
+    sim.angle = std::f32::consts::FRAC_PI_2 + rand.fqrand() * span - span * 0.5;
     sim.status = 1;
 }
 
@@ -611,7 +595,7 @@ fn present(
     clock: Res<DrumClock>,
     mut frames: Local<Vec<Vec<(Handle<Mesh>, Handle<N64Material>)>>>,
     mut sim: Local<BallSim>,
-    mut seed: Local<u32>,
+    mut rand: ResMut<crate::game_rand::GameRand>,
     mut drum_made: Local<bool>,
     mut ball_made: Local<bool>,
     mut rigs: Query<(Entity, &mut crate::disc_rig::DiscRig, &mut DrumRoot)>,
@@ -715,10 +699,7 @@ fn present(
     }
     let ticks = clock.ticks.unwrap_or(BALL_TICK);
     if !sim.made {
-        if *seed == 0 {
-            *seed = 0x6A09_E667;
-        }
-        ball_make(&mut sim, &mut seed);
+        ball_make(&mut sim, &mut rand.0);
         sim.simulated = BALL_TICK;
         sim.made = true;
         sim.shown = None;

@@ -289,6 +289,7 @@ pub(crate) fn pockets_input(
     time: Res<Time>,
     disc: Option<Res<crate::game_disc::GameDisc>>,
     mut warning: ResMut<crate::warning_panel::WarningPanel>,
+    mut rand: ResMut<crate::game_rand::GameRand>,
 ) {
     if ui.open && (ui.bag_warning || warning.is_open()) {
         // The retail warning panel: closed by A, B or Start, then the
@@ -510,7 +511,7 @@ pub(crate) fn pockets_input(
                     crate::sound::se(crate::sound::se_id::MENU_EXIT);
                     return;
                 }
-                match grab_bag::Opening::start(&mut inventory, slot) {
+                match grab_bag::Opening::start(&mut inventory, slot, &mut rand.0) {
                     Ok(opening) => ui.opening = Some(opening),
                     Err(grab_bag::Refusal::Capacity) => {
                         warning.open(&rustimal_logic::warning::HUKUBUKURO_OPEN);
