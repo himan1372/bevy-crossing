@@ -205,7 +205,7 @@ fn update(
     }
     if warning.has_choice() {
         // `mWR_set_frame_dl`: the cursor model beside the selected answer.
-        let cursor = state.skin.window(
+        let cursor = state.skin.solid(
             &disc,
             "warning-cursor",
             &["att_win_mode", "att_win_cursor_model"],

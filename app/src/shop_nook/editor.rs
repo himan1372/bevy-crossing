@@ -123,6 +123,22 @@ impl Skin {
         segment8: Option<&str>,
         assets: &mut Stores,
     ) -> Model {
+        self.model_with(true, disc, key, names, prim, segment8, assets)
+    }
+
+    /// `blend` false draws the lists opaque, as an opaque render mode does regardless of the
+    /// combiner's alpha (the warning panel's cursor outputs alpha 0).
+    #[allow(clippy::too_many_arguments)]
+    fn model_with(
+        &mut self,
+        blend: bool,
+        disc: &GameDisc,
+        key: String,
+        names: &[&str],
+        prim: [u8; 4],
+        segment8: Option<&str>,
+        assets: &mut Stores,
+    ) -> Model {
         if let Some(model) = self.models.get(&key) {
             return model.clone();
         }
@@ -141,11 +157,19 @@ impl Skin {
             disc,
             &sink,
             None,
-            true,
+            blend,
             &segments,
             PX,
             (&mut *assets.meshes, &mut *assets.n64, &mut *assets.images),
         );
+        if !blend {
+            // An opaque render mode keeps pixels whatever the combiner's alpha is.
+            for (_, handle) in &model {
+                if let Some(mut material) = assets.n64.get_mut(handle) {
+                    material.combiner.flags |= crate::n64_material::FLAG_OPAQUE;
+                }
+            }
+        }
         self.models.insert(key, model.clone());
         model
     }
@@ -160,6 +184,26 @@ impl Skin {
         assets: &mut Stores,
     ) -> Model {
         self.model(disc, format!("window|{key}"), names, prim, None, assets)
+    }
+
+    /// Opaque lists (an opaque render mode): the warning panel's cursor.
+    pub(crate) fn solid(
+        &mut self,
+        disc: &GameDisc,
+        key: &str,
+        names: &[&str],
+        prim: [u8; 4],
+        assets: &mut Stores,
+    ) -> Model {
+        self.model_with(
+            false,
+            disc,
+            format!("solid|{key}"),
+            names,
+            prim,
+            None,
+            assets,
+        )
     }
 
     /// A cached model with the plain draw state of the editor (`kai_sousa_mode`).
