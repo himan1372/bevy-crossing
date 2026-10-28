@@ -23,6 +23,29 @@ pub const CARPET00: u16 = 0x2600;
 
 /// `mQst_ERRAND_FIRST_JOB_ANIMAL_NUM`.
 pub const USED_VILLAGERS: usize = 2;
+/// `FTR_START(FTR_TAK_HOLE01)` and `FTR_START(FTR_KON_MAT)`: the furniture the delivery never rolls
+/// (`ng_list` of `aNRG2_stepup_j3`).
+pub const NO_DELIVERY_FURNITURE: [u16; 2] = [0x1444, 0x154C];
+/// `FTR_START(FTR_NOG_FAN01)`, shown while the furniture job is offered.
+pub const FAN: u16 = 0x1088;
+
+/// `mNpc_GetOtherAnimalPersonalID`: a resident not yet used for this job, chosen uniformly
+/// (`RANDOM(n)` over those left). `None` when everyone has been used.
+pub fn pick_other_villager(
+    residents: &[u16],
+    used: &[Option<u16>],
+    random: &mut dyn FnMut(i32) -> i32,
+) -> Option<u16> {
+    let left: Vec<u16> = residents
+        .iter()
+        .copied()
+        .filter(|r| !used.contains(&Some(*r)))
+        .collect();
+    if left.is_empty() {
+        return None;
+    }
+    left.get(random(left.len() as i32).max(0) as usize).copied()
+}
 
 /// The eleven jobs, in `mQst_ERRAND_FIRSTJOB_CHANGE_CLOTH..OPEN` order (the
 /// guide's `aNRG2_JOB1..JOB11`).
@@ -60,8 +83,6 @@ pub const JOBS: [Job; 11] = [
 pub enum Display {
     None,
     Item(u16),
-    /// `FTR_START(FTR_NOG_FAN01)`: the fan stands in for the furniture job.
-    FurnitureFan,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -108,7 +129,7 @@ impl Job {
         match self {
             Job::ChangeCloth => Display::Item(WORK_UNIFORM),
             Job::PlantFlower => Display::Item(WHITE_PANSY_BAG),
-            Job::DeliverFurniture => Display::FurnitureFan,
+            Job::DeliverFurniture => Display::Item(FAN),
             Job::SendLetter | Job::SendLetter2 => Display::Item(PAPER55),
             Job::DeliverCarpet => Display::Item(CARPET00),
             Job::DeliverAxe | Job::DeliverAxe2 => Display::Item(AXE),
@@ -453,6 +474,19 @@ mod tests {
         fj.step_up(Picks::default());
         fj.check_hello(true);
         assert!(fj.finished());
+    }
+
+    #[test]
+    fn the_picker_skips_used_villagers_and_ends_when_all_are_used() {
+        let residents = [4, 8, 15, 16];
+        let used = [Some(8), None];
+        let mut seen = std::collections::BTreeSet::new();
+        for roll in 0..3 {
+            seen.insert(pick_other_villager(&residents, &used, &mut |n| roll.min(n - 1)).unwrap());
+        }
+        assert_eq!(seen, [4, 15, 16].into_iter().collect());
+        assert_eq!(pick_other_villager(&[8], &used, &mut |_| 0), None);
+        assert_eq!(pick_other_villager(&[], &[None, None], &mut |_| 0), None);
     }
 
     #[test]

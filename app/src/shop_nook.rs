@@ -498,6 +498,7 @@ pub(crate) fn interact(
         look,
         mut rand,
         mut guide_state,
+        roster,
     ): (
         Option<ResMut<crate::home::PlayerHouse>>,
         Local<Option<f32>>,
@@ -511,6 +512,7 @@ pub(crate) fn interact(
         Res<crate::character::PlayerLook>,
         ResMut<crate::game_rand::GameRand>,
         ResMut<guide::GuideState>,
+        Option<Res<crate::roster::TownRoster>>,
     ),
 ) {
     let Some(disc) = disc.filter(|d| d.text.is_some()) else {
@@ -769,7 +771,15 @@ pub(crate) fn interact(
         if guide::active(&identity) {
             // `aNRG2_think_init_proc`: the guide stands in for the shop master during the job.
             let first = !std::mem::replace(&mut guide_state.greeted, true);
-            let talk = guide::arrival(&mut identity, &mut inventory, &look, &mut rand.0, first);
+            let residents = guide::residents(roster.as_deref());
+            let talk = guide::arrival(
+                &mut identity,
+                &mut inventory,
+                &look,
+                &residents,
+                &mut rand.0,
+                first,
+            );
             if let Some(talk) = talk {
                 flow.context = context(&identity, false);
                 *focus = InputFocus::Dialogue;
@@ -1505,7 +1515,14 @@ pub(crate) fn interact(
         }
         actions.consume(Action::Interact);
         if guide::active(&identity) {
-            if let Some(talk) = guide::talk(&mut identity, &mut inventory, &look, &mut rand.0) {
+            let residents = guide::residents(roster.as_deref());
+            if let Some(talk) = guide::talk(
+                &mut identity,
+                &mut inventory,
+                &look,
+                &residents,
+                &mut rand.0,
+            ) {
                 *focus = InputFocus::Dialogue;
                 start_guide(&disc, &mut dialogue, actor, &mut flow, talk.chain);
                 return;

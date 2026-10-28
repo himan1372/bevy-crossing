@@ -23,6 +23,13 @@ pub(super) struct Talk {
     pub chain: Vec<usize>,
 }
 
+/// The residents by villager-table index (`Save_Get(animals)` order).
+pub(super) fn residents(roster: Option<&crate::roster::TownRoster>) -> Vec<u16> {
+    roster.map_or_else(Vec::new, |r| {
+        r.residents.iter().map(|e| e.index as u16).collect()
+    })
+}
+
 /// Whether the guide runs the shop: the job is on and its first two jobs are in play.
 pub(super) fn active(identity: &crate::save::PlayerIdentity) -> bool {
     identity.events.first_job
@@ -66,17 +73,30 @@ fn grant(
 fn say_hello(
     job: &mut FirstJob,
     inventory: &mut PlayerInventory,
+    residents: &[u16],
     rand: &mut rustimal_logic::qrand::Qrand,
 ) -> Option<usize> {
     if job.progress != 1 {
         return None;
     }
     let kind = job.job?;
-    if kind.index() > Job::PlantFlower.index() {
+    if kind.index() > Job::DeliverFurniture.index() {
         return None;
     }
     if kind.can_start(free_slots(inventory)) {
-        job.step_up(Picks::default())?;
+        let mut picks = Picks {
+            slot: inventory.pockets.find_free_slot().unwrap_or(0),
+            ..Picks::default()
+        };
+        if kind == Job::DeliverFurniture {
+            // `aNRG2_stepup_j3`: an unused villager and a rolled piece of furniture.
+            picks.villager = fj::pick_other_villager(residents, &job.used, &mut |n| rand.random(n));
+            picks.item =
+                crate::goods::furniture_for_delivery(&fj::NO_DELIVERY_FURNITURE, &mut |n| {
+                    rand.random(n as i32) as u32
+                })?;
+        }
+        job.step_up(picks)?;
         grant(kind, job.item, inventory, rand);
         Some(kind.start_message())
     } else {
@@ -90,6 +110,7 @@ pub(super) fn arrival(
     identity: &mut crate::save::PlayerIdentity,
     inventory: &mut PlayerInventory,
     look: &crate::character::PlayerLook,
+    residents: &[u16],
     rand: &mut rustimal_logic::qrand::Qrand,
     first_visit: bool,
 ) -> Option<Talk> {
@@ -116,7 +137,7 @@ pub(super) fn arrival(
     } else {
         chain.push(0x07EF);
     }
-    chain.extend(say_hello(job, inventory, rand));
+    chain.extend(say_hello(job, inventory, residents, rand));
     Some(Talk { chain })
 }
 
@@ -126,6 +147,7 @@ pub(super) fn talk(
     identity: &mut crate::save::PlayerIdentity,
     inventory: &mut PlayerInventory,
     look: &crate::character::PlayerLook,
+    residents: &[u16],
     rand: &mut rustimal_logic::qrand::Qrand,
 ) -> Option<Talk> {
     let job = identity.first_job.get_or_insert_with(FirstJob::start);
@@ -141,7 +163,7 @@ pub(super) fn talk(
     }
     // `aNRG2_talk_start_wait` / `aNRG2_job_start_wait`.
     if job.progress == 1 {
-        let chain = say_hello(job, inventory, rand)
+        let chain = say_hello(job, inventory, residents, rand)
             .or_else(|| kind.refuse_message())
             .into_iter()
             .collect();
@@ -149,11 +171,11 @@ pub(super) fn talk(
     }
     if job.finished() {
         // The job_end talks (J1_END 0x07F4, J2_END 0x07F9), then the next job.
-        let end = [0x07F4, 0x07F9][kind.index()];
+        let end = [0x07F4, 0x07F9, 0x0801][kind.index()];
         let mut chain = vec![end];
         let next = job.next_job(false)?;
         job.setup_job(next);
-        chain.extend(say_hello(job, inventory, rand));
+        chain.extend(say_hello(job, inventory, residents, rand));
         return Some(Talk { chain });
     }
     // The job is running: `aNRG2_setup_j1_cont` / `_j2_cont`.
@@ -169,7 +191,8 @@ pub(super) fn talk(
                 vec![0x081F]
             }
         }
-        _ => vec![0x07F8],
+        Job::PlantFlower => vec![0x07F8],
+        _ => vec![0x07FE],
     };
     Some(Talk { chain })
 }

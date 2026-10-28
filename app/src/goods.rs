@@ -354,6 +354,18 @@ const FLOWER_NUM: u32 = 9;
 pub(crate) const CANDY: ItemId = 0x2806;
 pub(crate) const GRAB_BAG: ItemId = 0x2E00;
 
+/// `mSP_SelectRandomItem_New(.., mSP_KIND_FURNITURE, mSP_LISTTYPE_ABC, ..)` for one piece of
+/// furniture other than `exclude` (the first job's delivery).
+pub(crate) fn furniture_for_delivery(
+    exclude: &[ItemId],
+    below: &mut dyn FnMut(u32) -> u32,
+) -> Option<ItemId> {
+    let roll = roll_now();
+    select_items(&roll, Kind::Furniture, 1, exclude, below, None)
+        .first()
+        .copied()
+}
+
 /// init_sp_bargain: first uncollected rare->uncommon->common, then rare goods.
 pub(crate) fn bargain_stock(
     kind: u8,
