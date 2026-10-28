@@ -57,6 +57,7 @@ pub mod field_assessment;
 mod field_gen;
 pub mod field_items;
 pub mod footsteps;
+pub mod personal_events;
 pub mod qrand;
 pub mod random_field;
 mod random_field_tables;

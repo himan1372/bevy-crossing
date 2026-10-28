@@ -464,7 +464,7 @@ pub(crate) fn interact(
     mut inventory: ResMut<PlayerInventory>,
     mut shop: ResMut<ShopData>,
     mut catalog_ui: ResMut<crate::catalog_screen::CatalogUi>,
-    identity: Res<crate::save::PlayerIdentity>,
+    mut identity: ResMut<crate::save::PlayerIdentity>,
     layout: Res<crate::shop::layout::Layout>,
     (
         mut home,
@@ -736,9 +736,28 @@ pub(crate) fn interact(
     let was = *since;
     *since += time.delta_secs();
     if !layout.upper && was < ARRIVAL && *since >= ARRIVAL && matches!(flow.step, Step::Idle) {
-        // `aNSC_start_wait`: the wait type picks the talk. A pending sale-day balloon comes
-        // first and replaces the other talks (`aNSC_MSG_BALLOON`, `_DEPART`); then the house
-        // talk, then the sale or ordinary greeting.
+        // `aNSC_start_wait`: the wait type picks the talk. The day after the part-time job
+        // (HRATALK) comes first, clearing its flag as the talk starts (message -1, then the
+        // approach walk); a pending sale-day balloon next and it replaces the other talks
+        // (`aNSC_MSG_BALLOON`, `_DEPART`); then the house talk, then the sale or ordinary
+        // greeting.
+        if identity.events.take_hra_talk() {
+            flow.context = context(&identity, false);
+            *focus = InputFocus::Dialogue;
+            twins.house_walk = true;
+            house_say(
+                &disc,
+                &mut dialogue,
+                actor,
+                &mut flow,
+                rustimal_logic::personal_events::HRATALK_MESSAGE,
+                0,
+            );
+            if let Ok((_, _, mut loco)) = player.single_mut() {
+                *loco = crate::locomotion::Locomotion::default();
+            }
+            return;
+        }
         if shop.sale_view
             && shop.events.offer.as_ref().is_some_and(|o| !o.balloon)
             && inventory.pockets.pockets.contains(&0)

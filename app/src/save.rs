@@ -44,13 +44,50 @@ pub(crate) struct PlayerIdentity {
     /// `player_ID.player_id` (0xF000 | 0..252); 0 until assigned.
     #[serde(default)]
     pub id: u16,
+    /// The part-time-job event flags of this player (`m_event.c`).
+    #[serde(default, with = "personal_events_serde")]
+    pub events: rustimal_logic::personal_events::PersonalEvents,
+    /// Day number of the last daily renewal of those flags.
+    #[serde(default)]
+    pub events_day: i64,
 }
+
+/// `PersonalEvents` as three booleans, since the logic crate has no serde.
+mod personal_events_serde {
+    use rustimal_logic::personal_events::PersonalEvents;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S: Serializer>(ev: &PersonalEvents, s: S) -> Result<S::Ok, S::Error> {
+        (ev.first_job, ev.hra_wait, ev.hra_talk).serialize(s)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<PersonalEvents, D::Error> {
+        let (first_job, hra_wait, hra_talk) = <(bool, bool, bool)>::deserialize(d)?;
+        Ok(PersonalEvents {
+            first_job,
+            hra_wait,
+            hra_talk,
+        })
+    }
+}
+
+/// `mEv_RenewalDataEveryDay`: once per calendar day.
+fn renew_personal_events(mut identity: ResMut<PlayerIdentity>) {
+    let today = crate::clock::now().day_number;
+    if identity.events_day != today {
+        identity.events_day = today;
+        identity.events.renew_daily();
+    }
+}
+
 impl Default for PlayerIdentity {
     fn default() -> Self {
         Self {
             player: "phi".into(),
             town: "woponese".into(),
             id: 0,
+            events: Default::default(),
+            events_day: 0,
         }
     }
 }
@@ -782,6 +819,7 @@ impl Plugin for SavePlugin {
                 (
                     tick_playtime,
                     assign_player_id,
+                    renew_personal_events,
                     quick_save,
                     quick_load.in_set(LoadSet),
                     tick_notification,
