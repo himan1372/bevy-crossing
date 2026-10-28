@@ -50,6 +50,59 @@ pub(crate) struct PlayerIdentity {
     /// Day number of the last daily renewal of those flags.
     #[serde(default)]
     pub events_day: i64,
+    /// The part-time job's errand (`mQst_GetFirstJobData`); absent until the job starts.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "first_job_serde"
+    )]
+    pub first_job: Option<rustimal_logic::first_job::FirstJob>,
+}
+
+/// `FirstJob` as a plain record, since the logic crate has no serde.
+mod first_job_serde {
+    use rustimal_logic::first_job::{FirstJob, Job};
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    #[derive(Serialize, Deserialize)]
+    struct Record {
+        job: Option<u8>,
+        progress: u8,
+        recipient: Option<u16>,
+        used: [Option<u16>; 2],
+        used_num: u8,
+        item: u16,
+        pockets_idx: usize,
+        wrong_cloth: bool,
+    }
+
+    pub fn serialize<S: Serializer>(job: &Option<FirstJob>, s: S) -> Result<S::Ok, S::Error> {
+        job.as_ref()
+            .map(|j| Record {
+                job: j.job.map(|k| k.index() as u8),
+                progress: j.progress,
+                recipient: j.recipient,
+                used: j.used,
+                used_num: j.used_num,
+                item: j.item,
+                pockets_idx: j.pockets_idx,
+                wrong_cloth: j.wrong_cloth,
+            })
+            .serialize(s)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<FirstJob>, D::Error> {
+        Ok(Option::<Record>::deserialize(d)?.map(|r| FirstJob {
+            job: r.job.and_then(|i| Job::from_index(usize::from(i))),
+            progress: r.progress,
+            recipient: r.recipient,
+            used: r.used,
+            used_num: r.used_num.min(2),
+            item: r.item,
+            pockets_idx: r.pockets_idx,
+            wrong_cloth: r.wrong_cloth,
+        }))
+    }
 }
 
 /// `PersonalEvents` as three booleans, since the logic crate has no serde.
@@ -88,6 +141,7 @@ impl Default for PlayerIdentity {
             id: 0,
             events: Default::default(),
             events_day: 0,
+            first_job: None,
         }
     }
 }

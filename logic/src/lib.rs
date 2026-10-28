@@ -56,6 +56,7 @@ pub use fg_data::{parse_fg_records, FgRecord};
 pub mod field_assessment;
 mod field_gen;
 pub mod field_items;
+pub mod first_job;
 pub mod footsteps;
 pub mod personal_events;
 pub mod qrand;
