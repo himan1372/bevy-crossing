@@ -38,13 +38,16 @@ const MAP_ORIGIN: Vec2 = Vec2::new(11.7, 45.7);
 const BUILDING_COLOR: [u8; 4] = [120, 95, 205, 255];
 const RESIDENT_COLOR: [u8; 4] = [255, 75, 40, 255];
 const FREE_COLOR: [u8; 4] = [165, 145, 140, 255];
-/// `mMP_set_dl`'s town name colour when the map is opened with X (`data0 == 1`).
-const LAND_COLOR: [u8; 4] = [60, 60, 255, 255];
 /// Retail repeat of a held direction (`mSM_make_trigger_data`).
 const REPEAT_FIRST: f32 = 25.0;
 const REPEAT_NEXT: f32 = 3.0;
-/// The window's colour list (`kan_win_color1_mode_p`) for a map opened with X.
-const COLOR_LIST: &str = "kan_win_color1_mode";
+/// The window's colour list for a map opened with X (`data0 == 1`) and from a map board
+/// (`data0 == 0`, `mMP_set_base_dl`).
+const COLOR_LIST: [&str; 2] = ["kan_win_color0_mode", "kan_win_color1_mode"];
+/// The town name's colour by `data0` (`mMP_set_dl`'s `land_color`).
+const LAND_COLORS: [[u8; 4]; 2] = [[255, 0, 255, 255], [60, 60, 255, 255]];
+/// Map signboards (`MAP_BOARD0` / `MAP_BOARD1`).
+const MAP_BOARDS: [u16; 2] = [0x000C, 0x000D];
 
 #[derive(Resource, Default)]
 pub(crate) struct MapUi {
@@ -123,6 +126,9 @@ impl Slide {
 
 /// What the open map holds.
 struct View {
+    /// Opened at a map signboard (`data0 == 0`) rather than with X: another colour, and X does
+    /// not close it.
+    board: bool,
     cursor: Cursor,
     slide: Slide,
     /// The block type behind each acre picture (`mMP_set_map_texture_pal`).
@@ -323,6 +329,24 @@ fn labels_for(
 /// the unit in front of the house).
 const HOUSE_UT_Z_BIAS: u8 = 1;
 
+/// Facing a map signboard (field items 0x000C / 0x000D).
+fn facing_map_board(
+    player: &Query<(&Transform, &crate::interaction::Facing), With<Player>>,
+    items: Option<&crate::field_items::FieldItems>,
+) -> bool {
+    let (Some(items), Ok((at, facing))) = (items, player.single()) else {
+        return false;
+    };
+    let ahead = at.translation + facing.dir * 0.6;
+    let Some((ax, az, cx, cz)) = Town::cell_indices_of(ahead) else {
+        return false;
+    };
+    items
+        .acres
+        .get(az * ACRE_WIDTH + ax)
+        .is_some_and(|acre| MAP_BOARDS.contains(&acre[cz * 16 + cx]))
+}
+
 #[allow(clippy::too_many_arguments)]
 fn input(
     mut ui: ResMut<MapUi>,
@@ -336,12 +360,15 @@ fn input(
     state: Res<State<crate::shop::ShopLocation>>,
     house: Res<State<crate::house::HouseState>>,
     villagers: Query<&crate::npc::Villager>,
-    player: Query<&Transform, With<Player>>,
+    player: Query<(&Transform, &crate::interaction::Facing), With<Player>>,
+    items: Option<Res<crate::field_items::FieldItems>>,
+    tool: Res<crate::ecology::EquippedTool>,
     mut panel: Query<&mut Visibility, With<MapPanel>>,
     mut text: Query<&mut Text, With<MapText>>,
 ) {
     let ticks = time.delta_secs() * 60.0;
     let mut plain = false;
+    let mut from_board = false;
     if ui.open {
         if let Some(view) = ui.view.as_mut() {
             let mut closed = false;
@@ -370,7 +397,9 @@ fn input(
                         Action::Advance,
                         Action::Interact,
                     ] {
-                        closing |= actions.consume(action);
+                        let pressed = actions.consume(action);
+                        // `mMP_move_Play`: X closes it only when X opened it.
+                        closing |= pressed && (action != Action::Map || !view.board);
                     }
                     if closing {
                         view.slide.closing = true;
@@ -438,16 +467,28 @@ fn input(
             plain = true;
         }
     } else if focus.is_world()
-        && identity.map_flag
         && *state.get() == crate::shop::ShopLocation::Town
         && *house.get() == crate::house::HouseState::Town
-        && actions.consume(Action::Map)
+        && {
+            // `mSM_submenu_ctrl`: X with the map in hand, or the action button facing a map
+            // signboard (which needs no map).
+            let board = *tool == crate::ecology::EquippedTool::None
+                && actions.just_pressed(Action::Interact)
+                && facing_map_board(&player, items.as_deref());
+            if board {
+                actions.consume(Action::Interact);
+                from_board = true;
+                true
+            } else {
+                identity.map_flag && actions.consume(Action::Map)
+            }
+        }
     {
         ui.open = true;
         let here = player
             .single()
             .ok()
-            .and_then(|t| Town::cell_indices_of(t.translation))
+            .and_then(|(t, _)| Town::cell_indices_of(t.translation))
             .map(|(ax, az, _, _)| (ax, az));
         let overlay = disc
             .as_deref()
@@ -461,6 +502,7 @@ fn input(
             blocks.copy_from_slice(&retail.field.blocks);
             let pictures = map::acre_block_types(&blocks, None, &tables.plus_bridge);
             ui.view = Some(View {
+                board: from_board,
                 cursor: Cursor::new(ax, az),
                 slide: Slide::new(),
                 pictures,
@@ -492,6 +534,8 @@ fn input(
 struct Drawn {
     models: HashMap<String, Model>,
     font_material: Option<Handle<StandardMaterial>>,
+    /// Which of [`COLOR_LIST`] the cached models were built with.
+    color: usize,
     tables: Option<Arc<Tables>>,
     root: Option<Entity>,
     body: Option<Entity>,
@@ -512,6 +556,7 @@ fn rel_segment(disc: &GameDisc, at: u32, len: usize) -> Arc<[u8]> {
 fn build(
     disc: &GameDisc,
     names: &[&str],
+    color: &str,
     waku: &str,
     segments: &Segments,
     prim: [u8; 4],
@@ -527,7 +572,7 @@ fn build(
         .collect();
     // `mMP_set_base_dl` puts the window's colour list in segment B, `mMP_set_win_dl` the label
     // area's list in segment A.
-    let dl_segments: Vec<(u8, u32)> = [(0xB, COLOR_LIST), (0xA, waku)]
+    let dl_segments: Vec<(u8, u32)> = [(0xB, color), (0xA, waku)]
         .into_iter()
         .filter_map(|(seg, name)| Some((seg, disc.catalog.get(name)?.offset)))
         .collect();
@@ -585,6 +630,7 @@ fn at(x: f32, y: f32, z: f32) -> Vec3 {
 fn cached(
     drawn: &mut Drawn,
     disc: &GameDisc,
+    color: usize,
     gpu: (
         &mut Assets<Mesh>,
         &mut Assets<N64Material>,
@@ -599,7 +645,7 @@ fn cached(
     drawn
         .models
         .entry(name)
-        .or_insert_with(|| build(disc, names, waku, &segments, prim, gpu))
+        .or_insert_with(|| build(disc, names, COLOR_LIST[color], waku, &segments, prim, gpu))
         .clone()
 }
 
@@ -656,6 +702,12 @@ fn draw(
         }
         return;
     };
+    let color = usize::from(!view.board);
+    if drawn.color != color {
+        drawn.color = color;
+        drawn.models.clear();
+        drawn.key = None;
+    }
     let tables = drawn
         .tables
         .get_or_insert_with(|| Arc::new(read_tables(&disc).expect("read when the map opened")))
@@ -679,6 +731,7 @@ fn draw(
         let model = build(
             &disc,
             &["kan_win_mode", "kan_win_cursorT_model"],
+            COLOR_LIST[1],
             "",
             &Segments::default(),
             [255, 0, 255, 255],
@@ -756,6 +809,7 @@ fn draw(
             cached(
                 &mut drawn,
                 &disc,
+                color,
                 (&mut meshes, &mut n64, &mut images),
                 $name,
                 $names,
@@ -940,7 +994,7 @@ fn draw(
         text!(
             &identity.town,
             Vec2::new(-136.0 + 24.0 + 160.0, 120.0 - (102.0 - 29.0)),
-            LAND_COLOR,
+            LAND_COLORS[color],
             Vec2::ONE,
         );
     } else {
@@ -960,7 +1014,7 @@ fn draw(
             &identity.town,
             Vec2::new(-136.0 + 24.0 + 160.0, 120.0 - (102.0 - 29.0)),
             &font.widths,
-            LAND_COLOR,
+            LAND_COLORS[color],
             usize::MAX,
         ) {
             let mesh = meshes.add(mesh);
