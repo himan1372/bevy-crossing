@@ -523,3 +523,4 @@ Source (concept): https://pokeacer.xyz/wii/pdf/OS.pdf (Nintendo SDK OS manual,
 2026-10-28 claude: first-job-progress-checks complete: quest-manager finish rules (cloth, seed, letter, hello) in logic/src/first_job.rs. Slice 2 (guide NPC + stage 1) blocked on: wearing shirts from pockets, demo-order codes in messages, arbitrary item hand-over.
 2026-10-28 claude: wear-shirt complete: carry a shirt onto the player in the pockets to wear it (saved, world model follows). Portrait/animation and non-shirt drops not done. Next: demo-order markers in messages.
 2026-10-28 claude: message-order-markers complete: SET_DEMO_ORDER codes kept as page markers, DemoOrders resource set as the text reaches them. Next: the guide flow for stage 1.
+2026-10-28 claude: guide-stage-1 complete: Nook is the job's guide (job 1 change clothes and the start of job 2), shop goods locked (0x081C), uniform tracking. Jobs 3+, hand-over visual and plant check not done.

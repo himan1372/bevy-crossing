@@ -14,6 +14,7 @@ use crate::shop_display::ShopDisplay;
 use crate::states::GameplaySet;
 
 pub(crate) mod editor;
+pub(crate) mod guide;
 pub(crate) mod handover;
 pub(crate) mod password;
 pub(crate) mod preview;
@@ -61,6 +62,8 @@ pub(crate) enum Goodbye {
 enum Step {
     #[default]
     Idle,
+    /// The part-time job's guide is speaking; the rest of his messages follow in order.
+    Guide(Vec<usize>),
     Request,
     Other,
     BargainWelcome,
@@ -283,6 +286,22 @@ fn house_say(
     };
 }
 
+/// The guide's messages, one after the other.
+fn start_guide(
+    disc: &GameDisc,
+    dialogue: &mut DialogueState,
+    actor: Entity,
+    flow: &mut Conversation,
+    mut chain: Vec<usize>,
+) {
+    if chain.is_empty() {
+        return;
+    }
+    let first = chain.remove(0);
+    say_abs(disc, dialogue, actor, &flow.context, first);
+    flow.step = Step::Guide(chain);
+}
+
 fn context(identity: &crate::save::PlayerIdentity, upper: bool) -> ShopContext {
     let now = crate::clock::now();
     ShopContext {
@@ -476,6 +495,9 @@ pub(crate) fn interact(
         mut password,
         mut handover,
         mut twins,
+        look,
+        mut rand,
+        mut guide_state,
     ): (
         Option<ResMut<crate::home::PlayerHouse>>,
         Local<Option<f32>>,
@@ -486,6 +508,9 @@ pub(crate) fn interact(
         ResMut<password::PasswordUi>,
         ResMut<handover::HandOver>,
         ResMut<Twins>,
+        Res<crate::character::PlayerLook>,
+        ResMut<crate::game_rand::GameRand>,
+        ResMut<guide::GuideState>,
     ),
 ) {
     let Some(disc) = disc.filter(|d| d.text.is_some()) else {
@@ -741,6 +766,20 @@ pub(crate) fn interact(
         // approach walk); a pending sale-day balloon next and it replaces the other talks
         // (`aNSC_MSG_BALLOON`, `_DEPART`); then the house talk, then the sale or ordinary
         // greeting.
+        if guide::active(&identity) {
+            // `aNRG2_think_init_proc`: the guide stands in for the shop master during the job.
+            let first = !std::mem::replace(&mut guide_state.greeted, true);
+            let talk = guide::arrival(&mut identity, &mut inventory, &look, &mut rand.0, first);
+            if let Some(talk) = talk {
+                flow.context = context(&identity, false);
+                *focus = InputFocus::Dialogue;
+                if let Ok((_, _, mut loco)) = player.single_mut() {
+                    *loco = crate::locomotion::Locomotion::default();
+                }
+                start_guide(&disc, &mut dialogue, actor, &mut flow, talk.chain);
+            }
+            return;
+        }
         if identity.events.take_hra_talk() {
             flow.context = context(&identity, false);
             *focus = InputFocus::Dialogue;
@@ -924,6 +963,16 @@ pub(crate) fn interact(
         *focus = InputFocus::Dialogue;
         let step = std::mem::take(&mut flow.step);
         match step {
+            Step::Guide(mut rest) => {
+                if rest.is_empty() {
+                    *dialogue = DialogueState::default();
+                    *focus = InputFocus::World;
+                } else {
+                    let next = rest.remove(0);
+                    say_abs(&disc, &mut dialogue, actor, &flow.context, next);
+                    flow.step = Step::Guide(rest);
+                }
+            }
             Step::Goodbye => {
                 twins.goodbye = Goodbye::Done;
                 *dialogue = DialogueState::default();
@@ -1416,6 +1465,18 @@ pub(crate) fn interact(
             return;
         };
         actions.consume(Action::Interact);
+        if guide::active(&identity) {
+            // `aNRG2_goods_talk_request`: the goods are out of reach during the job.
+            *focus = InputFocus::Dialogue;
+            start_guide(
+                &disc,
+                &mut dialogue,
+                actor,
+                &mut flow,
+                vec![guide::GOODS_MESSAGE],
+            );
+            return;
+        }
         if stock.sold {
             return;
         }
@@ -1443,6 +1504,13 @@ pub(crate) fn interact(
             return;
         }
         actions.consume(Action::Interact);
+        if guide::active(&identity) {
+            if let Some(talk) = guide::talk(&mut identity, &mut inventory, &look, &mut rand.0) {
+                *focus = InputFocus::Dialogue;
+                start_guide(&disc, &mut dialogue, actor, &mut flow, talk.chain);
+                return;
+            }
+        }
         *focus = InputFocus::Dialogue;
         if shop.sale_view && layout.tier == 3 && !layout.upper {
             say(&disc, &mut dialogue, actor, &flow.context, 17);
@@ -1815,6 +1883,8 @@ impl Plugin for ShopNookPlugin {
             .init_resource::<handover::HandOver>()
             .init_resource::<preview::Preview>()
             .init_resource::<editor::CaretClock>()
+            .init_resource::<guide::GuideState>()
+            .add_systems(Update, guide::track.in_set(GameplaySet))
             .add_systems(PostUpdate, editor::pulse)
             .init_resource::<preview::Mannequin>()
             .init_resource::<preview::effects::Effects>()
