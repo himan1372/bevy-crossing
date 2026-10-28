@@ -38,6 +38,8 @@ pub struct DialogueState {
     pub choice: usize,
     /// The talk window is still typing the page out: E waits.
     pub revealing: bool,
+    /// `mDemo_Set_talk_window_color`: a window colour other than the villagers' default.
+    pub(crate) window_color: Option<[u8; 4]>,
     /// Actor controllers own these choices and commit their own transactions.
     pub(crate) external_name: Option<&'static str>,
     /// The special NPC's `npc_draw_data_tbl` index and `l_sp_actor_name`

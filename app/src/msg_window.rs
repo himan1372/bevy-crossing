@@ -85,6 +85,8 @@ pub(crate) struct MsgAssets {
     /// `mFont_GetCodeWidth(c, TRUE)`.
     pub(crate) widths: [u8; 256],
     window: Model,
+    /// The window in the part-time job's cheer colour (`mDemo_Set_talk_window_color`).
+    window_cheer: Model,
     /// Name plate per `PLATE_COLORS` entry.
     plates: [Model; 3],
     pub(crate) choice_body: Model,
@@ -180,6 +182,7 @@ fn setup(
         )
     };
     let window = build(init.offset, body.offset, WINDOW_COLOR);
+    let window_cheer = build(init.offset, body.offset, [185, 245, 80, 255]);
     let plates = PLATE_COLORS.map(|(bg, _)| build(init.offset, plate.offset, bg));
     // con_sentaku2_modelT sets its own prim (255, 255, 155).
     let choice_body = build(choice_init.offset, choice.offset, [255; 4]);
@@ -200,6 +203,7 @@ fn setup(
         font,
         widths,
         window,
+        window_cheer,
         plates,
         choice_body,
         choice_bounds,
@@ -627,7 +631,11 @@ fn draw_window(
             ));
         }
     };
-    model(&mut commands, &assets.window, window_at, 0.0);
+    let body = match dialogue.window_color {
+        Some([185, 245, 80, _]) => &assets.window_cheer,
+        _ => &assets.window,
+    };
+    model(&mut commands, body, window_at, 0.0);
     // Text and marks: a mesh in screen space, `image` tinted `color`.
     let mut put = |commands: &mut Commands,
                    mesh: Option<Mesh>,

@@ -16,8 +16,12 @@ use crate::states::GameplaySet;
 
 /// `BGM_INTRO_CHORES_COMPLETE` in `audio_defs.h`.
 const FANFARE: u8 = 73;
-/// How long the fanfare is held over the town music (the sequence's own length is not read).
-const FANFARE_SECONDS: f32 = 14.0;
+/// The fanfare loops until the message is read (`Player_actor_settle_main_Complete_payment`
+/// withdraws it; sequence 232 never ends by itself): this only bounds a message left open for an
+/// hour.
+const FANFARE_SECONDS: f32 = 3600.0;
+/// `mDemo_Set_talk_window_color` in `Player_actor_Complete_payment_demo_ct`.
+const WINDOW_COLOR: [u8; 4] = [185, 245, 80, 255];
 /// `Player_actor_MessageControl_Complete_payment`: the message waits 42 frames.
 const MESSAGE_FRAMES: f32 = 42.0;
 const MORPH: f32 = 8.0;
@@ -102,6 +106,7 @@ fn cheer(
             };
             let (pages, _) = text.talk(0x17B6, &ctx, &mut |_| 0);
             dialogue.begin_special(entity, "", (0, 0), pages, None);
+            dialogue.window_color = Some(WINDOW_COLOR);
             *focus = InputFocus::Dialogue;
             payment.stage = Stage::Talking;
             info!("complete payment: message 0x17b6");
