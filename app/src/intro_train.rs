@@ -194,6 +194,49 @@ fn name_text(bytes: &[u8; 8]) -> String {
         .collect()
 }
 
+/// `rom_train_in_modelT` is two translucent parts, the window glass (`rom_train_glass_tex`, aqua) and the
+/// ceiling lamps' glow (`rom_train_light_tex`). Drawn the way the room draws them the glass is a pale
+/// aqua sheet that washes the scenery out to white, which the retail windows are not, so only the lamps'
+/// glow is drawn.
+fn spawn_ceiling_lights(
+    commands: &mut Commands,
+    disc: &GameDisc,
+    (meshes, materials, images): (
+        &mut Assets<Mesh>,
+        &mut Assets<N64Material>,
+        &mut Assets<Image>,
+    ),
+) {
+    let Some(list) = disc.catalog.get("rom_train_in_modelT") else {
+        return;
+    };
+    let mut sink = crate::disc_gfx::run_ground_lists(&disc.rom, &[list.offset]);
+    if sink.parts.len() > 1 {
+        sink.parts.remove(0);
+    }
+    // As `IndoorRoom::build`: the room's 16x ground units, its floor tier at model height 640.
+    let scale = crate::town::CELL_SIZE / 16.0 / UNIT;
+    let root = commands
+        .spawn((
+            Name::new("train lamp glow"),
+            Transform::from_translation(TRAIN_ORIGIN - Vec3::Y * 640.0 * scale)
+                .with_scale(Vec3::splat(scale)),
+            Visibility::default(),
+        ))
+        .id();
+    for (mesh, material) in crate::disc_town::sink_meshes_scaled(
+        disc,
+        &sink,
+        None,
+        true,
+        &crate::disc_gfx::Segments::default(),
+        1.0,
+        (meshes, materials, images),
+    ) {
+        commands.spawn((Mesh3d(mesh), MeshMaterial3d(material), ChildOf(root)));
+    }
+}
+
 /// `TRAIN_DOOR` in the train layouts (`fgdata` 0xC9 / 0xCA): unit (3, 2).
 const DOOR_AT: Vec2 = Vec2::new(140.0, 100.0);
 
@@ -272,6 +315,37 @@ fn spawn_scenery(
             segments.set_segment(10, bytes.into());
         }
     }
+    // `aTrainWindow_SetLightPrimColorDetail`: the scenery is tinted by the room's ambient plus the sun's
+    // colour for the time of day, with the alpha and LOD fraction the draw sets for each list.
+    let secs = now.day_secs;
+    let light = crate::environment::LightTable::from_disc(disc).map(|table| table.at(secs));
+    let tint = |offset: [f32; 3], alpha: f32| -> [u8; 4] {
+        let base = light.map_or([255.0; 3], |l| {
+            [0, 1, 2].map(|i| l.ambient[i] + l.sun_color[i])
+        });
+        let c = |i: usize| (base[i] + offset[i]).clamp(0.0, 255.0) as u8;
+        [c(0), c(1), c(2), alpha.clamp(0.0, 255.0) as u8]
+    };
+    // `aTW_GetNowAlpha` and `lod_factor`: the scenery fades with the daylight.
+    let day = f32::from(secs > 14_400 && secs < 72_000);
+    let xlu = if (14_400..72_000).contains(&secs) {
+        if secs < 43_200 {
+            255.0 * (secs - 14_400) as f32 / 28_800.0
+        } else {
+            255.0 * (1.0 - (secs - 43_200) as f32 / 28_800.0)
+        }
+    } else if secs < 14_400 {
+        200.0 * (1.0 - (0.5 + secs as f32 / 28_800.0))
+    } else {
+        200.0 * ((secs - 72_000) as f32 / 28_800.0)
+    };
+    let glass_lod = if day == 0.0 {
+        0.0
+    } else if secs >= 43_200 {
+        160.0 - 160.0 * (secs - 43_200) as f32 / 28_800.0
+    } else {
+        160.0 * (secs - 14_400) as f32 / 28_800.0
+    };
     let root = commands
         .spawn((
             Name::new("train window scenery"),
@@ -279,26 +353,47 @@ fn spawn_scenery(
             Visibility::default(),
         ))
         .id();
-    // The opaque lists, then the translucent ones (`NOW_POLY_OPA_DISP` / `NOW_POLY_XLU_DISP`).
-    for (names, blend) in [
+    // The opaque lists, then the translucent ones (`NOW_POLY_OPA_DISP` / `NOW_POLY_XLU_DISP`), each with
+    // the colour, alpha and LOD fraction `Train_Window_Actor_draw` sets before it.
+    let lists: [(&str, bool, [u8; 4], u8); 5] = [
         (
-            &["rom_train_out_tunnel_model", "rom_train_out_bgsky_model"][..],
+            "rom_train_out_tunnel_model",
             false,
+            tint([0.0; 3], 255.0),
+            43,
         ),
         (
-            &[
-                "rom_train_out_bgcloud_modelT",
-                "rom_train_out_bgtree_modelT",
-                "rom_train_out_shineglass_modelT",
-            ][..],
-            true,
+            "rom_train_out_bgsky_model",
+            false,
+            tint([0.0; 3], 255.0),
+            127,
         ),
-    ] {
-        for name in names {
+        (
+            "rom_train_out_bgcloud_modelT",
+            true,
+            tint([0.0; 3], xlu),
+            127,
+        ),
+        (
+            "rom_train_out_bgtree_modelT",
+            true,
+            tint([-80.0, -70.0, -160.0], xlu),
+            27,
+        ),
+        (
+            "rom_train_out_shineglass_modelT",
+            true,
+            tint([0.0; 3], xlu),
+            glass_lod as u8,
+        ),
+    ];
+    for (name, blend, prim, lod) in lists {
+        {
             let Some(list) = disc.catalog.get(name) else {
                 continue;
             };
-            let sink = crate::disc_gfx::run_display_lists(&disc.rom, &[list.offset]);
+            let sink =
+                crate::disc_gfx::run_display_lists_with_prim(&disc.rom, &[list.offset], prim, lod);
             for (mesh, material) in crate::disc_town::sink_meshes_scaled(
                 disc,
                 &sink,
@@ -308,6 +403,24 @@ fn spawn_scenery(
                 1.0,
                 (&mut *meshes, &mut *materials, &mut *images),
             ) {
+                // The scene has no distance fog (the town's would wash the backdrop out to white).
+                if let Some(mut m) = materials.get_mut(&material) {
+                    m.combiner.flags &= !crate::n64_material::FLAG_FOG;
+                }
+                if name.contains("bgsky") {
+                    // The sky texture runs blue, lilac, yellow, cream, then a dark horizon. Through the
+                    // low camera's windows the cream and the dark band took over, so only the part down
+                    // to the yellow is stretched over the backdrop: blue at the top, yellow below.
+                    if let Some(mut sky) = meshes.get_mut(&mesh) {
+                        if let Some(bevy::mesh::VertexAttributeValues::Float32x2(uvs)) =
+                            sky.attribute_mut(Mesh::ATTRIBUTE_UV_0)
+                        {
+                            for uv in uvs.iter_mut() {
+                                uv[1] *= 0.58;
+                            }
+                        }
+                    }
+                }
                 let uvs = meshes
                     .get(&mesh)
                     .and_then(|m| match m.attribute(Mesh::ATTRIBUTE_UV_0) {
@@ -361,13 +474,18 @@ fn build_room(
         &disc,
         "train room",
         TRAIN_ORIGIN,
-        ("rom_train_in_model", Some("rom_train_in_modelT")),
+        ("rom_train_in_model", None),
         (&mut meshes, &mut materials, &mut images),
     );
     if room.room.is_none() {
         warn!("train room missing from the disc");
         return;
     }
+    spawn_ceiling_lights(
+        &mut commands,
+        &disc,
+        (&mut meshes, &mut materials, &mut images),
+    );
     spawn_scenery(
         &mut commands,
         &disc,

@@ -15,3 +15,10 @@ Philip: "ok finish slice 2" (2026-10-29).
 - The clock window's looping hand sound (`sAdo_SysLevStart(0xA)`), the window scenery's tunnel scroll and time-of-day shading, the sit-down message lock, Rover's eyes in his own clips (the same `ClipEyes` now applies to
   them, not looked at), the camera pass over the phone call (Rover is behind the near bench), echo sound while in the tunnel (`sAdo_TrgSeEcho`).
 - The scene's end hands over to slice 3: the player gets off the train in town.
+
+## Follow-up (2026-10-29, Philip: "the windows blue to white, it should be blue to yellow" and "rovers mouth doesn't stop moving")
+- The sky: the retail sky texture is blue, lilac, yellow, cream. What washed it to white was the room's own translucent window glass (`rom_train_in_modelT`, an aqua sheet): the room now
+  draws only the ceiling lamps' glow from that model (`spawn_ceiling_lights`), the scenery's materials have no distance fog (the town's fog would wash the backdrop out), the scenery lists get the
+  prim colour / alpha / LOD of `Train_Window_Actor_draw` (ambient + sun colour, `aTW_GetNowAlpha`, `lod_factor`), and the sky's texture coordinates stop at the yellow so the cream and the dark horizon rows
+  do not fill the low camera's windows. Seen: deep blue at the top, lilac, yellow, trees (autumn palette) below, as in the retail pictures.
+- Mouths: `Face` moves the mouth only while the page is typing out and for 8 ticks after (`aNPC_tex_anm_ctrl` / `kutipaku_timer`); a page waiting for a button or an answer leaves it closed. Villagers' too.

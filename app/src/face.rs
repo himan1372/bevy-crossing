@@ -52,6 +52,8 @@ pub struct Face {
     /// Player blink: countdown timer and blinks left in this run.
     player_timer: f32,
     player_blinks: u32,
+    /// `talk_info.kutipaku_timer`: ticks the mouth keeps moving after the text stops typing.
+    mouth_hold: f32,
     shown: (u8, u8),
 }
 
@@ -65,6 +67,7 @@ impl Face {
             mouth: Sequence::default(),
             player_timer: 0.0,
             player_blinks: 0,
+            mouth_hold: 0.0,
             shown: (u8::MAX, u8::MAX),
             // Any non-zero seed; differ per character so blinks don't sync.
         }
@@ -220,7 +223,15 @@ fn animate_faces(
             .find(|(parent, _)| parent.parent() == face.owner)
             .and_then(|(_, rig)| rig.eye_pattern())
             .unwrap_or(eye);
-        let talking = dialogue.active && dialogue.speaker == Some(face.owner);
+        // `aNPC_tex_anm_ctrl` (`kutipaku`): the mouth moves while the message is typing out and for 8
+        // ticks after; a page waiting for a button or an answer leaves it closed.
+        let typing = dialogue.active && dialogue.revealing && dialogue.speaker == Some(face.owner);
+        if typing {
+            face.mouth_hold = 8.0;
+        } else {
+            face.mouth_hold = (face.mouth_hold - frames).max(0.0);
+        }
+        let talking = face.mouth_hold > 0.0;
         step_mouth(&mut face, talking, frames, rng);
         let shown = (eye, face.mouth.pattern);
         if shown == face.shown {
