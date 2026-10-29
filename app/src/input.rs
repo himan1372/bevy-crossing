@@ -209,6 +209,8 @@ pub enum InputFocus {
     Transition,
     /// The counter's password entry window.
     Password,
+    /// The name window of the new-game intro (`m_ledit_ovl.c`).
+    NameEntry,
 }
 
 impl InputFocus {
@@ -263,9 +265,10 @@ pub(crate) fn update_focus(
     handover: Res<crate::shop_nook::handover::HandOver>,
     twins: Res<crate::shop_nook::Twins>,
     warning: Res<crate::warning_panel::WarningPanel>,
-    (notice, map): (
+    (notice, map, names): (
         Res<crate::notice_board::NoticeUi>,
         Res<crate::town_map::MapUi>,
+        Res<crate::name_entry::NameEntry>,
     ),
     mut focus: ResMut<InputFocus>,
 ) {
@@ -273,6 +276,8 @@ pub(crate) fn update_focus(
         InputFocus::Paused
     } else if room.diary_open() {
         InputFocus::Diary
+    } else if names.open() {
+        InputFocus::NameEntry
     } else if notice.open() {
         InputFocus::Notice
     } else if map.open {

@@ -48,6 +48,17 @@ const FIRST_MESSAGE: usize = 0x2AC6;
 const ORDER_NPC0: u8 = 1;
 const ORDER_STEP: u8 = 9;
 
+/// The window Rover's next "open it" order (NPC0 index 9 = 1) brings up
+/// (`aNGD_ACTION_*_MENU_OPEN_WAIT`).
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum Entry {
+    /// The time menu (`mSM_OVL_TIMEIN`).
+    #[default]
+    Time,
+    Player,
+    Country,
+}
+
 /// Where Rover's part of the scene has got to (`aNGD_ACTION_*`).
 #[derive(Default)]
 enum Step {
@@ -56,13 +67,39 @@ enum Step {
     Turn,
     /// A message is up; the question it ends on, if any.
     Talk(Option<(usize, MsgChoice)>),
-    /// The script has asked for the player's name (order 9 = 1).
-    NameEntry,
+    /// A window is open; its answer goes back into the script.
+    Window(Entry),
 }
 
 #[derive(Resource, Default)]
 struct Script {
     step: Step,
+    entry: Entry,
+    /// The message the current chain started with.
+    current: usize,
+    /// The script raised its "open the window" order during this message.
+    ask: bool,
+    /// `guide->answer_flags`: which of the four rude answers were given (`aNGD_check_talk_msg_no`).
+    flags: u8,
+    /// `Now_Private->gender`, once Rover has worked it out.
+    male: Option<bool>,
+}
+
+/// `aNGD_msg_win_open_wait`: the message that follows each window.
+const AFTER_WINDOW: [usize; 3] = [0x2AE5, 0x2ACA, 0x2AE4];
+/// `aNGD_sex_select_after`.
+const COUNTRY_ASK: usize = 0x2AD8;
+
+/// The text of an eight-byte name field.
+fn name_text(bytes: &[u8; 8]) -> String {
+    let len = bytes
+        .iter()
+        .rposition(|&c| c != rustimal_logic::editor_keyboard::CHAR_SPACE)
+        .map_or(0, |i| i + 1);
+    bytes[..len]
+        .iter()
+        .map(|&c| crate::messages::char_of(c).unwrap_or('?'))
+        .collect()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -158,6 +195,7 @@ fn context(identity: &crate::save::PlayerIdentity) -> MsgContext {
 fn say(
     disc: &GameDisc,
     dialogue: &mut DialogueState,
+    script: &mut Script,
     rover: Entity,
     ctx: &MsgContext,
     msg: usize,
@@ -171,22 +209,41 @@ fn say(
         pages,
         choice.as_ref().map(|(_, c)| c.labels.clone()),
     );
+    script.current = msg;
+    script.ask = false;
+    // Which window a later order opens.
+    match msg {
+        0x2AC6 => script.entry = Entry::Time,
+        0x2AC7 => script.entry = Entry::Player,
+        COUNTRY_ASK => script.entry = Entry::Country,
+        _ => {}
+    }
+    // `aNGD_check_talk_msg_no`: the answers that shape the player's face.
+    script.flags |= match msg {
+        0x2AC9 => 1 << 3,
+        0x2ACD => 1 << 2,
+        0x2ACF => 1 << 1,
+        0x2AD3 => 1,
+        _ => 0,
+    };
     info!("train message {msg:#06x}");
     choice
 }
 
 /// `aNGD_enter` .. `aNGD_talk_start_wait` .. the questions: Rover walks to the player, turns,
-/// and talks; each answer leads to the message the source's choice codes name.
+/// and talks; each answer leads to the message the source's choice codes name, and an order
+/// (index 9 = 1) at the end of a message opens the next window.
 #[allow(clippy::too_many_arguments)]
 fn rover(
     disc: Res<GameDisc>,
     state: Res<State<ShopLocation>>,
     time: Res<Time>,
-    identity: Res<crate::save::PlayerIdentity>,
+    mut identity: ResMut<crate::save::PlayerIdentity>,
     mut focus: ResMut<InputFocus>,
     mut script: ResMut<Script>,
     mut dialogue: ResMut<DialogueState>,
     mut orders: ResMut<crate::msg_window::DemoOrders>,
+    mut names: ResMut<crate::name_entry::NameEntry>,
     mut rover: Query<(Entity, &mut Transform, &mut crate::character::NpcGait), With<Rover>>,
     mut player: Query<(&Transform, &mut Facing), (With<Player>, Without<Rover>)>,
 ) {
@@ -199,6 +256,7 @@ fn rover(
         return;
     };
     let frames = time.delta_secs() * 60.0;
+    let script = &mut *script;
     match &mut script.step {
         Step::Walk => {
             at.translation.z += WALK_SPEED * frames / UNIT;
@@ -221,13 +279,8 @@ fn rover(
                 at.rotation = Quat::from_rotation_y(want);
                 facing.dir = -to.normalize_or_zero();
                 *focus = InputFocus::Dialogue;
-                let choice = say(
-                    &disc,
-                    &mut dialogue,
-                    entity,
-                    &context(&identity),
-                    FIRST_MESSAGE,
-                );
+                let ctx = context(&identity);
+                let choice = say(&disc, &mut dialogue, script, entity, &ctx, FIRST_MESSAGE);
                 script.step = Step::Talk(choice);
             } else {
                 at.rotation = Quat::from_rotation_y(yaw + diff.signum() * step);
@@ -236,29 +289,79 @@ fn rover(
         Step::Talk(choice) => {
             for (kind, index, value) in orders.take_raised() {
                 if (kind, index) == (ORDER_NPC0, ORDER_STEP) && value == 1 {
-                    info!("the script asks for the player's name");
-                    script.step = Step::NameEntry;
-                    return;
+                    script.ask = true;
                 }
             }
             let Some(answer) = dialogue.external_result.take() else {
                 return;
             };
+            let asked = choice.as_ref().map(|(msg, _)| *msg);
             let next = choice
                 .as_ref()
                 .and_then(|(_, c)| c.next.get(answer).copied().flatten());
+            // `aNGD_sex_select_wait2`: "cool" / "cute" and whether Rover's guess was right.
+            if let (Some(msg @ (0x2AD6 | 0x2AD7)), true) = (asked, answer < 2) {
+                script.male = Some((msg == 0x2AD6) == (answer == 0));
+                info!("gender: male = {:?}", script.male);
+            }
+            let ctx = context(&identity);
+            if script.ask {
+                *dialogue = DialogueState::default();
+                match script.current {
+                    // `aNGD_sex_select_after`: after the apology, on to the destination.
+                    0x2ADF | 0x2AE0 => {
+                        *focus = InputFocus::Dialogue;
+                        let choice = say(&disc, &mut dialogue, script, entity, &ctx, COUNTRY_ASK);
+                        script.step = Step::Talk(choice);
+                    }
+                    _ => {
+                        let window = script.entry;
+                        info!("the script opens a window");
+                        match window {
+                            Entry::Player => names.begin(crate::name_entry::Kind::Player),
+                            Entry::Country => names.begin(crate::name_entry::Kind::Country),
+                            // The time menu is built separately; the time is taken as it is.
+                            Entry::Time => {}
+                        }
+                        script.step = Step::Window(window);
+                    }
+                }
+                return;
+            }
             match next {
                 Some(msg) => {
-                    let choice = say(&disc, &mut dialogue, entity, &context(&identity), msg);
+                    let choice = say(&disc, &mut dialogue, script, entity, &ctx, msg);
                     script.step = Step::Talk(choice);
                 }
                 None => {
+                    info!("the questions end here (message {:#06x})", script.current);
                     *dialogue = DialogueState::default();
                     *focus = InputFocus::World;
                 }
             }
         }
-        Step::NameEntry => {}
+        Step::Window(window) => {
+            let window = *window;
+            let done = match window {
+                Entry::Time => Some(None),
+                _ => names.take().map(Some),
+            };
+            let Some(name) = done else { return };
+            if let Some(bytes) = name {
+                let text = name_text(&bytes);
+                match window {
+                    Entry::Player => identity.player = text,
+                    Entry::Country => identity.town = text,
+                    Entry::Time => {}
+                }
+                info!("named: {} / {}", identity.player, identity.town);
+            }
+            *focus = InputFocus::Dialogue;
+            let ctx = context(&identity);
+            let msg = AFTER_WINDOW[window as usize];
+            let choice = say(&disc, &mut dialogue, script, entity, &ctx, msg);
+            script.step = Step::Talk(choice);
+        }
     }
 }
 

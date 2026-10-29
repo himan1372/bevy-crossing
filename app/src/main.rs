@@ -53,6 +53,7 @@ mod museum;
 mod museum_fish;
 mod museum_insect;
 mod n64_material;
+mod name_entry;
 mod notice_board;
 mod npc;
 mod pause_menu;
@@ -156,6 +157,7 @@ fn main() {
         .add_plugins(job_end::JobEndPlugin)
         .add_plugins(intro::IntroPlugin)
         .add_plugins(intro_train::IntroTrainPlugin)
+        .add_plugins(name_entry::NameEntryPlugin)
         .add_plugins(scene_wipe::SceneWipePlugin)
         .add_plugins(field_items::FieldItemsPlugin)
         .add_plugins(critters::CrittersPlugin)
