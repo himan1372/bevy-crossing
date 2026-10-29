@@ -195,6 +195,7 @@ fn build(
         half: (hi - lo) / 2.0,
         box_yaw,
         yaw: 0.0,
+        palette_shift: 0,
     };
     let palette = structure_palette(disc, 37 + u32::from(tier), winter);
     let root = commands

@@ -372,6 +372,17 @@ pub struct RetailBuilding {
     pub origin: Vec3,
     /// The door's world position, when the model has one.
     pub door: Option<Vec3>,
+    /// Added to the spec's palette index (the station's colour, `type % 5`).
+    pub palette_shift: u32,
+}
+
+/// `TRAIN_STATION` (`STRUCTURE_START + 9`).
+pub(crate) const STATION: u16 = 0x5809;
+
+/// `mSDI_StartInitNew`: `station_type = RANDOM(15)`, which `ac_station.c` reads as the model (`/ 5`)
+/// and the colour (`% 5`). The town's seed decides it, so a town keeps its station.
+pub(crate) fn station_type(seed: u32) -> u8 {
+    seeded_rng(seed.wrapping_mul(0x9E37_79B1) ^ 0x57A7_1011)(15) as u8
 }
 
 /// One kind of public building: layout item, model prefix, body parts,
@@ -386,7 +397,7 @@ struct BuildingSpec {
     shift: (f32, f32),
 }
 
-const BUILDINGS: [BuildingSpec; 6] = [
+const BUILDINGS: [BuildingSpec; 9] = [
     // ac_shop.c: x -20, z +20.
     BuildingSpec {
         item: 0x5804,
@@ -432,6 +443,32 @@ const BUILDINGS: [BuildingSpec; 6] = [
         palette: 93, // aSTR_PAL_TAILOR
         shift: (-20.0, 20.0),
     },
+    // ac_station.c: `cKF_bs_r_obj_{s,w}_station{1,2,3}`, no shift; the palettes are
+    // `aSTR_PAL_STATION{1,2,3}_{A..E}` (42, 47, 52 plus the colour).
+    BuildingSpec {
+        item: STATION,
+        prefix: "station1",
+        parts: &["t1", "t2", "t3", "short", "long"],
+        light: "",
+        palette: 42,
+        shift: (0.0, 0.0),
+    },
+    BuildingSpec {
+        item: STATION,
+        prefix: "station2",
+        parts: &["t1", "t2", "t3", "short", "long"],
+        light: "",
+        palette: 47,
+        shift: (0.0, 0.0),
+    },
+    BuildingSpec {
+        item: STATION,
+        prefix: "station3",
+        parts: &["t1", "t2", "t3", "short", "long"],
+        light: "",
+        palette: 52,
+        shift: (0.0, 0.0),
+    },
     // ac_shrine.c::aSHR_actor_ct (WISHING_WELL).
     BuildingSpec {
         item: 0x5825,
@@ -465,10 +502,20 @@ pub(crate) fn structure_palette(disc: &GameDisc, index: u32, winter: bool) -> Op
 fn place_buildings(
     disc: &GameDisc,
     structures: &[(u16, usize, usize, usize, usize)],
+    station: u8,
 ) -> Vec<RetailBuilding> {
     let mut out = Vec::new();
     for &(item, ax, az, cx, cz) in structures {
-        let Some(spec_index) = BUILDINGS.iter().position(|b| b.item == item) else {
+        let found = if item == STATION {
+            // The model is `type / 5`; the three station specs follow the shop and the others.
+            BUILDINGS
+                .iter()
+                .position(|b| b.item == STATION)
+                .map(|first| first + usize::from(station / 5))
+        } else {
+            BUILDINGS.iter().position(|b| b.item == item)
+        };
+        let Some(spec_index) = found else {
             continue;
         };
         let spec = &BUILDINGS[spec_index];
@@ -507,6 +554,11 @@ fn place_buildings(
             box_yaw,
             origin,
             door,
+            palette_shift: if item == STATION {
+                u32::from(station % 5)
+            } else {
+                0
+            },
         });
     }
     out
@@ -566,7 +618,7 @@ fn spawn_buildings(
     for b in &retail.buildings {
         let spec = &BUILDINGS[b.spec];
         let prefix = format!("obj_{season}_{}", spec.prefix);
-        let palette = structure_palette(disc, spec.palette, winter);
+        let palette = structure_palette(disc, spec.palette + b.palette_shift, winter);
         let mut lists = part_lists(&disc.catalog, &prefix, spec.parts);
         let door_pose = (spec.prefix == "shop1")
             .then(|| cranny_door_pose(disc, &prefix))
@@ -1051,7 +1103,7 @@ pub fn build_retail_town(
             player_homes[(item - HOUSE0) as usize] = Some((ax, az, cx, cz));
         }
     }
-    let buildings = place_buildings(disc, &structures);
+    let buildings = place_buildings(disc, &structures, station_type(plan.seed));
     let statue = structures
         .iter()
         .find(|s| s.0 == DOUZOU)
