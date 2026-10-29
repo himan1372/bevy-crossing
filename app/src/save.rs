@@ -305,6 +305,9 @@ pub struct SaveData {
     /// at random for old saves like a new player's).
     #[serde(default)]
     pub player_face: Option<u8>,
+    /// The player is a girl (`Private_c::gender`): her faces follow the boys' in the face bank.
+    #[serde(default)]
+    pub player_female: bool,
     /// The player's shirt (clothing bank index; added later).
     #[serde(default)]
     pub player_cloth: Option<u16>,
@@ -410,6 +413,7 @@ pub(crate) fn init_save(mut commands: Commands) {
             commands.insert_resource(PlayerLook {
                 face: s.player_face.map_or(new.face, usize::from),
                 cloth: s.player_cloth.map_or(new.cloth, usize::from),
+                female: s.player_female,
             });
         }
         None => {
@@ -605,6 +609,7 @@ fn collect_save(
         shop_rare: shop.rare_item,
         quest: quest.active.clone(),
         player_face: None,
+        player_female: false,
         player_cloth: None,
         villagers: None,
         villagers_appeared: Vec::new(),
@@ -745,6 +750,7 @@ fn quick_save(
         &quest,
     );
     save.player_face = Some(look.face as u8);
+    save.player_female = look.female;
     save.identity = identity.clone();
     let (main, extra) = floors.snapshot(&room);
     save.home_furniture = main;

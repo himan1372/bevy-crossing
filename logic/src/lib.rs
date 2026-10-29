@@ -59,6 +59,7 @@ pub mod field_items;
 pub mod first_job;
 pub mod footsteps;
 pub mod force_remove;
+pub mod intro;
 pub mod menu_slide;
 pub mod notice_board;
 pub mod personal_events;

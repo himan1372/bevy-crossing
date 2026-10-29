@@ -22,6 +22,9 @@ const UNIT: f32 = 40.0;
 const PLAYER_START: Vec2 = Vec2::new(120.0, 340.0);
 /// `ALL_NPC_NUM + (SP_NPC_GUIDE - SP_NPC_START)`.
 const ROVER_NPC: u32 = 238 + 4;
+/// `ALL_NPC_NUM + (SP_NPC_SLEEP_OBABA - SP_NPC_START)`, at unit (4, 4) less the (6, 24) her `ct` takes off.
+const OBABA_NPC: u32 = 238 + 56;
+const OBABA_AT: Vec2 = Vec2::new(174.0, 156.0);
 
 fn local(p: Vec2) -> Vec3 {
     TRAIN_ORIGIN + Vec3::new(p.x / UNIT, 0.0, p.y / UNIT)
@@ -42,7 +45,31 @@ const ROVER_SOUND: u8 = 2;
 const APPROACH_Z: f32 = 290.0;
 /// `aNGD_set_walk_spd`: at most 1 game unit per frame.
 const WALK_SPEED: f32 = 1.0;
-/// `aNGD_talk_start_wait`'s first message ("Excuse me... do you have a second?").
+/// `aNGD_sitdown` / `aNGD_sitdown2`: where Rover sits.
+const SEAT: Vec2 = Vec2::new(100.0, 280.0);
+/// `aNGD_move_ready` .. `aNGD_move_to_deck`: the walk to the door end of the car.
+const STAND: Vec2 = Vec2::new(100.0, 300.0);
+const AISLE: Vec2 = Vec2::new(140.0, 290.0);
+const DECK: Vec2 = Vec2::new(140.0, 130.0);
+/// `aNGD_set_walk_spd2`: at most 1.5 game units per frame.
+const FAST_WALK: f32 = 1.5;
+/// `aNGD_set_talk_info_keitai_on` / `_last_talk_start_wait`.
+const PHONE_MESSAGE: usize = 0x2AD0;
+const LAST_MESSAGE: usize = 0x2AD1;
+/// The clips of `aNGD_set_animation` (`cKF_ba_r_npc_1_*`).
+mod clip {
+    pub const SIT: &str = "cKF_ba_r_npc_1_sitdown_d1";
+    pub const SIT_WAIT: &str = "cKF_ba_r_npc_1_sitdown_wait_d1";
+    pub const STAND_UP: &str = "cKF_ba_r_npc_1_standup_d1";
+    pub const TO_DECK: &str = "cKF_ba_r_npc_1_to_deck_d1";
+    pub const PHONE_ON: &str = "cKF_ba_r_npc_1_keitai_on1";
+    pub const PHONE_TALK: &str = "cKF_ba_r_npc_1_keitai_talk1";
+    pub const PHONE_OFF: &str = "cKF_ba_r_npc_1_keitai_off1";
+    pub const OPEN_DOOR: &str = "cKF_ba_r_npc_1_open_d2";
+}
+/// Blend frames between clips.
+const MORPH: f32 = 8.0;
+/// `aNGD_set_talk_info_talk_start_wait`'s first message ("Excuse me... do you have a second?").
 const FIRST_MESSAGE: usize = 0x2AC6;
 /// `mDemo_ORDER_NPC0` as the message codes raise it, and the index Rover's script waits on.
 const ORDER_NPC0: u8 = 1;
@@ -69,6 +96,22 @@ enum Step {
     Talk(Option<(usize, MsgChoice)>),
     /// A window is open; its answer goes back into the script.
     Window(Entry),
+    /// Rover sits down (`aNGD_sitdown`); then the message `next`.
+    Sit {
+        next: usize,
+    },
+    /// `aNGD_standup` .. `aNGD_move_to_deck`: stands, walks to the door end and steps out on the deck.
+    Stand,
+    Aisle,
+    Door,
+    Deck,
+    /// `aNGD_keitai_on`: the phone comes out and Rover rings Nook (message 0x2AD0).
+    PhoneOn,
+    PhoneOff,
+    OpenDoor,
+    /// `aNGD_return_approach`: back to the player, then the last talk.
+    Return,
+    Finished,
 }
 
 #[derive(Resource, Default)]
@@ -89,6 +132,20 @@ struct Script {
 const AFTER_WINDOW: [usize; 3] = [0x2AE5, 0x2ACA, 0x2AE4];
 /// `aNGD_sex_select_after`.
 const COUNTRY_ASK: usize = 0x2AD8;
+/// The messages whose closing order (9 = 1) asks for a window: the name (0x2AC8, 0x2AC9, 0x2AE2,
+/// 0x2AE3), the time (0x2AE1, 0x2AE6) and the destination (0x2AD8), or the apology 0x2ADF / 0x2AE0
+/// that goes on to the destination. 0x2AD6 / 0x2AD7 raise 1 / 2 for the gender instead.
+const ASKS: [usize; 9] = [
+    0x2AC8,
+    0x2AC9,
+    0x2AE2,
+    0x2AE3,
+    0x2AE1,
+    0x2AE6,
+    COUNTRY_ASK,
+    0x2ADF,
+    0x2AE0,
+];
 
 /// The text of an eight-byte name field.
 fn name_text(bytes: &[u8; 8]) -> String {
@@ -138,10 +195,22 @@ fn build_room(
         Name::new("Rover"),
         Rover,
         crate::character::NpcGait::default(),
+        crate::character::NpcClip::default(),
         crate::character::NpcModel(ROVER_NPC),
         Mesh3d(meshes.add(Capsule3d::new(0.35, 0.9))),
         Transform::from_translation(local(Vec2::new(140.0, 140.0)) + Vec3::Y)
             .looking_to(Vec3::Z, Vec3::Y),
+    ));
+    // `start_demo1_actable`: the old woman dozes on the other bench (`aNSO_set_animation`: kokkuri).
+    let mut nod = crate::character::NpcClip::default();
+    nod.start("cKF_ba_r_npc_1_kokkuri_d1", false, 0.0);
+    commands.spawn((
+        Name::new("sleeping old woman"),
+        crate::character::NpcGait::default(),
+        nod,
+        crate::character::NpcModel(OBABA_NPC),
+        Mesh3d(meshes.add(Capsule3d::new(0.35, 0.9))),
+        Transform::from_translation(local(OBABA_AT) + Vec3::Y).looking_to(Vec3::Z, Vec3::Y),
     ));
     transform.translation = local(PLAYER_START) + Vec3::Y;
     facing.dir = Vec3::NEG_Z;
@@ -189,6 +258,25 @@ fn context(identity: &crate::save::PlayerIdentity) -> MsgContext {
         weekday: now.weekday,
         ..default()
     }
+}
+
+/// Turns Rover towards a point and moves him `speed` game units per frame along it.
+fn walk_to(at: &mut Transform, to: Vec2, speed: f32, frames: f32) {
+    let here = Vec2::new(
+        (at.translation.x - TRAIN_ORIGIN.x) * UNIT,
+        (at.translation.z - TRAIN_ORIGIN.z) * UNIT,
+    );
+    let dir = (to - here).normalize_or_zero();
+    if dir != Vec2::ZERO {
+        at.rotation = Quat::from_rotation_y(dir.x.atan2(dir.y));
+        at.translation.x += dir.x * speed * frames / UNIT;
+        at.translation.z += dir.y * speed * frames / UNIT;
+    }
+}
+
+fn place(at: &mut Transform, p: Vec2) {
+    at.translation.x = TRAIN_ORIGIN.x + p.x / UNIT;
+    at.translation.z = TRAIN_ORIGIN.z + p.y / UNIT;
 }
 
 /// Starts message `msg` (and what follows it up to a question) and returns the question.
@@ -244,13 +332,23 @@ fn rover(
     mut dialogue: ResMut<DialogueState>,
     mut orders: ResMut<crate::msg_window::DemoOrders>,
     mut names: ResMut<crate::name_entry::NameEntry>,
-    mut rover: Query<(Entity, &mut Transform, &mut crate::character::NpcGait), With<Rover>>,
+    mut look: ResMut<crate::character::PlayerLook>,
+    mut rand: ResMut<crate::game_rand::GameRand>,
+    mut rover: Query<
+        (
+            Entity,
+            &mut Transform,
+            &mut crate::character::NpcGait,
+            &mut crate::character::NpcClip,
+        ),
+        With<Rover>,
+    >,
     mut player: Query<(&Transform, &mut Facing), (With<Player>, Without<Rover>)>,
 ) {
     if *state != ShopLocation::Train {
         return;
     }
-    let (Ok((entity, mut at, mut gait)), Ok((player_at, mut facing))) =
+    let (Ok((entity, mut at, mut gait, mut clip)), Ok((player_at, mut facing))) =
         (rover.single_mut(), player.single_mut())
     else {
         return;
@@ -287,8 +385,16 @@ fn rover(
             }
         }
         Step::Talk(choice) => {
-            for (kind, index, value) in orders.take_raised() {
-                if (kind, index) == (ORDER_NPC0, ORDER_STEP) && value == 1 {
+            // The order value, not the raised queue: other talk scripts drain that one.
+            let value = orders.get(ORDER_NPC0, ORDER_STEP);
+            if value != 0 {
+                orders.clear(ORDER_NPC0, ORDER_STEP);
+                if script.current == LAST_MESSAGE {
+                    // `aNGD_sitdown2_start_wait`: Rover sits down while the last talk goes on.
+                    place(&mut at, SEAT);
+                    at.rotation = Quat::from_rotation_y(0.0);
+                    clip.start(clip::SIT, true, MORPH);
+                } else if value == 1 && ASKS.contains(&script.current) {
                     script.ask = true;
                 }
             }
@@ -301,7 +407,7 @@ fn rover(
                 .and_then(|(_, c)| c.next.get(answer).copied().flatten());
             // `aNGD_sex_select_wait2`: "cool" / "cute" and whether Rover's guess was right.
             if let (Some(msg @ (0x2AD6 | 0x2AD7)), true) = (asked, answer < 2) {
-                script.male = Some((msg == 0x2AD6) == (answer == 0));
+                script.male = Some(rustimal_logic::intro::is_male(msg == 0x2AD6, answer == 0));
                 info!("gender: male = {:?}", script.male);
             }
             let ctx = context(&identity);
@@ -329,14 +435,57 @@ fn rover(
                 return;
             }
             match next {
+                Some(msg @ (0x2AC8 | 0x2AC9)) if script.current == 0x2AC7 => {
+                    // `aNGD_sitdown`: the next message waits for Rover to sit down.
+                    *dialogue = DialogueState::default();
+                    place(&mut at, SEAT);
+                    at.rotation = Quat::from_rotation_y(0.0);
+                    gait.0 = 0;
+                    clip.start(clip::SIT, true, MORPH);
+                    script.step = Step::Sit { next: msg };
+                }
                 Some(msg) => {
                     let choice = say(&disc, &mut dialogue, script, entity, &ctx, msg);
                     script.step = Step::Talk(choice);
                 }
                 None => {
-                    info!("the questions end here (message {:#06x})", script.current);
+                    info!("message chain {:#06x} ends", script.current);
                     *dialogue = DialogueState::default();
-                    *focus = InputFocus::World;
+                    match script.current {
+                        // The questions are over: Rover goes to ring Nook.
+                        0x2ACE | 0x2ACF => {
+                            clip.start(clip::STAND_UP, true, MORPH);
+                            script.step = Step::Stand;
+                        }
+                        PHONE_MESSAGE => {
+                            clip.start(clip::PHONE_OFF, true, MORPH);
+                            script.step = Step::PhoneOff;
+                        }
+                        // The last talk is over: the train ride is done.
+                        _ => {
+                            // `aNGD_scene_change_wait_init`: the face and the first shirt.
+                            let male = script.male.unwrap_or(true);
+                            look.female = !male;
+                            look.face = rustimal_logic::intro::face_type(
+                                male,
+                                script.flags,
+                                rand.0.random(8) as usize,
+                            );
+                            look.cloth = rustimal_logic::intro::starting_cloth(
+                                male,
+                                rand.0.random(8) as usize,
+                            );
+                            info!(
+                                "the player is a {}: face {}, shirt {}",
+                                if male { "boy" } else { "girl" },
+                                look.face,
+                                look.cloth
+                            );
+                            *focus = InputFocus::World;
+                            script.step = Step::Finished;
+                            info!("intro: the train scene ends");
+                        }
+                    }
                 }
             }
         }
@@ -362,6 +511,214 @@ fn rover(
             let choice = say(&disc, &mut dialogue, script, entity, &ctx, msg);
             script.step = Step::Talk(choice);
         }
+        Step::Sit { next, .. } => {
+            if clip.done {
+                let next = *next;
+                clip.start(clip::SIT_WAIT, false, MORPH);
+                *focus = InputFocus::Dialogue;
+                let ctx = context(&identity);
+                let choice = say(&disc, &mut dialogue, script, entity, &ctx, next);
+                script.step = Step::Talk(choice);
+            }
+        }
+        Step::Stand => {
+            if clip.done {
+                place(&mut at, STAND);
+                clip.stop(MORPH);
+                script.step = Step::Aisle;
+            }
+        }
+        Step::Aisle => {
+            gait.0 = 1;
+            walk_to(&mut at, AISLE, FAST_WALK, frames);
+            if (at.translation.x - TRAIN_ORIGIN.x) * UNIT > AISLE.x {
+                script.step = Step::Door;
+            }
+        }
+        Step::Door => {
+            walk_to(&mut at, DECK, FAST_WALK, frames);
+            if (at.translation.z - TRAIN_ORIGIN.z) * UNIT < DECK.y {
+                gait.0 = 0;
+                place(&mut at, DECK);
+                clip.start(clip::TO_DECK, true, MORPH);
+                script.step = Step::Deck;
+            }
+        }
+        Step::Deck => {
+            if clip.done {
+                clip.start(clip::PHONE_ON, true, MORPH);
+                *focus = InputFocus::Dialogue;
+                let ctx = context(&identity);
+                say(&disc, &mut dialogue, script, entity, &ctx, PHONE_MESSAGE);
+                script.step = Step::PhoneOn;
+            }
+        }
+        Step::PhoneOn => {
+            if clip.done {
+                // The message goes on while Rover talks; its end is handled as a chain end.
+                clip.start(clip::PHONE_TALK, false, MORPH);
+                script.step = Step::Talk(None);
+            }
+        }
+        Step::PhoneOff => {
+            if clip.done {
+                clip.start(clip::OPEN_DOOR, true, MORPH);
+                script.step = Step::OpenDoor;
+            }
+        }
+        Step::OpenDoor => {
+            // `aNGD_open_door`: he turns his back on the door while it opens.
+            at.rotation = Quat::from_rotation_y(std::f32::consts::PI);
+            if clip.done {
+                clip.stop(MORPH);
+                script.step = Step::Return;
+            }
+        }
+        Step::Return => {
+            gait.0 = 1;
+            walk_to(&mut at, Vec2::new(DECK.x, 300.0), FAST_WALK, frames);
+            if (at.translation.z - TRAIN_ORIGIN.z) * UNIT > APPROACH_Z {
+                gait.0 = 0;
+                at.rotation = Quat::from_rotation_y(0.0);
+                *focus = InputFocus::Dialogue;
+                let ctx = context(&identity);
+                let choice = say(&disc, &mut dialogue, script, entity, &ctx, LAST_MESSAGE);
+                script.step = Step::Talk(choice);
+            }
+        }
+        Step::Finished => {}
+    }
+}
+
+/// The camera of the scene (`aNGD_set_camera`, `Camera2_request_main_lock`): it sits behind the player
+/// at (100, 80, 400) with a 40 degree lens, looks down the car at (90, 80, 280) and, once Rover talks,
+/// comes round to his head over 40 frames and stays there; the train's sway shakes it a little.
+#[derive(Resource)]
+struct TrainCamera {
+    sway: rustimal_logic::intro::Sway,
+    ticks: f32,
+    offset: (f32, f32),
+    /// `camera_morph_counter`: frames left before the camera is locked on Rover.
+    morph: f32,
+    locked: bool,
+    /// The lens has been put back for the town.
+    restored: bool,
+}
+
+impl Default for TrainCamera {
+    fn default() -> Self {
+        Self {
+            sway: Default::default(),
+            ticks: 0.0,
+            offset: (0.0, 0.0),
+            morph: rustimal_logic::intro::CAMERA_MORPH,
+            locked: false,
+            restored: false,
+        }
+    }
+}
+
+/// The lens the town uses (`player.rs`): 20 degrees, 200 to 1600 units.
+fn town_lens() -> Projection {
+    Projection::Perspective(PerspectiveProjection {
+        fov: 20.0f32.to_radians(),
+        near: 200.0 / UNIT,
+        far: 1600.0 / UNIT,
+        ..default()
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn train_camera(
+    time: Res<Time>,
+    state: Res<State<ShopLocation>>,
+    script: Res<Script>,
+    dialogue: Res<DialogueState>,
+    mut cam: ResMut<TrainCamera>,
+    rover: Query<&Transform, With<Rover>>,
+    mut camera: Query<
+        (&mut Transform, &mut Projection),
+        (
+            With<crate::player::WorldCamera>,
+            Without<Rover>,
+            Without<crate::msg_window::OverlayCamera>,
+        ),
+    >,
+) {
+    if *state != ShopLocation::Train {
+        return;
+    }
+    let Ok((mut at, mut lens)) = camera.single_mut() else {
+        return;
+    };
+    if matches!(script.step, Step::Finished) {
+        // The scene is over: the town's camera takes over again.
+        if !cam.restored {
+            cam.restored = true;
+            *lens = town_lens();
+        }
+        return;
+    }
+    let frames = time.delta_secs() * 60.0;
+    cam.ticks += frames;
+    while cam.ticks >= 1.0 {
+        cam.ticks -= 1.0;
+        cam.offset = cam.sway.tick();
+        if dialogue.active && !cam.locked {
+            cam.morph -= 1.0;
+            if cam.morph <= 0.0 {
+                cam.locked = true;
+            }
+        }
+    }
+    let units = |p: Vec3| Vec3::new(p.x, p.y, p.z) * UNIT;
+    let (sway_x, sway_y) = cam.offset;
+    let eye = Vec3::new(100.0 + sway_x, 80.0 + sway_y, 400.0);
+    let rest = Vec3::new(90.0, 80.0, 280.0);
+    let center = match rover.single() {
+        // Rover's head: 30 units above his feet (`obj_look_y_max`).
+        Ok(rover) if cam.locked => {
+            let p = units(rover.translation - TRAIN_ORIGIN);
+            Vec3::new(p.x, 30.0, p.z)
+        }
+        Ok(rover) if dialogue.active => {
+            let p = units(rover.translation - TRAIN_ORIGIN);
+            let r = (rustimal_logic::intro::CAMERA_MORPH - cam.morph)
+                / rustimal_logic::intro::CAMERA_MORPH;
+            let blend = rustimal_logic::intro::camera_blend(r);
+            rest + (Vec3::new(p.x, 30.0, p.z) - rest) * blend
+        }
+        _ => rest,
+    } + Vec3::new(sway_x, sway_y, 0.0);
+    let to_world = |p: Vec3| TRAIN_ORIGIN + p / UNIT;
+    at.translation = to_world(eye);
+    at.look_at(to_world(center), Vec3::Y);
+    *lens = Projection::Perspective(PerspectiveProjection {
+        fov: 40.0f32.to_radians(),
+        near: 60.0 / UNIT,
+        far: 800.0 / UNIT,
+        ..default()
+    });
+}
+
+/// The player is not drawn on the train (the camera sits behind them).
+fn hide_player(
+    state: Res<State<ShopLocation>>,
+    script: Res<Script>,
+    mut player: Query<&mut Visibility, With<Player>>,
+    mut hidden: Local<bool>,
+) {
+    let want = *state == ShopLocation::Train && !matches!(script.step, Step::Finished);
+    if want == *hidden {
+        return;
+    }
+    if let Ok(mut visibility) = player.single_mut() {
+        *visibility = if want {
+            Visibility::Hidden
+        } else {
+            Visibility::Inherited
+        };
+        *hidden = want;
     }
 }
 
@@ -371,6 +728,7 @@ impl Plugin for IntroTrainPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<TrainRoom>()
             .init_resource::<Script>()
+            .init_resource::<TrainCamera>()
             .add_systems(
                 Update,
                 build_room
@@ -388,6 +746,13 @@ impl Plugin for IntroTrainPlugin {
                 Update,
                 rover
                     .in_set(crate::input::InteractSet::Talk)
+                    .in_set(GameplaySet),
+            )
+            .add_systems(Update, hide_player.in_set(GameplaySet))
+            .add_systems(
+                Update,
+                train_camera
+                    .after(crate::player::camera_follow)
                     .in_set(GameplaySet),
             );
     }

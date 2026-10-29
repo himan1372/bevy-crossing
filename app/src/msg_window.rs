@@ -460,9 +460,13 @@ impl DemoOrders {
     }
 
     /// Read by the first job's guide (`aNRG2_demo_start_wait_talk_proc`).
-    #[allow(dead_code)]
     pub(crate) fn get(&self, kind: u8, index: u8) -> u16 {
         self.values.get(&(kind, index)).copied().unwrap_or(0)
+    }
+
+    /// `mDemo_Set_OrderValue(kind, index, 0)`: the script has seen the order.
+    pub(crate) fn clear(&mut self, kind: u8, index: u8) {
+        self.values.remove(&(kind, index));
     }
 }
 

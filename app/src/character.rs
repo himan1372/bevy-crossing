@@ -67,6 +67,8 @@ pub struct PlayerLook {
     pub face: usize,
     /// Shirt index into the clothing bank.
     pub cloth: usize,
+    /// `mPr_SEX_FEMALE`: the face bank holds the girls' faces after the boys' (face + sex * 8).
+    pub female: bool,
 }
 
 /// Shirts a new boy can start in (`mPr_boy_cloth_table`: ITM_CLOTH000-007).
@@ -88,6 +90,7 @@ impl PlayerLook {
         Self {
             face: next() % FACE_TYPES,
             cloth: next() % NEW_BOY_CLOTHS,
+            female: false,
         }
     }
 }
@@ -99,7 +102,7 @@ pub(crate) fn player_segments(disc: &GameDisc, look: PlayerLook) -> Segments {
         bank.get(start..start + len).unwrap_or_default().into()
     };
     // `mPlib_Get_UseFaceRom_index` (texture): face + sex * 8 + swell * 16.
-    let face = look.face.min(7) * FACE_SIZE;
+    let face = (look.face.min(7) + usize::from(look.female) * 8) * FACE_SIZE;
     let mut segs = Segments::default();
     segs.set_segment(SEG_EYE, slice(&disc.player_faces, face, FACE_TEX_SIZE));
     segs.set_segment(
@@ -143,7 +146,7 @@ fn player_face_frames(
     first: usize,
     count: usize,
 ) -> Vec<Option<Arc<[u8]>>> {
-    let face = look.face.min(7) * FACE_SIZE;
+    let face = (look.face.min(7) + usize::from(look.female) * 8) * FACE_SIZE;
     (first..first + count)
         .map(|i| {
             let start = face + i * FACE_TEX_SIZE;

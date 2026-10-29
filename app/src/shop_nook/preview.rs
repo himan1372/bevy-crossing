@@ -209,6 +209,7 @@ pub(super) fn textures(
                         crate::character::PlayerLook {
                             face: 0,
                             cloth: index,
+                            female: false,
                         },
                     ),
                     Surface::Floor => crate::interior::floor_segments(&disc, index),
