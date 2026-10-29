@@ -547,3 +547,5 @@
 {"action":"complete","task":"museum-room-door-fade","agent":"claude","timestamp":"2026-10-28T23:54:54Z"}
 {"action":"claim","task":"job-moved-away-redirects","agent":"claude","timestamp":"2026-10-29T00:01:19Z"}
 {"action":"complete","task":"job-moved-away-redirects","agent":"claude","timestamp":"2026-10-29T00:33:05Z"}
+{"action":"claim","task":"villager-house-door","agent":"claude","timestamp":"2026-10-29T00:34:31Z"}
+{"action":"complete","task":"villager-house-door","agent":"claude","timestamp":"2026-10-29T00:37:01Z"}

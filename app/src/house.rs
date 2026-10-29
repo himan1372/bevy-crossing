@@ -156,6 +156,7 @@ fn build_villager_rooms(
         obstacles
             .0
             .extend(furniture.iter().map(|f| Obstacle::around(origin, f)));
+        info!("villager {i} door at {:?}", v.door());
         doors.push((v.door(), origin));
     }
     info!("{} villager rooms from the disc", doors.len());
