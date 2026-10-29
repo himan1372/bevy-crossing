@@ -18,7 +18,7 @@
 //! `chrono` only supplies the local wall-clock time (Rust's std can't read
 //! the Windows time zone).
 
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicI64, Ordering};
 
 use bevy::prelude::*;
 use bevy::text::FontSize;
@@ -33,6 +33,36 @@ use crate::states::GameplaySet;
 static DEBUG_HOUR_OFFSET: AtomicI32 = AtomicI32::new(0);
 /// Debug days added on top (`BEVY_CROSSING_DAY_OFFSET`), to try seasons.
 static DEBUG_DAY_OFFSET: AtomicI32 = AtomicI32::new(0);
+
+/// `Save.time_delta`: the offset the player set on the intro's clock window (`lbRTC_SetTime`), in
+/// hardware ticks added to the PC's clock.
+static TIME_DELTA: AtomicI64 = AtomicI64::new(0);
+
+pub fn time_delta() -> i64 {
+    TIME_DELTA.load(Ordering::Relaxed)
+}
+
+pub fn set_time_delta(ticks: i64) {
+    TIME_DELTA.store(ticks, Ordering::Relaxed);
+}
+
+/// `lbRTC_SetTime`: makes the game clock read this moment from now on, by keeping the difference to
+/// the PC's clock (the debug offsets stay on top).
+pub fn set_game_time(year: u16, month: u8, day: u8, hour: u8, minute: u8) {
+    let target = game_time::calendar_time_to_ticks(&game_time::CalendarTime {
+        year: i32::from(year),
+        mon: i32::from(month) - 1,
+        mday: i32::from(day),
+        hour: i32::from(hour),
+        min: i32::from(minute),
+        ..Default::default()
+    });
+    let debug = i64::from(
+        DEBUG_HOUR_OFFSET.load(Ordering::Relaxed) + DEBUG_DAY_OFFSET.load(Ordering::Relaxed) * 24,
+    ) * 3600
+        * TIMER_CLOCK;
+    set_time_delta(target - hard_ticks() - debug);
+}
 
 /// Day numbers count from this game day.
 const DAY_ZERO: RtcYmd = RtcYmd {
@@ -70,7 +100,7 @@ fn hard_ticks() -> i64 {
 /// Build `Now` from game-clock ticks (pure; used by tests too).
 fn now_from(hard: i64, debug_hours: i32) -> Now {
     let clock = GameClock {
-        time_delta: debug_hours as i64 * 3600 * TIMER_CLOCK,
+        time_delta: debug_hours as i64 * 3600 * TIMER_CLOCK + time_delta(),
     };
     let t = clock.game_time(hard);
     let day_number = game_time::interval_days_ymd(&DAY_ZERO, &game_time::game_day_ymd(&t)) as i64;

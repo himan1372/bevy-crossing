@@ -308,6 +308,9 @@ pub struct SaveData {
     /// The player is a girl (`Private_c::gender`): her faces follow the boys' in the face bank.
     #[serde(default)]
     pub player_female: bool,
+    /// The game clock's offset from the PC's (`Save.time_delta`, set on the intro's clock window).
+    #[serde(default)]
+    pub clock_delta: i64,
     /// The player's shirt (clothing bank index; added later).
     #[serde(default)]
     pub player_cloth: Option<u16>,
@@ -405,6 +408,7 @@ pub(crate) fn init_save(mut commands: Commands) {
                 "Save found: seed {}, {:.0}s played, {} bells, {} fruit",
                 s.town_seed, s.playtime_secs, s.bells, s.fruit
             );
+            crate::clock::set_time_delta(s.clock_delta);
             commands.insert_resource(TownSeed(s.town_seed));
             commands.insert_resource(Playtime {
                 secs: s.playtime_secs,
@@ -610,6 +614,7 @@ fn collect_save(
         quest: quest.active.clone(),
         player_face: None,
         player_female: false,
+        clock_delta: 0,
         player_cloth: None,
         villagers: None,
         villagers_appeared: Vec::new(),
@@ -751,6 +756,7 @@ fn quick_save(
     );
     save.player_face = Some(look.face as u8);
     save.player_female = look.female;
+    save.clock_delta = crate::clock::time_delta();
     save.identity = identity.clone();
     let (main, extra) = floors.snapshot(&room);
     save.home_furniture = main;

@@ -200,6 +200,7 @@ fn animate_faces(
     time: Res<Time>,
     dialogue: Res<DialogueState>,
     mut faces: Query<&mut Face>,
+    rigs: Query<(&ChildOf, &crate::character::CharacterRig)>,
     mut materials: ResMut<Assets<N64Material>>,
     mut rand: ResMut<crate::game_rand::GameRand>,
 ) {
@@ -213,6 +214,12 @@ fn animate_faces(
                 face.eye.pattern
             }
         };
+        // A clip that fixes the eyes (the old woman asleep) overrides the blinking.
+        let eye = rigs
+            .iter()
+            .find(|(parent, _)| parent.parent() == face.owner)
+            .and_then(|(_, rig)| rig.eye_pattern())
+            .unwrap_or(eye);
         let talking = dialogue.active && dialogue.speaker == Some(face.owner);
         step_mouth(&mut face, talking, frames, rng);
         let shown = (eye, face.mouth.pattern);

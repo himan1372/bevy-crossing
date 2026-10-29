@@ -256,7 +256,48 @@ pub struct CharacterRig {
     toy_phase: Option<(u16, bool)>,
     pose_morph: f32,
     /// The special clip playing (`NpcClip`), by name.
-    clip: Option<(&'static str, Arc<Animation>)>,
+    clip: Option<(&'static str, Arc<Animation>, ClipEyes)>,
+}
+
+/// The eye pattern an NPC animation asks for (`aNPC_Animation_c`: `eye_seq_p`, `eye_seq_type`,
+/// `eye_seq_stop_frame`): a pattern for every frame, a pattern held for the whole clip (type 0:
+/// the sleeping old woman's closed eyes), or none (the villagers' random blinks).
+#[derive(Clone, Default)]
+pub(crate) struct ClipEyes {
+    table: Option<Arc<[u8]>>,
+    kind: i16,
+    stop: i16,
+}
+
+impl ClipEyes {
+    fn read(disc: &GameDisc, offset: u32, frames: usize) -> Self {
+        let rom = &disc.rom;
+        let table = match rom.pointer_at(RomSource::Rel, offset + 0x24) {
+            Some(Target::File(RomSource::Rel, p)) => rom
+                .bytes(RomSource::Rel)
+                .get(p as usize..p as usize + frames)
+                .map(Arc::from),
+            _ => None,
+        };
+        let short = |o: u32| {
+            rom.slice(RomSource::Rel, offset + o, 2)
+                .map_or(0, |b| i16::from_be_bytes([b[0], b[1]]))
+        };
+        Self {
+            table,
+            kind: short(0x28),
+            stop: short(0x2A),
+        }
+    }
+
+    /// The eye pattern at `frame` (1-based), if the clip decides it.
+    fn pattern(&self, frame: f32) -> Option<u8> {
+        if let Some(table) = &self.table {
+            let i = (frame.floor() as usize).saturating_sub(1);
+            return table.get(i.min(table.len().saturating_sub(1))).copied();
+        }
+        (self.kind == 0 && self.stop >= 0).then_some(self.stop as u8)
+    }
 }
 
 /// A special NPC's own disc animation in place of standing (Copper's
@@ -293,6 +334,13 @@ impl NpcClip {
 
 impl CharacterRig {
     /// m_player_draw.c_inc::Player_actor_draw_After: right hand callback20.
+    /// The eye pattern the playing clip asks for, if it does (`aNPC_tex_anm_ctrl_fix_seq` and the
+    /// stop frame of a type-0 sequence).
+    pub(crate) fn eye_pattern(&self) -> Option<u8> {
+        let (_, _, eyes) = self.clip.as_ref()?;
+        eyes.pattern(self.frame)
+    }
+
     pub(crate) fn right_hand(&self) -> Option<Entity> {
         self.joints.get(20).copied()
     }
@@ -846,19 +894,20 @@ fn play_clip(
     ticks: f32,
     transforms: &mut Query<&mut Transform>,
 ) -> bool {
-    let current = rig.clip.as_ref().map(|(n, _)| *n);
+    let current = rig.clip.as_ref().map(|(n, _, _)| *n);
     if clip.name != current {
         rig.clip = clip.name.and_then(|name| {
             let a = disc?.catalog.get(name)?;
             let anim = Animation::read(&disc?.rom, a.offset, rig.skeleton.joints.len())?;
-            Some((name, Arc::new(anim)))
+            let eyes = ClipEyes::read(disc?, a.offset, anim.frames.max(1) as usize);
+            Some((name, Arc::new(anim), eyes))
         });
         rig.frame = 1.0;
         // Back to standing restarts its loop too.
         rig.playing = Motion::Wait;
         rig.pose_morph = clip.morph;
     }
-    let Some((_, anim)) = rig.clip.clone() else {
+    let Some((_, anim, _)) = rig.clip.clone() else {
         return false;
     };
     let last = anim.frames.max(2) as f32;

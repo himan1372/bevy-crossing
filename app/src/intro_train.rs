@@ -39,6 +39,11 @@ struct TrainRoom {
 #[derive(Component)]
 struct Rover;
 
+/// `aNSO_sleep` / `aNSO_cramp`: the old woman nods (`kokkuri_d1`) two to four times, twitches once
+/// (`kokkuri_d2`) and goes back to sleep. Holds the number of nods this round.
+#[derive(Component)]
+struct Dozing(u32);
+
 /// The tunnel wall of the window scenery: the train starts in a tunnel and comes out of it when Rover
 /// sits down (`Common_Set(sunlight_flag, TRUE)` in `aNGD_sitdown`).
 #[derive(Component)]
@@ -389,6 +394,7 @@ fn build_room(
     nod.start("cKF_ba_r_npc_1_kokkuri_d1", false, 0.0);
     commands.spawn((
         Name::new("sleeping old woman"),
+        Dozing(3),
         crate::character::NpcGait::default(),
         nod,
         crate::character::NpcModel(OBABA_NPC),
@@ -523,6 +529,7 @@ fn rover(
     mut dialogue: ResMut<DialogueState>,
     mut orders: ResMut<crate::msg_window::DemoOrders>,
     mut names: ResMut<crate::name_entry::NameEntry>,
+    mut times: ResMut<crate::time_window::TimeWindow>,
     mut look: ResMut<crate::character::PlayerLook>,
     mut rand: ResMut<crate::game_rand::GameRand>,
     mut rover: Query<
@@ -633,8 +640,7 @@ fn rover(
                         match window {
                             Entry::Player => names.begin(crate::name_entry::Kind::Player),
                             Entry::Country => names.begin(crate::name_entry::Kind::Country),
-                            // The time menu is built separately; the time is taken as it is.
-                            Entry::Time => {}
+                            Entry::Time => times.begin(crate::clock::now()),
                         }
                         script.step = Step::Window(window);
                     }
@@ -699,11 +705,29 @@ fn rover(
         }
         Step::Window(window) => {
             let window = *window;
-            let done = match window {
-                Entry::Time => Some(None),
-                _ => names.take().map(Some),
+            // `mTI_window_close`: the clock is set to what the player chose (`lbRTC_SetTime`).
+            let name = if window == Entry::Time {
+                let Some(set) = times.take() else { return };
+                crate::clock::set_game_time(
+                    set.year(),
+                    set.month(),
+                    set.day(),
+                    set.hour(),
+                    set.minute(),
+                );
+                info!(
+                    "clock set to {}-{:02}-{:02} {:02}:{:02}",
+                    set.year(),
+                    set.month(),
+                    set.day(),
+                    set.hour(),
+                    set.minute()
+                );
+                None
+            } else {
+                let Some(bytes) = names.take() else { return };
+                Some(bytes)
             };
-            let Some(name) = done else { return };
             if let Some(bytes) = name {
                 let text = name_text(&bytes);
                 match window {
@@ -858,8 +882,9 @@ fn train_camera(
     dialogue: Res<DialogueState>,
     mut cam: ResMut<TrainCamera>,
     rover: Query<&Transform, With<Rover>>,
+    window: Query<&Window, With<bevy::window::PrimaryWindow>>,
     mut camera: Query<
-        (&mut Transform, &mut Projection),
+        (&mut Transform, &mut Projection, &mut Camera),
         (
             With<crate::player::WorldCamera>,
             Without<Rover>,
@@ -870,7 +895,7 @@ fn train_camera(
     if *state != ShopLocation::Train {
         return;
     }
-    let Ok((mut at, mut lens)) = camera.single_mut() else {
+    let Ok((mut at, mut lens, mut view)) = camera.single_mut() else {
         return;
     };
     if matches!(script.step, Step::Finished) {
@@ -878,8 +903,20 @@ fn train_camera(
         if !cam.restored {
             cam.restored = true;
             *lens = town_lens();
+            view.viewport = None;
         }
         return;
+    }
+    // The retail picture is 4:3: on a wide window the car's open end shows as a void at the sides, so the
+    // scene is drawn in a centred 4:3 viewport.
+    if let Ok(window) = window.single() {
+        let (w, h) = (window.physical_width(), window.physical_height());
+        let wide = (h * 4 / 3).min(w);
+        view.viewport = Some(bevy::camera::Viewport {
+            physical_position: UVec2::new((w - wide) / 2, 0),
+            physical_size: UVec2::new(wide, h),
+            ..default()
+        });
     }
     let frames = time.delta_secs() * 60.0;
     cam.ticks += frames;
@@ -997,6 +1034,27 @@ fn scroll_trees(
         };
         let moved: Vec<[f32; 2]> = tree.uvs.iter().map(|uv| [uv[0] - shift, uv[1]]).collect();
         mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, moved);
+    }
+}
+
+fn doze(
+    time: Res<Time>,
+    mut rand: ResMut<crate::game_rand::GameRand>,
+    mut woman: Query<(&mut Dozing, &mut crate::character::NpcClip)>,
+    mut twitching: Local<bool>,
+) {
+    let _ = time;
+    for (mut dozing, mut clip) in &mut woman {
+        if *twitching {
+            if clip.done {
+                *twitching = false;
+                dozing.0 = 2 + rand.0.random(3) as u32;
+                clip.start("cKF_ba_r_npc_1_kokkuri_d1", false, 8.0);
+            }
+        } else if clip.loops >= dozing.0 {
+            *twitching = true;
+            clip.start("cKF_ba_r_npc_1_kokkuri_d2", true, 8.0);
+        }
     }
 }
 
@@ -1199,7 +1257,10 @@ impl Plugin for IntroTrainPlugin {
                     .in_set(GameplaySet),
             )
             .add_systems(Update, hide_player.in_set(GameplaySet))
-            .add_systems(Update, (tunnel_exit, scroll_trees).in_set(GameplaySet))
+            .add_systems(
+                Update,
+                (tunnel_exit, scroll_trees, doze).in_set(GameplaySet),
+            )
             .add_systems(
                 Update,
                 (door_cues, door_animate, phone_cues, phone_animate)

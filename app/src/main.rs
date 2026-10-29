@@ -83,6 +83,7 @@ mod sound_rom;
 mod states;
 mod statue;
 mod talk;
+mod time_window;
 mod tortimer;
 mod town;
 mod town_map;
@@ -159,6 +160,7 @@ fn main() {
         .add_plugins(intro::IntroPlugin)
         .add_plugins(intro_train::IntroTrainPlugin)
         .add_plugins(name_entry::NameEntryPlugin)
+        .add_plugins(time_window::TimeWindowPlugin)
         .add_plugins(scene_wipe::SceneWipePlugin)
         .add_plugins(field_items::FieldItemsPlugin)
         .add_plugins(critters::CrittersPlugin)
