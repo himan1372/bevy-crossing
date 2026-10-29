@@ -32,8 +32,10 @@ const UNIT: f32 = 40.0;
 /// The field's border block (16 cells) and the town's half size (80 x 96 cells): game units to world.
 const BORDER: f32 = 16.0;
 const HALF_X: f32 = 40.0;
-const HALF_Z: f32 = 48.0;
-/// The camera's centre (`aID_train_birth_wait_init`): the doorway, 35 units below the ground.
+/// Field z (cells) of the town's world z = 0 (measured: the station's units line up with the
+/// platform and the rails at 63, one cell nearer than the border and half height add up to).
+const Z_ORIGIN: f32 = 63.6;
+/// The camera's centre (`aID_train_birth_wait_init`): the doorway.
 const CAMERA_CENTRE: Vec2 = Vec2::new(2180.0, 820.0);
 /// `ac_train1`'s passenger offset (`aTR1_passenger_ctrl`: arg0 = 1).
 const PASSENGER: Vec3 = Vec3::new(60.0, 20.0, 20.0);
@@ -52,7 +54,7 @@ pub fn music_on() -> bool {
 
 /// Game units on the field (x, z) to the town's world position.
 fn world(x: f32, z: f32) -> Vec2 {
-    Vec2::new(x / UNIT - BORDER - HALF_X, z / UNIT - BORDER - HALF_Z)
+    Vec2::new(x / UNIT - BORDER - HALF_X, z / UNIT - Z_ORIGIN)
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -305,7 +307,8 @@ fn leave(
             .find(|b| b.item == crate::disc_town::STATION)
     }) {
         let off = world(OFF_POS.x, OFF_POS.y);
-        let p = Vec3::new(off.x - 2.0, 0.0, off.y);
+        // `fd_npc_land_actable`: unit (5, 4) of the station's block, west of the exit.
+        let p = Vec3::new(off.x - 1.0, 0.0, off.y);
         let home = p.with_y(town.ground_y(p));
         info!(
             "Porter at {home:?} (the station building's origin is {:?})",
@@ -447,7 +450,8 @@ fn camera(
     };
     let w = world(CAMERA_CENTRE.x, CAMERA_CENTRE.y);
     let ground = town.ground_y(Vec3::new(w.x, 0.0, w.y));
-    let centre = Vec3::new(w.x, ground - 35.0 / UNIT, w.y);
+    // `mCoBG_GetBgY_OnlyCenter_FromWpos2(.., -35.0f)`: the ground's height (35 is only the margin).
+    let centre = Vec3::new(w.x, ground, w.y);
     let pitch = CAMERA_PITCH.to_radians();
     at.translation = centre + Vec3::new(0.0, pitch.sin(), pitch.cos()) * CAMERA_DISTANCE;
     at.look_at(centre, Vec3::Y);
@@ -631,19 +635,27 @@ pub struct IntroArrivalPlugin;
 
 impl Plugin for IntroArrivalPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Arrival>()
-            .add_systems(PreUpdate, lock.after(crate::input::update_focus))
-            .add_systems(
-                Update,
-                (leave, run_train, scene, tidy)
-                    .chain()
-                    .in_set(crate::states::GameplaySet),
-            )
-            .add_systems(
-                Update,
-                camera
-                    .after(crate::player::camera_follow)
-                    .in_set(crate::states::GameplaySet),
-            );
+        app.insert_resource(Arrival {
+            // QA: `BEVY_CROSSING_INTRO_ARRIVE=1` (with `BEVY_CROSSING_INTRO=skip`) starts at the arrival.
+            stage: if std::env::var("BEVY_CROSSING_INTRO_ARRIVE").is_ok() {
+                Stage::Leaving
+            } else {
+                Stage::Idle
+            },
+            ..default()
+        })
+        .add_systems(PreUpdate, lock.after(crate::input::update_focus))
+        .add_systems(
+            Update,
+            (leave, run_train, scene, tidy)
+                .chain()
+                .in_set(crate::states::GameplaySet),
+        )
+        .add_systems(
+            Update,
+            camera
+                .after(crate::player::camera_follow)
+                .in_set(crate::states::GameplaySet),
+        );
     }
 }

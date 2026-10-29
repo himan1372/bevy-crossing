@@ -567,3 +567,4 @@ Source (concept): https://pokeacer.xyz/wii/pdf/OS.pdf (Nintendo SDK OS manual,
 2026-10-29 claude: intro slice 3b (intro-train-arrival): train_control kernel, the train (locomotive, tender, car with its door) comes in on the rails with the player in it, fade + circle wipe, arrival music, fixed camera. Porter, getting off and the walk out next.
 2026-10-29 claude: intro slice 3c (intro-porter-walk): Porter greets the player, the player steps off, the train leaves, the walk one unit. Nook's welcome (slice 4) next.
 2026-10-29 claude: intro train fixed (orientation, real outtrain1 step-off with root motion).
+2026-10-29 claude: intro arrival re-aligned (z origin 63.6: train on the rails, Porter and the exit on the platform; camera centre at ground height).
