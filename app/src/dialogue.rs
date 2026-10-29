@@ -179,6 +179,16 @@ const TALK_END_TIMER: u16 = 1000;
 /// Chance a villager is in a Happy mood (re-rolled when patience resets).
 const HAPPY_CHANCE: u32 = 25;
 
+/// A villager's mood for the session (`mNpc` feel): `BEVY_CROSSING_VILLAGER_MOOD=normal` or
+/// `happy` fixes it, to drive one talk tree; otherwise `HAPPY_CHANCE`.
+fn roll_happy(roll: u32) -> bool {
+    match std::env::var("BEVY_CROSSING_VILLAGER_MOOD").as_deref() {
+        Ok("normal") => false,
+        Ok("happy") => true,
+        _ => roll < HAPPY_CHANCE,
+    }
+}
+
 /// A villager's conversation state.
 #[derive(Component)]
 pub struct VillagerTalk {
@@ -302,7 +312,7 @@ fn on_talk(
         };
         let looks = villager.looks as usize;
         if !chat.rolled {
-            chat.happy = rng.below(100) < HAPPY_CHANCE;
+            chat.happy = roll_happy(rng.below(100));
             chat.rolled = true;
         }
         let say = |line: &str| format!("{}: {line}", villager.name);
@@ -571,7 +581,7 @@ fn tick_talk_timers(
             chat.info.unlock_timer = chat.info.unlock_timer.saturating_sub(step);
             if chat.info.unlock_timer == 0 {
                 chat.info.talk_num = 0;
-                chat.happy = rng.below(100) < HAPPY_CHANCE;
+                chat.happy = roll_happy(rng.below(100));
             }
         }
     }
