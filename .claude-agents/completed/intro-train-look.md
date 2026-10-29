@@ -20,6 +20,6 @@ The door and the phone were not seen close up (Rover stands behind the near benc
 the old woman's eyes show the "+" pattern (the clip's eye texture indices are not applied: `npc_1_*_tex_index`); the tunnel scroll; the cloud animation; the window shading by the time of day.
 
 ## Follow-up (2026-10-29, Philip: "his head is inside the speech bubble" and "the camera jump cuts")
-- Camera height while Rover stands is 21 units (his head is about 33 up; the box now clears it), 38 on the bench; measured from the first-message screenshot (9 px per unit at that distance).
+- Camera height while Rover stands is 29 units (21 put his eyes below the camera; 31 hid his mouth) (his head is about 33 up; the box now clears it), 38 on the bench; measured from the first-message screenshot (9 px per unit at that distance).
 - The camera eases at 3.5 % of the gap per frame (it was 8 %) and Rover now slides to the bench over 36 frames (`slide`) instead of being placed there, so the camera pans after him
   while he turns and sits; burst screenshots (every 0.05 s) show one continuous pan from the aisle to the bench.
