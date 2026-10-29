@@ -190,23 +190,20 @@ impl TownRoster {
             .unwrap_or(used.len())
     }
 
-    /// `mNpc_ForceRemove`: with a full town and no move-in or removal for ten days, the villager
-    /// the player knows least leaves. `known(index)` says whether the player has met them and
-    /// whether they have been sent a letter. Returns who left.
-    pub fn force_remove(
-        &mut self,
-        day: i64,
+    /// `mNpc_GetGoodbyAnimalIdx`: the slot of the villager the player knows least, never the one
+    /// who is thinking of moving. `known(entry)` is (met, letter sent).
+    fn goodbye_slot(
+        &self,
         seed: u32,
+        day: i64,
         known: impl Fn(&RosterEntry) -> (bool, bool),
-    ) -> Option<RosterEntry> {
+    ) -> Option<usize> {
         use rustimal_logic::force_remove as fr;
-        if !fr::due(self.residents.len(), self.remove_day, day) {
-            return None;
-        }
         let mut order: Vec<usize> = (0..self.residents.len()).collect();
         order.sort_by_key(|&i| self.slot(i));
         let candidates: Vec<fr::Candidate> = order
             .iter()
+            .filter(|&&i| self.leaver != Some(self.slot(i)))
             .map(|&i| {
                 let entry = &self.residents[i];
                 let (met, letter) = known(entry);
@@ -224,9 +221,79 @@ impl TownRoster {
             })
             .collect();
         let mut rng = Rng::new((seed ^ (day as u32).wrapping_mul(0x85EB_CA6B)) | 1);
-        let slot = fr::goodbye_slot(&candidates, &mut |n| {
+        fr::goodbye_slot(&candidates, &mut |n| {
             ((rng.next() * n as f32) as u32).min(n - 1)
-        })?;
+        })
+    }
+
+    /// `mNpc_GetRemoveAnimal`, moving out: the villager thinking of moving leaves with the player.
+    /// Their memories go with them and nobody is thinking of moving until the next pick.
+    pub fn take_leaver(&mut self) -> Option<RosterEntry> {
+        let slot = self.leaver.take()?;
+        let i = (0..self.residents.len()).find(|&i| self.slot(i) == slot)?;
+        self.slots = self.resident_slots();
+        self.slots.remove(i);
+        let gone = self.residents.remove(i);
+        self.met.retain(|&m| m != gone.index);
+        Some(gone)
+    }
+
+    /// `mNpc_GetRemoveAnimal`, moving in: a villager arriving from another town. A full town
+    /// loses its goodbye villager (or slot 0) in their place. The summer camper and the last
+    /// villager to leave (`last_removed_animal_id`) are not tracked here yet.
+    pub fn receive(
+        &mut self,
+        incoming: RosterEntry,
+        day: i64,
+        seed: u32,
+        known: impl Fn(&RosterEntry) -> (bool, bool),
+    ) -> Arrival {
+        use rustimal_logic::villager_transfer::{may_move_in, move_in_slot, MoveInSlot};
+        let town: Vec<u32> = self.residents.iter().map(|r| r.index).collect();
+        if !may_move_in(incoming.index, false, &town, None, None) {
+            return Arrival::Refused;
+        }
+        let free = (self.residents.len() < RESIDENTS_MAX).then(|| self.free_slot());
+        let goodbye = match free {
+            Some(_) => None,
+            None => self.goodbye_slot(seed, day, known),
+        };
+        self.appeared.push(incoming.index);
+        self.met.retain(|&m| m != incoming.index);
+        self.remove_day = Some(day);
+        match move_in_slot(free, goodbye) {
+            MoveInSlot::Free(slot) => {
+                self.slots = self.resident_slots();
+                self.slots.push(slot);
+                self.residents.push(incoming);
+                Arrival::MovedIn
+            }
+            MoveInSlot::Replace(slot) => {
+                let i = (0..self.residents.len())
+                    .find(|&i| self.slot(i) == slot)
+                    .unwrap_or(0);
+                if self.leaver == Some(self.slot(i)) {
+                    self.leaver = None;
+                }
+                Arrival::Replaced(std::mem::replace(&mut self.residents[i], incoming))
+            }
+        }
+    }
+
+    /// `mNpc_ForceRemove`: with a full town and no move-in or removal for ten days, the villager
+    /// the player knows least leaves. `known(index)` says whether the player has met them and
+    /// whether they have been sent a letter. Returns who left.
+    pub fn force_remove(
+        &mut self,
+        day: i64,
+        seed: u32,
+        known: impl Fn(&RosterEntry) -> (bool, bool),
+    ) -> Option<RosterEntry> {
+        use rustimal_logic::force_remove as fr;
+        if !fr::due(self.residents.len(), self.remove_day, day) {
+            return None;
+        }
+        let slot = self.goodbye_slot(seed, day, known)?;
         let i = (0..self.residents.len()).find(|&i| self.slot(i) == slot)?;
         if self.leaver == Some(slot) {
             self.leaver = None;
@@ -442,20 +509,86 @@ fn init_roster(
         .map_or(&[], |p| p.sent_to.as_slice());
     let met = roster.met.clone();
     let mut goodbyes = Vec::new();
-    if let Some(gone) = roster.force_remove(day, seed.0, |e| {
-        (met.contains(&e.index), letters.contains(&e.name))
-    }) {
+    let known = |e: &RosterEntry| (met.contains(&e.index), letters.contains(&e.name));
+    if let Some(gone) = roster.force_remove(day, seed.0, known) {
         bevy::prelude::info!("{} moved out", gone.name);
         goodbyes.push(gone);
     }
-    commands.insert_resource(PendingGoodbyes(goodbyes));
     let rank = || crate::field_rank::rank_at_start(disc.as_deref()?, seed.0, save);
     if let Some(new) = roster.grow(&tables, crate::clock::now().day_number, seed.0, rank) {
         bevy::prelude::info!("{} moved in", new.name);
     }
+    if let Ok(mode) = std::env::var("BEVY_CROSSING_TRANSFER") {
+        debug_transfer(
+            &mode,
+            &mut roster,
+            &tables,
+            (day, seed.0),
+            known,
+            &mut goodbyes,
+        );
+    }
+    commands.insert_resource(PendingGoodbyes(goodbyes));
     // `mSDI_StartInitAfter`: someone is picked to be thinking of moving.
     roster.choose_leaver(None, seed.0, day);
     commands.insert_resource(roster);
+}
+
+/// The file `BEVY_CROSSING_TRANSFER` passes a villager through: the memory card's foreigner file.
+const TRANSFER_FILE: &str = "villager-transfer.txt";
+
+/// QA aid (`BEVY_CROSSING_TRANSFER=out|in`): the port has no memory card or other towns, so
+/// `out` packs the villager thinking of moving into `villager-transfer.txt` and `in` takes the
+/// villager in it into this town (`mNpc_GetRemoveAnimal`, moving out / moving in).
+fn debug_transfer(
+    mode: &str,
+    roster: &mut TownRoster,
+    tables: &VillagerTables,
+    (day, seed): (i64, u32),
+    known: impl Fn(&RosterEntry) -> (bool, bool),
+    goodbyes: &mut Vec<RosterEntry>,
+) {
+    use bevy::prelude::{info, warn};
+    match mode {
+        "out" => match roster.take_leaver() {
+            Some(gone) => {
+                info!("transfer out: {} (index {})", gone.name, gone.index);
+                if let Err(e) = std::fs::write(TRANSFER_FILE, gone.index.to_string()) {
+                    warn!("transfer file: {e}");
+                }
+            }
+            None => info!("transfer out: nobody is thinking of moving"),
+        },
+        "in" => {
+            let incoming = std::fs::read_to_string(TRANSFER_FILE)
+                .ok()
+                .and_then(|text| text.trim().parse::<u32>().ok())
+                .and_then(|index| tables.entry(index));
+            let Some(incoming) = incoming else {
+                warn!("transfer in: no villager in {TRANSFER_FILE}");
+                return;
+            };
+            let name = incoming.name.clone();
+            match roster.receive(incoming, day, seed, known) {
+                Arrival::Refused => info!("transfer in: {name} refused"),
+                Arrival::MovedIn => info!("transfer in: {name} moved in"),
+                Arrival::Replaced(gone) => {
+                    info!("transfer in: {name} moved in, {} left", gone.name);
+                    goodbyes.push(gone);
+                }
+            }
+        }
+        other => warn!("BEVY_CROSSING_TRANSFER={other}: expected out or in"),
+    }
+}
+
+/// What `TownRoster::receive` did with an arriving villager.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Arrival {
+    Refused,
+    MovedIn,
+    /// The town was full: this villager left in their place.
+    Replaced(RosterEntry),
 }
 
 /// Villagers who moved out at this start and whose goodbye letters are still to be sent
@@ -656,5 +789,43 @@ mod tests {
         assert!(!r.resident_slots().contains(&4));
         assert_eq!(r.free_slot(), 4);
         assert_eq!(r.slot(4), 5, "the resident after the gap keeps slot 5");
+    }
+
+    #[test]
+    fn the_villager_thinking_of_moving_leaves_with_the_player() {
+        let t = tables();
+        let mut r = full_town(&t);
+        r.met = r.residents.iter().map(|e| e.index).collect();
+        r.leaver = Some(6);
+        let gone = r.take_leaver().expect("slot 6 leaves");
+        assert_eq!(gone.index, 6);
+        assert_eq!((r.leaver, r.residents.len()), (None, RESIDENTS_MAX - 1));
+        assert!(!r.met.contains(&6), "their memories go with them");
+        assert!(r.take_leaver().is_none());
+        // Back in a town with room they take the free slot; the same town refuses a resident.
+        assert_eq!(
+            r.receive(gone.clone(), 50, 1, |_| (true, false)),
+            Arrival::MovedIn
+        );
+        assert_eq!(r.residents.len(), RESIDENTS_MAX);
+        assert_eq!(r.remove_day, Some(50));
+        assert_eq!(r.receive(gone, 50, 1, |_| (true, false)), Arrival::Refused);
+    }
+
+    #[test]
+    fn a_full_town_swaps_the_goodbye_villager_for_the_newcomer() {
+        let t = tables();
+        let mut r = full_town(&t);
+        // Everyone is known but index 4; the villager thinking of moving (slot 2) is never chosen.
+        r.leaver = Some(2);
+        let newcomer = t.entry(RESIDENTS_MAX as u32 + 1).expect("a 16th villager");
+        let known = |e: &RosterEntry| (e.index != 4, false);
+        match r.receive(newcomer.clone(), 60, 1, known) {
+            Arrival::Replaced(gone) => assert_eq!(gone.index, 4),
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(r.residents.len(), RESIDENTS_MAX);
+        assert_eq!(r.residents[4], newcomer, "the newcomer takes slot 4");
+        assert_eq!(r.leaver, Some(2));
     }
 }
