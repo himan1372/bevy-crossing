@@ -148,6 +148,41 @@ impl Job {
         ][self.index()]
     }
 
+    /// `aNRG2_setup_j3/j4/j5/j6_cont` with `mQst_CheckRemoveTarget` true: the guide's message
+    /// when the recipient has moved away, and the job that replaces this one
+    /// (`aNRG2_demo2_start_wait` restarts it, `demo3_start_wait` gives the second letter,
+    /// `decide_new_target` picks another recipient).
+    pub fn moved_away(self) -> Option<(usize, Job)> {
+        match self {
+            Job::DeliverFurniture => Some((0x07FF, Job::DeliverFurniture)),
+            Job::DeliverCarpet => Some((0x0810, Job::DeliverCarpet)),
+            Job::DeliverAxe | Job::DeliverAxe2 => Some((0x0816, Job::SendLetter2)),
+            Job::SendLetter | Job::SendLetter2 => Some((0x0808, self)),
+            _ => None,
+        }
+    }
+
+    /// The message the redirect continues with once the new recipient is known (the target
+    /// of the redirect message's `SET_NEXT_MESSAGE`).
+    pub fn moved_away_next(self) -> Option<usize> {
+        match self {
+            Job::DeliverFurniture => Some(0x0800),
+            Job::DeliverCarpet => Some(0x0811),
+            Job::DeliverAxe | Job::DeliverAxe2 => Some(0x0817),
+            Job::SendLetter | Job::SendLetter2 => Some(0x0809),
+            _ => None,
+        }
+    }
+
+    /// The item the player gives back in a delivery redirect (`demo2` / `demo3_start_wait`).
+    pub fn given_back(self, errand_item: u16) -> Option<u16> {
+        match self {
+            Job::DeliverFurniture | Job::DeliverCarpet => Some(errand_item),
+            Job::DeliverAxe | Job::DeliverAxe2 => Some(AXE),
+            _ => None,
+        }
+    }
+
     /// `aNRG2_demo_start_wait_talk_proc`'s `itemNo`.
     pub fn display(self) -> Display {
         match self {
@@ -338,6 +373,19 @@ impl FirstJob {
     pub fn check_letter(&mut self, recipient_has_letter: bool) {
         if matches!(self.progress, 2 | 3) && recipient_has_letter {
             self.progress = 0;
+        }
+    }
+
+    /// `mQst_CheckRemoveTarget`: the errand's recipient no longer lives in town.
+    pub fn recipient_gone(&self, residents: &[u16]) -> bool {
+        self.recipient.is_some_and(|id| !residents.contains(&id))
+    }
+
+    /// `mNpc_SetAnimalMail` during a letter job: any letter the post office delivers while it
+    /// runs sets progress 3; `check_letter` then finishes it if the recipient got it.
+    pub fn letter_sent(&mut self) {
+        if matches!(self.job, Some(Job::SendLetter | Job::SendLetter2)) && self.progress != 0 {
+            self.progress = 3;
         }
     }
 
@@ -541,5 +589,44 @@ mod tests {
         fj.setup_job(Job::Open);
         let out = fj.step_up(Picks::default()).unwrap();
         assert!(out.open_quest_event && fj.recipient.is_none());
+    }
+
+    #[test]
+    fn a_missing_recipient_redirects_each_delivery() {
+        let mut fj = FirstJob::start();
+        fj.setup_job(Job::DeliverFurniture);
+        fj.recipient = Some(55);
+        assert!(!fj.recipient_gone(&[55, 25]));
+        assert!(fj.recipient_gone(&[25, 90]));
+        assert_eq!(
+            Job::DeliverFurniture.moved_away(),
+            Some((0x07FF, Job::DeliverFurniture))
+        );
+        assert_eq!(Job::DeliverCarpet.moved_away_next(), Some(0x0811));
+        assert_eq!(
+            Job::DeliverAxe.moved_away(),
+            Some((0x0816, Job::SendLetter2))
+        );
+        assert_eq!(Job::DeliverAxe2.given_back(7), Some(AXE));
+        assert_eq!(Job::DeliverCarpet.given_back(0x1234), Some(0x1234));
+        assert_eq!(Job::PostNotice.moved_away(), None);
+    }
+
+    #[test]
+    fn a_letter_to_anyone_sets_progress_three_until_the_recipient_has_it() {
+        let mut fj = FirstJob::start();
+        fj.setup_job(Job::SendLetter);
+        fj.step_up(Picks {
+            villager: Some(3),
+            ..Picks::default()
+        });
+        fj.letter_sent();
+        assert_eq!(fj.progress, 3);
+        fj.check_letter(false);
+        assert_eq!(fj.progress, 3);
+        fj.check_letter(true);
+        assert!(fj.finished());
+        fj.letter_sent();
+        assert!(fj.finished(), "a finished job stays finished");
     }
 }

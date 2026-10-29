@@ -6,8 +6,8 @@
 //!
 //! Jobs 1 (change clothes), 2 (plant flowers), 3 (deliver furniture), 4 (send a
 //! letter), 10 (introductions), 11 (the open quest), 5 (carpet), 6 (axe) and 7 (post a notice)
-//! are covered; the second letter and second axe jobs, which only the "recipient moved away"
-//! redirects lead to, are not.
+//! are covered, and so are the second letter and second axe jobs, which the "recipient moved
+//! away" redirects lead to (`Job::moved_away`).
 
 use bevy::prelude::*;
 use rustimal_logic::first_job::{self as fj, Cond, FirstJob, Job, Picks};
@@ -52,6 +52,8 @@ pub(super) struct Residents {
     post_column: usize,
     /// `mNpc_CheckFriendAllAnimal && mSC_check_ArbeitPlayer`: every resident met and Tortimer talked to.
     pub met_everyone: bool,
+    /// The errand's recipient when they no longer live in town: id and name.
+    gone: Option<(u16, String)>,
 }
 
 pub(super) fn residents(
@@ -91,6 +93,24 @@ pub(super) fn residents(
 }
 
 impl Residents {
+    /// Names a recipient who has moved away (`mQst_CheckRemoveTarget`) from the disc's table.
+    pub(super) fn with_gone(
+        mut self,
+        recipient: Option<u16>,
+        disc: &crate::game_disc::GameDisc,
+    ) -> Self {
+        if let Some(id) = recipient.filter(|id| !self.ids.contains(id)) {
+            self.gone = crate::roster::VillagerTables::from_disc(disc)
+                .and_then(|tables| tables.entry(u32::from(id)))
+                .map(|entry| (id, entry.name));
+        }
+        self
+    }
+
+    pub(super) fn ids(&self) -> &[u16] {
+        &self.ids
+    }
+
     fn name_of(&self, id: u16) -> Option<&str> {
         let i = self.ids.iter().position(|&r| r == id)?;
         self.names.get(i).map(String::as_str)
@@ -113,7 +133,13 @@ impl Residents {
             return Vec::new();
         };
         let Some(i) = self.ids.iter().position(|&r| r == id) else {
-            return Vec::new();
+            // Moved away: only the name is left (FREE5).
+            return self
+                .gone
+                .iter()
+                .filter(|(gone, _)| *gone == id)
+                .map(|(_, name)| (5, name.clone()))
+                .collect();
         };
         let (x, z) = self.acres[i];
         let mut free = vec![
@@ -144,6 +170,8 @@ fn handled(kind: Job) -> bool {
             | Job::Open
             | Job::DeliverCarpet
             | Job::DeliverAxe
+            | Job::SendLetter2
+            | Job::DeliverAxe2
             | Job::PostNotice
             | Job::Introductions
     )
@@ -200,45 +228,63 @@ fn say_hello(
         return None;
     }
     if kind.can_start(free_slots(inventory)) {
-        let mut picks = Picks {
-            slot: inventory.pockets.find_free_slot().unwrap_or(0),
-            ..Picks::default()
-        };
-        if matches!(
-            kind,
-            Job::DeliverFurniture | Job::SendLetter | Job::DeliverCarpet
-        ) {
-            // `aNRG2_stepup_j3` / `_j4` / `_j5`: an unused villager.
-            picks.villager =
-                fj::pick_other_villager(&residents.ids, &job.used, &mut |n| rand.random(n));
-        }
-        if matches!(kind, Job::DeliverFurniture | Job::DeliverCarpet) {
-            // ... and a rolled piece of furniture (the walk-on ones excluded) or carpet.
-            let (goods, exclude) = if kind == Job::DeliverFurniture {
-                (
-                    crate::goods::Kind::Furniture,
-                    &fj::NO_DELIVERY_FURNITURE[..],
-                )
-            } else {
-                (crate::goods::Kind::Carpet, &[][..])
-            };
-            picks.item =
-                crate::goods::delivery_item(goods, exclude, &mut |n| rand.random(n as i32) as u32)?;
-        }
-        let out = job.step_up(picks)?;
-        if kind == Job::SendLetter {
-            // The recipient is put in the address book even if the player never met them.
-            *meet = job
-                .recipient
-                .and_then(|id| residents.name_of(id))
-                .map(str::to_string);
-        }
-        state.ask_again = out.can_ask_again;
-        grant(kind, job.item, inventory, rand);
+        begin_job(kind, job, inventory, residents, state, meet, rand, true)?;
         Some(kind.start_message())
     } else {
         kind.refuse_message()
     }
+}
+
+/// `aNRG2_stepup_job` and `aNRG2_set_possession` for a chosen job: the picks, the state change,
+/// the acquaintance and the items. `None` if the job is not at progress 1.
+fn begin_job(
+    kind: Job,
+    job: &mut FirstJob,
+    inventory: &mut PlayerInventory,
+    residents: &Residents,
+    state: &mut GuideState,
+    meet: &mut Option<String>,
+    rand: &mut rustimal_logic::qrand::Qrand,
+    give: bool,
+) -> Option<()> {
+    let mut picks = Picks {
+        slot: inventory.pockets.find_free_slot().unwrap_or(0),
+        ..Picks::default()
+    };
+    if matches!(
+        kind,
+        Job::DeliverFurniture | Job::SendLetter | Job::SendLetter2 | Job::DeliverCarpet
+    ) {
+        // `aNRG2_stepup_j3` / `_j4` / `_j5`: an unused villager.
+        picks.villager =
+            fj::pick_other_villager(&residents.ids, &job.used, &mut |n| rand.random(n));
+    }
+    if matches!(kind, Job::DeliverFurniture | Job::DeliverCarpet) {
+        // ... and a rolled piece of furniture (the walk-on ones excluded) or carpet.
+        let (goods, exclude) = if kind == Job::DeliverFurniture {
+            (
+                crate::goods::Kind::Furniture,
+                &fj::NO_DELIVERY_FURNITURE[..],
+            )
+        } else {
+            (crate::goods::Kind::Carpet, &[][..])
+        };
+        picks.item =
+            crate::goods::delivery_item(goods, exclude, &mut |n| rand.random(n as i32) as u32)?;
+    }
+    let out = job.step_up(picks)?;
+    if matches!(kind, Job::SendLetter | Job::SendLetter2) {
+        // The recipient is put in the address book even if the player never met them.
+        *meet = job
+            .recipient
+            .and_then(|id| residents.name_of(id))
+            .map(str::to_string);
+    }
+    state.ask_again = out.can_ask_again;
+    if give {
+        grant(kind, job.item, inventory, rand);
+    }
+    Some(())
 }
 
 /// A talk that ends with the job's start (or refusal) message appended.
@@ -338,9 +384,9 @@ pub(super) fn talk(
             Job::ChangeCloth => 0x07F4,
             Job::PlantFlower => 0x07F9,
             Job::DeliverFurniture => 0x0801,
-            Job::SendLetter => 0x080B,
+            Job::SendLetter | Job::SendLetter2 => 0x080B,
             Job::DeliverCarpet => 0x0812,
-            Job::DeliverAxe => 0x0818,
+            Job::DeliverAxe | Job::DeliverAxe2 => 0x0818,
             Job::PostNotice => 0x081A,
             Job::Introductions => 0x0828,
             _ => 0x0830, // Job::Open
@@ -374,6 +420,25 @@ pub(super) fn talk(
         ));
     }
     // The job is running: `aNRG2_setup_j*_cont`.
+    let letter = matches!(kind, Job::SendLetter | Job::SendLetter2);
+    // `mQst_CheckRemoveTarget`: the recipient no longer lives in town (a letter job asks
+    // again first).
+    if let Some((message, next)) = kind.moved_away() {
+        if job.recipient_gone(residents.ids()) && !(letter && state.ask_again) {
+            state.redirect = Some(Redirect {
+                next,
+                give_back: kind.given_back(job.item),
+                grant: !letter,
+            });
+            let mut chain = vec![message];
+            chain.extend(kind.moved_away_next());
+            return Some(Talk {
+                chain,
+                free: residents.job_strings(job),
+                ..Talk::default()
+            });
+        }
+    }
     let chain = match kind {
         Job::ChangeCloth => {
             if inventory.pockets.find_item(fj::WORK_UNIFORM).is_some() {
@@ -389,12 +454,27 @@ pub(super) fn talk(
         Job::PlantFlower => vec![0x07F8],
         Job::DeliverFurniture => vec![0x07FE],
         Job::DeliverCarpet => vec![0x080F],
-        Job::DeliverAxe => vec![0x0815],
+        Job::DeliverAxe | Job::DeliverAxe2 => vec![0x0815],
         Job::PostNotice => vec![0x0819],
         Job::Introductions => vec![0x0822],
         // `aNRG2_setup_j4_cont`: asked again (0x0836) until the flag drops, else the paper talk.
-        Job::SendLetter if state.ask_again => vec![0x0836],
-        Job::SendLetter => vec![0x0807],
+        Job::SendLetter | Job::SendLetter2 if state.ask_again => vec![0x0836],
+        // `aNRG2_give_new_paper_talk_proc`: a letter went to the wrong person (progress 3).
+        Job::SendLetter | Job::SendLetter2 if job.progress == 3 => {
+            if kind.can_start(free_slots(inventory)) {
+                grant(kind, job.item, inventory, rand);
+                state.ask_again = true;
+                vec![0x0804, 0x0805]
+            } else {
+                state.ask_again = false;
+                vec![0x0804, 0x07FA]
+            }
+        }
+        // 0x0807 goes on to the question about more paper (0x080A), answered by `paper_answer`.
+        Job::SendLetter | Job::SendLetter2 => {
+            state.paper_ask = true;
+            vec![0x0807]
+        }
         _ => vec![0x0829], // Job::Open
     };
     Some(Talk {
@@ -414,7 +494,12 @@ pub(crate) fn track(
     post: Res<crate::post::Post>,
     mut quest: ResMut<crate::quest::QuestState>,
     roster: Option<Res<crate::roster::TownRoster>>,
+    mut letters: Local<Option<u32>>,
 ) {
+    // A letter handed in while a letter job runs (`mNpc_SetAnimalMail`).
+    let delivered = letters
+        .replace(post.letters_given)
+        .is_some_and(|before| post.letters_given != before);
     if !identity.events.first_job {
         return;
     }
@@ -422,6 +507,9 @@ pub(crate) fn track(
         return;
     };
     let mut next = job.clone();
+    if delivered {
+        next.letter_sent();
+    }
     match next.job {
         Some(Job::ChangeCloth) => next.check_cloth(worn(&look)),
         // `ITEM1_CAT_PLANT`: saplings and flower bags (0x2900-0x29FF).
@@ -433,7 +521,7 @@ pub(crate) fn track(
                 .any(|&item| (0x2900..0x2A00).contains(&item)),
         ),
         // The recipient holds a letter from the player (`letter_info.exists`).
-        Some(Job::SendLetter) => {
+        Some(Job::SendLetter | Job::SendLetter2) => {
             let name = roster.as_deref().and_then(|r| {
                 let id = next.recipient?;
                 r.residents
@@ -480,6 +568,7 @@ pub(crate) fn hand_over_job_item(
     mut dialogue: ResMut<crate::dialogue::DialogueState>,
     mut state: ResMut<GuideState>,
     identity: Res<crate::save::PlayerIdentity>,
+    mut inventory: ResMut<PlayerInventory>,
 ) {
     for (kind, index, value) in orders.take_raised() {
         // `aNRG2_3rd_job_end_talk_proc`: order (NPC0, 9) while the third job's end is spoken.
@@ -493,6 +582,36 @@ pub(crate) fn hand_over_job_item(
                 taker: super::handover::Party::Player,
             });
             continue;
+        }
+        // `aNRG2_demo2_start_wait_talk_proc` / `demo3_start_wait`: the redirect message's order
+        // takes the undelivered item back from the player's pockets and hands it over.
+        if (kind, index) == (ORDER_NPC0, 9) && value != 0 {
+            if let Some(Redirect {
+                give_back: Some(item),
+                ..
+            }) = state.redirect
+            {
+                // The source clears the first pocket if the quest item cannot be found.
+                let slot = inventory
+                    .pockets
+                    .find_item_with_cond(item, QUEST)
+                    .unwrap_or(0);
+                inventory.pockets.pockets[slot] = 0;
+                inventory.pockets.set_item_cond(slot, 0);
+                info!("hand-back of the job item {item:#06x}");
+                dialogue.held = true;
+                handover.start(super::handover::Request {
+                    item: super::handover::Item::Goods(item),
+                    giver: super::handover::Party::Player,
+                    taker: super::handover::Party::Nook,
+                });
+                // Only the first order of the message (the later ones have other values).
+                state.redirect = state.redirect.map(|r| Redirect {
+                    give_back: None,
+                    ..r
+                });
+                continue;
+            }
         }
         if (kind, index, value) != (ORDER_NPC0, 1, 4) || !identity.events.first_job {
             continue;
@@ -516,6 +635,75 @@ pub(crate) fn hand_over_job_item(
     }
 }
 
+/// The redirect messages are shown on their own: the new recipient's name is put in before
+/// the message that follows them.
+pub(super) fn single(message: usize) -> bool {
+    matches!(message, 0x07FF | 0x0810 | 0x0816 | 0x0808)
+}
+
+/// The end of a redirect message (`aNRG2_demo2_end_wait_talk_proc` -> `aNRG2_job_start_talk_proc`,
+/// `aNRG2_decide_new_target_talk_proc`): the replacing job is chosen and started with a new
+/// pick, and the message that follows needs the new recipient's strings.
+pub(super) fn redirect_effect(
+    identity: &mut crate::save::PlayerIdentity,
+    inventory: &mut PlayerInventory,
+    residents: &Residents,
+    state: &mut GuideState,
+    rand: &mut rustimal_logic::qrand::Qrand,
+) -> Option<(Vec<(usize, String)>, Option<String>)> {
+    let redirect = state.redirect.take()?;
+    let job = identity.first_job.as_mut()?;
+    job.setup_job(redirect.next);
+    let mut meet = None;
+    // A letter's new target does not give paper yet: the guide asks (`check_more_paper`).
+    begin_job(
+        redirect.next,
+        job,
+        inventory,
+        residents,
+        state,
+        &mut meet,
+        rand,
+        redirect.grant,
+    )?;
+    // The message that follows ends on the question about more paper.
+    state.paper_ask = !redirect.grant;
+    info!(
+        "first job redirected to {:?}, recipient {:?}",
+        redirect.next, job.recipient
+    );
+    Some((residents.job_strings(job), meet))
+}
+
+/// `aNRG2_check_more_paper_talk_proc`: the answer to 0x080A. Yes gives another sheet if the
+/// pockets allow it (`aNRG2_give_new_paper_talk_proc`); the message that follows is returned.
+pub(super) fn paper_answer(
+    answer: usize,
+    identity: &mut crate::save::PlayerIdentity,
+    inventory: &mut PlayerInventory,
+    state: &mut GuideState,
+    rand: &mut rustimal_logic::qrand::Qrand,
+) -> usize {
+    state.paper_ask = false;
+    let Some(job) = identity.first_job.as_mut() else {
+        return 0x0806;
+    };
+    let kind = job.job.unwrap_or(Job::SendLetter);
+    if answer != 0 {
+        state.ask_again = false;
+        return 0x0806;
+    }
+    job.progress = 2;
+    if kind.can_start(free_slots(inventory)) {
+        grant(kind, job.item, inventory, rand);
+        state.ask_again = true;
+        0x0805
+    } else {
+        state.ask_again = false;
+        0x07FA
+    }
+}
+
 /// Session-only guide state (`Common_Get(quest).work`, `can_ask_again_flag`).
 #[derive(Resource, Default)]
 pub(crate) struct GuideState {
@@ -526,6 +714,21 @@ pub(crate) struct GuideState {
     pub map_handover: bool,
     /// Seconds since the last talk ended, once the whole job is over.
     pub ending: Option<f32>,
+    /// The guide is giving a job another go (`mQst_CheckRemoveTarget`): set when the redirect
+    /// message is chosen, carried out as it ends.
+    pub redirect: Option<Redirect>,
+    /// The talk is on 0x0807 / 0x080A: the question about more paper follows.
+    pub paper_ask: bool,
+}
+
+/// What a "recipient moved away" talk does: the job that takes this one's place, and the item
+/// the player hands back.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Redirect {
+    pub next: Job,
+    pub give_back: Option<u16>,
+    /// The job's items are given too (not for a letter's new target, which asks about paper).
+    pub grant: bool,
 }
 
 /// `aNRG2_all_job_end` / `aNRG2_send_away_init`: a second after the last talk the guide sends the

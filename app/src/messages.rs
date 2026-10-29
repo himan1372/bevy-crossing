@@ -564,6 +564,18 @@ impl GameText {
         ctx: &MsgContext,
         pick: &mut dyn FnMut(u32) -> u32,
     ) -> (Vec<String>, Option<(usize, MsgChoice)>) {
+        self.talk_until(msg_no, ctx, pick, None)
+    }
+
+    /// [`Self::talk_asking`] that stops after message `stop` instead of following its
+    /// `SET_NEXT_MESSAGE`: the caller changes the context and goes on from there.
+    pub fn talk_until(
+        &self,
+        msg_no: usize,
+        ctx: &MsgContext,
+        pick: &mut dyn FnMut(u32) -> u32,
+        stop: Option<usize>,
+    ) -> (Vec<String>, Option<(usize, MsgChoice)>) {
         let mut pages = vec![String::new()];
         let mut next = Some(msg_no);
         let mut followed = 0;
@@ -582,6 +594,9 @@ impl GameText {
             let (then, asks) = self.render(text, ctx, &mut pages, pick);
             if let Some(asks) = asks {
                 choice = Some((no, asks));
+                break;
+            }
+            if stop == Some(no) {
                 break;
             }
             next = then;

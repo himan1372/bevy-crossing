@@ -64,6 +64,8 @@ enum Step {
     Idle,
     /// The part-time job's guide is speaking; the rest of his messages follow in order.
     Guide(Vec<usize>),
+    /// The guide asked whether the player needs more paper; the answer comes back as the choice.
+    GuideAsk,
     Request,
     Other,
     BargainWelcome,
@@ -261,7 +263,8 @@ fn say_abs(
     msg: usize,
 ) -> Option<crate::messages::MsgChoice> {
     let text = disc.text.as_ref()?;
-    let (pages, choice) = text.talk(msg, ctx, &mut |_| 0);
+    let (pages, choice) = text.talk_until(msg, ctx, &mut |_| 0, guide::single(msg).then_some(msg));
+    let choice = choice.map(|(_, c)| c);
     dialogue.begin_external(actor, pages, choice.as_ref().map(|c| c.labels.clone()));
     info!("Nook message {msg:#06x}");
     choice
@@ -294,6 +297,7 @@ fn run_guide(
     flow: &mut Conversation,
     memory: &mut crate::villager_memory::VillagerMemory,
     talk: guide::Talk,
+    ask: bool,
 ) {
     for (slot, text) in talk.free {
         if let Some(free) = flow.context.free.get_mut(slot) {
@@ -303,7 +307,7 @@ fn run_guide(
     if let Some(name) = talk.meet {
         memory.meet(&name);
     }
-    start_guide(disc, dialogue, actor, flow, talk.chain);
+    start_guide(disc, dialogue, actor, flow, talk.chain, ask);
 }
 
 /// The guide's messages, one after the other.
@@ -313,13 +317,18 @@ fn start_guide(
     actor: Entity,
     flow: &mut Conversation,
     mut chain: Vec<usize>,
+    ask: bool,
 ) {
     if chain.is_empty() {
         return;
     }
     let first = chain.remove(0);
-    say_abs(disc, dialogue, actor, &flow.context, first);
-    flow.step = Step::Guide(chain);
+    let choice = say_abs(disc, dialogue, actor, &flow.context, first);
+    // The question about more paper (0x080A) is answered by `guide::paper_answer`.
+    flow.step = match choice {
+        Some(_) if ask => Step::GuideAsk,
+        _ => Step::Guide(chain),
+    };
 }
 
 fn context(identity: &crate::save::PlayerIdentity, upper: bool) -> ShopContext {
@@ -796,7 +805,8 @@ pub(crate) fn interact(
             // `aNRG2_think_init_proc`: the guide stands in for the shop master during the job.
             let first = !std::mem::replace(&mut guide_state.greeted, true);
             let residents =
-                guide::residents(roster.as_deref(), town.as_deref(), identity.arbeit_trophy);
+                guide::residents(roster.as_deref(), town.as_deref(), identity.arbeit_trophy)
+                    .with_gone(identity.first_job.as_ref().and_then(|j| j.recipient), &disc);
             let talk = guide::arrival(
                 &mut identity,
                 &mut inventory,
@@ -813,7 +823,15 @@ pub(crate) fn interact(
                     *loco = crate::locomotion::Locomotion::default();
                 }
                 let end_job = talk.end_job;
-                run_guide(&disc, &mut dialogue, actor, &mut flow, &mut memory, talk);
+                run_guide(
+                    &disc,
+                    &mut dialogue,
+                    actor,
+                    &mut flow,
+                    &mut memory,
+                    talk,
+                    guide_state.paper_ask,
+                );
                 if end_job {
                     guide_state.ending = Some(0.0);
                 }
@@ -1009,9 +1027,48 @@ pub(crate) fn interact(
                     *focus = InputFocus::World;
                 } else {
                     let next = rest.remove(0);
-                    say_abs(&disc, &mut dialogue, actor, &flow.context, next);
-                    flow.step = Step::Guide(rest);
+                    if guide_state.redirect.is_some() {
+                        // A redirect message has ended: the replacing job starts with a new pick
+                        // and the next message names the new recipient.
+                        let residents = guide::residents(
+                            roster.as_deref(),
+                            town.as_deref(),
+                            identity.arbeit_trophy,
+                        );
+                        if let Some((free, meet)) = guide::redirect_effect(
+                            &mut identity,
+                            &mut inventory,
+                            &residents,
+                            &mut guide_state,
+                            &mut rand.0,
+                        ) {
+                            for (slot, text) in free {
+                                if let Some(f) = flow.context.free.get_mut(slot) {
+                                    *f = text;
+                                }
+                            }
+                            if let Some(name) = meet {
+                                memory.meet(&name);
+                            }
+                        }
+                    }
+                    let choice = say_abs(&disc, &mut dialogue, actor, &flow.context, next);
+                    flow.step = match choice {
+                        Some(_) if guide_state.paper_ask => Step::GuideAsk,
+                        _ => Step::Guide(rest),
+                    };
                 }
+            }
+            Step::GuideAsk => {
+                let next = guide::paper_answer(
+                    choice,
+                    &mut identity,
+                    &mut inventory,
+                    &mut guide_state,
+                    &mut rand.0,
+                );
+                say_abs(&disc, &mut dialogue, actor, &flow.context, next);
+                flow.step = Step::Guide(Vec::new());
             }
             Step::Goodbye => {
                 twins.goodbye = Goodbye::Done;
@@ -1514,6 +1571,7 @@ pub(crate) fn interact(
                 actor,
                 &mut flow,
                 vec![guide::GOODS_MESSAGE],
+                false,
             );
             return;
         }
@@ -1546,7 +1604,8 @@ pub(crate) fn interact(
         actions.consume(Action::Interact);
         if guide::active(&identity) {
             let residents =
-                guide::residents(roster.as_deref(), town.as_deref(), identity.arbeit_trophy);
+                guide::residents(roster.as_deref(), town.as_deref(), identity.arbeit_trophy)
+                    .with_gone(identity.first_job.as_ref().and_then(|j| j.recipient), &disc);
             if let Some(talk) = guide::talk(
                 &mut identity,
                 &mut inventory,
@@ -1557,7 +1616,15 @@ pub(crate) fn interact(
             ) {
                 *focus = InputFocus::Dialogue;
                 let end_job = talk.end_job;
-                run_guide(&disc, &mut dialogue, actor, &mut flow, &mut memory, talk);
+                run_guide(
+                    &disc,
+                    &mut dialogue,
+                    actor,
+                    &mut flow,
+                    &mut memory,
+                    talk,
+                    guide_state.paper_ask,
+                );
                 if end_job {
                     guide_state.ending = Some(0.0);
                 }

@@ -74,6 +74,10 @@ pub struct Post {
     /// Villagers holding a letter from the player (`letter_info.exists`).
     #[serde(default)]
     pub sent_to: Vec<String>,
+    /// Letters villagers have been given, counted: the first job's letter jobs notice one
+    /// that was delivered to the wrong person (`mNpc_SetAnimalMail`: progress 3).
+    #[serde(default)]
+    pub letters_given: u32,
     /// The plaza's notice board (`Save_Get(noticeboard)`), oldest first.
     #[serde(default)]
     pub notices: Vec<crate::notice_board::Notice>,
@@ -99,6 +103,7 @@ impl Post {
                 if !self.sent_to.contains(name) {
                     self.sent_to.push(name.clone());
                 }
+                self.letters_given = self.letters_given.wrapping_add(1);
                 // mNpc_SetMailCondThisLand: GOOD and BAD letters are answered.
                 use rustimal_logic::npc_reply;
                 let score =

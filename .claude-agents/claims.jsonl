@@ -545,3 +545,5 @@
 {"action":"complete","task":"notice-board-animations","agent":"claude","timestamp":"2026-10-28T23:45:41Z"}
 {"action":"claim","task":"museum-room-door-fade","agent":"claude","timestamp":"2026-10-28T23:48:19Z"}
 {"action":"complete","task":"museum-room-door-fade","agent":"claude","timestamp":"2026-10-28T23:54:54Z"}
+{"action":"claim","task":"job-moved-away-redirects","agent":"claude","timestamp":"2026-10-29T00:01:19Z"}
+{"action":"complete","task":"job-moved-away-redirects","agent":"claude","timestamp":"2026-10-29T00:33:05Z"}
