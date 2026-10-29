@@ -23,7 +23,9 @@ use disc::{rel_bss, AssetCatalog, RomImage, RomSource, Target};
 use rustimal_logic::random_field::{
     bt, make_random_field, ComboInfo, RandomField, BLOCK_X_NUM, BLOCK_Z_NUM,
 };
-use rustimal_logic::town_gen::{CellKind, Feature, TownAcre, TownPlan, ACRE_DEPTH, ACRE_WIDTH};
+use rustimal_logic::town_gen::{
+    CellKind, Feature, TownAcre, TownPlan, ACRE_DEPTH, ACRE_WIDTH, MAX_TOWN_VILLAGERS,
+};
 
 use crate::disc_gfx::{decode_texture, run_display_lists, run_ground_lists, Segments, LIST_TAG};
 use crate::environment::{BuildingLights, WindowLights};
@@ -904,7 +906,7 @@ pub(crate) fn cell_for_item(item: u16) -> Option<CellKind> {
 pub fn build_retail_town(
     disc: &GameDisc,
     plan: &mut TownPlan,
-    residents: Option<usize>,
+    residents: Option<&[usize]>,
 ) -> (RetailLayout, GroundMap) {
     let combos = read_combos(&disc.rom, &disc.catalog);
     let bg_lists = read_bg_lists(&disc.rom, &disc.catalog);
@@ -1062,8 +1064,8 @@ pub fn build_retail_town(
         .map(|&(_, ax, az, cx, cz)| (ax, az, cx, cz))
         .collect();
     resite_homes(plan, &player_homes, &ground);
-    if let Some(count) = residents.filter(|_| !reserved.is_empty()) {
-        place_homes_on_reserved(plan, &reserved, count);
+    if let Some(slots) = residents.filter(|_| !reserved.is_empty()) {
+        place_homes_on_reserved(plan, &reserved, slots);
     }
     let mut field_items = Vec::with_capacity(ACRE_WIDTH * ACRE_DEPTH);
     for az in 0..ACRE_DEPTH {
@@ -1370,7 +1372,7 @@ const SIGN20: u16 = 0x5824;
 fn place_homes_on_reserved(
     plan: &mut TownPlan,
     reserved: &[(usize, usize, usize, usize)],
-    count: usize,
+    slots: &[usize],
 ) {
     // Clear the plan's homes; the reserved spots replace them.
     for acre in plan.acres.iter_mut() {
@@ -1382,8 +1384,16 @@ fn place_homes_on_reserved(
         }
     }
     let order = crate::roster::home_spot_order(reserved.len(), plan.seed);
-    let count = count.min(reserved.len()).min(plan.house_acres.len());
-    for (i, &spot) in order.iter().take(count).enumerate() {
+    // A slot nobody lives in (`slots` leaves it out) gets no house.
+    plan.house_acres = [u8::MAX; MAX_TOWN_VILLAGERS];
+    plan.house_units = [u16::MAX; MAX_TOWN_VILLAGERS];
+    let mut count = 0;
+    for &i in slots {
+        let Some(&spot) = order.get(i) else { continue };
+        if i >= plan.house_acres.len() {
+            continue;
+        }
+        count = count.max(i + 1);
         let (ax, az, cx, cz) = reserved[spot];
         if !(1..15).contains(&cx) || !(1..15).contains(&cz) {
             continue;
@@ -1957,7 +1967,7 @@ fn cell_hash((ax, az, cx, cz): (usize, usize, usize, usize)) -> usize {
 type HouseLooks = HashMap<(usize, usize, usize, usize), (u8, u8)>;
 
 /// Each resident's house look from `npc_house_list` (type, palette),
-/// keyed by their home cell (resident i lives at plan home i).
+/// keyed by their home cell (a resident lives at the plan home of their slot).
 fn resident_house_looks(
     disc: &GameDisc,
     town: &Town,
@@ -1968,12 +1978,11 @@ fn resident_house_looks(
         return out;
     };
     let plan = &town.plan;
-    for (i, resident) in roster
-        .residents
-        .iter()
-        .enumerate()
-        .take(plan.villager_count as usize)
-    {
+    for (n, resident) in roster.residents.iter().enumerate() {
+        let i = roster.slot(n);
+        if i >= plan.villager_count as usize || plan.house_acres[i] == u8::MAX {
+            continue;
+        }
         let Some(b) = disc
             .rom
             .slice(RomSource::Rel, list.offset + resident.index * 8, 2)

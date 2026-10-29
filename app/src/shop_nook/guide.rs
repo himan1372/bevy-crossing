@@ -74,7 +74,7 @@ pub(super) fn residents(
         out.ids.push(entry.index as u16);
         out.names.push(entry.name.clone());
         let acre = town
-            .and_then(|t| t.plan.house_acres.get(i).copied())
+            .and_then(|t| t.plan.house_acres.get(roster.slot(i)).copied())
             .map_or(0, usize::from);
         out.acres.push((
             acre % rustimal_logic::town_gen::ACRE_WIDTH,

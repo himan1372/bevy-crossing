@@ -611,6 +611,42 @@ fn load(loaded: Res<crate::save::LoadedSave>, mut post: ResMut<Post>) {
     }
 }
 
+/// `mNpc_SendRegisteredGoodbyMail` after `mNpc_ForceRemove`: a villager who moved out at this
+/// start writes goodbye (`0x20E + looks * 3 + RANDOM(3)`), to the mailbox or the post office.
+fn goodbye_letters(
+    mut commands: Commands,
+    pending: Option<ResMut<crate::roster::PendingGoodbyes>>,
+    disc: Option<Res<GameDisc>>,
+    identity: Res<crate::save::PlayerIdentity>,
+    mut post: ResMut<Post>,
+    mut house_box: ResMut<HouseMailbox>,
+) {
+    let (Some(mut pending), Some(disc)) = (pending, disc) else {
+        return;
+    };
+    if disc.text.is_none() {
+        return;
+    }
+    let mut seed = (crate::clock::now().day_number as u32).wrapping_mul(0x9E37_79B9) | 1;
+    for gone in std::mem::take(&mut pending.0) {
+        let mut ctx = letter_context(&identity);
+        // mNpc_SetGoodbyMailData: the player, the villager, (the neighbour is unused), the town.
+        ctx.free[0] = identity.player.clone();
+        ctx.free[1] = gone.name.clone();
+        ctx.free[3] = identity.town.clone();
+        let no = rustimal_logic::force_remove::goodbye_mail(gone.looks, rand(&mut seed, 3));
+        let paper = random_paper(&mut seed);
+        if let Some(letter) = disc_letter(&disc, no, &ctx, &gone.name, paper, 0) {
+            let sent = send(letter, &mut house_box.0, &mut post);
+            info!(
+                "{} writes goodbye (letter {no:#x}, delivered: {sent})",
+                gone.name
+            );
+        }
+    }
+    commands.remove_resource::<crate::roster::PendingGoodbyes>();
+}
+
 pub struct PostPlugin;
 
 impl Plugin for PostPlugin {
@@ -620,7 +656,9 @@ impl Plugin for PostPlugin {
             .add_systems(Startup, load)
             .add_systems(
                 Update,
-                (daily, deliver).chain().in_set(crate::states::GameplaySet),
+                (goodbye_letters, daily, deliver)
+                    .chain()
+                    .in_set(crate::states::GameplaySet),
             );
     }
 }

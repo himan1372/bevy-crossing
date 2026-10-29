@@ -279,10 +279,11 @@ pub(crate) fn spawn_villagers(
     identity: Res<crate::save::PlayerIdentity>,
 ) {
     commands.insert_resource(WanderRng(0x9E3779B97F4A7C15));
-    let houses = match roster {
-        // Resident i lives in home i (`plan.house_*`).
-        Some(_) => (0..town.plan.villager_count as usize)
-            .map(|i| {
+    let houses = match roster.as_deref() {
+        // A resident lives in the home of their slot (`plan.house_*`).
+        Some(roster) => (0..roster.residents.len())
+            .map(|n| {
+                let i = roster.slot(n).min(town.plan.house_acres.len() - 1);
                 let a = town.plan.house_acres[i] as usize;
                 let u = town.plan.house_units[i] as usize;
                 Town::cell_to_world(a % ACRE_WIDTH, a / ACRE_WIDTH, u % 16, u / 16)

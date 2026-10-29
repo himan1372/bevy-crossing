@@ -313,6 +313,12 @@ pub struct SaveData {
     /// Game day of the last move-in.
     #[serde(default)]
     pub last_move_in_day: Option<i64>,
+    /// The home slot of each resident (parallel to `villagers`; empty: slot = position).
+    #[serde(default)]
+    pub villager_slots: Vec<usize>,
+    /// `force_remove_date`: the last move-in or removal.
+    #[serde(default)]
+    pub last_remove_day: Option<i64>,
 }
 
 /// Save data loaded at startup (PreStartup), consumed by Startup systems.
@@ -590,6 +596,8 @@ fn collect_save(
         villagers_appeared: Vec::new(),
         villagers_met: Vec::new(),
         last_move_in_day: None,
+        villager_slots: Vec::new(),
+        last_remove_day: None,
     }
 }
 
@@ -742,6 +750,8 @@ fn quick_save(
         save.villagers_appeared = r.appeared.clone();
         save.villagers_met = r.met.clone();
         save.last_move_in_day = r.last_grow_day;
+        save.villager_slots = r.slots.clone();
+        save.last_remove_day = r.remove_day;
     }
     if write_save(&save) {
         println!("Saved to {}", save_path().display());

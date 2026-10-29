@@ -414,8 +414,9 @@ pub fn generate_town(
     // water and objects replace the plan ones (resident homes are kept).
     let (retail, ground) = match disc {
         Some(disc) => {
-            let residents = roster.as_ref().map(|r| r.residents.len());
-            let (retail, ground) = crate::disc_town::build_retail_town(&disc, &mut plan, residents);
+            let slots = roster.as_ref().map(|r| r.resident_slots());
+            let (retail, ground) =
+                crate::disc_town::build_retail_town(&disc, &mut plan, slots.as_deref());
             (Some(retail), Some(ground))
         }
         None => (None, None),

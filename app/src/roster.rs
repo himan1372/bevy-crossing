@@ -106,6 +106,11 @@ pub struct TownRoster {
     pub met: Vec<u32>,
     /// Game day of the last move-in check that let someone in.
     pub last_grow_day: Option<i64>,
+    /// The home slot of each resident (`animals[i]`, parallel to `residents`): a villager who
+    /// leaves keeps the others where they are. Empty means resident `i` is in slot `i`.
+    pub slots: Vec<usize>,
+    /// `force_remove_date`: the last move-in or removal (`mNpc_RenewRemoveHistory`).
+    pub remove_day: Option<i64>,
 }
 
 impl VillagerTables {
@@ -133,6 +138,69 @@ impl TownRoster {
     /// the field-rank chance, a new villager moves in. Returns them.
     /// `rank` gives the town's field rank (`mFAs_GetFieldRank`) and is only
     /// asked for once the cheaper gates pass.
+    /// The home slot of resident `i`.
+    pub fn slot(&self, i: usize) -> usize {
+        self.slots.get(i).copied().unwrap_or(i)
+    }
+
+    /// Every resident's slot, `residents.len()` of them.
+    pub fn resident_slots(&self) -> Vec<usize> {
+        (0..self.residents.len()).map(|i| self.slot(i)).collect()
+    }
+
+    /// The first slot nobody lives in (`mNpc_UseFreeAnimalInfo`).
+    fn free_slot(&self) -> usize {
+        let used = self.resident_slots();
+        (0..RESIDENTS_MAX)
+            .find(|s| !used.contains(s))
+            .unwrap_or(used.len())
+    }
+
+    /// `mNpc_ForceRemove`: with a full town and no move-in or removal for ten days, the villager
+    /// the player knows least leaves. `known(index)` says whether the player has met them and
+    /// whether they have been sent a letter. Returns who left.
+    pub fn force_remove(
+        &mut self,
+        day: i64,
+        seed: u32,
+        known: impl Fn(&RosterEntry) -> (bool, bool),
+    ) -> Option<RosterEntry> {
+        use rustimal_logic::force_remove as fr;
+        if !fr::due(self.residents.len(), self.remove_day, day) {
+            return None;
+        }
+        let mut order: Vec<usize> = (0..self.residents.len()).collect();
+        order.sort_by_key(|&i| self.slot(i));
+        let candidates: Vec<fr::Candidate> = order
+            .iter()
+            .map(|&i| {
+                let entry = &self.residents[i];
+                let (met, letter) = known(entry);
+                fr::Candidate {
+                    slot: self.slot(i),
+                    memories: u32::from(met),
+                    letters: u32::from(met && letter),
+                    lands: u32::from(met),
+                    same_looks: self
+                        .residents
+                        .iter()
+                        .filter(|r| r.looks == entry.looks)
+                        .count() as u32,
+                }
+            })
+            .collect();
+        let mut rng = Rng::new((seed ^ (day as u32).wrapping_mul(0x85EB_CA6B)) | 1);
+        let slot = fr::goodbye_slot(&candidates, &mut |n| {
+            ((rng.next() * n as f32) as u32).min(n - 1)
+        })?;
+        let i = (0..self.residents.len()).find(|&i| self.slot(i) == slot)?;
+        self.slots = self.resident_slots();
+        self.slots.remove(i);
+        let gone = self.residents.remove(i);
+        self.remove_day = Some(day);
+        Some(gone)
+    }
+
     pub fn grow(
         &mut self,
         tables: &VillagerTables,
@@ -165,7 +233,11 @@ impl TownRoster {
         let idx = self.pick(tables, looks, &mut rng)?;
         let entry = tables.entry(idx as u32)?;
         self.appeared.push(entry.index);
+        let slot = self.free_slot();
+        self.slots = self.resident_slots();
+        self.slots.push(slot);
         self.residents.push(entry.clone());
+        self.remove_day = Some(day);
         Some(entry)
     }
 
@@ -318,14 +390,38 @@ fn init_roster(
             .unwrap_or_else(|| residents.iter().map(|r| r.index).collect()),
         met: save.map(|s| s.villagers_met.clone()).unwrap_or_default(),
         last_grow_day: save.and_then(|s| s.last_move_in_day),
+        slots: save
+            .map(|s| s.villager_slots.clone())
+            .filter(|slots| slots.len() == residents.len())
+            .unwrap_or_default(),
+        remove_day: save.and_then(|s| s.last_remove_day),
         residents,
     };
+    let day = crate::clock::now().day_number;
+    // `mSDI_StartInitAfter`: `mNpc_ForceRemove` comes before `mNpc_Grow`.
+    let letters: &[String] = save
+        .and_then(|s| s.post.as_ref())
+        .map_or(&[], |p| p.sent_to.as_slice());
+    let met = roster.met.clone();
+    let mut goodbyes = Vec::new();
+    if let Some(gone) = roster.force_remove(day, seed.0, |e| {
+        (met.contains(&e.index), letters.contains(&e.name))
+    }) {
+        bevy::prelude::info!("{} moved out", gone.name);
+        goodbyes.push(gone);
+    }
+    commands.insert_resource(PendingGoodbyes(goodbyes));
     let rank = || crate::field_rank::rank_at_start(disc.as_deref()?, seed.0, save);
     if let Some(new) = roster.grow(&tables, crate::clock::now().day_number, seed.0, rank) {
         bevy::prelude::info!("{} moved in", new.name);
     }
     commands.insert_resource(roster);
 }
+
+/// Villagers who moved out at this start and whose goodbye letters are still to be sent
+/// (`l_mnpc_goodby_mail`).
+#[derive(bevy::prelude::Resource, Default)]
+pub struct PendingGoodbyes(pub Vec<RosterEntry>);
 
 pub struct RosterPlugin;
 
@@ -429,5 +525,38 @@ mod tests {
     fn names_trim_padding() {
         assert_eq!(decode_name(b"Bob     "), "Bob");
         assert_eq!(decode_name(b"Maple\0\0\0"), "Maple");
+    }
+
+    fn full_town(t: &VillagerTables) -> TownRoster {
+        let residents: Vec<RosterEntry> = (0..RESIDENTS_MAX as u32)
+            .filter_map(|i| t.entry(i))
+            .collect();
+        TownRoster {
+            appeared: residents.iter().map(|r| r.index).collect(),
+            residents,
+            ..TownRoster::default()
+        }
+    }
+
+    #[test]
+    fn a_full_town_loses_the_villager_the_player_knows_least() {
+        let t = tables();
+        let mut r = full_town(&t);
+        r.remove_day = Some(100);
+        assert!(
+            r.force_remove(105, 1, |_| (false, false)).is_none(),
+            "too soon"
+        );
+        // Everyone has been met but one.
+        let gone = r
+            .force_remove(111, 1, |e| (e.index != 4, false))
+            .expect("someone leaves");
+        assert_eq!(gone.index, 4);
+        assert_eq!(r.residents.len(), RESIDENTS_MAX - 1);
+        assert_eq!(r.remove_day, Some(111));
+        // The others keep their slots; the empty one is the next to be used.
+        assert!(!r.resident_slots().contains(&4));
+        assert_eq!(r.free_slot(), 4);
+        assert_eq!(r.slot(4), 5, "the resident after the gap keeps slot 5");
     }
 }
