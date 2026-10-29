@@ -24,6 +24,7 @@ impl Prop {
         skeleton_name: &str,
         parent: Entity,
         local: Transform,
+        palette: Option<u32>,
         (meshes, materials, images): (
             &mut Assets<Mesh>,
             &mut Assets<N64Material>,
@@ -52,7 +53,7 @@ impl Prop {
             for (mesh, material) in crate::disc_town::sink_meshes_scaled(
                 disc,
                 &sink,
-                None,
+                palette,
                 joint.flags & 1 != 0,
                 &crate::disc_gfx::Segments::default(),
                 1.0,
@@ -79,11 +80,11 @@ impl Prop {
     }
 
     /// Poses every joint at `frame` of `anim`.
-    pub(crate) fn pose(
+    pub(crate) fn pose<F: bevy::ecs::query::QueryFilter>(
         &self,
         anim: Option<&Animation>,
         frame: f32,
-        transforms: &mut Query<&mut Transform>,
+        transforms: &mut Query<&mut Transform, F>,
     ) {
         let world = self.skeleton.world_matrices(anim, frame);
         for (holder, matrix) in self.joints.iter().zip(world) {

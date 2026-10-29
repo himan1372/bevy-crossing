@@ -277,6 +277,7 @@ fn spawn_door(
         "cKF_bs_r_obj_romtrain_door",
         holder,
         Transform::default(),
+        None,
         assets,
     ) else {
         warn!("the train door is not on the disc");
@@ -648,6 +649,7 @@ fn rover(
     mut orders: ResMut<crate::msg_window::DemoOrders>,
     mut names: ResMut<crate::name_entry::NameEntry>,
     mut times: ResMut<crate::time_window::TimeWindow>,
+    mut arrival: ResMut<crate::intro_arrival::Arrival>,
     mut look: ResMut<crate::character::PlayerLook>,
     mut rand: ResMut<crate::game_rand::GameRand>,
     mut rover: Query<
@@ -814,6 +816,7 @@ fn rover(
                                 look.cloth
                             );
                             *focus = InputFocus::World;
+                            arrival.begin();
                             script.step = Step::Finished;
                             info!("intro: the train scene ends");
                         }
@@ -1010,7 +1013,9 @@ fn train_camera(
         ),
     >,
 ) {
-    if *state != ShopLocation::Train {
+    // Once the scene is over the lens is put back even though the town has been entered.
+    let finished = matches!(script.step, Step::Finished);
+    if *state != ShopLocation::Train && !(finished && !cam.restored) {
         return;
     }
     let Ok((mut at, mut lens, mut view)) = camera.single_mut() else {
@@ -1291,6 +1296,7 @@ fn phone_cues(
                 "cKF_bs_r_tol_keitai_1",
                 hand,
                 Transform::from_scale(Vec3::ZERO),
+                None,
                 (&mut meshes, &mut materials, &mut images),
             ) else {
                 return;

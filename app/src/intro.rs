@@ -19,6 +19,8 @@ pub enum Intro {
     Off,
     /// On the train with Rover (`SCENE_START_DEMO`).
     Train,
+    /// Coming in to the station (`ac_intro_demo`).
+    Arrival,
 }
 
 /// What the intro leaves behind (`aID_*` act 11, `aNGD_scene_change_wait_init`): the part-time job is

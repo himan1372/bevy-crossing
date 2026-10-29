@@ -641,7 +641,9 @@ fn update_music(
     let previous_volume = bgm.volume.current;
     bgm.volume.advance(time.delta_secs());
 
-    let scene = if *shop.get() == crate::shop::ShopLocation::Train {
+    let scene = if crate::intro_arrival::music_on() {
+        music_policy::Scene::Arrival
+    } else if *shop.get() == crate::shop::ShopLocation::Train {
         music_policy::Scene::Train
     } else if *shop.get() == crate::shop::ShopLocation::Museum {
         music_policy::Scene::Museum
