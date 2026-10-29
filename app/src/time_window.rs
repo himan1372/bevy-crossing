@@ -191,8 +191,50 @@ fn close(view: &mut View) {
 
 type Model = Vec<(Handle<Mesh>, Handle<N64Material>)>;
 
+/// `mSM_menu_control_move`: the window's cloth pattern creeps 0.3535 texels a tick
+/// (`gDPSetTileSize_Dolphin(RENDERTILE, -texture_pos * k, ..)`; `k` quarter texels per unit, so the
+/// cloth moves `k / 4` texels per unit). Only the cloth pieces (the ones with a second tile) slide.
+pub(crate) fn scroll_cloth(
+    model: &Model,
+    slide: f32,
+    n64: &mut Assets<N64Material>,
+    images: &Assets<Image>,
+) {
+    for (_, handle) in model {
+        let Some(mut material) = n64.get_mut(handle) else {
+            continue;
+        };
+        if material.texture1.is_none() {
+            continue;
+        }
+        let Some(size) = material
+            .texture
+            .as_ref()
+            .and_then(|h| images.get(h))
+            .map(|image| image.size_f32())
+        else {
+            continue;
+        };
+        material.combiner.extra.y = (slide / size.x.max(1.0)).fract();
+        material.combiner.extra.z = (slide / size.y.max(1.0)).fract();
+    }
+}
+
+fn creep(
+    time: Res<Time>,
+    mut assets: ResMut<TimeAssets>,
+    mut n64: ResMut<Assets<N64Material>>,
+    images: Res<Assets<Image>>,
+) {
+    assets.slide = (assets.slide + 0.3535 * time.delta_secs() * 60.0).rem_euclid(1024.0);
+    if let Some(frame) = assets.frame.as_ref() {
+        scroll_cloth(frame, assets.slide, &mut n64, &images);
+    }
+}
+
 #[derive(Resource, Default)]
 pub(crate) struct TimeAssets {
+    slide: f32,
     frame: Option<Model>,
     hands: Option<[Model; 3]>,
     root: Option<Entity>,
@@ -459,7 +501,7 @@ impl Plugin for TimeWindowPlugin {
             )
             .add_systems(
                 Update,
-                (draw, animate)
+                (draw, creep, animate)
                     .chain()
                     .after(crate::input::InteractSet::Ui)
                     .in_set(crate::states::GameplaySet)

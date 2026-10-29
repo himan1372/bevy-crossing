@@ -338,8 +338,23 @@ fn input(
 
 type Model = Vec<(Handle<Mesh>, Handle<N64Material>)>;
 
+/// The window's cloth creeps half a texel for every 0.3535 of `texture_pos` (`mLE_set_dl`: -pos * 2
+/// quarter texels).
+fn creep(
+    time: Res<Time>,
+    mut assets: ResMut<NameAssets>,
+    mut n64: ResMut<Assets<N64Material>>,
+    images: Res<Assets<Image>>,
+) {
+    assets.slide = (assets.slide + 0.3535 * 0.5 * time.delta_secs() * 60.0).rem_euclid(1024.0);
+    for model in assets.windows.iter().flatten() {
+        crate::time_window::scroll_cloth(model, assets.slide, &mut n64, &images);
+    }
+}
+
 #[derive(Resource, Default)]
 pub(crate) struct NameAssets {
+    slide: f32,
     windows: [Option<Model>; 2],
     root: Option<Entity>,
     shown: Option<(Kind, u64, bool)>,
@@ -525,7 +540,7 @@ impl Plugin for NameEntryPlugin {
             )
             .add_systems(
                 Update,
-                (draw, animate)
+                (draw, creep, animate)
                     .chain()
                     .after(crate::input::InteractSet::Ui)
                     .in_set(crate::states::GameplaySet)
