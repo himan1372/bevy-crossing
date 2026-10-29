@@ -564,9 +564,9 @@ mod tests {
             .expect("someone moves in");
         assert_eq!(r.residents.len(), PERSONALITIES + 1);
         assert!(r.appeared.contains(&new.index));
-        assert_eq!(
-            t.grow[new.index as usize], GROW_STARTER,
-            "only villagers allowed to move in"
+        assert!(
+            t.can_move_in(new.index as usize),
+            "only villagers allowed to move in (starter or move-in)"
         );
         let first: Vec<u32> = t.starters(7).iter().map(|e| e.index).collect();
         assert!(
