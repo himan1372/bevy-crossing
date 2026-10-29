@@ -42,6 +42,8 @@ pub enum Topic {
     Season,
     GameHint,
     Rumor,
+    /// This villager is the one thinking of moving (`aQMgr_decide_msg_remove`).
+    Moving,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -59,6 +61,8 @@ pub struct TalkContext {
     pub free_pocket: bool,
     pub bells: u32,
     pub has_letter_from_them: bool,
+    /// `aQMgr_check_client_remove`: this villager is the one thinking of moving.
+    pub leaving: bool,
     /// A fish or bug in the pockets, if any.
     pub carried_catch: Option<ItemId>,
     /// A piece of furniture in the pockets, if any.
@@ -120,6 +124,9 @@ pub fn choose(ctx: &TalkContext, rng: &mut dyn FnMut(u32) -> u32) -> (Topic, i32
             if tt::decide_idx_prob_table(&tt::NORMAL_1_PROB, rng) == 1 {
                 return if tt::decide_idx_prob_table(&tt::GAME_PROB, rng) == tt::game::HINT {
                     (Topic::GameHint, base::GAME_HINT[looks] + rng(5) as i32)
+                } else if ctx.leaving {
+                    // `aQMgr_decide_msg_game_ev`: the villager who is thinking of moving.
+                    (Topic::Moving, base::REMOVE_YES[looks] + rng(3) as i32)
                 } else {
                     (Topic::Rumor, base::EV_CAL[looks])
                 };
@@ -576,6 +583,7 @@ pub fn lines(topic: Topic, ctx: &TalkContext, item: Option<&str>, variant: usize
         Topic::Season => &SEASON,
         Topic::GameHint => &GAME_HINT,
         Topic::Rumor => &RUMOR,
+        Topic::Moving => &CHAT,
     };
     let line = pool[looks][variant % 2]
         .replace("{item}", item.unwrap_or("thing"))
@@ -610,6 +618,7 @@ mod tests {
             free_pocket: true,
             bells: 0,
             has_letter_from_them: false,
+            leaving: false,
             carried_catch: None,
             carried_furniture: None,
             month: 4,
@@ -684,5 +693,30 @@ mod tests {
             ..ctx(false)
         };
         assert!(lines(Topic::Season, &peppy, None, 0).starts_with("Spring is my FAVORITE"));
+    }
+
+    #[test]
+    fn only_the_villager_thinking_of_moving_says_so() {
+        let mut seen = std::collections::HashSet::new();
+        for (leaving, expect) in [(false, false), (true, true)] {
+            let c = TalkContext {
+                leaving,
+                ..ctx(false)
+            };
+            let mut state = 7u32;
+            let mut found = false;
+            for _ in 0..4000 {
+                let (topic, msg) = choose(&c, &mut |n| {
+                    state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+                    (state >> 8) % n
+                });
+                if topic == Topic::Moving {
+                    found = true;
+                    seen.insert(msg);
+                }
+            }
+            assert_eq!(found, expect);
+        }
+        assert_eq!(seen, [0x11FB, 0x11FC, 0x11FD].into_iter().collect());
     }
 }

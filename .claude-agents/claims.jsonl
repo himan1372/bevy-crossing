@@ -551,3 +551,5 @@
 {"action":"complete","task":"villager-house-door","agent":"claude","timestamp":"2026-10-29T00:37:01Z"}
 {"action":"claim","task":"roster-slots-force-remove","agent":"claude","timestamp":"2026-10-29T00:40:08Z"}
 {"action":"complete","task":"roster-slots-force-remove","agent":"claude","timestamp":"2026-10-29T00:46:41Z"}
+{"action":"claim","task":"moving-talk","agent":"claude","timestamp":"2026-10-29T00:57:26Z"}
+{"action":"complete","task":"moving-talk","agent":"claude","timestamp":"2026-10-29T02:37:23Z"}

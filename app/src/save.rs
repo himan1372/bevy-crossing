@@ -319,6 +319,9 @@ pub struct SaveData {
     /// `force_remove_date`: the last move-in or removal.
     #[serde(default)]
     pub last_remove_day: Option<i64>,
+    /// `remove_animal_idx`: the slot of the villager thinking of moving.
+    #[serde(default)]
+    pub remove_slot: Option<usize>,
 }
 
 /// Save data loaded at startup (PreStartup), consumed by Startup systems.
@@ -598,6 +601,7 @@ fn collect_save(
         last_move_in_day: None,
         villager_slots: Vec::new(),
         last_remove_day: None,
+        remove_slot: None,
     }
 }
 
@@ -752,6 +756,7 @@ fn quick_save(
         save.last_move_in_day = r.last_grow_day;
         save.villager_slots = r.slots.clone();
         save.last_remove_day = r.remove_day;
+        save.remove_slot = r.leaver;
     }
     if write_save(&save) {
         println!("Saved to {}", save_path().display());

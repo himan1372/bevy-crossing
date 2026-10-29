@@ -424,6 +424,9 @@ impl Reveal {
 
 /// Types the page out: a character every 2 ticks (30 a second), twice as
 /// fast while B (run) is held, waiting out `CURSOR_SET_TIME` pauses.
+/// The order kind of `SET_DEMO_ORDER_QUEST`.
+const QUEST_ORDER: u8 = 4;
+
 /// `mDemo_Set_OrderValue` / `mDemo_Get_OrderValue`: what the text last told the
 /// speaker's actor to do. Values stay until a later code replaces them.
 #[derive(Resource, Default)]
@@ -431,12 +434,24 @@ pub(crate) struct DemoOrders {
     values: std::collections::HashMap<(u8, u8), u16>,
     /// Orders raised and not yet acted on, oldest first.
     raised: Vec<(u8, u8, u16)>,
+    /// The quest manager's orders (kind 4: `aQMgr_control_animal_info` and the like), kept apart
+    /// so that the first job's guide, which takes the others, does not swallow them.
+    quest: Vec<(u8, u16)>,
 }
 
 impl DemoOrders {
     pub(crate) fn set(&mut self, kind: u8, index: u8, value: u16) {
         self.values.insert((kind, index), value);
-        self.raised.push((kind, index, value));
+        if kind == QUEST_ORDER {
+            self.quest.push((index, value));
+        } else {
+            self.raised.push((kind, index, value));
+        }
+    }
+
+    /// Takes the quest manager's orders raised since the last call: (index, value).
+    pub(crate) fn take_quest(&mut self) -> Vec<(u8, u16)> {
+        std::mem::take(&mut self.quest)
     }
 
     /// Takes the orders raised since the last call.

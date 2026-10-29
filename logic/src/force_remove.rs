@@ -79,6 +79,41 @@ pub fn goodbye_slot(candidates: &[Candidate], random: &mut dyn FnMut(u32) -> u32
     }
 }
 
+/// `ANIMAL_NUM_MIN`: a town this small keeps everyone (`mNpc_SetRemoveAnimalNo`).
+pub const ANIMAL_NUM_MIN: usize = 5;
+
+/// `mNpc_SetRemoveAnimalNo` for one player: the slot of the villager who is "thinking of
+/// moving". `residents` are `(slot, met)` in slot order; `ignored` is the slot that was just
+/// talked out of it. Someone the player has met is drawn first (`_Friend`), else anyone
+/// (`mNpc_DecideRemoveAnimalNo`). `None` for a town of five or fewer.
+pub fn pick_leaver(
+    residents: &[(usize, bool)],
+    ignored: Option<usize>,
+    random: &mut dyn FnMut(u32) -> u32,
+) -> Option<usize> {
+    if residents.len() <= ANIMAL_NUM_MIN {
+        return None;
+    }
+    let met: Vec<usize> = residents
+        .iter()
+        .filter(|&&(slot, met)| met && Some(slot) != ignored)
+        .map(|&(slot, _)| slot)
+        .collect();
+    if !met.is_empty() {
+        return Some(met[random(met.len() as u32) as usize % met.len()]);
+    }
+    // The forced pick: RANDOM among the others, counting down over the occupied slots.
+    let others: Vec<usize> = residents
+        .iter()
+        .map(|&(slot, _)| slot)
+        .filter(|&slot| Some(slot) != ignored)
+        .collect();
+    if others.is_empty() {
+        return None;
+    }
+    Some(others[random(others.len() as u32) as usize % others.len()])
+}
+
 /// The goodbye letter's mail number (`0x20E + looks * 3 + RANDOM(3)`).
 pub fn goodbye_mail(looks: u8, roll: u32) -> usize {
     GOODBYE_MAIL + usize::from(looks) * 3 + (roll as usize).min(2)
@@ -115,6 +150,19 @@ mod tests {
         assert_eq!(goodbye_slot(&tie, &mut |_| 0), Some(1));
         assert_eq!(goodbye_slot(&tie, &mut |n| n - 1), Some(2));
         assert_eq!(goodbye_slot(&[], &mut |_| 0), None);
+    }
+
+    #[test]
+    fn someone_met_is_thinking_of_moving() {
+        let town: Vec<(usize, bool)> = (0..6).map(|s| (s, s == 2 || s == 4)).collect();
+        assert_eq!(pick_leaver(&town, None, &mut |_| 0), Some(2));
+        assert_eq!(pick_leaver(&town, None, &mut |n| n - 1), Some(4));
+        // Talked out of it: the other one.
+        assert_eq!(pick_leaver(&town, Some(2), &mut |_| 0), Some(4));
+        // Nobody met: anyone but the ignored one.
+        let strangers: Vec<(usize, bool)> = (0..6).map(|s| (s, false)).collect();
+        assert_eq!(pick_leaver(&strangers, Some(0), &mut |_| 0), Some(1));
+        assert_eq!(pick_leaver(&town[..5], None, &mut |_| 0), None, "five stay");
     }
 
     #[test]

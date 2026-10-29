@@ -111,6 +111,8 @@ pub struct TownRoster {
     pub slots: Vec<usize>,
     /// `force_remove_date`: the last move-in or removal (`mNpc_RenewRemoveHistory`).
     pub remove_day: Option<i64>,
+    /// `remove_animal_idx`: the slot of the villager who is thinking of moving.
+    pub leaver: Option<usize>,
 }
 
 impl VillagerTables {
@@ -146,6 +148,38 @@ impl TownRoster {
     /// Every resident's slot, `residents.len()` of them.
     pub fn resident_slots(&self) -> Vec<usize> {
         (0..self.residents.len()).map(|i| self.slot(i)).collect()
+    }
+
+    /// Whether table index `npc_index` is the villager thinking of moving.
+    pub fn is_leaver(&self, npc_index: u32) -> bool {
+        self.leaver.is_some_and(|slot| {
+            self.residents
+                .iter()
+                .position(|r| r.index == npc_index)
+                .is_some_and(|i| self.slot(i) == slot)
+        })
+    }
+
+    /// `mNpc_SetRemoveAnimalNo`: names who is thinking of moving, if nobody is and the town has
+    /// more than five villagers. `ignored` is a slot just talked out of it.
+    pub fn choose_leaver(&mut self, ignored: Option<usize>, seed: u32, day: i64) {
+        if self.leaver.is_some() {
+            return;
+        }
+        let mut rng = Rng::new((seed ^ (day as u32).wrapping_mul(0x27D4_EB2F)) | 1);
+        let mut town: Vec<(usize, bool)> = (0..self.residents.len())
+            .map(|i| (self.slot(i), self.met.contains(&self.residents[i].index)))
+            .collect();
+        town.sort_by_key(|&(slot, _)| slot);
+        self.leaver = rustimal_logic::force_remove::pick_leaver(&town, ignored, &mut |n| {
+            ((rng.next() * n as f32) as u32).min(n - 1)
+        });
+    }
+
+    /// `aQMgr_order_cancel_remove`: talked out of it; someone else is chosen.
+    pub fn cancel_leaver(&mut self, seed: u32, day: i64) {
+        let old = self.leaver.take();
+        self.choose_leaver(old, seed, day);
     }
 
     /// The first slot nobody lives in (`mNpc_UseFreeAnimalInfo`).
@@ -194,6 +228,9 @@ impl TownRoster {
             ((rng.next() * n as f32) as u32).min(n - 1)
         })?;
         let i = (0..self.residents.len()).find(|&i| self.slot(i) == slot)?;
+        if self.leaver == Some(slot) {
+            self.leaver = None;
+        }
         self.slots = self.resident_slots();
         self.slots.remove(i);
         let gone = self.residents.remove(i);
@@ -395,6 +432,7 @@ fn init_roster(
             .filter(|slots| slots.len() == residents.len())
             .unwrap_or_default(),
         remove_day: save.and_then(|s| s.last_remove_day),
+        leaver: save.and_then(|s| s.remove_slot),
         residents,
     };
     let day = crate::clock::now().day_number;
@@ -415,6 +453,8 @@ fn init_roster(
     if let Some(new) = roster.grow(&tables, crate::clock::now().day_number, seed.0, rank) {
         bevy::prelude::info!("{} moved in", new.name);
     }
+    // `mSDI_StartInitAfter`: someone is picked to be thinking of moving.
+    roster.choose_leaver(None, seed.0, day);
     commands.insert_resource(roster);
 }
 
@@ -422,6 +462,25 @@ fn init_roster(
 /// (`l_mnpc_goodby_mail`).
 #[derive(bevy::prelude::Resource, Default)]
 pub struct PendingGoodbyes(pub Vec<RosterEntry>);
+
+/// `aQMgr_control_animal_info`: the quest order 2 of "would you miss me?" (0x1200) talks the
+/// villager out of moving, and someone else is picked (`aQMgr_order_cancel_remove`).
+fn cancel_moving(
+    mut orders: bevy::prelude::ResMut<crate::msg_window::DemoOrders>,
+    roster: Option<bevy::prelude::ResMut<TownRoster>>,
+    seed: Option<bevy::prelude::Res<crate::town::TownSeed>>,
+) {
+    let queued = orders.take_quest();
+    let (Some(mut roster), Some(seed)) = (roster, seed) else {
+        return;
+    };
+    for (index, value) in queued {
+        if (index, value) == (1, 2) {
+            roster.cancel_leaver(seed.0, crate::clock::now().day_number);
+            bevy::prelude::info!("talked out of moving; now {:?}", roster.leaver);
+        }
+    }
+}
 
 pub struct RosterPlugin;
 
@@ -433,6 +492,10 @@ impl bevy::prelude::Plugin for RosterPlugin {
             init_roster
                 .after(crate::game_disc::start_disc_load)
                 .before(crate::town::generate_town),
+        )
+        .add_systems(
+            bevy::prelude::Update,
+            cancel_moving.in_set(crate::states::GameplaySet),
         );
     }
 }
@@ -525,6 +588,41 @@ mod tests {
     fn names_trim_padding() {
         assert_eq!(decode_name(b"Bob     "), "Bob");
         assert_eq!(decode_name(b"Maple\0\0\0"), "Maple");
+    }
+
+    #[test]
+    fn the_villager_thinking_of_moving_can_be_talked_out_of_it() {
+        use bevy::prelude::*;
+        let t = tables();
+        let mut r = town(&t);
+        r.residents.extend((6..8).filter_map(|i| t.entry(i)));
+        r.met = r.residents.iter().map(|e| e.index).collect();
+        r.choose_leaver(None, 3, 100);
+        let first = r
+            .leaver
+            .expect("eight villagers: someone is thinking of moving");
+        assert!(r.is_leaver(r.residents[first].index));
+        let mut app = App::new();
+        app.insert_resource(r)
+            .insert_resource(crate::town::TownSeed(3))
+            .init_resource::<crate::msg_window::DemoOrders>()
+            .add_systems(Update, cancel_moving);
+        // The "would you miss me?" answer's quest order (index 1, value 2).
+        app.world_mut()
+            .resource_mut::<crate::msg_window::DemoOrders>()
+            .set(4, 1, 2);
+        app.update();
+        let after = app.world().resource::<TownRoster>().leaver;
+        assert!(
+            after.is_some() && after != Some(first),
+            "{first:?} -> {after:?}"
+        );
+        // An unrelated quest order changes nothing.
+        app.world_mut()
+            .resource_mut::<crate::msg_window::DemoOrders>()
+            .set(4, 5, 0x66);
+        app.update();
+        assert_eq!(app.world().resource::<TownRoster>().leaver, after);
     }
 
     fn full_town(t: &VillagerTables) -> TownRoster {

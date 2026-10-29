@@ -321,6 +321,10 @@ fn on_talk(
                 free_pocket: inventory.pockets.find_free_slot().is_some(),
                 bells: inventory.bells,
                 has_letter_from_them: mailbox.letters.iter().any(|l| l.sender == villager.name),
+                leaving: roster
+                    .as_deref()
+                    .zip(villager.npc_index)
+                    .is_some_and(|(r, i)| r.is_leaver(i)),
                 carried_catch: inventory
                     .pockets
                     .pockets
@@ -404,10 +408,15 @@ fn on_talk(
                 lines.push(say(talk::mildly_annoyed(looks)));
             }
             println!(
-                "Talking to {} ({}, {}): {topic:?}, msg #{msg_no:#06x}, patience {patience:?}",
+                "Talking to {} ({}, {}{}): {topic:?}, msg #{msg_no:#06x}, patience {patience:?}",
                 villager.name,
                 villager.personality.english_name(),
                 if chat.happy { "happy" } else { "normal mood" },
+                if ctx.leaving {
+                    ", thinking of moving"
+                } else {
+                    ""
+                },
             );
         }
 
