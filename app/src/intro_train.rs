@@ -85,7 +85,7 @@ const MORPH: f32 = 8.0;
 /// The camera's height, in game units, while Rover stands and while he sits on the bench: a little
 /// below his head, so the head clears the speech box (his head is about 33 units up standing and
 /// about 50 on the bench).
-const STANDING_HEAD: f32 = 29.0;
+const STANDING_HEAD: f32 = 25.0;
 const SEATED_HEAD: f32 = 38.0;
 /// How much of the gap to the goal the camera closes per 60 Hz frame: slow, so it glides.
 const CAMERA_EASE: f32 = 0.035;
