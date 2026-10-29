@@ -6,14 +6,17 @@
 //!
 //! The train is `ac_train0` (the locomotive `cKF_bs_r_obj_train1_1`, the tender `obj_train1_2_model`)
 //! pulling `ac_train1` (the passenger car `cKF_bs_r_obj_train1_3` with its `_open` / `_close`
-//! animations). Not built yet: the engineer in the cab, the smoke and steam, the back car's spring, the
-//! train's sounds, and everything after the door opens (Porter, stepping off, the walk out).
+//! animations). Then the player steps down, Porter the station master turns and greets them (force talk
+//! 0x07DD), the train pulls out and the player walks one unit (`aID_walk_one_unit`) to the platform's end.
+//! Not built yet: the engineer in the cab, the smoke and steam, the back car's spring, the train's
+//! sounds, the get-off animation, and Nook's welcome that follows.
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use bevy::prelude::*;
 use rustimal_logic::train_control::{self as tc, Action, Event, Train};
 
+use crate::dialogue::DialogueState;
 use crate::game_disc::GameDisc;
 use crate::input::InputFocus;
 use crate::intro::Intro;
@@ -60,15 +63,45 @@ enum Stage {
     Leaving,
     /// The train comes in and stops.
     Riding,
-    /// The door is open; the scene hands over (nothing follows yet).
-    Open { seconds: f32 },
+    /// The door is open; the player waits a moment, then steps off.
+    Open {
+        seconds: f32,
+    },
+    /// `mPlayer_INDEX_DEMO_GETOFF_TRAIN`: stepping down onto the platform, frames so far.
+    GetOff {
+        frames: f32,
+    },
+    /// Porter turns to the player (`aSTM_THINK_GET_OFF_WAIT`), then speaks (force talk 0x07DD).
+    Turn,
+    Talk,
+    /// `aID_walk_one_unit_init`: the player walks to (2220, 840).
+    Walk,
 }
+
+/// `aID_PLR_START`: where the player steps down to, and where they walk to.
+const OFF_POS: Vec2 = Vec2::new(2180.0, 820.0);
+const WALK_POS: Vec2 = Vec2::new(2220.0, 840.0);
+/// `aID_walk_one_unit_init`'s speed, game units a frame.
+const WALK_SPEED: f32 = 2.5;
+/// `aID_go_out_of_station`: past this z the arrival music fades (`aSTM_talk_wait`).
+const OUT_Z: f32 = 970.0;
+/// `NPC_STATION_MASTER`'s model (`ALL_NPC_NUM + SP_NPC_STATION_MASTER - SP_NPC_START`), voice 2.
+const PORTER_NPC: u32 = 238 + 14;
+const PORTER_SOUND: u8 = 2;
+/// Force talk 0 of `aSTM_set_force_talk_info`.
+const PORTER_GREETING: usize = 0x07DD;
+
+/// Porter, the station master.
+#[derive(Component)]
+struct Porter;
 
 /// The arrival's state.
 #[derive(Resource, Default)]
 pub(crate) struct Arrival {
     stage: Stage,
     train: Option<Train>,
+    /// Where the player stood in the car.
+    from: Vec3,
     /// The track's height (`mCoBG_GetBgY_OnlyCenter_FromWpos2`) plus the rails.
     y: f32,
 }
@@ -261,7 +294,30 @@ fn leave(
     );
     let car = track(tc::DEMO_X - 2.0 * COUPLING, arrival.y);
     at.translation = car + PASSENGER / UNIT;
+    arrival.from = at.translation;
     facing.dir = Vec3::Z;
+    // Porter waits by the station, looking at the train (`aSTM_think_init_proc`: -90 degrees).
+    if let Some(b) = town.retail.as_ref().and_then(|r| {
+        r.buildings
+            .iter()
+            .find(|b| b.item == crate::disc_town::STATION)
+    }) {
+        let off = world(OFF_POS.x, OFF_POS.y);
+        let p = Vec3::new(off.x - 2.0, 0.0, off.y);
+        let home = p.with_y(town.ground_y(p));
+        info!(
+            "Porter at {home:?} (the station building's origin is {:?})",
+            b.origin
+        );
+        commands.spawn((
+            Name::new("Porter"),
+            Porter,
+            crate::character::NpcClip::default(),
+            crate::character::NpcModel(PORTER_NPC),
+            Mesh3d(meshes.add(Capsule3d::new(0.35, 0.9))),
+            Transform::from_translation(home + Vec3::Y).with_rotation(Quat::from_rotation_y(0.0)),
+        ));
+    }
     next.set(ShopLocation::Town);
     *intro = Intro::Arrival;
     MUSIC.store(true, Ordering::Relaxed);
@@ -381,7 +437,7 @@ fn camera(
         ),
     >,
 ) {
-    if !matches!(arrival.stage, Stage::Riding | Stage::Open { .. }) {
+    if !on_platform(arrival.stage) {
         return;
     }
     let Ok(mut at) = cameras.single_mut() else {
@@ -397,48 +453,150 @@ fn camera(
 
 /// Nothing takes input while the train comes in.
 fn lock(arrival: Res<Arrival>, mut focus: ResMut<InputFocus>) {
-    if matches!(arrival.stage, Stage::Riding | Stage::Open { .. }) {
+    if matches!(
+        arrival.stage,
+        Stage::Riding | Stage::Open { .. } | Stage::GetOff { .. } | Stage::Turn | Stage::Walk
+    ) {
         *focus = InputFocus::Transition;
     }
 }
 
-/// With the door open the scene hands on. Until the station master and the walk out are built the
-/// player steps onto the platform and the game goes on as a played one (`finish_intro`).
+/// Whether the player is still in the arrival's cut scene (the camera holds, the train is shown).
+fn on_platform(stage: Stage) -> bool {
+    !matches!(stage, Stage::Idle | Stage::Leaving)
+}
+
+/// Door open, stepping off, Porter's greeting, the walk (`aID_ACT_RIDE_OFF_PLAYER` .. `WALK_ONE_UNIT`).
+/// Until Nook's welcome is built the game then goes on as a played one (`finish_intro`).
 #[allow(clippy::too_many_arguments)]
-fn hand_over(
+fn scene(
     time: Res<Time>,
+    disc: Option<Res<GameDisc>>,
+    town: Res<crate::town::Town>,
     mut arrival: ResMut<Arrival>,
     mut intro: ResMut<Intro>,
+    mut dialogue: ResMut<DialogueState>,
     mut identity: ResMut<crate::save::PlayerIdentity>,
     mut inventory: ResMut<crate::interaction::PlayerInventory>,
     mut player: Query<(&mut Transform, &mut crate::interaction::Facing), With<Player>>,
-    car: Query<Entity, With<Car>>,
-    train_parts: Query<Entity, Or<(With<Locomotive>, With<Tender>)>>,
-    mut commands: Commands,
+    mut porter: Query<(Entity, &mut Transform), (With<Porter>, Without<Player>)>,
 ) {
-    let Stage::Open { seconds } = arrival.stage else {
+    let frames = time.delta_secs() * 60.0;
+    let Ok((mut at, mut facing)) = player.single_mut() else {
         return;
     };
-    let seconds = seconds + time.delta_secs();
-    arrival.stage = Stage::Open { seconds };
-    if seconds < 3.0 {
-        return;
+    let ground = |p: Vec2| {
+        let w = world(p.x, p.y);
+        town.ground_y(Vec3::new(w.x, 0.0, w.y))
+    };
+    match arrival.stage {
+        // The door has been open a moment.
+        Stage::Open { seconds } => {
+            let seconds = seconds + time.delta_secs();
+            arrival.stage = if seconds < 1.0 {
+                Stage::Open { seconds }
+            } else {
+                Stage::GetOff { frames: 0.0 }
+            };
+        }
+        Stage::GetOff { frames: done } => {
+            let done = done + frames;
+            let t = (done / 45.0).min(1.0);
+            let off = world(OFF_POS.x, OFF_POS.y);
+            let to = Vec3::new(off.x, ground(OFF_POS), off.y);
+            at.translation = arrival.from.lerp(to, t);
+            facing.dir = (to - arrival.from).with_y(0.0).normalize_or_zero();
+            arrival.stage = if t >= 1.0 {
+                Stage::Turn
+            } else {
+                Stage::GetOff { frames: done }
+            };
+        }
+        Stage::Turn => {
+            let Ok((porter, mut pat)) = porter.single_mut() else {
+                // No station master (no station building): carry on.
+                arrival.stage = Stage::Walk;
+                return;
+            };
+            // `chase_angle(.., 0x400)` per frame towards the player.
+            let to = (at.translation - pat.translation).with_y(0.0);
+            let want = to.x.atan2(to.z);
+            let fwd = pat.rotation * Vec3::Z;
+            let yaw = fwd.x.atan2(fwd.z);
+            let diff = (want - yaw + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
+                - std::f32::consts::PI;
+            let step = 0x400 as f32 / 65536.0 * std::f32::consts::TAU * frames;
+            if diff.abs() > step {
+                pat.rotation = Quat::from_rotation_y(yaw + diff.signum() * step);
+                return;
+            }
+            pat.rotation = Quat::from_rotation_y(want);
+            facing.dir = -to.normalize_or_zero();
+            if let Some(text) = disc.as_ref().and_then(|d| d.text.as_ref()) {
+                let mut ctx = crate::intro_train::context(&identity);
+                ctx.talk_name = "Porter".into();
+                let (pages, choice) = text.talk_asking(PORTER_GREETING, &ctx, &mut |_| 0);
+                dialogue.begin_special(
+                    porter,
+                    "Porter",
+                    (PORTER_NPC, PORTER_SOUND),
+                    pages,
+                    choice.as_ref().map(|(_, c)| c.labels.clone()),
+                );
+            }
+            arrival.stage = Stage::Talk;
+        }
+        Stage::Talk => {
+            if !dialogue.active {
+                // `train_control_state` changes: the train may go.
+                if let Some(train) = arrival.train.as_mut() {
+                    train.depart = true;
+                }
+                arrival.stage = Stage::Walk;
+            }
+        }
+        Stage::Walk => {
+            let goal = world(WALK_POS.x, WALK_POS.y);
+            let here = Vec2::new(at.translation.x, at.translation.z);
+            let to = goal - here;
+            let step = WALK_SPEED * 60.0 / UNIT * time.delta_secs();
+            facing.dir = Vec3::new(to.x, 0.0, to.y).normalize_or_zero();
+            if to.length() <= step {
+                at.translation = Vec3::new(goal.x, ground(WALK_POS), goal.y);
+                arrival.stage = Stage::Idle;
+                *intro = Intro::Off;
+                crate::intro::finish_intro(&mut identity, &mut inventory);
+                info!("intro: arrived; the game goes on");
+            } else {
+                let next = here + to.normalize() * step;
+                at.translation = Vec3::new(next.x, ground(WALK_POS), next.y);
+            }
+        }
+        Stage::Idle | Stage::Leaving | Stage::Riding => {}
     }
-    if let Ok((mut at, mut facing)) = player.single_mut() {
-        let w = world(CAMERA_CENTRE.x, CAMERA_CENTRE.y);
-        at.translation = Vec3::new(w.x, at.translation.y, w.y);
-        facing.dir = Vec3::Z;
+}
+
+/// The train that has pulled out goes (`mTRC` state 4), and the arrival music fades once the player
+/// has left the station (`aSTM_talk_wait`).
+fn tidy(
+    mut arrival: ResMut<Arrival>,
+    mut commands: Commands,
+    parts: Query<Entity, Or<(With<Locomotive>, With<Tender>, With<Car>)>>,
+    player: Query<&Transform, With<Player>>,
+) {
+    if arrival.train.is_some_and(|t| t.action == Action::None) {
+        arrival.train = None;
+        for entity in &parts {
+            commands.entity(entity).despawn();
+        }
     }
-    arrival.stage = Stage::Idle;
-    arrival.train = None;
-    MUSIC.store(false, Ordering::Relaxed);
-    *intro = Intro::Off;
-    crate::intro::finish_intro(&mut identity, &mut inventory);
-    // The train goes on its way.
-    for entity in car.iter().chain(train_parts.iter()) {
-        commands.entity(entity).despawn();
+    if arrival.stage == Stage::Idle && music_on() {
+        if let Ok(at) = player.single() {
+            if at.translation.z >= world(0.0, OUT_Z).y {
+                MUSIC.store(false, Ordering::Relaxed);
+            }
+        }
     }
-    info!("intro: arrived; the game goes on");
 }
 
 pub struct IntroArrivalPlugin;
@@ -449,7 +607,7 @@ impl Plugin for IntroArrivalPlugin {
             .add_systems(PreUpdate, lock.after(crate::input::update_focus))
             .add_systems(
                 Update,
-                (leave, run_train, hand_over)
+                (leave, run_train, scene, tidy)
                     .chain()
                     .in_set(crate::states::GameplaySet),
             )

@@ -549,7 +549,7 @@ fn movement(
     );
 }
 
-fn context(identity: &crate::save::PlayerIdentity) -> MsgContext {
+pub(crate) fn context(identity: &crate::save::PlayerIdentity) -> MsgContext {
     let now = crate::clock::now();
     MsgContext {
         player_name: identity.player.clone(),
