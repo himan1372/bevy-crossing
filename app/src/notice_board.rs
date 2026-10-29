@@ -55,7 +55,6 @@ struct View {
     just_opened: bool,
     revision: u64,
     cursor: usize,
-    scroll: usize,
     keyboard: kb::Keyboard,
     repeat: kb::ButtonRepeat,
     held: crate::shop_nook::editor::Held,
@@ -65,6 +64,12 @@ struct View {
     slide: Slide,
     /// `mNT_Play_page_move` and friends: the paper's sideways motion.
     motion: Motion,
+    /// `mNT_roll_control`: the page rolls up so the cursor line stays in view.
+    roll: board::Roll,
+    /// The cursor's line in the draft, as the roll follows it.
+    line: usize,
+    /// `mSM_MOVE_IN_BOTTOM` / `OUT_BOTTOM`: the keyboard comes up from the bottom while writing.
+    keys: Option<Slide>,
     anim_ticks: f32,
 }
 
@@ -75,8 +80,6 @@ const BACKSPACE: u16 = 0x1034;
 const START: u16 = 0x5F;
 const TOGGLE: u16 = 0x37;
 const ERROR: u16 = 0x1003;
-/// The paper shows five lines above the keyboard while editing.
-const EDIT_LINES: usize = 5;
 const LIMITS: native::Limits = native::LETTER;
 
 fn direction(keys: &ButtonInput<KeyCode>) -> Option<kb::Direction> {
@@ -104,15 +107,14 @@ fn begin_edit(view: &mut View, widths: &[u8; 256]) {
     view.mode = Mode::Edit;
     view.cursor = view.draft.len();
     view.repeat = kb::ButtonRepeat::default();
-    follow_cursor(view, widths);
+    view.line = native::cursor_line(&view.draft, view.cursor, widths).0;
+    view.keys = Some(Slide::new());
 }
 
-fn follow_cursor(view: &mut View, widths: &[u8; 256]) {
-    let (line, _) = native::cursor_line(&view.draft, view.cursor, widths);
-    if line < view.scroll {
-        view.scroll = line;
-    } else if line >= view.scroll + EDIT_LINES {
-        view.scroll = line + 1 - EDIT_LINES;
+/// The keyboard leaves downward when the edit ends.
+fn end_edit(view: &mut View) {
+    if let Some(keys) = view.keys.as_mut() {
+        keys.close();
     }
 }
 
@@ -174,7 +176,6 @@ fn open_board(
         just_opened: true,
         revision: 0,
         cursor: 0,
-        scroll: 0,
         keyboard: kb::Keyboard::default(),
         repeat: kb::ButtonRepeat::default(),
         held: Default::default(),
@@ -182,6 +183,9 @@ fn open_board(
         over: false,
         slide: Slide::new(),
         motion: Motion::new(board::first_page(post.notices.len())),
+        roll: board::Roll::default(),
+        line: 0,
+        keys: None,
         anim_ticks: 0.0,
     });
     crate::sound::se(0x5F);
@@ -215,6 +219,17 @@ fn input(
     while view.anim_ticks >= 1.0 {
         view.anim_ticks -= 1.0;
         view.motion.tick(post.notices.len());
+        if view.mode == Mode::Edit {
+            let line = view.line;
+            view.roll.follow(line);
+        } else {
+            view.roll.release();
+        }
+    }
+    if let Some(keys) = view.keys.as_mut() {
+        if keys.advance(frames) {
+            view.keys = None;
+        }
     }
     if std::mem::take(&mut view.over) {
         warning.open(&rustimal_logic::warning::WORD_OVER);
@@ -231,7 +246,8 @@ fn input(
         return;
     };
     // Nothing is read while the board slides or a page turns (`mNT_Play_*` take no buttons).
-    if !view.slide.settled() || !view.motion.idle() {
+    if !view.slide.settled() || !view.motion.idle() || view.keys.is_some_and(|keys| !keys.settled())
+    {
         events.clear();
         ui.0 = Some(view);
         return;
@@ -239,7 +255,6 @@ fn input(
     let before = (
         view.page,
         view.mode,
-        view.scroll,
         view.choice,
         view.draft.clone(),
         view.cursor,
@@ -270,7 +285,6 @@ fn input(
             } else if actions.consume(Action::Confirm) {
                 // `mNT_Play_page_read`: A starts a new post on an empty page.
                 view.draft.clear();
-                view.scroll = 0;
                 crate::sound::se(START);
                 view.motion.start_write();
                 begin_edit(&mut view, &font.widths);
@@ -286,6 +300,7 @@ fn input(
                 match event.key_code {
                     KeyCode::Escape => {
                         view.mode = Mode::Read;
+                        end_edit(&mut view);
                         view.motion.start_read(view.page);
                         break;
                     }
@@ -326,6 +341,7 @@ fn input(
                     KeyCode::F4 => {
                         // Start ends the edit (`mED_COMMAND_END_EDIT`): the end check.
                         view.mode = Mode::Confirm;
+                        end_edit(&mut view);
                         view.choice = 0;
                         crate::sound::se(START);
                         break;
@@ -406,7 +422,6 @@ fn input(
                     pad,
                     stick,
                 };
-                follow_cursor(&mut view, widths);
             }
         }
         Mode::Confirm => {
@@ -461,7 +476,6 @@ fn input(
             != (
                 view.page,
                 view.mode,
-                view.scroll,
                 view.choice,
                 view.draft.clone(),
                 view.cursor,
@@ -470,6 +484,9 @@ fn input(
             )
         {
             view.revision = view.revision.wrapping_add(1);
+            if view.mode == Mode::Edit {
+                view.line = native::cursor_line(&view.draft, view.cursor, &font.widths).0;
+            }
             if view.mode != Mode::Edit && (view.mode != before.1 || view.page != before.0) {
                 crate::sound::se(crate::sound::se_id::CURSOR);
             }

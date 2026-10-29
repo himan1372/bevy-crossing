@@ -32,17 +32,14 @@ type Shown = (
     usize,
     Mode,
     usize,
-    usize,
     u64,
     usize,
     kb::Keyboard,
     crate::shop_nook::editor::Held,
     usize,
     (board::Play, usize, usize),
+    bool,
 );
-
-/// How far the paper rolls up to make room for the keyboard.
-const LIFT: f32 = 100.0;
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn draw(
@@ -68,7 +65,6 @@ pub(super) fn draw(
     let signature = (
         view.page,
         view.mode,
-        view.scroll,
         view.choice,
         view.revision,
         view.cursor,
@@ -76,6 +72,7 @@ pub(super) fn draw(
         view.held,
         post.notices.len(),
         (view.motion.mode, view.motion.now, view.motion.disp),
+        view.keys.is_some(),
     );
     if assets.shown == Some(signature) && assets.root.is_some() {
         return;
@@ -184,7 +181,15 @@ pub(super) fn draw(
             }
         }
     }
-    if view.mode == Mode::Edit && motion.idle() {
+    if view.keys.is_some() {
+        let keyboard = commands
+            .spawn((
+                Slot::Keyboard,
+                Transform::default(),
+                Visibility::default(),
+                ChildOf(root),
+            ))
+            .id();
         let mut stores = crate::shop_nook::editor::Stores {
             meshes: &mut meshes,
             n64: &mut n64,
@@ -193,7 +198,7 @@ pub(super) fn draw(
         };
         crate::shop_nook::editor::spawn(
             &mut commands,
-            root,
+            keyboard,
             &mut assets.skin,
             disc,
             &font,
@@ -267,13 +272,12 @@ fn spawn_page(
 ) {
     let writing = page == board::WRITE_PAGE;
     let editing = writing && view.mode == Mode::Edit;
-    let lift = if editing { LIFT } else { 0.0 };
     if let Some(frame) = frame {
         for (i, (mesh, material)) in frame.iter().enumerate() {
             paint.commands.spawn((
                 Mesh3d(mesh.clone()),
                 MeshMaterial3d(material.clone()),
-                Transform::from_xyz(0.0, lift * 16.0, 200.0 + i as f32 * 0.1),
+                Transform::from_xyz(0.0, 0.0, 200.0 + i as f32 * 0.1),
                 RenderLayers::layer(1),
                 ChildOf(paint.root),
             ));
@@ -309,7 +313,7 @@ fn spawn_page(
     paint.text(
         font,
         &small(&format!("entry {entry:>2}")),
-        Vec2::new(63.0, 46.0 - lift),
+        Vec2::new(63.0, 46.0),
         blue,
         230.0,
     );
@@ -335,7 +339,7 @@ fn spawn_page(
     ];
     let name = MONTHS[usize::from(month.clamp(1, 13)) - 1];
     let width = crate::msg_window::text_width(name, &font.widths) * 0.75;
-    let y = 46.0 - lift;
+    let y = 46.0;
     paint.text(font, &small(name), Vec2::new(213.0 - width, y), blue, 230.0);
     paint.text(
         font,
@@ -358,16 +362,10 @@ fn spawn_page(
     };
     let lines = native::lines(&text, &font.widths);
     let (cursor_line, cursor_x) = native::cursor_line(&text, view.cursor, &font.widths);
-    let scroll = if writing { view.scroll } else { 0 };
-    for (row, line) in lines
-        .iter()
-        .skip(scroll)
-        .take(if editing { EDIT_LINES } else { 6 })
-        .enumerate()
-    {
-        let y = if editing { 28.0 } else { 63.0 } + row as f32 * 16.0;
+    for (row, line) in lines.iter().take(6).enumerate() {
+        let y = 63.0 + row as f32 * 16.0;
         paint.text(font, &display(line), Vec2::new(63.0, y), ink, 230.0);
-        if editing && scroll + row == cursor_line {
+        if editing && row == cursor_line {
             let at = Vec2::new(63.0 + cursor_x as f32, y);
             if let Some(caret) =
                 paint.text(font, "_", at, crate::shop_nook::editor::CARET_INK, 230.0)
@@ -390,6 +388,7 @@ pub(super) enum Slot {
     Arriving,
     Leaving,
     Hints,
+    Keyboard,
 }
 
 /// Slides the board and turns its pages (`menu_info->position`, `control_position`); one
@@ -411,8 +410,19 @@ pub(super) fn animate(
     };
     for (slot, mut transform) in &mut slots {
         match slot {
-            Slot::Arriving => transform.translation.x = motion.x * 16.0,
-            Slot::Leaving => transform.translation.x = (motion.x + side) * 16.0,
+            // `menu_info->position[1]`: the page rolls up with the cursor line.
+            Slot::Arriving => {
+                transform.translation.x = motion.x * 16.0;
+                transform.translation.y = view.roll.position * 16.0;
+            }
+            Slot::Leaving => {
+                transform.translation.x = (motion.x + side) * 16.0;
+                transform.translation.y = view.roll.position * 16.0;
+            }
+            // `mSM_MOVE_IN_BOTTOM`: the keyboard's height is the slide, downward.
+            Slot::Keyboard => {
+                transform.translation.y = -view.keys.map_or(0.0, |keys| keys.pos) * 16.0;
+            }
             // The hints are drawn from the screen's frame, not the sliding board's.
             Slot::Hints => {
                 transform.translation.y = (motion.control - 2.0 * view.slide.pos) * 16.0;

@@ -194,6 +194,60 @@ impl Motion {
     }
 }
 
+/// The page rolling up so the cursor line stays in view (`mNT_roll_control`, while writing) and
+/// back down (`mNT_roll_control2`, while the end check is up). `position` is `menu_info->position[1]`
+/// in pixels, a page line is 16.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Roll {
+    pub position: f32,
+    pub speed: f32,
+    /// `page_center`: the first of the three lines kept in view.
+    pub center: usize,
+}
+
+impl Roll {
+    /// One 60 Hz frame of `mNT_roll_control`; `line` is the cursor's line.
+    pub fn follow(&mut self, line: usize) {
+        if line < self.center {
+            self.center = line;
+            self.speed = 1.0;
+        } else if line > self.center + 2 {
+            self.center = line - 2;
+            self.speed = 1.0;
+        }
+        let target = (self.center * 16) as f32;
+        let distance = (target - self.position).abs();
+        if distance > 0.1 {
+            if distance > 9.0 {
+                self.speed = (self.speed * 2.0).min(4.0);
+            } else if distance < 7.0 {
+                self.speed = (self.speed * 0.5).max(1.0);
+            }
+            // `chase_f`
+            if distance <= self.speed {
+                self.position = target;
+            } else {
+                self.position += self.speed * (target - self.position).signum();
+            }
+        } else {
+            self.position = target;
+        }
+    }
+
+    /// One 60 Hz frame of `mNT_roll_control2`: the page falls back to its place.
+    pub fn release(&mut self) {
+        let next = self.position - self.speed;
+        self.speed = self.speed.max(1.0);
+        if next > 0.0 {
+            self.position = next;
+            self.speed = (self.speed * 2.0).min(16.0);
+        } else {
+            self.position = 0.0;
+            self.speed = 0.0;
+        }
+    }
+}
+
 use crate::room_light::add_calc;
 
 #[cfg(test)]
@@ -228,6 +282,32 @@ mod tests {
         assert_eq!(end_choice(0), EndChoice::Post);
         assert_eq!(end_choice(1), EndChoice::KeepWriting);
         assert_eq!(end_choice(2), EndChoice::Cancel);
+    }
+
+    #[test]
+    fn the_roll_keeps_the_cursor_line_in_three_lines() {
+        let mut roll = Roll::default();
+        for line in [0, 1, 2] {
+            roll.follow(line);
+            assert_eq!((roll.center, roll.position), (0, 0.0));
+        }
+        for _ in 0..100 {
+            roll.follow(5);
+        }
+        assert_eq!((roll.center, roll.position), (3, 48.0));
+        roll.follow(1);
+        assert_eq!(roll.center, 1);
+        for _ in 0..100 {
+            roll.follow(1);
+        }
+        assert_eq!(roll.position, 16.0);
+        let mut frames = 0;
+        while roll.position > 0.0 {
+            roll.release();
+            frames += 1;
+            assert!(frames < 100);
+        }
+        assert_eq!(roll.speed, 0.0);
     }
 
     #[test]
