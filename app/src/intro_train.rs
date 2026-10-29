@@ -82,12 +82,15 @@ mod clip {
 }
 /// Blend frames between clips.
 const MORPH: f32 = 8.0;
-/// How high Rover's head is standing and sitting on the bench, in game units: the camera comes to
-/// his level (the pictures of the retail train show it level with him on the bench).
-const STANDING_HEAD: f32 = 52.0;
+/// The camera's height, in game units, while Rover stands and while he sits on the bench: a little
+/// below his head, so the head clears the speech box (his head is about 33 units up standing and
+/// about 50 on the bench).
+const STANDING_HEAD: f32 = 21.0;
 const SEATED_HEAD: f32 = 38.0;
-/// How much of the gap to the goal the camera closes per 60 Hz frame.
-const CAMERA_EASE: f32 = 0.08;
+/// How much of the gap to the goal the camera closes per 60 Hz frame: slow, so it glides.
+const CAMERA_EASE: f32 = 0.035;
+/// Frames Rover takes to slide to the bench while he sits down.
+const SIT_FRAMES: f32 = 36.0;
 /// `aNGD_talk_start_wait`'s first message ("Excuse me... do you have a second?").
 const FIRST_MESSAGE: usize = 0x2AC6;
 /// `mDemo_ORDER_NPC0` as the message codes raise it, and the index Rover's script waits on.
@@ -151,6 +154,8 @@ struct Script {
     /// at the door end (`aNGD_move_to_door`, `aNGD_open_door`).
     tilt_goal: f32,
     tilt_add: f32,
+    /// Rover sliding to the bench: where he started (game units) and how far along (0 to 1).
+    slide: Option<(Vec2, f32)>,
 }
 
 /// `aNGD_msg_win_open_wait`: the message that follows each window.
@@ -452,6 +457,14 @@ fn walk_to(at: &mut Transform, to: Vec2, speed: f32, frames: f32) {
     }
 }
 
+/// Where Rover stands, in game units on the car's floor.
+fn rover_units(at: &Transform) -> Vec2 {
+    Vec2::new(
+        (at.translation.x - TRAIN_ORIGIN.x) * UNIT,
+        (at.translation.z - TRAIN_ORIGIN.z) * UNIT,
+    )
+}
+
 fn place(at: &mut Transform, p: Vec2) {
     at.translation.x = TRAIN_ORIGIN.x + p.x / UNIT;
     at.translation.z = TRAIN_ORIGIN.z + p.y / UNIT;
@@ -533,6 +546,22 @@ fn rover(
     };
     let frames = time.delta_secs() * 60.0;
     let script = &mut *script;
+    // Sitting down: he slides to the bench and turns to face the car instead of jumping there.
+    if let Some((from, t)) = script.slide {
+        let t = (t + frames / SIT_FRAMES).min(1.0);
+        let eased = t * t * (3.0 - 2.0 * t);
+        place(&mut at, from.lerp(SEAT, eased));
+        let yaw = (at.rotation * Vec3::Z).x.atan2((at.rotation * Vec3::Z).z);
+        let turn = (0.0 - yaw + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
+            - std::f32::consts::PI;
+        at.rotation = Quat::from_rotation_y(yaw + turn * eased.max(0.05) * 0.25);
+        script.slide = if t >= 1.0 {
+            at.rotation = Quat::from_rotation_y(0.0);
+            None
+        } else {
+            Some((from, t))
+        };
+    }
     match &mut script.step {
         Step::Walk => {
             at.translation.z += WALK_SPEED * frames / UNIT;
@@ -569,8 +598,7 @@ fn rover(
                 orders.clear(ORDER_NPC0, ORDER_STEP);
                 if script.current == LAST_MESSAGE {
                     // `aNGD_sitdown2_start_wait`: Rover sits down while the last talk goes on.
-                    place(&mut at, SEAT);
-                    at.rotation = Quat::from_rotation_y(0.0);
+                    script.slide = Some((rover_units(&at), 0.0));
                     clip.start(clip::SIT, true, MORPH);
                     script.sat = true;
                 } else if value == 1 && ASKS.contains(&script.current) {
@@ -617,8 +645,7 @@ fn rover(
                 Some(msg @ (0x2AC8 | 0x2AC9)) if script.current == 0x2AC7 => {
                     // `aNGD_sitdown`: the next message waits for Rover to sit down.
                     *dialogue = DialogueState::default();
-                    place(&mut at, SEAT);
-                    at.rotation = Quat::from_rotation_y(0.0);
+                    script.slide = Some((rover_units(&at), 0.0));
                     gait.0 = 0;
                     clip.start(clip::SIT, true, MORPH);
                     script.sat = true;
@@ -693,7 +720,7 @@ fn rover(
             script.step = Step::Talk(choice);
         }
         Step::Sit { next, .. } => {
-            if clip.done {
+            if clip.done && script.slide.is_none() {
                 let next = *next;
                 clip.start(clip::SIT_WAIT, false, MORPH);
                 *focus = InputFocus::Dialogue;
