@@ -186,6 +186,8 @@ mod code {
     pub const FREE9: u8 = 45;
     /// `PUT_STRING_DETERMINATION`: the answer the player just chose.
     pub const DETERMINATION: u8 = 46;
+    /// `PUT_STRING_COUNTRY_NAME`: the town's name.
+    pub const COUNTRY_NAME: u8 = 47;
     pub const ITEM0: u8 = 49;
     pub const ITEM4: u8 = 53;
     pub const FREE10: u8 = 54;
@@ -360,6 +362,8 @@ pub struct MsgContext {
     pub item_articles: Vec<u8>,
     /// The last chosen answer (`PUT_STRING_DETERMINATION`).
     pub determination: String,
+    /// `PUT_STRING_COUNTRY_NAME`.
+    pub town_name: String,
     pub year: u16,
     pub month: u8,
     pub weekday: u8,
@@ -745,6 +749,7 @@ impl GameText {
                         code::TALK_NAME => put(&ctx.talk_name, page),
                         code::TAIL => put(&ctx.tail, page),
                         code::DETERMINATION => put(&ctx.determination, page),
+                        code::COUNTRY_NAME => put(&ctx.town_name, page),
                         code::YEAR => put(&ctx.year.to_string(), page),
                         code::MONTH => put(MONTHS[(ctx.month.max(1) as usize - 1) % 12], page),
                         code::WEEK => put(WEEKDAYS[ctx.weekday as usize % 7], page),

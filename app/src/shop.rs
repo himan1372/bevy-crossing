@@ -47,6 +47,8 @@ pub enum ShopLocation {
     PostOffice,
     PoliceBox,
     Museum,
+    /// The new-game intro's train (`intro_train.rs`).
+    Train,
 }
 
 /// Exterior shop building: door position plus the blocked footprint the
@@ -1423,7 +1425,8 @@ fn update_shop_hud(
             ShopLocation::Town
             | ShopLocation::PostOffice
             | ShopLocation::PoliceBox
-            | ShopLocation::Museum => Visibility::Hidden,
+            | ShopLocation::Museum
+            | ShopLocation::Train => Visibility::Hidden,
         };
     }
 }

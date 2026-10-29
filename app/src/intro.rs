@@ -17,6 +17,8 @@ const COND_QUEST: u32 = 2;
 pub enum Intro {
     /// Not running: a played game, or a fresh one before the intro is built.
     Off,
+    /// On the train with Rover (`SCENE_START_DEMO`).
+    Train,
 }
 
 /// What the intro leaves behind (`aID_*` act 11, `aNGD_scene_change_wait_init`): the part-time job is
@@ -45,6 +47,10 @@ fn begin_intro(
         Ok("skip") => {
             finish_intro(&mut identity, &mut inventory);
             info!("intro skipped: the part-time job starts");
+        }
+        Ok("play") => {
+            commands.insert_resource(Intro::Train);
+            return;
         }
         // The intro itself is built in later slices; a fresh game plays as before.
         _ => identity.intro_done = true,

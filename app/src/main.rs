@@ -38,6 +38,7 @@ mod input;
 mod interaction;
 mod interior;
 mod intro;
+mod intro_train;
 mod items;
 mod joan;
 mod job_end;
@@ -154,6 +155,7 @@ fn main() {
         .add_plugins(town_map::TownMapPlugin)
         .add_plugins(job_end::JobEndPlugin)
         .add_plugins(intro::IntroPlugin)
+        .add_plugins(intro_train::IntroTrainPlugin)
         .add_plugins(scene_wipe::SceneWipePlugin)
         .add_plugins(field_items::FieldItemsPlugin)
         .add_plugins(critters::CrittersPlugin)

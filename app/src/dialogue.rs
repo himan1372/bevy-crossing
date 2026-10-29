@@ -493,6 +493,7 @@ pub(crate) fn disc_message_context(
         items: vec![item; 5],
         item_articles: Vec::new(),
         determination: String::new(),
+        town_name: String::new(),
         year: chrono::Datelike::year(&chrono::Local::now()) as u16,
         month: now.month,
         weekday: now.weekday,
