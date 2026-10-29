@@ -95,6 +95,31 @@ impl Sway {
     }
 }
 
+/// `aTrainWindow_GetTreePalletIdx`: which of the fifteen tree palettes (spring greens to autumn reds to bare
+/// winter) the window scenery uses on a date: the first whose (month, day) limit has not passed.
+pub fn tree_palette(month: u8, day: u8) -> usize {
+    const TILL: [(u8, u8); 15] = [
+        (2, 3),
+        (2, 17),
+        (2, 24),
+        (4, 3),
+        (4, 8),
+        (7, 22),
+        (9, 15),
+        (10, 5),
+        (10, 23),
+        (11, 7),
+        (11, 14),
+        (11, 28),
+        (12, 10),
+        (12, 17),
+        (12, 31),
+    ];
+    TILL.iter()
+        .position(|&(m, d)| month < m || (month == m && day <= d))
+        .unwrap_or(0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -136,5 +161,13 @@ mod tests {
             biggest = biggest.max(x.abs()).max(y.abs());
         }
         assert!(biggest <= 0.31, "{biggest}");
+    }
+
+    #[test]
+    fn the_tree_palette_follows_the_date() {
+        assert_eq!(tree_palette(1, 1), 0);
+        assert_eq!(tree_palette(2, 4), 1);
+        assert_eq!(tree_palette(7, 1), 5);
+        assert_eq!(tree_palette(12, 31), 14);
     }
 }

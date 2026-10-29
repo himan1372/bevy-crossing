@@ -39,6 +39,19 @@ struct TrainRoom {
 #[derive(Component)]
 struct Rover;
 
+/// The tunnel wall of the window scenery: the train starts in a tunnel and comes out of it when Rover
+/// sits down (`Common_Set(sunlight_flag, TRUE)` in `aNGD_sitdown`).
+#[derive(Component)]
+struct TunnelWall;
+
+/// The trees of the window scenery and their mesh's unscrolled texture coordinates (`TreeScrollx`: the
+/// tile slides 5 quarter texels of the 128 wide texture per frame).
+#[derive(Component)]
+struct TreeScroll {
+    mesh: Handle<Mesh>,
+    uvs: Vec<[f32; 2]>,
+}
+
 /// Rover's sound id (`l_sp_actor_name`: 2, like Nook's) and name.
 const ROVER_SOUND: u8 = 2;
 /// `aNGD_approach`: Rover stops at z = 290.
@@ -69,7 +82,13 @@ mod clip {
 }
 /// Blend frames between clips.
 const MORPH: f32 = 8.0;
-/// `aNGD_set_talk_info_talk_start_wait`'s first message ("Excuse me... do you have a second?").
+/// How high Rover's head is standing and sitting on the bench, in game units: the camera comes to
+/// his level (the pictures of the retail train show it level with him on the bench).
+const STANDING_HEAD: f32 = 52.0;
+const SEATED_HEAD: f32 = 38.0;
+/// How much of the gap to the goal the camera closes per 60 Hz frame.
+const CAMERA_EASE: f32 = 0.08;
+/// `aNGD_talk_start_wait`'s first message ("Excuse me... do you have a second?").
 const FIRST_MESSAGE: usize = 0x2AC6;
 /// `mDemo_ORDER_NPC0` as the message codes raise it, and the index Rover's script waits on.
 const ORDER_NPC0: u8 = 1;
@@ -126,6 +145,12 @@ struct Script {
     flags: u8,
     /// `Now_Private->gender`, once Rover has worked it out.
     male: Option<bool>,
+    /// Rover is on the bench: the camera comes down to his level.
+    sat: bool,
+    /// `camera_tilt_goal_angle` / `camera_tilt_add`: the camera leans out past the bench to see him
+    /// at the door end (`aNGD_move_to_door`, `aNGD_open_door`).
+    tilt_goal: f32,
+    tilt_add: f32,
 }
 
 /// `aNGD_msg_win_open_wait`: the message that follows each window.
@@ -159,6 +184,149 @@ fn name_text(bytes: &[u8; 8]) -> String {
         .collect()
 }
 
+/// `TRAIN_DOOR` in the train layouts (`fgdata` 0xC9 / 0xCA): unit (3, 2).
+const DOOR_AT: Vec2 = Vec2::new(140.0, 100.0);
+
+/// `ac_train_door.c`: the door at the end of the car, `cKF_ba_r_obj_romtrain_door` held at its first
+/// frame until it is told to open; it then plays through at half speed and closes again.
+#[derive(Component)]
+struct TrainDoor {
+    prop: crate::prop::Prop,
+    anim: Option<std::sync::Arc<crate::skeleton::Animation>>,
+    frame: f32,
+    speed: f32,
+}
+
+/// Seconds until the door's `open_flag` is raised (Rover reaches the frame that opens it).
+#[derive(Resource, Default)]
+struct DoorCue(Option<f32>);
+
+fn spawn_door(
+    commands: &mut Commands,
+    disc: &GameDisc,
+    assets: (
+        &mut Assets<Mesh>,
+        &mut Assets<N64Material>,
+        &mut Assets<Image>,
+    ),
+) {
+    let scale = crate::disc_town::OBJECT_SCALE;
+    let holder = commands
+        .spawn((
+            Name::new("train door"),
+            Transform::from_translation(local(DOOR_AT)).with_scale(Vec3::splat(scale)),
+            Visibility::default(),
+        ))
+        .id();
+    let Some((_, prop)) = crate::prop::Prop::spawn(
+        commands,
+        disc,
+        "cKF_bs_r_obj_romtrain_door",
+        holder,
+        Transform::default(),
+        assets,
+    ) else {
+        warn!("the train door is not on the disc");
+        return;
+    };
+    let anim = prop.animation(disc, "cKF_ba_r_obj_romtrain_door");
+    commands.entity(holder).insert((
+        TrainDoor {
+            prop,
+            anim,
+            frame: 1.0,
+            speed: 0.0,
+        },
+        Posed::default(),
+    ));
+}
+
+/// `Train_Window_Actor_draw`: what the windows look at, drawn at the field origin in 0.05 scale: the
+/// tunnel wall, the sky, the clouds, the trees and the shine on the glass. The trees' palette is the
+/// date's (`aTrainWindow_GetTreePalletIdx`, segment 10).
+fn spawn_scenery(
+    commands: &mut Commands,
+    disc: &GameDisc,
+    (meshes, materials, images): (
+        &mut Assets<Mesh>,
+        &mut Assets<N64Material>,
+        &mut Assets<Image>,
+    ),
+) {
+    let now = crate::clock::now();
+    let mut segments = crate::disc_gfx::Segments::default();
+    if let Some(table) = disc.catalog.get("aTrainWindow_tree_pal_table") {
+        let index = rustimal_logic::intro::tree_palette(now.month, now.day);
+        let at = table.offset + (index * 32) as u32;
+        if let Some(bytes) = disc.rom.slice(disc::RomSource::Rel, at, 32) {
+            segments.set_segment(10, bytes.into());
+        }
+    }
+    let root = commands
+        .spawn((
+            Name::new("train window scenery"),
+            Transform::from_translation(TRAIN_ORIGIN).with_scale(Vec3::splat(0.05 / UNIT)),
+            Visibility::default(),
+        ))
+        .id();
+    // The opaque lists, then the translucent ones (`NOW_POLY_OPA_DISP` / `NOW_POLY_XLU_DISP`).
+    for (names, blend) in [
+        (
+            &["rom_train_out_tunnel_model", "rom_train_out_bgsky_model"][..],
+            false,
+        ),
+        (
+            &[
+                "rom_train_out_bgcloud_modelT",
+                "rom_train_out_bgtree_modelT",
+                "rom_train_out_shineglass_modelT",
+            ][..],
+            true,
+        ),
+    ] {
+        for name in names {
+            let Some(list) = disc.catalog.get(name) else {
+                continue;
+            };
+            let sink = crate::disc_gfx::run_display_lists(&disc.rom, &[list.offset]);
+            for (mesh, material) in crate::disc_town::sink_meshes_scaled(
+                disc,
+                &sink,
+                None,
+                blend,
+                &segments,
+                1.0,
+                (&mut *meshes, &mut *materials, &mut *images),
+            ) {
+                let uvs = meshes
+                    .get(&mesh)
+                    .and_then(|m| match m.attribute(Mesh::ATTRIBUTE_UV_0) {
+                        Some(bevy::mesh::VertexAttributeValues::Float32x2(uvs)) => {
+                            Some(uvs.clone())
+                        }
+                        _ => None,
+                    });
+                let mut entity = commands.spawn((
+                    Mesh3d(mesh.clone()),
+                    MeshMaterial3d(material),
+                    ChildOf(root),
+                ));
+                if name.contains("tunnel") {
+                    entity.insert(TunnelWall);
+                } else if name.contains("bgtree") {
+                    if let Some(uvs) = uvs {
+                        // Its texture coordinates move every frame, so the main world keeps them.
+                        if let Some(mut tree) = meshes.get_mut(&mesh) {
+                            tree.asset_usage = bevy::asset::RenderAssetUsages::default();
+                        }
+                        entity.insert(TreeScroll { mesh, uvs });
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_room(
     mut commands: Commands,
@@ -190,6 +358,16 @@ fn build_room(
         warn!("train room missing from the disc");
         return;
     }
+    spawn_scenery(
+        &mut commands,
+        &disc,
+        (&mut meshes, &mut materials, &mut images),
+    );
+    spawn_door(
+        &mut commands,
+        &disc,
+        (&mut meshes, &mut materials, &mut images),
+    );
     // `start_demo1_actable`: Rover starts at unit (3, 3), the door end of the car.
     commands.spawn((
         Name::new("Rover"),
@@ -198,8 +376,8 @@ fn build_room(
         crate::character::NpcClip::default(),
         crate::character::NpcModel(ROVER_NPC),
         Mesh3d(meshes.add(Capsule3d::new(0.35, 0.9))),
-        Transform::from_translation(local(Vec2::new(140.0, 140.0)) + Vec3::Y)
-            .looking_to(Vec3::Z, Vec3::Y),
+        // The models face +Z at yaw 0: Rover comes in walking south.
+        Transform::from_translation(local(Vec2::new(140.0, 140.0)) + Vec3::Y),
     ));
     // `start_demo1_actable`: the old woman dozes on the other bench (`aNSO_set_animation`: kokkuri).
     let mut nod = crate::character::NpcClip::default();
@@ -210,7 +388,7 @@ fn build_room(
         nod,
         crate::character::NpcModel(OBABA_NPC),
         Mesh3d(meshes.add(Capsule3d::new(0.35, 0.9))),
-        Transform::from_translation(local(OBABA_AT) + Vec3::Y).looking_to(Vec3::Z, Vec3::Y),
+        Transform::from_translation(local(OBABA_AT) + Vec3::Y),
     ));
     transform.translation = local(PLAYER_START) + Vec3::Y;
     facing.dir = Vec3::NEG_Z;
@@ -394,6 +572,7 @@ fn rover(
                     place(&mut at, SEAT);
                     at.rotation = Quat::from_rotation_y(0.0);
                     clip.start(clip::SIT, true, MORPH);
+                    script.sat = true;
                 } else if value == 1 && ASKS.contains(&script.current) {
                     script.ask = true;
                 }
@@ -442,6 +621,7 @@ fn rover(
                     at.rotation = Quat::from_rotation_y(0.0);
                     gait.0 = 0;
                     clip.start(clip::SIT, true, MORPH);
+                    script.sat = true;
                     script.step = Step::Sit { next: msg };
                 }
                 Some(msg) => {
@@ -455,6 +635,7 @@ fn rover(
                         // The questions are over: Rover goes to ring Nook.
                         0x2ACE | 0x2ACF => {
                             clip.start(clip::STAND_UP, true, MORPH);
+                            script.sat = false;
                             script.step = Step::Stand;
                         }
                         PHONE_MESSAGE => {
@@ -537,6 +718,10 @@ fn rover(
         }
         Step::Door => {
             walk_to(&mut at, DECK, FAST_WALK, frames);
+            if (at.translation.z - TRAIN_ORIGIN.z) * UNIT < 140.0 {
+                script.tilt_goal = std::f32::consts::FRAC_PI_2;
+                script.tilt_add = 2.8125f32.to_radians();
+            }
             if (at.translation.z - TRAIN_ORIGIN.z) * UNIT < DECK.y {
                 gait.0 = 0;
                 place(&mut at, DECK);
@@ -563,6 +748,8 @@ fn rover(
         Step::PhoneOff => {
             if clip.done {
                 clip.start(clip::OPEN_DOOR, true, MORPH);
+                script.tilt_goal = 0.0;
+                script.tilt_add = 8.4375f32.to_radians();
                 script.step = Step::OpenDoor;
             }
         }
@@ -601,6 +788,11 @@ struct TrainCamera {
     /// `camera_morph_counter`: frames left before the camera is locked on Rover.
     morph: f32,
     locked: bool,
+    /// `camera_tilt_cur_angle`.
+    tilt: f32,
+    /// The camera's height and where it looks, eased towards Rover's head.
+    height: f32,
+    center: Vec3,
     /// The lens has been put back for the town.
     restored: bool,
 }
@@ -613,6 +805,9 @@ impl Default for TrainCamera {
             offset: (0.0, 0.0),
             morph: rustimal_logic::intro::CAMERA_MORPH,
             locked: false,
+            tilt: 0.0,
+            height: STANDING_HEAD,
+            center: Vec3::new(90.0, STANDING_HEAD, 280.0),
             restored: false,
         }
     }
@@ -671,25 +866,44 @@ fn train_camera(
             }
         }
     }
-    let units = |p: Vec3| Vec3::new(p.x, p.y, p.z) * UNIT;
+    let units = |p: Vec3| p * UNIT;
     let (sway_x, sway_y) = cam.offset;
-    let eye = Vec3::new(100.0 + sway_x, 80.0 + sway_y, 400.0);
-    let rest = Vec3::new(90.0, 80.0, 280.0);
-    let center = match rover.single() {
-        // Rover's head: 30 units above his feet (`obj_look_y_max`).
+    // Level with Rover's head: lower once he sits, eased so it never jumps.
+    let goal_height = if script.sat {
+        SEATED_HEAD
+    } else {
+        STANDING_HEAD
+    };
+    let ease = 1.0 - (1.0 - CAMERA_EASE).powf(frames);
+    cam.height += (goal_height - cam.height) * ease;
+    let height = cam.height;
+    let rest = Vec3::new(90.0, height, 280.0);
+    let goal = match rover.single() {
         Ok(rover) if cam.locked => {
             let p = units(rover.translation - TRAIN_ORIGIN);
-            Vec3::new(p.x, 30.0, p.z)
+            Vec3::new(p.x, height, p.z)
         }
         Ok(rover) if dialogue.active => {
             let p = units(rover.translation - TRAIN_ORIGIN);
             let r = (rustimal_logic::intro::CAMERA_MORPH - cam.morph)
                 / rustimal_logic::intro::CAMERA_MORPH;
             let blend = rustimal_logic::intro::camera_blend(r);
-            rest + (Vec3::new(p.x, 30.0, p.z) - rest) * blend
+            rest + (Vec3::new(p.x, height, p.z) - rest) * blend
         }
         _ => rest,
-    } + Vec3::new(sway_x, sway_y, 0.0);
+    };
+    let moved = (goal - cam.center) * ease;
+    cam.center += moved;
+    let center = cam.center + Vec3::new(sway_x, sway_y, 0.0);
+    let step = (script.tilt_goal - cam.tilt).clamp(-script.tilt_add, script.tilt_add) * frames;
+    cam.tilt += step;
+    let lean = cam.tilt.sin();
+    // `eye.x = moveX + sin * 20 + 100`, `eye.y = moveY - sin * 5 + height`.
+    let eye = Vec3::new(
+        100.0 + sway_x + lean * 20.0,
+        height + sway_y - lean * 5.0,
+        400.0,
+    );
     let to_world = |p: Vec3| TRAIN_ORIGIN + p / UNIT;
     at.translation = to_world(eye);
     at.look_at(to_world(center), Vec3::Y);
@@ -722,11 +936,220 @@ fn hide_player(
     }
 }
 
+/// The train leaves the tunnel once Rover has sat down: the wall goes after a second and a half.
+fn tunnel_exit(
+    time: Res<Time>,
+    script: Res<Script>,
+    mut since: Local<Option<f32>>,
+    mut walls: Query<&mut Visibility, With<TunnelWall>>,
+) {
+    if script.sat && since.is_none() {
+        *since = Some(0.0);
+    }
+    let Some(t) = since.as_mut() else { return };
+    *t += time.delta_secs();
+    if *t >= 1.5 {
+        for mut visibility in &mut walls {
+            *visibility = Visibility::Hidden;
+        }
+    }
+}
+
+/// `Train_Window_Actor_move`: the trees' tile slides along the window.
+fn scroll_trees(
+    time: Res<Time>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    trees: Query<&TreeScroll>,
+    mut quarter_texels: Local<f32>,
+) {
+    *quarter_texels += 5.0 * time.delta_secs() * 60.0;
+    let shift = *quarter_texels / 4.0 / 128.0;
+    for tree in &trees {
+        let Some(mut mesh) = meshes.get_mut(&tree.mesh) else {
+            continue;
+        };
+        let moved: Vec<[f32; 2]> = tree.uvs.iter().map(|uv| [uv[0] - shift, uv[1]]).collect();
+        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, moved);
+    }
+}
+
+/// Raises the door's cue when Rover reaches the frame of his clip that opens it
+/// (`aNGD_move_to_deck`: frame 9, `aNGD_open_door`: frame 22, at 0.5 frames per tick).
+fn door_cues(script: Res<Script>, mut cue: ResMut<DoorCue>, mut last: Local<u8>) {
+    let now = match script.step {
+        Step::Deck => 1,
+        Step::OpenDoor => 2,
+        _ => 0,
+    };
+    if now != *last {
+        *last = now;
+        match now {
+            1 => cue.0 = Some(9.0 / 0.5 / 60.0),
+            2 => cue.0 = Some(22.0 / 0.5 / 60.0),
+            _ => {}
+        }
+    }
+}
+
+/// `aTRD_actor_move`: the door plays through once at half speed when told to, with its two sounds.
+fn door_animate(
+    time: Res<Time>,
+    mut cue: ResMut<DoorCue>,
+    mut doors: Query<(&mut TrainDoor, &mut Posed)>,
+    mut transforms: Query<&mut Transform>,
+) {
+    if let Some(left) = cue.0.as_mut() {
+        *left -= time.delta_secs();
+        if *left <= 0.0 {
+            cue.0 = None;
+            for (mut door, _) in &mut doors {
+                door.speed = 0.5;
+            }
+        }
+    }
+    let ticks = time.delta_secs() * 60.0;
+    for (mut door, mut posed) in &mut doors {
+        let before = door.frame;
+        if door.speed > 0.0 {
+            door.frame += door.speed * ticks;
+            // `NA_SE_TRAINDOOR0` / `1` at frames 2 and 27.
+            for (frame, se) in [(2.0, 0x412), (27.0, 0x413)] {
+                if before < frame && door.frame >= frame {
+                    crate::sound::se(se);
+                }
+            }
+            if door.frame >= 51.0 {
+                door.frame = 1.0;
+                door.speed = 0.0;
+            }
+        } else if posed.0 {
+            continue;
+        }
+        posed.0 = true;
+        door.prop
+            .pose(door.anim.as_deref(), door.frame, &mut transforms);
+    }
+}
+
+/// Whether a prop has been posed at least once.
+#[derive(Component, Default)]
+struct Posed(bool);
+
+/// `ac_t_keitai.c`: the phone in Rover's right hand, `cKF_ba_r_tol_keitai_1_keitai_on1` / `_off1`
+/// at half speed; it grows out of the hand over frames 10 to 20 and shrinks away over 33 to 41.
+#[derive(Component)]
+struct Phone {
+    prop: crate::prop::Prop,
+    on: Option<std::sync::Arc<crate::skeleton::Animation>>,
+    off: Option<std::sync::Arc<crate::skeleton::Animation>>,
+    putting_away: bool,
+    frame: f32,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn phone_cues(
+    mut commands: Commands,
+    script: Res<Script>,
+    disc: Option<Res<GameDisc>>,
+    rover: Query<Entity, With<Rover>>,
+    rigs: Query<(&ChildOf, &crate::character::CharacterRig)>,
+    mut phones: Query<&mut Phone>,
+    mut last: Local<u8>,
+    (mut meshes, mut materials, mut images): (
+        ResMut<Assets<Mesh>>,
+        ResMut<Assets<N64Material>>,
+        ResMut<Assets<Image>>,
+    ),
+) {
+    let now = match script.step {
+        Step::PhoneOn => 1,
+        Step::PhoneOff => 2,
+        _ => 0,
+    };
+    if now == *last {
+        return;
+    }
+    *last = now;
+    match now {
+        1 => {
+            let (Some(disc), Ok(rover)) = (disc, rover.single()) else {
+                return;
+            };
+            let Some(hand) = rigs
+                .iter()
+                .find(|(parent, _)| parent.parent() == rover)
+                .and_then(|(_, rig)| rig.right_hand())
+            else {
+                return;
+            };
+            let Some((root, prop)) = crate::prop::Prop::spawn(
+                &mut commands,
+                &disc,
+                "cKF_bs_r_tol_keitai_1",
+                hand,
+                Transform::from_scale(Vec3::ZERO),
+                (&mut meshes, &mut materials, &mut images),
+            ) else {
+                return;
+            };
+            let on = prop.animation(&disc, "cKF_ba_r_tol_keitai_1_keitai_on1");
+            let off = prop.animation(&disc, "cKF_ba_r_tol_keitai_1_keitai_off1");
+            commands.entity(root).insert((
+                Phone {
+                    prop,
+                    on,
+                    off,
+                    putting_away: false,
+                    frame: 1.0,
+                },
+                Posed::default(),
+            ));
+        }
+        2 => {
+            for mut phone in &mut phones {
+                phone.putting_away = true;
+                phone.frame = 1.0;
+            }
+        }
+        _ => {}
+    }
+}
+
+fn phone_animate(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut phones: Query<(Entity, &mut Phone)>,
+    mut transforms: Query<&mut Transform>,
+) {
+    let ticks = time.delta_secs() * 60.0;
+    for (entity, mut phone) in &mut phones {
+        phone.frame += 0.5 * ticks;
+        let (anim, last, from, to, grow) = if phone.putting_away {
+            (phone.off.clone(), 61.0, 33.0, 41.0, false)
+        } else {
+            (phone.on.clone(), 68.0, 10.0, 20.0, true)
+        };
+        phone.frame = phone.frame.min(last);
+        let t = ((phone.frame - from) / (to - from)).clamp(0.0, 1.0);
+        let scale = if grow { t } else { 1.0 - t };
+        if let Ok(mut transform) = transforms.get_mut(entity) {
+            transform.scale = Vec3::splat(scale);
+        }
+        phone
+            .prop
+            .pose(anim.as_deref(), phone.frame, &mut transforms);
+        if phone.putting_away && phone.frame >= last {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
 pub struct IntroTrainPlugin;
 
 impl Plugin for IntroTrainPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<TrainRoom>()
+            .init_resource::<DoorCue>()
             .init_resource::<Script>()
             .init_resource::<TrainCamera>()
             .add_systems(
@@ -749,6 +1172,13 @@ impl Plugin for IntroTrainPlugin {
                     .in_set(GameplaySet),
             )
             .add_systems(Update, hide_player.in_set(GameplaySet))
+            .add_systems(Update, (tunnel_exit, scroll_trees).in_set(GameplaySet))
+            .add_systems(
+                Update,
+                (door_cues, door_animate, phone_cues, phone_animate)
+                    .chain()
+                    .in_set(GameplaySet),
+            )
             .add_systems(
                 Update,
                 train_camera

@@ -67,6 +67,7 @@ mod police_box;
 mod post;
 mod post_office;
 mod postman;
+mod prop;
 mod quest;
 mod raffle;
 mod remote;
