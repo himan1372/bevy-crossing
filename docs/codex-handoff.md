@@ -1,8 +1,38 @@
 # Codex handoff - 2026-10-25
 
-## Claude continuation - 2026-10-28, third session (newest)
+## Claude continuation - 2026-10-28/29, third session (newest, read this first)
 
-Later the same session: museum room doors now fade (`SceneWipe::hold`/`release`, `completed/museum-room-door-fade.md`); door sound already starts with the fade; villager house door still undriven. Then the job redirects (`completed/job-moved-away-redirects.md`): moved-away recipients, second letter / axe, wrong-recipient letter and the paper question work; villagers cannot move out yet, so only a save edit reaches them. The villager house door is driven (fade out/in); move-out scoped in `completed/villager-house-door.md` (retail only removes villagers via `mNpc_ForceRemove` at 15 residents or transfers; the roster needs empty slots first). Roster: residents keep home slots and `mNpc_ForceRemove` + goodbye letters run at start (`completed/roster-slots-force-remove.md`); only a full town (15) loses someone, `remove_animal_idx` talks not built; test `a_new_villager_moves_in_once_a_day` already failed before. The "I'm moving" talk is built (`completed/moving-talk.md`): the saved `leaver` villager says it in the event branch; the message itself was not seen live (all reachable villagers were happy). Philip picked the notice/map animations. Done (`completed/notice-board-animations.md`): shared `logic/src/menu_slide.rs` (slide in/out, also used by the map), `notice_board::Motion` (page turn, to-write, to-read), board slides, page turns and hint drop in `app/src/notice_board/render.rs`. Not built: cursor-following roll, keyboard slide-in, per-hop page sound. The map overlay already had its slide/glide/pulse. Remaining candidates are as in the list below (intro demo, remaining doors, job redirects).
+Identity `claude`, branch `main`, everything below is committed and pushed (last commit `6fc299ae`). Only `.gitignore` and `savegame.json` are untracked/modified and must NOT be committed
+(real save hash `C15154C0...`, unchanged all session). Workflow as in the second session below (repo skills, backlog note + `task-claimer.sh claim`, `cargo -j 1`, QA only in a Temp copy of the capture
+exe, fmt / `clippy --workspace --all-targets -D warnings`, explicit-file commits with the `Co-Authored-By: Claude Sonnet 5.5` line). Philip chose each task from the candidate list; each has
+`.claude-agents/completed/<slug>.md` with source references, evidence and what was not done. The whole `cargo test -p bevy-crossing` run passes (76, 21 ignored).
+
+Done, in order:
+- **Notice board animations** (`notice-board-animations`): `logic/src/menu_slide.rs` (`mSM_move_Move`, shared with the map) and `notice_board::Motion` (page turn, to-write, to-read); `notice_board/render.rs` builds the arriving and leaving
+  pages and the key hints as moving groups. Not built: the cursor-following roll, the keyboard's own slide-in, the per-hop page sound.
+- **Museum room doors fade** (`museum-room-door-fade`): `SceneWipe::hold` / `release` for changes that are no state change. Door sounds already start with the fade (same frame), so unchanged.
+- **Villager house door** driven with the fade (`villager-house-door`); `house.rs` logs each villager's door position.
+- **Job redirects** (`job-moved-away-redirects`): `Job::moved_away` etc. in `logic/src/first_job.rs`; `guide.rs` takes the undelivered item back (player -> Nook hand-over), restarts the job with a new pick, turns a missing axe
+  recipient into the second letter, handles a letter given to the wrong person (progress 3, `Post.letters_given`) and the "more paper" question (0x0807 -> 0x080A). `GameText::talk_until` renders a redirect message alone.
+- **Roster slots and ForceRemove** (`roster-slots-force-remove`): `TownRoster.slots` (saved `villager_slots`) so a villager can leave without moving the others, `remove_day` (`last_remove_day`), `logic/src/force_remove.rs`
+  (the 15-resident / 10-day rule, the goodbye choice, the goodbye letter number), goodbye letter via `post::goodbye_letters`. Homes are placed per occupied slot (`disc_town::place_homes_on_reserved`).
+- **"I'm moving" talk** (`moving-talk`, `moving-cancel-branch`): `TownRoster.leaver` (`remove_animal_idx`, saved `remove_slot`, chosen at start, five or fewer villagers keep everyone); `talk::choose` makes that villager say
+  `REMOVE_YES[looks] + RANDOM(3)` in the event branch; the quest order (index 1, value 2) in the "no/won't help" answers is read from a new quest queue in `DemoOrders` (`take_quest`) and `roster::cancel_moving` picks
+  someone else. Seen live: Anchovy 0x1cd5, Bluebear 0x1504 / 0x1505 / 0x1506, and the cancel (`talked out of moving`).
+- **QA aid** `BEVY_CROSSING_VILLAGER_MOOD=normal|happy` (`villager-mood-debug`): fixes the mood roll (happy villagers use the other talk tree).
+- Roster test `a_new_villager_moves_in_once_a_day` fixed (it asked for a starter only; `can_move_in` allows `GROW_MOVE_IN` too).
+
+QA traps learned (add to the earlier lists):
+- A Windows-checked-out file may be CRLF: patch scripts must match the file's line endings (a replace that silently misses was the old trap; assert every replace).
+- A pockets / letter / quest-offer panel left open blocks every talk (Escape x4, N declines an offer). A villager inside a house cannot be talked to. Teleporting beside a villager and tapping KeyD can walk the player into their own
+  house door: stand 0.9 south and tap KeyW instead.
+- Museum doors: read the door position from the `museum door at` log line (it depends on the town seed); the museum is open 09-18, launch with `-Hour 14`.
+- F5 saves only in world focus and not while a dialogue / quest panel is up.
+- Run long QA loops in the background and poll the output file; do not stop a process whose PID you did not verify (a stray `python` may be left from the moving-talk runs).
+
+Known gaps now: the intro demo (arrival, name entry, house choice) is the largest open item; the villagers' "take me with you" talks (0x11FE, 0x11FD) need other-town trips; `remove_animal_idx` transfers (card / island) are not
+built; the demolition animation of a removed villager's house; per-villager memory counts beyond met / letter; the notice board's cursor roll and keyboard slide; the lighthouse and island, visitor / foreign-town paths, parent
+retail/M4 and Philip's acceptance stay open. Philip chooses the next task.
 
 ## Claude continuation - 2026-10-28, second session (read this first)
 
