@@ -83,6 +83,8 @@ const OFF_POS: Vec2 = Vec2::new(2180.0, 820.0);
 const WALK_POS: Vec2 = Vec2::new(2220.0, 840.0);
 /// `aID_walk_one_unit_init`'s speed, game units a frame.
 const WALK_SPEED: f32 = 2.5;
+/// The player's model units to world units (actor scale 0.01, then 40 units a cell).
+const MODEL_TO_WORLD: f32 = 0.01 / UNIT;
 /// `aID_go_out_of_station`: past this z the arrival music fades (`aSTM_talk_wait`).
 const OUT_Z: f32 = 970.0;
 /// `NPC_STATION_MASTER`'s model (`ALL_NPC_NUM + SP_NPC_STATION_MASTER - SP_NPC_START`), voice 2.
@@ -164,7 +166,7 @@ fn spawn_train(
 ) {
     let scale = crate::disc_town::OBJECT_SCALE;
     // `world.angle.y = 90 degrees`: the train faces +x.
-    let facing = Quat::from_rotation_y(std::f32::consts::FRAC_PI_2);
+    let facing = Quat::IDENTITY;
     let engine_palette = palette(disc, 57, false);
     let car_palette = palette(disc, 58, false);
     let at = |x: f32| {
@@ -478,11 +480,20 @@ fn scene(
     mut dialogue: ResMut<DialogueState>,
     mut identity: ResMut<crate::save::PlayerIdentity>,
     mut inventory: ResMut<crate::interaction::PlayerInventory>,
-    mut player: Query<(&mut Transform, &mut crate::interaction::Facing), With<Player>>,
+    mut player: Query<
+        (
+            Entity,
+            &mut Transform,
+            &mut crate::interaction::Facing,
+            Option<&mut crate::character::NpcClip>,
+        ),
+        With<Player>,
+    >,
+    mut commands: Commands,
     mut porter: Query<(Entity, &mut Transform), (With<Porter>, Without<Player>)>,
 ) {
     let frames = time.delta_secs() * 60.0;
-    let Ok((mut at, mut facing)) = player.single_mut() else {
+    let Ok((who, mut at, mut facing, mut clip)) = player.single_mut() else {
         return;
     };
     let ground = |p: Vec2| {
@@ -496,17 +507,34 @@ fn scene(
             arrival.stage = if seconds < 1.0 {
                 Stage::Open { seconds }
             } else {
+                // `Player_actor_InitAnimation_Base2(.., mPlayer_ANIM_OUTTRAIN1, ..)`.
+                arrival.from = at.translation;
+                if let Some(clip) = clip.as_mut() {
+                    clip.start_moving("cKF_ba_r_ply_1_outtrain1", 0.0);
+                } else {
+                    let mut started = crate::character::NpcClip::default();
+                    started.start_moving("cKF_ba_r_ply_1_outtrain1", 0.0);
+                    commands.entity(who).insert(started);
+                }
                 Stage::GetOff { frames: 0.0 }
             };
         }
         Stage::GetOff { frames: done } => {
             let done = done + frames;
-            let t = (done / 45.0).min(1.0);
-            let off = world(OFF_POS.x, OFF_POS.y);
-            let to = Vec3::new(off.x, ground(OFF_POS), off.y);
-            at.translation = arrival.from.lerp(to, t);
-            facing.dir = (to - arrival.from).with_y(0.0).normalize_or_zero();
-            arrival.stage = if t >= 1.0 {
+            // The clip's root movement carries the player down onto the platform.
+            let turn = clip.as_ref().map_or(0.0, |c| c.turn);
+            facing.dir = Quat::from_rotation_y(turn) * Vec3::Z;
+            let moved = clip.as_ref().map_or(Vec3::ZERO, |c| c.motion);
+            at.translation = arrival.from + moved * MODEL_TO_WORLD;
+            let over = clip.as_ref().is_none_or(|c| c.done) || done >= 150.0;
+            arrival.stage = if over {
+                info!(
+                    "intro: stepped off by {moved:?} model units, turn {:?}",
+                    clip.as_ref().map(|c| c.turn)
+                );
+                if let Some(clip) = clip.as_mut() {
+                    clip.stop(5.0);
+                }
                 Stage::Turn
             } else {
                 Stage::GetOff { frames: done }

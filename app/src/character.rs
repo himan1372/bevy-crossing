@@ -311,6 +311,13 @@ pub struct NpcClip {
     pub morph: f32,
     pub loops: u32,
     pub done: bool,
+    /// The clip's root translation is movement, not pose (`cKF_ANIMATION_TRANS_XZ | TRANS_Y`: the
+    /// get-off-train clip): the root stays where it began and `motion` (model units) says how far the
+    /// clip has carried it.
+    pub root_motion: bool,
+    pub motion: Vec3,
+    /// The root's turn about the model's x (the actor's yaw in the original).
+    pub turn: f32,
 }
 
 /// A special NPC's stride: 0 standing, 1 walking, 2 running.
@@ -325,6 +332,12 @@ impl NpcClip {
             morph,
             ..default()
         };
+    }
+
+    /// `start`, with the clip's root translation reported in `motion` instead of drawn.
+    pub fn start_moving(&mut self, name: &'static str, morph: f32) {
+        self.start(name, true, morph);
+        self.root_motion = true;
     }
 
     pub fn stop(&mut self, morph: f32) {
@@ -923,7 +936,19 @@ fn play_clip(
             clip.loops += 1;
         }
     }
-    let locals = anim.pose(rig.frame).local_transforms(&rig.skeleton);
+    let mut pose = anim.pose(rig.frame);
+    if clip.root_motion {
+        let first = anim.pose(1.0).translation;
+        clip.motion = pose.translation - first;
+        pose.translation = first;
+        // `cKF_SkeletonInfo_R_AnimationMove_base`: the root's x turn becomes the actor's yaw and is
+        // not drawn (`base_model_rotation.x`).
+        if let Some(r) = pose.rotations.first_mut() {
+            clip.turn = r.x;
+            r.x = 0.0;
+        }
+    }
+    let locals = pose.local_transforms(&rig.skeleton);
     for (&joint, local) in rig.joints.iter().zip(locals) {
         if let Ok(mut t) = transforms.get_mut(joint) {
             *t = local;
