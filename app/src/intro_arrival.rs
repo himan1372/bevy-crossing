@@ -85,6 +85,8 @@ const OFF_POS: Vec2 = Vec2::new(2180.0, 820.0);
 const WALK_POS: Vec2 = Vec2::new(2220.0, 840.0);
 /// `aID_walk_one_unit_init`'s speed, game units a frame.
 const WALK_SPEED: f32 = 2.5;
+/// The player's transform is the capsule centre: feet are this far below.
+const HALF: f32 = crate::disc_town::PLAYER_HALF_HEIGHT;
 /// The player's model units to world units (actor scale 0.01, then 40 units a cell).
 const MODEL_TO_WORLD: f32 = 0.01 / UNIT;
 /// `aID_go_out_of_station`: past this z the arrival music fades (`aSTM_talk_wait`).
@@ -297,7 +299,7 @@ fn leave(
         (&mut meshes, &mut materials, &mut images),
     );
     let car = track(tc::DEMO_X - 2.0 * COUPLING, arrival.y);
-    at.translation = car + PASSENGER / UNIT;
+    at.translation = car + PASSENGER / UNIT + Vec3::Y * HALF;
     arrival.from = at.translation;
     facing.dir = Vec3::Z;
     // Porter waits by the station, looking at the train (`aSTM_think_init_proc`: -90 degrees).
@@ -419,7 +421,7 @@ fn run_train(
     // The passenger stands in the car (`aTR1_passenger_ctrl`).
     if matches!(arrival.stage, Stage::Riding | Stage::Open { .. }) {
         if let Ok(mut at) = player.single_mut() {
-            at.translation = track(x - 2.0 * COUPLING, y) + PASSENGER / UNIT;
+            at.translation = track(x - 2.0 * COUPLING, y) + PASSENGER / UNIT + Vec3::Y * HALF;
         }
     }
     if event_seen.take() == Some(Event::Stopped) {
@@ -594,14 +596,14 @@ fn scene(
             let step = WALK_SPEED * 60.0 / UNIT * time.delta_secs();
             facing.dir = Vec3::new(to.x, 0.0, to.y).normalize_or_zero();
             if to.length() <= step {
-                at.translation = Vec3::new(goal.x, ground(WALK_POS), goal.y);
+                at.translation = Vec3::new(goal.x, ground(WALK_POS) + HALF, goal.y);
                 arrival.stage = Stage::Idle;
                 *intro = Intro::Off;
                 crate::intro::finish_intro(&mut identity, &mut inventory);
                 info!("intro: arrived; the game goes on");
             } else {
                 let next = here + to.normalize() * step;
-                at.translation = Vec3::new(next.x, ground(WALK_POS), next.y);
+                at.translation = Vec3::new(next.x, ground(WALK_POS) + HALF, next.y);
             }
         }
         Stage::Idle | Stage::Leaving | Stage::Riding => {}
