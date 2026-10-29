@@ -1,5 +1,17 @@
 # Codex handoff - 2026-10-25
 
+## Claude continuation - 2026-10-29, fourth session (newest)
+
+Identity `claude`, `main`, pushed (`067cbab1`; this note is the only later change). Philip picked three gaps from the third session's list:
+- **Notice board cursor roll and keyboard slide-in: done** (`completed/notice-board-roll-keyboard.md`): `logic/src/notice_board.rs::Roll` (`mNT_roll_control` / `_control2`), the page group is lifted by the roll,
+  every line is drawn, the keyboard is its own group sliding from the bottom (`mSM_MOVE_IN_BOTTOM`, the menu slide negated) and out when the edit ends. Driven live; the port's own help rows at the screen top
+  still overlap the header once the page has rolled up.
+- **House demolition animation: no source.** `ac_house.c` only has door / open requests (`request_type`); a leaving villager's house is cleared as item data in `m_all_grow_ovl.c`. Nothing to build.
+- **Per-villager memory counts: nothing missing for what the port models.** `mNpc_ForceRemove` compares `GetAnimalMemoryNum` / `LetterNum` / `LandKindNum`, which count one memory per player and per town; with one player and
+  no foreign towns they are 0 or 1, exactly what `roster::force_remove` passes (`met`, `met && letter`, `met`). Larger counts need several players or visits to other towns (not built). Friendship
+  (`Anmmem_c.friendship`) is a different field and is not part of this gap.
+Next candidates are unchanged: the intro demo (largest), `remove_animal_idx` transfers, "take me with you" talks. Philip chooses.
+
 ## Claude continuation - 2026-10-28/29, third session (newest, read this first)
 
 Identity `claude`, branch `main`, everything below is committed and pushed (last commit `6fc299ae`). Only `.gitignore` and `savegame.json` are untracked/modified and must NOT be committed
