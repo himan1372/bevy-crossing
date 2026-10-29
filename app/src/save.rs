@@ -64,9 +64,16 @@ pub(crate) struct PlayerIdentity {
         with = "first_job_serde"
     )]
     pub first_job: Option<rustimal_logic::first_job::FirstJob>,
+    /// The new-game intro has been played (or skipped). Saves from before it never run it.
+    #[serde(default = "intro_done_on")]
+    pub intro_done: bool,
 }
 
 fn map_flag_on() -> bool {
+    true
+}
+
+fn intro_done_on() -> bool {
     true
 }
 
@@ -155,6 +162,7 @@ impl Default for PlayerIdentity {
             arbeit_trophy: false,
             map_flag: true,
             first_job: None,
+            intro_done: false,
         }
     }
 }
@@ -490,7 +498,10 @@ fn pockets_from_save(save: &SaveData) -> Inventory {
 }
 
 /// Startup: restore the wallet and pockets from the loaded save.
-fn apply_loaded_inventory(loaded: Res<LoadedSave>, mut inventory: ResMut<PlayerInventory>) {
+pub(crate) fn apply_loaded_inventory(
+    loaded: Res<LoadedSave>,
+    mut inventory: ResMut<PlayerInventory>,
+) {
     if let Some(save) = loaded.0.as_ref() {
         inventory.bells = save.bells;
         inventory.loan = save.loan;
