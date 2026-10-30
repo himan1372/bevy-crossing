@@ -1,6 +1,18 @@
 # Codex handoff - 2026-10-25
 
-## Claude continuation - 2026-10-29, fourth session (newest)
+## Claude continuation - 2026-10-30, fifth session: the new-game intro (newest, read this first)
+
+Identity `claude`, `main`, pushed (last code commit `4edda5e0`). Only `.gitignore` and `savegame.json` stay uncommitted (never commit them). Philip picked the intro demo; it is built in slices, each with a note in `.claude-agents/completed/`:
+- **Gate and train scene** (`intro-new-game-gate`, `intro-train-scene`, `intro-train-script`, `intro-train-look`, `intro-time-eyes`, `intro-slice2-finish`): new-game gate and intro state, `finish_intro`; Rover's full train script, the name window and
+  questions, gender / face, window scenery, clock, the old woman, train music.
+- **Slice 3, the arrival in town** (`intro-station`, `intro-train-arrival`, `intro-porter-walk`, `intro-train-orient-getoff`): the station building (`disc_town::station_type`), the train coming in (`logic/src/train_control.rs`,
+  `app/src/intro_arrival.rs`), Porter's force talk 0x07DD, the player stepping off with `outtrain1` and walking out of the station; the latest commits fix the train's axis, platform alignment and the capsule-centre height.
+- Not built (see each note's "Not done"): the engineer, smoke / steam, train sounds, camera mode 9 easing, Porter's idle clip, Nook's welcome, house choice (`finish_intro` still runs straight after the walk).
+- Philip is still checking the arrival visually (several "fix" commits came from his feedback); re-drive it in a Temp capture copy before touching it.
+
+Next: Nook's welcome / house choice after the walk, then the other intro leftovers above. Philip chooses.
+
+## Claude continuation - 2026-10-29, fourth session
 
 Identity `claude`, `main`, pushed (`067cbab1`; this note is the only later change). Philip picked three gaps from the third session's list:
 - **Notice board cursor roll and keyboard slide-in: done** (`completed/notice-board-roll-keyboard.md`): `logic/src/notice_board.rs::Roll` (`mNT_roll_control` / `_control2`), the page group is lifted by the roll,
