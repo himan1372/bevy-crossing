@@ -548,12 +548,14 @@ fn scene(
             facing.dir = Quat::from_rotation_y(turn) * Vec3::Z;
             let moved = clip.as_ref().map_or(Vec3::ZERO, |c| c.motion);
             at.translation = arrival.from + moved * MODEL_TO_WORLD;
-            // Settle from the carriage floor to platform height during the clip, so returning
-            // to terrain grounding does not drop the player when the get-off pose ends.
+            // Keep the planted crouch on the carriage floor. Settle during the airborne
+            // middle of outtrain1, before the landing pose returns to terrain grounding.
             let progress = clip.as_ref().map_or(1.0, |c| c.progress);
+            let settle = ((progress - 0.25) / 0.5).clamp(0.0, 1.0);
+            let settle = settle * settle * (3.0 - 2.0 * settle);
             let landing = town.ground_y(at.translation) + HALF;
             at.translation.y =
-                arrival.from.y + (landing - arrival.from.y) * progress + moved.y * MODEL_TO_WORLD;
+                arrival.from.y + (landing - arrival.from.y) * settle + moved.y * MODEL_TO_WORLD;
             let over = clip.as_ref().is_none_or(|c| c.done) || done >= 150.0;
             arrival.stage = if over {
                 info!(
@@ -582,12 +584,23 @@ fn scene(
             let diff = (want - yaw + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
                 - std::f32::consts::PI;
             let step = 0x400 as f32 / 65536.0 * std::f32::consts::TAU * frames;
-            if diff.abs() > step {
-                pat.rotation = Quat::from_rotation_y(yaw + diff.signum() * step);
+            pat.rotation = Quat::from_rotation_y(yaw + diff.clamp(-step, step));
+            // Player_actor_Movement_Talk: CALC_EASE(0.5), with 50..2500 binary-angle
+            // units per tick. Turn the player as well as Porter before opening the talk.
+            let player_yaw = facing.dir.x.atan2(facing.dir.z);
+            let player_want = (-to.x).atan2(-to.z);
+            let player_diff = (player_want - player_yaw + std::f32::consts::PI)
+                .rem_euclid(std::f32::consts::TAU)
+                - std::f32::consts::PI;
+            let angle_unit = std::f32::consts::TAU / 65536.0;
+            let player_step = (player_diff.abs() * (1.0 - 0.5_f32.sqrt().powf(frames)))
+                .clamp(50.0 * angle_unit * frames, 2500.0 * angle_unit * frames)
+                .min(player_diff.abs());
+            facing.dir =
+                Quat::from_rotation_y(player_yaw + player_diff.signum() * player_step) * Vec3::Z;
+            if diff.abs() > step || player_diff.abs() > player_step {
                 return;
             }
-            pat.rotation = Quat::from_rotation_y(want);
-            facing.dir = -to.normalize_or_zero();
             if let Some(text) = disc.as_ref().and_then(|d| d.text.as_ref()) {
                 let mut ctx = crate::intro_train::context(&identity);
                 ctx.talk_name = "Porter".into();

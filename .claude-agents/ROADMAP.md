@@ -1,5 +1,11 @@
 # bevy-crossing roadmap (revised 2026-10-14)
 
+2026-10-30 codex: arrival-turn-floor replaces the player's instant facing change
+with native talk-turn easing, alongside Porter's turn, and delays the carriage
+to platform height settlement until the airborne middle of outtrain1. Captured
+intermediate yaw/foot-clearance frames and unchanged landing; controls return.
+Philip's motion acceptance remains open. See arrival-turn-floor task.
+
 2026-10-30 codex: station-placement-collision fixes the missing original -20 X
 offset, renders actual station skeleton lists/idle transforms across variants,
 and replaces the platform-spanning building box with native terrain collision.
