@@ -1,5 +1,15 @@
 # bevy-crossing roadmap (revised 2026-10-14)
 
+2026-10-30 codex: station arrival recheck and Philip's walking/jump feedback.
+The scripted walk now supplies locomotion state, runs before character animation
+and uses half its previous speed (30 movement ticks/s). Terrain grounding yields
+to train/get-off height control; clip progress settles the landing height and
+the stopped player clip uses the existing exit blend. Porter's completed talk
+result is consumed, releasing input. Isolated runtime capture confirms settling,
+changing walk poses, returned keyboard movement and F5 with intro/job state.
+See intro-arrival-recheck task; Nook's welcome/house choice and Philip's acceptance
+remain open.
+
 ## Remaining shop services (Philip requested roadmap, 2026-10-25)
 
 Remaining priorities after native shop tiers and renovation lifecycle. The visible checklist is

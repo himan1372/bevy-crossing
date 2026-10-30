@@ -2344,10 +2344,17 @@ pub(crate) const PLAYER_HALF_HEIGHT: f32 = 1.0;
 /// Keeps the player and villagers on the disc terrain's surface.
 fn follow_ground(
     town: Res<Town>,
-    mut walkers: Query<&mut Transform, Or<(With<Player>, With<crate::npc::Villager>)>>,
+    arrival: Option<Res<crate::intro_arrival::Arrival>>,
+    mut walkers: Query<
+        (&mut Transform, Has<Player>),
+        Or<(With<Player>, With<crate::npc::Villager>)>,
+    >,
 ) {
     let Some(ground) = &town.ground else { return };
-    for mut t in &mut walkers {
+    for (mut t, player) in &mut walkers {
+        if player && arrival.as_ref().is_some_and(|a| a.owns_player_height()) {
+            continue;
+        }
         if let Some(h) = ground.height(t.translation.x, t.translation.z) {
             t.translation.y = h + PLAYER_HALF_HEIGHT;
         }

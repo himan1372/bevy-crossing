@@ -311,6 +311,8 @@ pub struct NpcClip {
     pub morph: f32,
     pub loops: u32,
     pub done: bool,
+    /// Normalized position in the current clip, for movement synchronized with its pose.
+    pub progress: f32,
     /// The clip's root translation is movement, not pose (`cKF_ANIMATION_TRANS_XZ | TRANS_Y`: the
     /// get-off-train clip): the root stays where it began and `motion` (model units) says how far the
     /// clip has carried it.
@@ -936,6 +938,7 @@ fn play_clip(
             clip.loops += 1;
         }
     }
+    clip.progress = (rig.frame - 1.0) / (last - 1.0);
     let mut pose = anim.pose(rig.frame);
     if clip.root_motion {
         let first = anim.pose(1.0).translation;
@@ -1055,7 +1058,7 @@ fn animate_characters(
                 continue;
             }
             // A hand-over clip (give, reach, put away) replaces the locomotion pose.
-            if let Some(arm) = arm.as_deref_mut().filter(|arm| arm.name.is_some()) {
+            if let Some(arm) = arm.as_deref_mut() {
                 let previous = (rig.pose_morph > 0.0).then(|| {
                     rig.joints
                         .iter()

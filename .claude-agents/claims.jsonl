@@ -585,3 +585,5 @@
 {"action":"complete","task":"intro-porter-walk","agent":"claude","timestamp":"2026-10-29T21:55:01Z"}
 {"action":"claim","task":"intro-train-orient-getoff","agent":"claude","timestamp":"2026-10-29T22:17:30Z"}
 {"action":"complete","task":"intro-train-orient-getoff","agent":"claude","timestamp":"2026-10-29T22:17:31Z"}
+{"action":"claim","task":"intro-arrival-recheck","agent":"codex","timestamp":"2026-10-30T18:16:41Z"}
+{"action":"complete","task":"intro-arrival-recheck","agent":"codex","timestamp":"2026-10-30T18:40:41Z"}

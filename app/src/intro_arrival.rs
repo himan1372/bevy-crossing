@@ -9,7 +9,7 @@
 //! animations). Then the player steps down, Porter the station master turns and greets them (force talk
 //! 0x07DD), the train pulls out and the player walks one unit (`aID_walk_one_unit`) to the platform's end.
 //! Not built yet: the engineer in the cab, the smoke and steam, the back car's spring, the train's
-//! sounds, the get-off animation, and Nook's welcome that follows.
+//! sounds, and Nook's welcome that follows.
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -85,6 +85,8 @@ const OFF_POS: Vec2 = Vec2::new(2180.0, 820.0);
 const WALK_POS: Vec2 = Vec2::new(2220.0, 840.0);
 /// `aID_walk_one_unit_init`'s speed, game units a frame.
 const WALK_SPEED: f32 = 2.5;
+/// The original game's movement ticks per second.
+const WALK_TICKS: f32 = 30.0;
 /// The player's transform is the capsule centre: feet are this far below.
 const HALF: f32 = crate::disc_town::PLAYER_HALF_HEIGHT;
 /// The player's model units to world units (actor scale 0.01, then 40 units a cell).
@@ -113,6 +115,14 @@ pub(crate) struct Arrival {
 }
 
 impl Arrival {
+    /// Train placement and root motion own height until the step onto the platform finishes.
+    pub(crate) fn owns_player_height(&self) -> bool {
+        matches!(
+            self.stage,
+            Stage::Riding | Stage::Open { .. } | Stage::GetOff { .. }
+        )
+    }
+
     /// The train scene is over: leave it.
     pub(crate) fn begin(&mut self) {
         if self.stage == Stage::Idle {
@@ -491,6 +501,7 @@ fn scene(
             Entity,
             &mut Transform,
             &mut crate::interaction::Facing,
+            &mut crate::locomotion::Locomotion,
             Option<&mut crate::character::NpcClip>,
         ),
         With<Player>,
@@ -499,9 +510,14 @@ fn scene(
     mut porter: Query<(Entity, &mut Transform), (With<Porter>, Without<Player>)>,
 ) {
     let frames = time.delta_secs() * 60.0;
-    let Ok((who, mut at, mut facing, mut clip)) = player.single_mut() else {
+    let Ok((who, mut at, mut facing, mut loco, mut clip)) = player.single_mut() else {
         return;
     };
+    // Scripted movement owns the same state the renderer reads for ordinary walking.
+    // Input is locked here, so player_movement cannot select (or clear) its gait.
+    if on_platform(arrival.stage) {
+        *loco = crate::locomotion::Locomotion::default();
+    }
     let ground = |p: Vec2| {
         let w = world(p.x, p.y);
         town.ground_y(Vec3::new(w.x, 0.0, w.y))
@@ -532,6 +548,12 @@ fn scene(
             facing.dir = Quat::from_rotation_y(turn) * Vec3::Z;
             let moved = clip.as_ref().map_or(Vec3::ZERO, |c| c.motion);
             at.translation = arrival.from + moved * MODEL_TO_WORLD;
+            // Settle from the carriage floor to platform height during the clip, so returning
+            // to terrain grounding does not drop the player when the get-off pose ends.
+            let progress = clip.as_ref().map_or(1.0, |c| c.progress);
+            let landing = town.ground_y(at.translation) + HALF;
+            at.translation.y =
+                arrival.from.y + (landing - arrival.from.y) * progress + moved.y * MODEL_TO_WORLD;
             let over = clip.as_ref().is_none_or(|c| c.done) || done >= 150.0;
             arrival.stage = if over {
                 info!(
@@ -582,6 +604,9 @@ fn scene(
         }
         Stage::Talk => {
             if !dialogue.active {
+                // This script owns Porter's completed special talk. Leaving its result pending
+                // would keep update_focus in Dialogue after the arrival has finished.
+                dialogue.external_result.take();
                 // `train_control_state` changes: the train may go.
                 if let Some(train) = arrival.train.as_mut() {
                     train.depart = true;
@@ -593,7 +618,7 @@ fn scene(
             let goal = world(WALK_POS.x, WALK_POS.y);
             let here = Vec2::new(at.translation.x, at.translation.z);
             let to = goal - here;
-            let step = WALK_SPEED * 60.0 / UNIT * time.delta_secs();
+            let step = WALK_SPEED * WALK_TICKS / UNIT * time.delta_secs();
             facing.dir = Vec3::new(to.x, 0.0, to.y).normalize_or_zero();
             if to.length() <= step {
                 at.translation = Vec3::new(goal.x, ground(WALK_POS) + HALF, goal.y);
@@ -604,6 +629,8 @@ fn scene(
             } else {
                 let next = here + to.normalize() * step;
                 at.translation = Vec3::new(next.x, ground(WALK_POS) + HALF, next.y);
+                loco.0.state = rustimal_logic::player_move::LocomotionState::Walk;
+                loco.0.speed = WALK_SPEED * WALK_TICKS / UNIT / crate::locomotion::FULL_TILT_SPEED;
             }
         }
         Stage::Idle | Stage::Leaving | Stage::Riding => {}
@@ -649,7 +676,14 @@ impl Plugin for IntroArrivalPlugin {
         .add_systems(PreUpdate, lock.after(crate::input::update_focus))
         .add_systems(
             Update,
-            (leave, run_train, scene, tidy)
+            (
+                leave,
+                run_train,
+                scene
+                    .after(crate::locomotion::MovementSet)
+                    .before(crate::character::CharacterAnimationSet),
+                tidy,
+            )
                 .chain()
                 .in_set(crate::states::GameplaySet),
         )
