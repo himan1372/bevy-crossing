@@ -1,5 +1,12 @@
 # bevy-crossing roadmap (revised 2026-10-14)
 
+2026-10-30 codex: station-placement-collision fixes the missing original -20 X
+offset, renders actual station skeleton lists/idle transforms across variants,
+and replaces the platform-spanning building box with native terrain collision.
+Stone bridge attributes permit the station stairs' four-sample incline; side
+walls remain checked. Isolated arrival and stairs down/up driven, tower/east
+wall/front rail remain blocked. Philip's acceptance remains open.
+
 2026-10-30 codex: station arrival recheck and Philip's walking/jump feedback.
 The scripted walk now supplies locomotion state, runs before character animation
 and uses half its previous speed (30 movement ticks/s). Terrain grounding yields

@@ -443,7 +443,7 @@ const BUILDINGS: [BuildingSpec; 9] = [
         palette: 93, // aSTR_PAL_TAILOR
         shift: (-20.0, 20.0),
     },
-    // ac_station.c: `cKF_bs_r_obj_{s,w}_station{1,2,3}`, no shift; the palettes are
+    // ac_station.c: x -20; `cKF_bs_r_obj_{s,w}_station{1,2,3}`; the palettes are
     // `aSTR_PAL_STATION{1,2,3}_{A..E}` (42, 47, 52 plus the colour).
     BuildingSpec {
         item: STATION,
@@ -451,7 +451,7 @@ const BUILDINGS: [BuildingSpec; 9] = [
         parts: &["t1", "t2", "t3", "short", "long"],
         light: "",
         palette: 42,
-        shift: (0.0, 0.0),
+        shift: (-20.0, 0.0),
     },
     BuildingSpec {
         item: STATION,
@@ -459,7 +459,7 @@ const BUILDINGS: [BuildingSpec; 9] = [
         parts: &["t1", "t2", "t3", "short", "long"],
         light: "",
         palette: 47,
-        shift: (0.0, 0.0),
+        shift: (-20.0, 0.0),
     },
     BuildingSpec {
         item: STATION,
@@ -467,7 +467,7 @@ const BUILDINGS: [BuildingSpec; 9] = [
         parts: &["t1", "t2", "t3", "short", "long"],
         light: "",
         palette: 52,
-        shift: (0.0, 0.0),
+        shift: (-20.0, 0.0),
     },
     // ac_shrine.c::aSHR_actor_ct (WISHING_WELL).
     BuildingSpec {
@@ -526,7 +526,7 @@ fn place_buildings(
         } else {
             spec.parts
         };
-        let lists = part_lists(&disc.catalog, &prefix, footprint_parts);
+        let lists = building_lists(disc, &prefix, footprint_parts);
         if lists.is_empty() {
             continue;
         }
@@ -619,7 +619,7 @@ fn spawn_buildings(
         let spec = &BUILDINGS[b.spec];
         let prefix = format!("obj_{season}_{}", spec.prefix);
         let palette = structure_palette(disc, spec.palette + b.palette_shift, winter);
-        let mut lists = part_lists(&disc.catalog, &prefix, spec.parts);
+        let mut lists = building_lists(disc, &prefix, spec.parts);
         let door_pose = (spec.prefix == "shop1")
             .then(|| cranny_door_pose(disc, &prefix))
             .flatten();
@@ -1810,7 +1810,7 @@ pub(crate) fn sink_meshes_scaled(
 
 /// Structure skeletons whose parts are drawn in their idle pose: houses,
 /// player houses and public buildings, summer and winter.
-const POSED_STRUCTURES: [&str; 17] = [
+const POSED_STRUCTURES: [&str; 20] = [
     "house1",
     "house2",
     "house3",
@@ -1828,6 +1828,9 @@ const POSED_STRUCTURES: [&str; 17] = [
     "kouban",
     "museum",
     "tailor",
+    "station1",
+    "station2",
+    "station3",
 ];
 
 /// Model-space transform of each structure part's display list (REL
@@ -1897,6 +1900,20 @@ fn part_lists(catalog: &AssetCatalog, prefix: &str, parts: &[&str]) -> Vec<u32> 
         .filter_map(|p| catalog.get(&format!("{prefix}_{p}_model")))
         .map(|a| a.offset)
         .collect()
+}
+
+/// Station part names vary by model and season (including original spelling
+/// differences). Follow its skeleton rather than guessing display-list suffixes.
+fn building_lists(disc: &GameDisc, prefix: &str, parts: &[&str]) -> Vec<u32> {
+    if prefix.contains("station") {
+        return disc
+            .catalog
+            .get(&format!("cKF_bs_r_{prefix}"))
+            .and_then(|a| crate::skeleton::Skeleton::read(&disc.rom, a.offset))
+            .map(|s| s.joints.iter().filter_map(|j| j.model).collect())
+            .unwrap_or_default();
+    }
+    part_lists(&disc.catalog, prefix, parts)
 }
 
 /// Yaw that turns a model so its `door` part faces south (+Z, towards the

@@ -175,6 +175,12 @@ impl Town {
             return false;
         };
         let in_building = retail.buildings.iter().any(|b| {
+            // The station includes a walkable platform and stairwell. Its native
+            // terrain heights/attribute walls describe the solid walls and rails;
+            // one mesh bounding box also covers the arrival and blocks the stairs.
+            if b.item == crate::disc_town::STATION {
+                return false;
+            }
             let d = Quat::from_rotation_y(-b.box_yaw) * (p - b.centre);
             d.x.abs() < b.half.x && d.z.abs() < b.half.y
         });

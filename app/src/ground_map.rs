@@ -148,7 +148,14 @@ impl Unit {
     fn triangle_walkable(self, t: u8) -> bool {
         let c = self.triangle_samples(t);
         let rise = c.iter().max().unwrap_or(&0) - c.iter().min().unwrap_or(&0);
-        self.walkable() && rise <= MAX_TRIANGLE_RISE
+        // Stone bridge edges (also used by the station stairs) have a four-sample
+        // incline. Their attribute walls still block the sides of the stairwell.
+        let max_rise = if (32..=35).contains(&self.attribute) {
+            4
+        } else {
+            MAX_TRIANGLE_RISE
+        };
+        self.walkable() && rise <= max_rise
     }
 
     /// River or pond water (where fish swim).
