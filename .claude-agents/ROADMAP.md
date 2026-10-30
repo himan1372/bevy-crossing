@@ -1,5 +1,11 @@
 # bevy-crossing roadmap (revised 2026-10-14)
 
+2026-10-30 codex: porter-collision adds a live entity-position body blocker to
+outdoor movement using the original 20+20 game-unit NPC/player pipe radii.
+Swept circle checks block long-frame crossing; overlapping starts can escape
+without deepening penetration. Isolated approaches, held input, escape and
+walking around to the stairs verified. Philip's acceptance remains open.
+
 2026-10-30 codex: arrival-turn-floor replaces the player's instant facing change
 with native talk-turn easing, alongside Porter's turn, and delays the carriage
 to platform height settlement until the airborne middle of outtrain1. Captured

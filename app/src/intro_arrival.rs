@@ -101,7 +101,29 @@ const PORTER_GREETING: usize = 0x07DD;
 
 /// Porter, the station master.
 #[derive(Component)]
-struct Porter;
+pub(crate) struct Porter;
+
+impl Porter {
+    pub(crate) fn blocks(&self, centre: Vec3, from: Vec3, to: Vec3) -> bool {
+        // npc_draw_data_tbl[252].col_radius and Player_actor_OcInfoData_forStand:
+        // both collision pipes have radius 20 game units.
+        let clearance = (20.0 + 20.0) / UNIT;
+        let offset = (from - centre).with_y(0.0);
+        let movement = (to - from).with_y(0.0);
+        let distance = movement.length_squared();
+        if distance == 0.0 {
+            return false;
+        }
+        // The scripted landing or an old save may overlap him. Permit escape,
+        // but never a step whose path goes farther into his body.
+        if offset.length_squared() < clearance * clearance {
+            return offset.dot(movement) < 0.0;
+        }
+        // Check the whole step so a long frame cannot jump through the circle.
+        let along = (-offset.dot(movement) / distance).clamp(0.0, 1.0);
+        (offset + movement * along).length_squared() < clearance * clearance
+    }
+}
 
 /// The arrival's state.
 #[derive(Resource, Default)]

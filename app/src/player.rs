@@ -71,6 +71,7 @@ pub fn player_movement(
         Option<Res<crate::statue::StatueUnit>>,
         Option<Res<crate::copper::CopperUnit>>,
     ),
+    porters: Query<(&Transform, &crate::intro_arrival::Porter), Without<Player>>,
 ) {
     if *state != HouseState::Town || *shop_loc != crate::shop::ShopLocation::Town {
         return;
@@ -88,19 +89,22 @@ pub fn player_movement(
 
     let movement = locomotion::step(&actions, time.delta().as_secs_f32(), &mut facing, &mut loco);
     if movement != Vec3::ZERO {
-        let blocked = |x: f32, z: f32| {
+        let blocked = |from: Vec3, x: f32, z: f32| {
             shop_building
                 .as_ref()
                 .is_some_and(|s| crate::shop::point_blocked(s, x, z))
                 || statue.as_ref().is_some_and(|s| s.blocks(x, z))
                 || copper.as_ref().is_some_and(|c| c.blocks(x, z))
+                || porters.iter().any(|(at, porter)| {
+                    porter.blocks(at.translation, from, Vec3::new(x, from.y, z))
+                })
         };
 
         // Try X movement
         let new_x = transform.translation.x + movement.x;
         let test_pos_x = Vec3::new(new_x, 0.0, transform.translation.z);
         if town.can_step(transform.translation, test_pos_x)
-            && !blocked(new_x, transform.translation.z)
+            && !blocked(transform.translation, new_x, transform.translation.z)
         {
             transform.translation.x = new_x;
         }
@@ -109,7 +113,7 @@ pub fn player_movement(
         let new_z = transform.translation.z + movement.z;
         let test_pos_z = Vec3::new(transform.translation.x, 0.0, new_z);
         if town.can_step(transform.translation, test_pos_z)
-            && !blocked(transform.translation.x, new_z)
+            && !blocked(transform.translation, transform.translation.x, new_z)
         {
             transform.translation.z = new_z;
         }
