@@ -660,6 +660,20 @@ fn spawn_buildings(
                 Visibility::default(),
             ))
             .id();
+        // Camera2_Talk_SetTalking_Cull excludes the station; building widths
+        // are native actor-profile values, separate from collision footprints.
+        let width = match spec.prefix {
+            "station1" | "station2" | "station3" => None,
+            "museum" => Some(142.0),
+            "shrine" => Some(105.0), // ac_shrine_draw's own foreground check
+            "shop1" | "shop2" | "tailor" | "yubinkyoku" => Some(90.0),
+            _ => Some(65.0),
+        };
+        if let Some(width) = width {
+            commands
+                .entity(root)
+                .insert(crate::intro_camera::Occluder::new(width));
+        }
         if spec.prefix == "shop1" {
             commands.entity(root).insert(shop_exterior::OriginalShop);
         }
@@ -1648,6 +1662,7 @@ fn spawn_disc_trees(
         let root = commands
             .spawn((
                 DiscTree,
+                crate::intro_camera::Occluder::new(65.0),
                 Transform::from_translation(at),
                 Visibility::default(),
             ))
@@ -2199,6 +2214,11 @@ fn spawn_disc_objects(
                 Visibility::default(),
             ))
             .id();
+        if obj.kind == CellKind::House {
+            commands
+                .entity(root)
+                .insert(crate::intro_camera::Occluder::new(65.0));
+        }
         for (mesh, material) in model {
             commands.spawn((
                 Mesh3d(mesh.clone()),
@@ -2256,6 +2276,7 @@ fn spawn_player_homes(
             .spawn((
                 DiscObject,
                 Name::new(format!("player house {house}")),
+                crate::intro_camera::Occluder::new(65.0),
                 Transform::from_xyz(centre.x, ground_y, centre.z)
                     .with_rotation(Quat::from_rotation_y(yaw)),
                 Visibility::default(),

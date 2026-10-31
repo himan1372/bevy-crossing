@@ -39,6 +39,7 @@ mod interaction;
 mod interior;
 mod intro;
 mod intro_arrival;
+mod intro_camera;
 mod intro_house;
 mod intro_train;
 mod items;

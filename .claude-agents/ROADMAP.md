@@ -1,5 +1,22 @@
 # bevy-crossing roadmap (revised 2026-10-14)
 
+2026-10-31 codex: intro-camera-framing implements native arrival release at
+Porter's NORMAL greeting, seeded native centre/distance/angle chasing and
+Nook's source NORMAL/TALK table through choices/payment. Native talk midpoint,
+distance,35-unit NPC eye height, yaw/pitch and high-cliff branch; render
+interpolation avoids whole-tick camera stepping. Typed foreground culling uses
+native15-tick delay/corridor/profile widths, preserving station/ground/rocks;
+objects restore after dialogue, room entry and reload. Full synthetic tour,
+two-home refusal/acceptance, repeated explanation, payment cancel/Give,
+completion and reload verified; exact settled camera distance/pitch observed.
+Philip's smoothness report also exposed smoke material-count invalidation
+rebuilding every N64 material. Targeted Added/Loaded lighting updates remove
+that amplification; smoke p95/peak72.42/79.01ms becomes9.59/11.50ms in bounded
+post-startup comparison. check/clippy/fmt/capture/default/release passed (final
+release4m07s); no tests. All owned previews closed, actual save hash unchanged.
+Character reactions/gestures, broader camera fidelity and M4 acceptance remain
+open; these checks are not blanket retail acceptance.
+
 2026-10-31 codex: intro-train-effects adds engineer NPC341 at native cab offset,
 disc chimney smoke/cylinder steam with native emission frames, lifetimes and
 two-texture interpolation, plus stop0x73/depart0x71, speed-based0x3B/0x3F and

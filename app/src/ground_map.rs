@@ -248,6 +248,30 @@ impl GroundMap {
         self.locate(x, z).map(|(u, ..)| u.attribute)
     }
 
+    /// Camera2_Talk_CheckCliffLR: nine cells across, at rows0/3/6 south.
+    pub(crate) fn talk_camera_high_cliff(&self, position: Vec3) -> bool {
+        let Some((ux, uz)) = self.unit_coords(position.x, position.z) else {
+            return false;
+        };
+        let height = position.y * UNIT + GROUND_ZERO;
+        let last_x = (BLOCK_X_NUM * 16) as i32 - 1;
+        for z in [uz, uz + 3, uz + 6] {
+            if z >= (BLOCK_Z_NUM * 16) as i32 {
+                continue;
+            }
+            for x in (ux - 4).max(0)..=(ux + 4).min(last_x) {
+                let (unit, base) = self.unit_at(x, z);
+                let center = base + f32::from(unit.center) * SAMPLE_HEIGHT;
+                if ((47..=58).contains(&unit.attribute) && center > height + 30.0)
+                    || center > height + 230.0
+                {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     /// Effective gameplay surface, using the translated retail resolver.
     /// The shoreline uses a neutral wave phase until water animation exists.
     pub fn sound_attribute_at(&self, x: f32, z: f32) -> Option<u8> {

@@ -463,6 +463,11 @@ fn draw_field_items(
                     Visibility::default(),
                 ))
                 .id();
+            if matches!(item, 0x0007 | 0x000B..=0x000F) {
+                commands
+                    .entity(root)
+                    .insert(crate::intro_camera::Occluder::new(65.0));
+            }
             for (mesh, material) in model.iter() {
                 commands.spawn((
                     Mesh3d(mesh.clone()),

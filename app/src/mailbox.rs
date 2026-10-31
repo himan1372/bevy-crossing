@@ -344,6 +344,7 @@ pub fn spawn_mailboxes(
         let root = commands
             .spawn((
                 crate::disc_town::DiscObject,
+                crate::intro_camera::Occluder::new(65.0),
                 Name::new(format!("mailbox {house}")),
                 Transform::from_xyz(at.x, town.ground_y(at), at.z)
                     .with_rotation(Quat::from_rotation_y(yaw)),

@@ -60,6 +60,7 @@ pub mod first_job;
 pub mod footsteps;
 pub mod force_remove;
 pub mod intro;
+pub mod intro_camera;
 pub mod menu_slide;
 pub mod notice_board;
 pub mod personal_events;

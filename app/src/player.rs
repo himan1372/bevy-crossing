@@ -176,6 +176,18 @@ pub fn camera_follow(
     location: Res<State<crate::shop::ShopLocation>>,
     mut preview_camera: Local<crate::shop_nook::preview::CameraBlend>,
     layout: Res<crate::shop::layout::Layout>,
+    (arrival, flow, disc, town, house, intro): (
+        Res<crate::intro_arrival::Arrival>,
+        Res<crate::intro_house::HouseIntro>,
+        Option<Res<crate::game_disc::GameDisc>>,
+        Res<crate::town::Town>,
+        Res<State<crate::house::HouseState>>,
+        Res<crate::intro::Intro>,
+    ),
+    actors: Query<&Transform, (With<crate::intro_house::NookGuide>, Without<WorldCamera>)>,
+    mut intro_camera: Local<crate::intro_camera::Camera>,
+    mut loads: MessageReader<crate::sound::ResetAudio>,
+    mut occlusion: ResMut<crate::intro_camera::Occlusion>,
 ) {
     let Ok(player_transform) = player_query.single() else {
         return;
@@ -186,6 +198,10 @@ pub fn camera_follow(
 
     let feet = player_transform.translation - Vec3::Y * crate::disc_town::PLAYER_HALF_HEIGHT;
     let target = feet + Vec3::Y * PLAYER_EYE_HEIGHT;
+    if loads.read().count() != 0 {
+        *intro_camera = crate::intro_camera::Camera::default();
+        *centre = Some(target);
+    }
     let c = centre.get_or_insert(target);
     // add_calc per 60 Hz frame, scaled to this frame's length.
     let frames = time.delta_secs() * 60.0;
@@ -199,6 +215,46 @@ pub fn camera_follow(
         *c + step
     };
 
+    let held = arrival.camera_center(&town);
+    let talking = flow
+        .camera_actor()
+        .and_then(|entity| actors.get(entity).ok())
+        .map(|npc| {
+            (
+                feet,
+                npc.translation - Vec3::Y * crate::disc_town::PLAYER_HALF_HEIGHT,
+            )
+        });
+    let request = held
+        .map(|center| rustimal_logic::intro_camera::View::normal((center * 40.0).to_array()))
+        .or_else(|| {
+            let (feet, npc) = talking?;
+            Some(crate::intro_camera::talk_view(
+                disc.as_deref(),
+                &town,
+                feet,
+                npc,
+            ))
+        });
+    if let Some((look, eye)) = intro_camera.view(
+        request,
+        held.is_some(),
+        *c,
+        target,
+        frames,
+        matches!(
+            *intro,
+            crate::intro::Intro::Arrival | crate::intro::Intro::Houses
+        ),
+        *location == crate::shop::ShopLocation::Town && *house == crate::house::HouseState::Town,
+    ) {
+        *c = look;
+        occlusion.update(talking, Some((look, eye)), frames);
+        camera_transform.translation = eye;
+        camera_transform.look_at(look, Vec3::Y);
+        return;
+    }
+    occlusion.update(None, None, frames);
     let (look, eye) = preview_camera.view(
         preview.camera(*layout),
         (*c, *c + camera_eye_offset()),
@@ -219,6 +275,8 @@ impl Plugin for PlayerPlugin {
                 player_movement.in_set(locomotion::MovementSet),
                 camera_follow
                     .after(locomotion::MovementSet)
+                    .after(crate::intro_arrival::scene)
+                    .after(crate::intro_house::run)
                     .after(crate::shop_nook::interact),
             )
                 .in_set(GameplaySet),

@@ -86,11 +86,15 @@ pub(super) fn update(
         cache.models.insert(key, model);
     }
     for (&model_key, model) in &cache.models {
-        commands.entity(model.entity).insert(if model_key == key {
-            Visibility::Inherited
-        } else {
-            Visibility::Hidden
-        });
+        crate::intro_camera::Occluder::set_base_visibility(
+            &mut commands,
+            model.entity,
+            if model_key == key {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            },
+        );
     }
     let model = &cache.models[&key];
     let building = model.building.clone();
@@ -202,6 +206,7 @@ fn build(
         .spawn((
             DiscObject,
             Name::new(prefix.clone()),
+            crate::intro_camera::Occluder::new(if tier == 1 { 110.0 } else { 130.0 }),
             Transform::from_translation(origin.with_y(base_y)),
             Visibility::default(),
         ))

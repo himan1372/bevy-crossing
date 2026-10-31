@@ -65,7 +65,7 @@ enum After {
 }
 
 #[derive(Resource, Default)]
-struct HouseIntro {
+pub(crate) struct HouseIntro {
     phase: Phase,
     guide: Option<Entity>,
     corner: Vec2,
@@ -75,6 +75,19 @@ struct HouseIntro {
     selected: usize,
     inspect_request: Option<usize>,
     talk_request: bool,
+    talk_camera: bool,
+}
+
+impl HouseIntro {
+    pub(crate) fn camera_actor(&self) -> Option<Entity> {
+        (self.talk_camera
+            && matches!(
+                self.phase,
+                Phase::Talk(_) | Phase::Payment | Phase::Transfer
+            ))
+        .then_some(self.guide)
+        .flatten()
+    }
 }
 
 fn turn(from: f32, target: f32, frames: f32) -> (f32, bool) {
@@ -161,6 +174,13 @@ fn say(
     );
     flow.question = choice.map(|(_, c)| c);
     flow.message = message;
+    // aNRG_set_force_talk_info: retain the originating mode through choices,
+    // payment cancellation and the hand-over's continued message pages.
+    match message {
+        0x07DE | 0x07E2..=0x07E4 => flow.talk_camera = false,
+        0x07DF | 0x07E1 | 0x07E5 | 0x07E6 | 0x0820 => flow.talk_camera = true,
+        _ => {}
+    }
     flow.phase = Phase::Talk(after);
     orders.clear(1, 9);
     info!("intro Nook message {message:#06x}");
@@ -221,7 +241,7 @@ fn choose_input(
 }
 
 #[allow(clippy::too_many_arguments)] // One owner commits scene, dialogue and inventory transitions.
-fn run(
+pub(crate) fn run(
     mut commands: Commands,
     time: Res<Time>,
     disc: Option<Res<GameDisc>>,
@@ -636,6 +656,7 @@ fn run(
 pub(crate) struct IntroHousePlugin;
 impl Plugin for IntroHousePlugin {
     fn build(&self, app: &mut App) {
+        crate::intro_camera::install(app);
         app.init_resource::<HouseIntro>()
             .add_systems(PreUpdate, lock.after(crate::input::update_focus))
             .add_systems(

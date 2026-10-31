@@ -257,29 +257,57 @@ pub(crate) fn update_environment(
     mut clear: ResMut<ClearColor>,
     house: Option<Res<State<crate::house::HouseState>>>,
     shop: Option<Res<State<crate::shop::ShopLocation>>>,
-    mut last: Local<Option<(u32, usize, bool)>>,
+    mut last: Local<Option<(u32, bool)>>,
+    mut events: MessageReader<AssetEvent<N64Material>>,
 ) {
     let Some(table) = table else { return };
     let now = clock::now();
     let minute = now.day_secs / 60;
     let indoors = house.is_some_and(|h| *h.get() == crate::house::HouseState::Inside)
         || shop.is_some_and(|s| *s.get() != crate::shop::ShopLocation::Town);
-    // Also refresh when new materials appear (town built after the table).
-    let count = materials.len();
-    if *last == Some((minute, count, indoors)) {
+    let added: std::collections::HashSet<_> = events
+        .read()
+        .filter_map(|event| match event {
+            AssetEvent::Added { id } | AssetEvent::LoadedWithDependencies { id } => Some(*id),
+            _ => None,
+        })
+        .collect();
+    let refresh_all = *last != Some((minute, indoors));
+    if !refresh_all && added.is_empty() {
         return;
     }
-    *last = Some((minute, count, indoors));
-    let light = table.at(now.day_secs);
+    let light = table.at(minute * 60);
     let env = if indoors {
         light.indoor_uniform()
     } else {
         light.uniform()
     };
-    for (_, material) in materials.iter_mut() {
-        if material.combiner.flags & crate::n64_material::FLAG_MENU_LIGHTING == 0 {
+    // iter_mut marks every yielded asset Modified, even if nothing is assigned.
+    // A puff being born/retired must not rebuild every town material's GPU bindings.
+    let needs_light = |material: &N64Material| {
+        material.combiner.flags & crate::n64_material::FLAG_MENU_LIGHTING == 0
+            && material.env != env
+    };
+    let ids: Vec<_> = if refresh_all {
+        materials
+            .iter()
+            .filter(|(_, material)| needs_light(material))
+            .map(|(id, _)| id)
+            .collect()
+    } else {
+        added
+            .into_iter()
+            .filter(|id| materials.get(*id).is_some_and(needs_light))
+            .collect()
+    };
+    for id in ids {
+        if let Some(mut material) = materials.get_mut(id) {
             material.env = env;
         }
+    }
+    *last = Some((minute, indoors));
+    if !refresh_all {
+        return;
     }
     // Rooms stand in black (no sky).
     let [r, g, b] = if indoors {

@@ -42,9 +42,6 @@ const CAMERA_CENTRE: Vec2 = Vec2::new(2180.0, 820.0);
 const PASSENGER: Vec3 = Vec3::new(60.0, 20.0, 20.0);
 /// The car and tender trail the locomotive by this much (`-125` each).
 const COUPLING: f32 = 125.0;
-/// The town camera (`player.rs`): 620 units out, pitched 45 degrees.
-const CAMERA_DISTANCE: f32 = 620.0 / UNIT;
-const CAMERA_PITCH: f32 = 45.0;
 
 static MUSIC: AtomicBool = AtomicBool::new(false);
 
@@ -543,31 +540,20 @@ impl Arrival {
     }
 }
 
-/// The camera holds still on the doorway (`Camera2_request_main_demo_fromNowPos2`).
-fn camera(
-    arrival: Res<Arrival>,
-    town: Res<crate::town::Town>,
-    mut cameras: Query<
-        &mut Transform,
-        (
-            With<crate::player::WorldCamera>,
-            Without<crate::msg_window::OverlayCamera>,
-        ),
-    >,
-) {
-    if !on_platform(arrival.stage) {
-        return;
+impl Arrival {
+    /// Zero-duration native demo request (priority9): hold the doorway.
+    pub(crate) fn camera_center(&self, town: &crate::town::Town) -> Option<Vec3> {
+        // aSTM_set_force_talk_info selects NORMAL for0x07DD. Its demo
+        // request replaces the arrival hold once Porter begins speaking.
+        if !matches!(
+            self.stage,
+            Stage::Riding | Stage::Open { .. } | Stage::GetOff { .. } | Stage::Turn
+        ) {
+            return None;
+        }
+        let w = world(CAMERA_CENTRE.x, CAMERA_CENTRE.y);
+        Some(Vec3::new(w.x, town.ground_y(Vec3::new(w.x, 0.0, w.y)), w.y))
     }
-    let Ok(mut at) = cameras.single_mut() else {
-        return;
-    };
-    let w = world(CAMERA_CENTRE.x, CAMERA_CENTRE.y);
-    let ground = town.ground_y(Vec3::new(w.x, 0.0, w.y));
-    // `mCoBG_GetBgY_OnlyCenter_FromWpos2(.., -35.0f)`: the ground's height (35 is only the margin).
-    let centre = Vec3::new(w.x, ground, w.y);
-    let pitch = CAMERA_PITCH.to_radians();
-    at.translation = centre + Vec3::new(0.0, pitch.sin(), pitch.cos()) * CAMERA_DISTANCE;
-    at.look_at(centre, Vec3::Y);
 }
 
 /// Nothing takes input while the train comes in.
@@ -588,7 +574,7 @@ fn on_platform(stage: Stage) -> bool {
 /// Door open, stepping off, Porter's greeting, the walk (`aID_ACT_RIDE_OFF_PLAYER` .. `WALK_ONE_UNIT`).
 /// Until Nook's welcome is built the game then goes on as a played one (`finish_intro`).
 #[allow(clippy::too_many_arguments)]
-fn scene(
+pub(crate) fn scene(
     time: Res<Time>,
     disc: Option<Res<GameDisc>>,
     town: Res<crate::town::Town>,
@@ -848,12 +834,6 @@ impl Plugin for IntroArrivalPlugin {
                 tidy,
             )
                 .chain()
-                .in_set(crate::states::GameplaySet),
-        )
-        .add_systems(
-            Update,
-            camera
-                .after(crate::player::camera_follow)
                 .in_set(crate::states::GameplaySet),
         );
     }
