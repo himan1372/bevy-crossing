@@ -518,7 +518,11 @@ fn spawn_mailbox(
         println!("Restored {} letters from save", mailbox.letters.len());
     }
     // The disc town draws the real mailbox at the layout's MAILBOX0.
-    if let Some(cell) = town.retail.as_ref().and_then(|r| r.mailboxes[0]) {
+    if let Some(cell) = town
+        .retail
+        .as_ref()
+        .and_then(|r| r.mailboxes[crate::home::index()])
+    {
         let pos = crate::disc_town::mailbox_position(cell);
         info!("player mailbox at {pos}");
         commands.insert_resource(MailboxPos(pos));
@@ -596,7 +600,7 @@ fn mailbox_interact(
         return;
     }
     // aMBX_pl_open: the box opens, then the pockets in mailbox mode.
-    if let Some(mut b) = boxes.iter_mut().find(|b| b.house == 0) {
+    if let Some(mut b) = boxes.iter_mut().find(|b| b.house == crate::home::index()) {
         b.action = Some((crate::mailbox::BoxAction::Open, 1.0));
     }
     pockets.mailbox_wait = true;
@@ -615,7 +619,7 @@ fn mailbox_visit(
     mut ticks: Local<f32>,
     mut warned: Local<bool>,
 ) {
-    let Some(mut b) = boxes.iter_mut().find(|b| b.house == 0) else {
+    let Some(mut b) = boxes.iter_mut().find(|b| b.house == crate::home::index()) else {
         pockets.mailbox_wait = false;
         return;
     };
@@ -1225,6 +1229,20 @@ fn refresh_mail_ui(
     }
 }
 
+fn refresh_mailbox_position(town: Res<crate::town::Town>, pos: Option<ResMut<MailboxPos>>) {
+    let Some(mut pos) = pos else { return };
+    if let Some(cell) = town
+        .retail
+        .as_ref()
+        .and_then(|r| r.mailboxes[crate::home::index()])
+    {
+        let at = crate::disc_town::mailbox_position(cell);
+        if pos.0 != at {
+            pos.0 = at;
+        }
+    }
+}
+
 pub struct MailPlugin;
 
 impl Plugin for MailPlugin {
@@ -1234,6 +1252,10 @@ impl Plugin for MailPlugin {
             .insert_resource(MailUi::default())
             .insert_resource(MailNotifyTimer::default())
             .add_systems(Startup, setup_mail_ui)
+            .add_systems(
+                Update,
+                refresh_mailbox_position.before(InteractSet::Objects),
+            )
             .add_plugins(crate::mail_disc::MailDiscPlugin)
             .add_systems(
                 Startup,

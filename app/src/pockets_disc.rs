@@ -1182,6 +1182,7 @@ fn draw(
                 || ui.selling
                 || ui.donating
                 || ui.sending
+                || ui.giving.is_some()
                 || ui.mailing
                 || ui.storing.is_some()
                 || ui.home;

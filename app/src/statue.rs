@@ -115,7 +115,7 @@ fn spawn(
     }
     let world = skeleton.world_from_locals(&locals);
 
-    let (dx, dz) = OFFSETS[0];
+    let (dx, dz) = OFFSETS[crate::home::index()];
     let at = Town::cell_to_world(ax, az, cx, cz) + Vec3::new(dx, 0.0, dz) / 40.0;
     let root = commands
         .spawn((

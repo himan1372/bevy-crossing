@@ -5,6 +5,7 @@ type Model = Vec<(Handle<Mesh>, Handle<N64Material>)>;
 
 #[derive(Component)]
 pub(super) struct Appearance {
+    house: usize,
     size: u8,
     palette: u8,
     winter: bool,
@@ -18,16 +19,16 @@ pub(super) struct Cache(HashMap<(u8, u8), Model>);
 pub(super) fn track(
     commands: &mut Commands,
     root: Entity,
+    house: usize,
     (size, palette): (u8, u8),
     winter: bool,
-    model: &Model,
 ) {
     commands.entity(root).insert(Appearance {
+        house,
         size,
         palette,
         winter,
     });
-    commands.insert_resource(Cache(HashMap::from([((size, palette), model.clone())])));
 }
 
 #[allow(clippy::too_many_arguments)] // Rebuild all native house parts with one palette and lighting cache.
@@ -44,8 +45,12 @@ pub(super) fn update(
     let (Some(disc), Some(mut lights)) = (disc, lights) else {
         return;
     };
-    let wanted = crate::home::look();
     for (root, mut shown, children) in &mut roots {
+        let wanted = if shown.house == crate::home::index() {
+            crate::home::look()
+        } else {
+            (0, 0)
+        };
         // Preserve the existing restart requirement for changing house size.
         if shown.size != wanted.0 || shown.palette == wanted.1 {
             continue;

@@ -323,8 +323,8 @@ fn player_home_bodies(
     let mine = (own != 0).then(|| measure(own));
     std::array::from_fn(|house| {
         let cell = homes[house]?;
-        let (points, door) = match (&mine, house) {
-            (Some(m), 0) => (&m.0, m.1),
+        let (points, door) = match (&mine, house == crate::home::index()) {
+            (Some(m), true) => (&m.0, m.1),
             _ => (&small.0, small.1),
         };
         if points.is_empty() {
@@ -2234,7 +2234,7 @@ fn spawn_player_homes(
     let mut models: Vec<((u8, u8), Vec<(Handle<Mesh>, Handle<N64Material>)>)> = Vec::new();
     for (house, cell) in retail.player_homes.iter().enumerate() {
         let Some(cell) = *cell else { continue };
-        let look = if house == 0 {
+        let look = if house == crate::home::index() {
             (own_size, own_pal)
         } else {
             (0, 0)
@@ -2261,9 +2261,7 @@ fn spawn_player_homes(
                 Visibility::default(),
             ))
             .id();
-        if house == 0 {
-            player_home_roof::track(commands, root, look, winter, model);
-        }
+        player_home_roof::track(commands, root, house, look, winter);
         for (mesh, material) in model {
             commands.spawn((
                 Mesh3d(mesh.clone()),

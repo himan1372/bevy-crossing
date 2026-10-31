@@ -735,8 +735,11 @@ fn interact(
     mut dialogue: ResMut<DialogueState>,
     rigs: Query<(&RoomPiece, &crate::furniture::storage::StorageRig)>,
     mut warning: ResMut<crate::warning_panel::WarningPanel>,
+    intro: Option<Res<crate::intro::Intro>>,
 ) {
-    room.available = disc.is_some() && crate::house::is_player_room(&current, &state);
+    room.available = disc.is_some()
+        && crate::house::is_player_room(&current, &state)
+        && intro.as_deref() != Some(&crate::intro::Intro::Houses);
     if room.diary_open() {
         return;
     }

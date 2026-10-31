@@ -120,6 +120,16 @@ pub fn tree_palette(month: u8, day: u8) -> usize {
         .unwrap_or(0)
 }
 
+/// `aNRG_menu_close_wait_talk_proc`: only the starting quest Bell bag pays Nook.
+pub fn take_starting_bells(pockets: &mut crate::inventory::Inventory, slot: usize) -> bool {
+    if pockets.pockets.get(slot) != Some(&0x2100) || pockets.item_cond(slot) != 2 {
+        return false;
+    }
+    pockets.pockets[slot] = crate::inventory::EMPTY_NO;
+    pockets.set_item_cond(slot, 0);
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

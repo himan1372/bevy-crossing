@@ -127,7 +127,7 @@ fn origin(town: &Town) -> Option<Origin> {
 
 /// aPMAN_check_delivery: house 0 when the store holds letters.
 fn first_delivery(post: &Post) -> Option<usize> {
-    (!post.store.is_empty()).then_some(0)
+    (!post.store.is_empty()).then_some(crate::home::index())
 }
 
 fn chase_angle(from: f32, to: f32, step: f32) -> (f32, bool) {

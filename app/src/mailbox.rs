@@ -415,7 +415,7 @@ fn animate_flags(
         *ring -= 1.0;
     }
     for (position, mut f) in &mut flags {
-        let mail_here = f.house == 0 && has_mail;
+        let mail_here = f.house == crate::home::index() && has_mail;
         if ring_now && mail_here && f.flag == Flag::UpWait {
             crate::sound::se_at(0x43B, position.translation());
         }

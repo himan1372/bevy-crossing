@@ -137,6 +137,9 @@ pub(crate) struct Arrival {
 }
 
 impl Arrival {
+    pub(crate) fn ready_for_welcome(&self) -> bool {
+        self.stage == Stage::Idle
+    }
     /// Train placement and root motion own height until the step onto the platform finishes.
     pub(crate) fn owns_player_height(&self) -> bool {
         matches!(
@@ -306,6 +309,10 @@ fn leave(
     ),
 ) {
     if arrival.stage != Stage::Leaving {
+        return;
+    }
+    if *intro == Intro::Off {
+        arrival.stage = Stage::Idle;
         return;
     }
     // The train scene fades out; the change is made under the black.
@@ -516,8 +523,7 @@ fn scene(
     mut arrival: ResMut<Arrival>,
     mut intro: ResMut<Intro>,
     mut dialogue: ResMut<DialogueState>,
-    mut identity: ResMut<crate::save::PlayerIdentity>,
-    mut inventory: ResMut<crate::interaction::PlayerInventory>,
+    identity: Res<crate::save::PlayerIdentity>,
     mut player: Query<
         (
             Entity,
@@ -658,9 +664,8 @@ fn scene(
             if to.length() <= step {
                 at.translation = Vec3::new(goal.x, ground(WALK_POS) + HALF, goal.y);
                 arrival.stage = Stage::Idle;
-                *intro = Intro::Off;
-                crate::intro::finish_intro(&mut identity, &mut inventory);
-                info!("intro: arrived; the game goes on");
+                *intro = Intro::Arrival;
+                info!("intro: arrived; walk down the station stairs");
             } else {
                 let next = here + to.normalize() * step;
                 at.translation = Vec3::new(next.x, ground(WALK_POS) + HALF, next.y);

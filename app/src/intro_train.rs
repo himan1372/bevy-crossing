@@ -1377,6 +1377,7 @@ impl Plugin for IntroTrainPlugin {
             .add_systems(
                 Update,
                 rover
+                    .run_if(resource_exists::<GameDisc>)
                     .in_set(crate::input::InteractSet::Talk)
                     .in_set(GameplaySet),
             )

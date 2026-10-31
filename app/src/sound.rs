@@ -643,6 +643,10 @@ fn update_music(
 
     let scene = if crate::intro_arrival::music_on() {
         music_policy::Scene::Arrival
+    } else if let Some(scene) =
+        crate::intro_house::music().filter(|_| *house.get() == crate::house::HouseState::Town)
+    {
+        scene
     } else if *shop.get() == crate::shop::ShopLocation::Train {
         music_policy::Scene::Train
     } else if *shop.get() == crate::shop::ShopLocation::Museum {

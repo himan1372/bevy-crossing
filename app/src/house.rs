@@ -41,6 +41,27 @@ pub struct PlayerHouse {
     pub door_yaw: f32,
 }
 
+/// A home door by physical slot, also used before ownership during the intro.
+pub(crate) fn retail_home_door(town: &Town, slot: usize) -> Option<PlayerHouse> {
+    let retail = town.retail.as_ref()?;
+    let cell = *retail.player_homes.get(slot)?.as_ref()?;
+    let body = retail.player_home_bodies.get(slot)?.as_ref()?;
+    let (_, _, yaw) = crate::disc_town::player_home_placement(slot, cell);
+    Some(PlayerHouse {
+        door_pos: body.door + Quat::from_rotation_y(yaw) * Vec3::Z * DOOR_OUT,
+        door_yaw: yaw,
+    })
+}
+
+pub(crate) fn enter_intro_home(commands: &mut Commands, at: &mut Transform, facing: &mut Facing) {
+    let bounds = RoomBounds::disc_room();
+    commands.insert_resource(ReturnPosition(at.translation));
+    commands.insert_resource(CurrentRoom(INTERIOR_ORIGIN, bounds));
+    at.translation = INTERIOR_ORIGIN + Vec3::new(0.0, 1.0, bounds.spawn_z);
+    facing.dir = Vec3::NEG_Z;
+    crate::sound::door_sound(None, true);
+}
+
 /// Door yaw for a player house at plan cell column `cx` of its acre: with
 /// the retail town, houses face the path through the acre centre (east
 /// from the left half, west from the right); otherwise south.
@@ -185,12 +206,11 @@ const DOOR_HALF_W: f32 = 0.6;
 pub(crate) fn find_player_house(town: Res<Town>, mut commands: Commands) {
     let mut door = None;
     // Retail town: the player's house is HOUSE0, placed as the game does.
-    if let Some((cell, body)) = town
-        .retail
-        .as_ref()
-        .and_then(|r| Some((r.player_homes[0]?, r.player_home_bodies[0].as_ref()?)))
-    {
-        let (_, _, yaw) = crate::disc_town::player_home_placement(0, cell);
+    if let Some((cell, body)) = town.retail.as_ref().and_then(|r| {
+        let slot = crate::home::index();
+        Some((r.player_homes[slot]?, r.player_home_bodies[slot].as_ref()?))
+    }) {
+        let (_, _, yaw) = crate::disc_town::player_home_placement(crate::home::index(), cell);
         let out = Quat::from_rotation_y(yaw) * Vec3::Z * DOOR_OUT;
         door = Some((body.door + out, yaw));
     }
@@ -522,7 +542,11 @@ fn house_enter(
     mut player_query: Query<(&mut Transform, &mut Facing), With<Player>>,
     bounds: Res<RoomBounds>,
     villager_doors: Res<VillagerDoors>,
+    intro: Option<Res<crate::intro::Intro>>,
 ) {
+    if intro.as_deref() == Some(&crate::intro::Intro::Houses) {
+        return;
+    }
     if *state != HouseState::Town || *shop_loc != crate::shop::ShopLocation::Town {
         return;
     }
@@ -713,6 +737,12 @@ impl Plugin for HousePlugin {
     fn build(&self, app: &mut App) {
         app.add_sub_state::<HouseState>()
             .add_systems(Startup, find_player_house.after(crate::town::generate_town))
+            .add_systems(
+                Update,
+                find_player_house
+                    .run_if(resource_changed::<crate::home::PlayerHouse>)
+                    .before(InteractSet::Doors),
+            )
             .init_resource::<RoomBounds>()
             .init_resource::<CurrentRoom>()
             .init_resource::<InteriorObstacles>()

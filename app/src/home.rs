@@ -16,6 +16,9 @@ use crate::interaction::PlayerInventory;
 /// The saved house record.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HouseSave {
+    /// `mHS_set_use`: which of the four homes belongs to this player.
+    #[serde(default)]
+    pub home_slot: u8,
     pub size: u8,
     pub next_size: u8,
     pub statue_rank: u8,
@@ -205,6 +208,16 @@ pub struct PlayerHouse(pub HouseSave);
 
 /// Size (0-3) and roof palette of house 0, for the town model.
 static LOOK: AtomicU16 = AtomicU16::new(0);
+static HOME_SLOT: AtomicU8 = AtomicU8::new(0);
+
+pub(crate) fn index() -> usize {
+    usize::from(HOME_SLOT.load(Ordering::Relaxed))
+}
+
+pub(crate) fn select(house: &mut PlayerHouse, slot: usize) {
+    house.0.home_slot = slot.min(3) as u8;
+    HOME_SLOT.store(house.0.home_slot, Ordering::Relaxed);
+}
 
 pub fn look() -> (u8, u8) {
     let v = LOOK.load(Ordering::Relaxed);
@@ -363,6 +376,8 @@ pub fn today() -> (u16, u8, u8) {
 /// The loaded save's house, built up to date (PreStartup, before the town).
 fn init_house(mut commands: Commands, loaded: Res<crate::save::LoadedSave>) {
     let mut house = loaded.0.as_ref().and_then(|s| s.house).unwrap_or_default();
+    house.home_slot = house.home_slot.min(3);
+    HOME_SLOT.store(house.home_slot, Ordering::Relaxed);
     // The loan is restored with the inventory; construction only changes
     // size flags here, and the next loan is billed by Nook.
     let mut loan = loaded.0.as_ref().map_or(0, |s| s.loan);
@@ -381,6 +396,8 @@ pub(crate) fn restore(
     inventory: &mut PlayerInventory,
 ) {
     let mut h = saved.unwrap_or_default();
+    h.home_slot = h.home_slot.min(3);
+    HOME_SLOT.store(h.home_slot, Ordering::Relaxed);
     h.check_rehouse_order(&mut inventory.loan, today());
     set_look(&h);
     house.0 = h;

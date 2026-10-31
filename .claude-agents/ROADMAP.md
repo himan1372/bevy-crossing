@@ -1,5 +1,13 @@
 # bevy-crossing roadmap (revised 2026-10-14)
 
+2026-10-30 codex: Nook's welcome and house-choice slice is implemented after
+the station exit: native greeting/tour, four-house inspection, original choices
+and explanation, quest Bell-bag payment and existing first-job handoff. Selected
+home ownership now persists and routes the door, roof, mailbox, gyroid and statue.
+Isolated tour/refusal/repeat/cancel/payment/departure, nonzero-home reload and
+first-job entry verified; missing-disc numeric state preserved. Philip's
+acceptance and M4 remain open.
+
 2026-10-30 codex: porter-collision adds a live entity-position body blocker to
 outdoor movement using the original 20+20 game-unit NPC/player pipe radii.
 Swept circle checks block long-frame crossing; overlapping starts can escape

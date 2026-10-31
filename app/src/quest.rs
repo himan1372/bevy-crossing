@@ -98,11 +98,12 @@ pub struct QuestState {
 /// `aQMgr_select_talk`: while the part-time job runs villagers talk about the job, not their own
 /// quests, except during the open-quest job (`FJOPENQUEST`), which exists to take one.
 fn job_blocks_quests(identity: &crate::save::PlayerIdentity) -> bool {
-    identity.events.first_job
-        && !identity
-            .first_job
-            .as_ref()
-            .is_some_and(|j| j.open_quest_running())
+    !identity.intro_done
+        || identity.events.first_job
+            && !identity
+                .first_job
+                .as_ref()
+                .is_some_and(|j| j.open_quest_running())
 }
 
 impl QuestState {

@@ -1,5 +1,47 @@
 # Codex handoff - 2026-10-25
 
+## Codex continuation - 2026-10-31 (newest)
+
+Philip resumed after the usage wrap-up. Nook welcome/house-choice implementation
+and runtime verification are complete; all builds passed. Task note:
+.claude-agents/completed/intro-nook-house-choice.md; plan:
+docs/superpowers/plans/2026-10-30-intro-nook-house-choice.md.
+
+Station exit now reaches Nook's native welcome/tour, inspection of any four homes,
+original choices/explanation, exact quest Bell-bag Give/Quit, handover, nearer-end
+departure and existing first job. Selected HouseSave.home_slot defaults to0 for
+old saves and drives door, roof, mailbox/flag, gyroid, postman delivery and statue.
+Played payment uses complete_intro, avoiding Skip's bag allocation. Completed
+identities are guarded before missing-data fallback. Rover's mandatory disc
+system is now gated, fixing the no-disc panic found during QA.
+
+Verified: native normal arrival/stairs to Nook; home1 refusal (unchanged ownership,
+loan and bag), home2 acceptance, explanation repeat, acre warning, Escape/Quit
+payment cancellation, Give/handover and actual corrected south departure without
+actor edits. Final save: home2, loan17400, bag removed, intro_done/first_job true.
+F9 and process restart preserve selected door/mailbox/roof, numeric inventory,
+loan and full room; entering the shop starts existing first-job greeting.
+Completed-save INTRO=play with missing disc preserves house3, loan12345, wallet543,
+pockets/conditions/room and no job reset. Fresh missing-disc intro falls back to
+playable world/save. Source reviewer confirmed ownership/payment/departure fixes.
+
+check/clippy(-D warnings)/fmt and capture/default passed after final Rover guard;
+release passed (4m29s). No tests added/run. All previews used synthetic Temp saves;
+all owned previews are closed. Temp/bevy-intro-houses-20261030 retains evidence.
+Earlier blocked old-build departure was moved beyond the board only to inspect
+integration; the final fresh latest-binary run needed no guide transform edits.
+
+Keep M4, Philip's acceptance and overall intro fidelity open. Train engineer,
+smoke/sounds, camera staging and remaining native emotion commands are follow-ups;
+intro remains development-gated as before (INTRO=play, ARRIVE/HOUSES QA flags).
+Do not silently start another gameplay slice. Next concrete step: Philip plays
+from the station through house choice/payment and the first shop visit.
+
+Preserve unrelated .gitignore and real savegame.json. Real save SHA256 remains
+C15154C01FE105A33229406AD7D16499D0A79F7961F5D28DFDB20B9A43562FBA.
+Previous pushed gameplay9542eb3b fixed Porter's collision ("def better now").
+The Nook slice commit is titled "Continue the arrival into Nook house selection".
+
 ## Claude continuation - 2026-10-30, fifth session: the new-game intro (newest, read this first)
 
 Identity `claude`, `main`, pushed (last code commit `4edda5e0`). Only `.gitignore` and `savegame.json` stay uncommitted (never commit them). Philip picked the intro demo; it is built in slices, each with a note in `.claude-agents/completed/`:

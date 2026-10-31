@@ -593,3 +593,7 @@
 {"action":"complete","task":"arrival-turn-floor","agent":"codex","timestamp":"2026-10-30T19:55:39Z"}
 {"action":"claim","task":"porter-collision","agent":"codex","timestamp":"2026-10-30T20:05:39Z"}
 {"action":"complete","task":"porter-collision","agent":"codex","timestamp":"2026-10-30T20:21:06Z"}
+{"action":"claim","task":"intro-nook-house-choice","agent":"codex","timestamp":"2026-10-30T20:31:45Z"}
+{"action":"release","task":"intro-nook-house-choice","agent":"codex","timestamp":"2026-10-30T20:46:52Z"}
+{"action":"claim","task":"intro-nook-house-choice","agent":"codex","timestamp":"2026-10-31T00:00:07Z"}
+{"action":"complete","task":"intro-nook-house-choice","agent":"codex","timestamp":"2026-10-31T08:42:08Z"}

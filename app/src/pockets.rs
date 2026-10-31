@@ -37,6 +37,8 @@ pub struct PocketsUi {
     /// Inventory mode 0x10 at Nook's password counter: pick the item to
     /// trade in; the slot comes back in `sell_slot`.
     pub(crate) sending: bool,
+    /// The intro's quest-item selection. The controller commits the transfer.
+    pub(crate) giving: Option<u16>,
     /// Inventory mode for the post office counter (mSM_IV_OPEN_SEND_MAIL):
     /// pick a written letter; its index comes back in `mail_pick`.
     pub(crate) mailing: bool,
@@ -237,7 +239,13 @@ fn can_hold(item: u16, condition: u32) -> bool {
 
 impl PocketsUi {
     pub(crate) fn actions(&self, item: u16, condition: u32) -> Vec<&'static str> {
-        if self.sending {
+        if let Some(wanted) = self.giving {
+            if item == wanted && condition == 2 {
+                vec!["Give", "Quit"]
+            } else {
+                vec!["Quit"]
+            }
+        } else if self.sending {
             // check_possession_item_make_password: plain pocket items Nook sells.
             if condition == 0 && crate::shop_nook::password::present_user(item) {
                 vec!["Send", "Quit"]
@@ -490,9 +498,12 @@ pub(crate) fn pockets_input(
         if item == EMPTY_NO {
             return;
         }
-        if ui.sending || ui.donating {
+        if ui.sending || ui.donating || ui.giving.is_some() {
             if choice == 0 && ui.actions(item, inventory.pockets.item_cond(slot)).len() == 2 {
                 ui.sell_slot = Some(slot);
+                ui.open = false;
+            } else if ui.giving.is_some() {
+                ui.sell_slot = None;
                 ui.open = false;
             }
             crate::sound::se(crate::sound::se_id::CHOICE_CONFIRM);

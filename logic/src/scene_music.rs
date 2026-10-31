@@ -31,6 +31,8 @@ pub enum Scene {
     Train,
     /// The new-game arrival at the station: `BGM_INTRO_ARRIVE`.
     Arrival,
+    IntroGuide,
+    IntroSelectHouse,
 }
 
 /// Music ID (resolved through the disc's SEQ_TABLE), plus hourly arrangement.
@@ -63,6 +65,8 @@ pub fn select_with(
         Scene::Museum => (88, 0),
         Scene::Train => (42, 0),
         Scene::Arrival => (47, 0),
+        Scene::IntroGuide => (48, 0),
+        Scene::IntroSelectHouse => (49, 0),
         Scene::Town => {
             let hour = (day_secs / 3600 % 24) as usize;
             match weather {

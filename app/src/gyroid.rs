@@ -134,7 +134,7 @@ pub fn spawn_gyroids(
             .collect();
         commands.entity(root).insert(Gyroid {
             house,
-            owned: house == 0,
+            owned: house == crate::home::index(),
             frame: FIRST_FRAME,
             speed: 0.0,
             angle,
@@ -160,6 +160,7 @@ fn animate_gyroids(
     let ticks = time.delta_secs() * 60.0;
     let player = player.single().ok().map(|t| t.translation);
     for (mut g, mut t) in &mut gyroids {
+        g.owned = g.house == crate::home::index();
         // aHNW_common_process: ease the speed, turn to the player or front.
         let target_speed = if g.owned { OWNER_SPEED } else { 0.0 };
         let rate = if target_speed > g.speed { 0.05 } else { 0.015 };

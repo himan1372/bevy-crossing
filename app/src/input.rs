@@ -298,7 +298,11 @@ pub(crate) fn update_focus(
         || dialogue.external_result.is_some()
         || handover.busy()
         || twins.waiting
-        || ((pockets.selling || pockets.donating || pockets.sending || pockets.mailing)
+        || ((pockets.selling
+            || pockets.donating
+            || pockets.sending
+            || pockets.mailing
+            || pockets.giving.is_some())
             && !pockets.open)
         || pockets.mailbox_wait
         || pockets.room_request.is_some()

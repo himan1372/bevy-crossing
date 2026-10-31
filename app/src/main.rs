@@ -39,6 +39,7 @@ mod interaction;
 mod interior;
 mod intro;
 mod intro_arrival;
+mod intro_house;
 mod intro_train;
 mod items;
 mod joan;
@@ -161,6 +162,7 @@ fn main() {
         .add_plugins(intro::IntroPlugin)
         .add_plugins(intro_train::IntroTrainPlugin)
         .add_plugins(intro_arrival::IntroArrivalPlugin)
+        .add_plugins(intro_house::IntroHousePlugin)
         .add_plugins(name_entry::NameEntryPlugin)
         .add_plugins(time_window::TimeWindowPlugin)
         .add_plugins(scene_wipe::SceneWipePlugin)
