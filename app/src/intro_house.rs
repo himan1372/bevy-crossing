@@ -23,7 +23,7 @@ use crate::town::Town;
 
 const NOOK: u32 = 238 + 20;
 const MONEY: u16 = 0x2100;
-const RUN_SPEED: f32 = 3.75;
+const RUN_SPEED: f32 = crate::npc::RUN_SPEED;
 static MUSIC: AtomicU8 = AtomicU8::new(0);
 
 pub(crate) fn music() -> Option<rustimal_logic::scene_music::Scene> {

@@ -963,7 +963,7 @@ fn play_clip(
 /// World units per second above which a villager walks / runs (between
 /// their wander speeds, see `npc.rs`).
 const VILLAGER_WALK_MIN: f32 = 0.3;
-const VILLAGER_RUN_MIN: f32 = 2.5;
+const VILLAGER_RUN_MIN: f32 = (crate::npc::WALK_SPEED + crate::npc::RUN_SPEED) * 0.5;
 
 /// Plays each rig's animation: the player's from its locomotion (turning
 /// the model to its facing), villagers' from how fast they move.
@@ -1186,9 +1186,11 @@ fn animate_characters(
             });
             if !played {
                 let (motion, speed) = match gait.map(|g| g.0) {
-                    Some(2) => (Motion::Run, 1.0),
+                    // aNPC_set_anime_speed: locked movement clips use 0.5
+                    // frames per 60-Hz tick, including running.
+                    Some(2) => (Motion::Run, WAIT_SPEED),
                     Some(1) => (Motion::Walk, WAIT_SPEED),
-                    _ if keeper.is_some_and(|n| n.running) => (Motion::Run, 1.0),
+                    _ if keeper.is_some_and(|n| n.running) => (Motion::Run, WAIT_SPEED),
                     _ if keeper.is_some_and(|n| n.walking) => (Motion::Walk, WAIT_SPEED),
                     _ => (Motion::Wait, WAIT_SPEED),
                 };

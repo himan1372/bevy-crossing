@@ -1,5 +1,12 @@
 # bevy-crossing roadmap (revised 2026-10-14)
 
+2026-10-31 codex: Philip reports the Nook house flow works, but NPCs move too
+fast. Native NPC caps are now walk0.75/run2.25 world units/s (game speeds1/3,
+30 movement ticks/s, 40 units/cell), shared with intro Nook and his follower.
+NPC run playback returns to native0.5 frames/60-Hz tick; villager gait threshold
+follows the new caps. Isolated measurements: Nook median2.263; one-second villager
+walk/run medians0.74997/2.24929. Speed feel acceptance remains open.
+
 2026-10-30 codex: Nook's welcome and house-choice slice is implemented after
 the station exit: native greeting/tour, four-house inspection, original choices
 and explanation, quest Bell-bag payment and existing first-job handoff. Selected

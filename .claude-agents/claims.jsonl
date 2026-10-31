@@ -597,3 +597,5 @@
 {"action":"release","task":"intro-nook-house-choice","agent":"codex","timestamp":"2026-10-30T20:46:52Z"}
 {"action":"claim","task":"intro-nook-house-choice","agent":"codex","timestamp":"2026-10-31T00:00:07Z"}
 {"action":"complete","task":"intro-nook-house-choice","agent":"codex","timestamp":"2026-10-31T08:42:08Z"}
+{"action":"claim","task":"npc-retail-speed","agent":"codex","timestamp":"2026-10-31T09:08:51Z"}
+{"action":"complete","task":"npc-retail-speed","agent":"codex","timestamp":"2026-10-31T09:18:58Z"}

@@ -12,7 +12,8 @@
 //! - two villagers who meet greet each other and both become happy
 //!   (`ac_npc_act_greeting`).
 //!
-//! Ours (not traced): walk/run speeds, wander radius, wait times, the
+//! Speeds use `aNPC_spd_data` and `Actor_position_move`'s 30 movement ticks/s.
+//! Ours (not traced): wander radius, wait times, the
 //! greeting distance and cooldown, and villager-to-house assignment (the
 //! translated `villager_home` lot assignment isn't wired yet; villagers get
 //! the town's non-player houses in order).
@@ -34,8 +35,10 @@ use crate::town::{Town, HOUSE_SIZE};
 /// Wander targets lie within this distance of home.
 /// Philip's playtest: ~19 units.
 const WANDER_RADIUS: f32 = 19.0;
-const WALK_SPEED: f32 = 1.6;
-const RUN_SPEED: f32 = 3.4;
+/// `aNPC_spd_data`: 1/3 game units per movement tick; `Actor_position_move`
+/// advances half a speed unit per 60-Hz tick, with 40 game units per cell.
+pub(crate) const WALK_SPEED: f32 = 1.0 * RETAIL_FPS / 40.0;
+pub(crate) const RUN_SPEED: f32 = 3.0 * RETAIL_FPS / 40.0;
 /// Seconds a "wait" lasts (min, max). Short, because waits chain: a peppy
 /// villager waits on 70% of decisions (decomp odds).
 const WAIT_SECS: (f32, f32) = (1.0, 2.5);

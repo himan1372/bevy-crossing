@@ -1,5 +1,27 @@
 # Codex handoff - 2026-10-25
 
+## NPC speed correction - 2026-10-31 (newest)
+
+Philip played the Nook sequence and said it works, but Nook and the other NPCs
+move too fast. Task npc-retail-speed is complete; all gates/builds passed.
+Three source files: npc.rs, intro_house.rs, character.rs. Source aNPC_spd_data is
+walk1/run3; Actor_position_move advances
+0.5 per60-Hz tick. With40 units/cell, native caps are0.75/2.25 world units/s.
+The guide/follower share the resident run cap; generic NPC/keeper run playback
+uses native0.5 frames/60-Hz tick and resident run threshold follows the new caps.
+Existing steering/schedules/waits and player input speed are outside this fix.
+
+check/clippy/fmt/capture/default passed; release passed (5m19s). Isolated Nook median
+2.263; six villagers sampled45s, one-second walk/run medians0.74997/2.24929.
+Nook reached the houses and run-pose captures were inspected. No tests. Temporary
+QA folder: Temp/bevy-npc-retail-speed-20261031; latest PID/log files identify the
+owned preview. A fresh interactive station preview is open for Philip; no more
+automated input is pending. Real save unchanged. Completed task note is
+.claude-agents/completed/npc-retail-speed.md; commit title is
+Match Nook and villager movement to native NPC speeds.
+Do not touch unrelated .gitignore/savegame.json. Speed acceptance,
+remaining intro staging/emotions/engineer/smoke/sounds and M4 remain open.
+
 ## Codex continuation - 2026-10-31 (newest)
 
 Philip resumed after the usage wrap-up. Nook welcome/house-choice implementation
