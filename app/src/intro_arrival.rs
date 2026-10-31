@@ -8,8 +8,9 @@
 //! pulling `ac_train1` (the passenger car `cKF_bs_r_obj_train1_3` with its `_open` / `_close`
 //! animations). Then the player steps down, Porter the station master turns and greets them (force talk
 //! 0x07DD), the train pulls out and the player walks one unit (`aID_walk_one_unit`) to the platform's end.
-//! Not built yet: the engineer in the cab, the smoke and steam, the back car's spring, the train's
-//! sounds, and Nook's welcome that follows.
+//! The cab engineer, chimney/cylinder effects and sounds follow the original train actors.
+//! The back car's spring remains separate.
+mod effects;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -134,6 +135,9 @@ pub(crate) struct Arrival {
     from: Vec3,
     /// The track's height (`mCoBG_GetBgY_OnlyCenter_FromWpos2`) plus the rails.
     y: f32,
+    ticks: f32,
+    presentation: tc::Presentation,
+    town_active: bool,
 }
 
 impl Arrival {
@@ -166,6 +170,9 @@ struct Locomotive {
 
 #[derive(Component)]
 struct Tender;
+
+#[derive(Component)]
+struct Engineer;
 
 /// `aTR1_setupAction`: the car's door.
 #[derive(Component)]
@@ -213,6 +220,16 @@ fn spawn_train(
             .with_rotation(facing)
             .with_scale(Vec3::splat(scale))
     };
+    commands.spawn((
+        Name::new("train engineer"),
+        Engineer,
+        crate::character::NpcModel(238 + 103),
+        Transform::from_translation(
+            track(tc::DEMO_X, y) + Vec3::new(-40.0, 47.0, 20.0) / UNIT + Vec3::Y * HALF,
+        )
+        .with_rotation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)),
+        Visibility::default(),
+    ));
     // The locomotive.
     let loco = commands
         .spawn((
@@ -331,6 +348,9 @@ fn leave(
     };
     arrival.y = ground_at(tc::DEMO_X) + 20.0 / UNIT;
     arrival.train = Some(Train::demo());
+    arrival.presentation = tc::Presentation::default();
+    arrival.ticks = 0.0;
+    arrival.town_active = false;
     spawn_train(
         &mut commands,
         &disc,
@@ -377,8 +397,12 @@ fn leave(
 /// `mTRC_trainControl` and the actors that follow it.
 #[allow(clippy::too_many_arguments)]
 fn run_train(
+    mut commands: Commands,
     time: Res<Time>,
     mut arrival: ResMut<Arrival>,
+    mut effects: ResMut<effects::Effects>,
+    mut materials: ResMut<Assets<N64Material>>,
+    mut random: ResMut<crate::game_rand::GameRand>,
     mut locomotive: Query<(&mut Transform, &mut Locomotive), (Without<Tender>, Without<Car>)>,
     mut tender: Query<&mut Transform, (With<Tender>, Without<Locomotive>, Without<Car>)>,
     mut car: Query<(&mut Transform, &mut Car), (Without<Locomotive>, Without<Tender>)>,
@@ -401,22 +425,52 @@ fn run_train(
         ),
     >,
 ) {
-    let Some(train) = arrival.train.as_mut() else {
+    if arrival.train.is_none() {
         return;
-    };
+    }
     let dt = time.delta_secs() * 60.0;
-    let event = train.step(dt);
-    let (x, speed, action) = (train.x, train.speed, train.action);
     let y = arrival.y;
-    let mut event_seen = event;
+    arrival.ticks += dt;
+    while arrival.ticks >= 1.0 {
+        arrival.ticks -= 1.0;
+        let Some(train) = arrival.train.as_mut() else {
+            break;
+        };
+        let event = train.step(1.0);
+        let (x, speed) = (train.x, train.speed);
+        match event {
+            Some(Event::Stopped) => {
+                crate::sound::se_at(0x73, track(x, y));
+                info!("intro: the train has stopped (sound 0x73)");
+            }
+            Some(Event::PullingOut) => {
+                // Arrival is the outdoor field (Na scene 0), so departure uses 0x71.
+                crate::sound::se_at(0x71, track(x, y));
+                info!("intro: train pulling out (sound 0x71)");
+            }
+            _ => {}
+        }
+        let cues = arrival.presentation.tick(speed);
+        if cues.chuff {
+            crate::sound::se_at(0x3B, track(x, y));
+        }
+        if cues.clack {
+            crate::sound::se_at(0x3F, track(x - 250.0, y));
+        }
+        effects.tick(
+            track(x, y),
+            &cues,
+            &mut random,
+            &mut commands,
+            &mut materials,
+        );
+    }
+    let Some(train) = arrival.train else { return };
+    let (x, action) = (train.x, train.action);
     if let Ok((mut at, mut loco)) = locomotive.single_mut() {
         at.translation = track(x, y);
         // `aTR0_actor_move`: the wheels turn at a tenth of the speed per unit, at most 0.5 frames a tick.
-        let rate = (speed / 40.0 * 10.0).min(0.5);
-        loco.frame += rate * dt;
-        while loco.frame >= 25.0 {
-            loco.frame -= 24.0;
-        }
+        loco.frame = arrival.presentation.wheel.max(1.0);
         loco.prop
             .pose(loco.anim.as_deref(), loco.frame, &mut transforms);
     }
@@ -438,7 +492,7 @@ fn run_train(
             car.speed = speed;
             car.frame = 1.0;
             if action.number() == 4 || action.number() == 6 {
-                crate::sound::se(43);
+                crate::sound::se_at(43, track(x - 2.0 * COUPLING, y));
             }
             car.posed = false;
         }
@@ -463,11 +517,29 @@ fn run_train(
             at.translation = track(x - 2.0 * COUPLING, y) + PASSENGER / UNIT + Vec3::Y * HALF;
         }
     }
-    if event_seen.take() == Some(Event::Stopped) {
-        info!("intro: the train has stopped");
-    }
     if action == Action::WaitStopped && arrival.stage == Stage::Riding {
         arrival.stage = Stage::Open { seconds: 0.0 };
+    }
+}
+
+fn follow_engineer(arrival: Res<Arrival>, mut engineers: Query<&mut Transform, With<Engineer>>) {
+    if let Some(train) = arrival.train {
+        for mut at in &mut engineers {
+            at.translation =
+                track(train.x, arrival.y) + Vec3::new(-40.0, 47.0, 20.0) / UNIT + Vec3::Y * HALF;
+        }
+    }
+}
+
+impl Arrival {
+    /// Stable Na_KishaStatusLevel steam source; the original keeps it active while stopped.
+    pub(crate) fn sound_source(&self) -> Option<rustimal_logic::ambience::Source> {
+        let train = self.train.filter(|train| train.action != Action::None)?;
+        Some(rustimal_logic::ambience::Source {
+            key: u64::MAX - 2,
+            id: 0x10,
+            position: (track(train.x, self.y) * UNIT).to_array(),
+        })
     }
 }
 
@@ -682,11 +754,19 @@ fn scene(
 fn tidy(
     mut arrival: ResMut<Arrival>,
     mut commands: Commands,
-    parts: Query<Entity, Or<(With<Locomotive>, With<Tender>, With<Car>)>>,
+    parts: Query<Entity, Or<(With<Locomotive>, With<Tender>, With<Car>, With<Engineer>)>>,
+    mut effects: ResMut<effects::Effects>,
+    mut materials: ResMut<Assets<N64Material>>,
+    shop: Res<State<ShopLocation>>,
+    house: Res<State<crate::house::HouseState>>,
     player: Query<&Transform, With<Player>>,
 ) {
+    if *shop.get() == ShopLocation::Town && *house.get() == crate::house::HouseState::Town {
+        arrival.town_active = arrival.train.is_some();
+    }
     if arrival.train.is_some_and(|t| t.action == Action::None) {
         arrival.train = None;
+        effects.clear(&mut commands, &mut materials);
         for entity in &parts {
             commands.entity(entity).despawn();
         }
@@ -698,6 +778,38 @@ fn tidy(
             }
         }
     }
+}
+
+fn reset(
+    mut commands: Commands,
+    mut arrival: ResMut<Arrival>,
+    mut effects: ResMut<effects::Effects>,
+    mut materials: ResMut<Assets<N64Material>>,
+    parts: Query<Entity, Or<(With<Locomotive>, With<Tender>, With<Car>, With<Engineer>)>>,
+) {
+    arrival.train = None;
+    arrival.stage = Stage::Idle;
+    arrival.ticks = 0.0;
+    arrival.town_active = false;
+    MUSIC.store(false, Ordering::Relaxed);
+    effects.clear(&mut commands, &mut materials);
+    for entity in &parts {
+        commands.entity(entity).try_despawn();
+    }
+}
+
+fn loaded(mut messages: MessageReader<crate::sound::ResetAudio>) -> bool {
+    messages.read().count() != 0
+}
+
+fn left_scene(
+    arrival: Res<Arrival>,
+    shop: Option<Res<State<ShopLocation>>>,
+    house: Option<Res<State<crate::house::HouseState>>>,
+) -> bool {
+    arrival.town_active
+        && (shop.is_none_or(|shop| *shop.get() != ShopLocation::Town)
+            || house.is_none_or(|house| *house.get() != crate::house::HouseState::Town))
 }
 
 pub struct IntroArrivalPlugin;
@@ -713,12 +825,23 @@ impl Plugin for IntroArrivalPlugin {
             },
             ..default()
         })
+        .init_resource::<effects::Effects>()
+        .add_systems(Update, reset.run_if(left_scene).before(run_train))
+        .add_systems(
+            Update,
+            reset
+                .run_if(loaded)
+                .before(run_train)
+                .after(crate::save::LoadSet),
+        )
         .add_systems(PreUpdate, lock.after(crate::input::update_focus))
         .add_systems(
             Update,
             (
                 leave,
                 run_train,
+                follow_engineer,
+                effects::draw,
                 scene
                     .after(crate::locomotion::MovementSet)
                     .before(crate::character::CharacterAnimationSet),

@@ -79,6 +79,71 @@ pub enum Event {
     Gone,
 }
 
+/// One native 60-Hz tick of ac_train0 and Na_KishaStatusLevel presentation.
+#[derive(Default)]
+pub struct Presentation {
+    pub wheel: f32,
+    saved_wheel: u8,
+    smoke_wait: u8,
+    shu: u16,
+    tonton: u16,
+}
+
+#[derive(Default)]
+pub struct Cues {
+    pub smoke: bool,
+    pub steam: Option<usize>,
+    pub chuff: bool,
+    pub clack: bool,
+}
+
+impl Presentation {
+    pub fn tick(&mut self, speed: f32) -> Cues {
+        if self.wheel == 0.0 {
+            self.wheel = 1.0;
+        }
+        let frame = self.wheel as u8;
+        let changed = frame != self.saved_wheel;
+        self.saved_wheel = frame;
+        let mut cues = Cues::default();
+        if speed > 0.0 {
+            if self.smoke_wait == 0 {
+                cues.smoke = true;
+                self.smoke_wait = if speed >= 1.0 {
+                    (12.0 / speed) as u8
+                } else {
+                    12
+                };
+            } else {
+                self.smoke_wait -= 1;
+            }
+            // aTR0_animation reports changes to the integer wheel frame only.
+            if changed {
+                cues.steam = match frame {
+                    2..=5 => Some(0),
+                    13..=16 => Some(1),
+                    _ => None,
+                };
+            }
+        }
+        cues.chuff = self.shu == 4 && speed > 0.4;
+        cues.clack = self.tonton == 10 && speed > 0.4;
+        if self.shu > (20.0 - 2.5 * speed) as u16 {
+            self.shu = 0;
+        }
+        if self.tonton > (90.0 - 11.5 * speed) as u16 {
+            self.tonton = 0;
+        }
+        self.shu += 1;
+        self.tonton += 1;
+        self.wheel += (speed / 4.0).min(0.5);
+        if self.wheel >= 25.0 {
+            self.wheel -= 24.0;
+        }
+        cues
+    }
+}
+
 impl Train {
     /// `mTRC_demo_init`: the new game's train, coming in at slow speed.
     pub fn demo() -> Self {

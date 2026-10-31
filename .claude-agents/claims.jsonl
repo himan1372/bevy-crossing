@@ -601,3 +601,5 @@
 {"action":"complete","task":"npc-retail-speed","agent":"codex","timestamp":"2026-10-31T09:18:58Z"}
 {"action":"claim","task":"handoff-intro-priorities","agent":"codex","timestamp":"2026-10-31T09:29:08Z"}
 {"action":"complete","task":"handoff-intro-priorities","agent":"codex","timestamp":"2026-10-31T09:32:09Z"}
+{"action":"claim","task":"intro-train-effects","agent":"codex","timestamp":"2026-10-31T09:39:12Z"}
+{"action":"complete","task":"intro-train-effects","agent":"codex","timestamp":"2026-10-31T10:05:36Z"}

@@ -1,5 +1,16 @@
 # bevy-crossing roadmap (revised 2026-10-14)
 
+2026-10-31 codex: intro-train-effects adds engineer NPC341 at native cab offset,
+disc chimney smoke/cylinder steam with native emission frames, lifetimes and
+two-texture interpolation, plus stop0x73/depart0x71, speed-based0x3B/0x3F and
+stable positional steam loop0x10. Controller/presentation run at60Hz. Arrival,
+stopped emission decay, full departure retirement, QuickLoad cleanup and
+missing-disc wallet/loan/pockets/room retention checked in synthetic Temp worlds.
+Scene cleanup checks both shop and house states; direct house-entry QA was
+intercepted by the existing Nook welcome, so that branch is source-reviewed.
+check/clippy/fmt/capture/default/release passed; no tests. Camera and dialogue
+reaction priorities, Philip's visual/audio acceptance and M4 remain open.
+
 2026-10-31 codex: Philip reports the Nook house flow works, but NPCs move too
 fast. Native NPC caps are now walk0.75/run2.25 world units/s (game speeds1/3,
 30 movement ticks/s, 40 units/cell), shared with intro Nook and his follower.
