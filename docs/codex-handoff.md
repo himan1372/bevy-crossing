@@ -1,5 +1,26 @@
 # Codex handoff - 2026-10-25
 
+## Philip's handoff request - 2026-10-31 (read first)
+
+Philip explicitly requested this update and instructed the next agent to list
+the three remaining intro priorities at the END of its first catch-up reply.
+Use the exact order and scope listed at the end of this file. These replace the
+older seasonal-work recommendation for this continuation. Do not start any of
+the three without Philip selecting it.
+
+Published main: **65eae995** (native NPC speed correction), following
+**fe1a3b2e** (Nook welcome, house selection/payment and first-job handoff).
+Philip said the Nook flow works, then requested original-game NPC speeds; the
+speed fix is built, measured and pushed, with his visual acceptance still open.
+All required builds/checks passed; no tests added/run. Both tasks are completed.
+
+Last interactive preview: PID24212, executable
+Temp/bevy-npc-retail-speed-20261031/nook-qa.exe, launched at the station with
+synthetic save and corrected speeds. It may have been closed since: verify its
+identity and owned-pid.txt/log-name.txt before attaching or stopping it. No
+automated input is pending. Preserve the real save and unrelated .gitignore.
+Read the task notes below for source evidence and remaining fidelity limits.
+
 ## NPC speed correction - 2026-10-31 (newest)
 
 Philip played the Nook sequence and said it works, but Nook and the other NPCs
@@ -642,4 +663,6 @@ Complete all authorized repository work and confirm publication/status first,
 then tell Philip the next concrete step. End the first catch-up reply with these
 three priorities, in this order (do not start them without a selection):
 
-1. Remaining seasonal work (see Currently next above).
+1. **Train arrival:** add the engineer, smoke/steam, and train sounds.
+2. **Camera movement:** match the original arrival and Nook-tour framing.
+3. **Character reactions:** finish the original expressions and gestures during dialogue.
