@@ -1,5 +1,19 @@
 # bevy-crossing roadmap (revised 2026-10-14)
 
+2026-11-01 codex: retail-pause-ui implements the native30CD save question,
+Save & Quit / Save & Continue bank labels and disc message/choice/font/cursor
+presentation at P. PC Settings and confirmed Quit without saving stay at F1;
+P/Escape resumes. Choices sit above the question for readability. Save requests
+use the paused snapshot and actual write outcome; quit requires success and a
+separate acknowledgement. Failed saves preserve the old file via an exclusive
+same-directory temporary/sync/rename commit; retry and simultaneous-P handling
+verified. Native and no-disc cancel/settings/save/load/error/quit paths retain
+numeric state, including nonzero pocket flags; locked-file failure preserves
+old bytes and leaves0 temporary files. check/clippy/fmt/capture/default/release
+pass (release5m20s); no tests. Actual save unchanged; owned previews exited.
+This is the PC pause entry to the retail save conversation; title and full
+gyroid save-scene staging remain separate. Philip comparison/M4 stay open.
+
 2026-11-01 codex: intro-dialogue-reactions (Philip priority3) connects the16
 native Rover/Nook reaction orders and seated/standing resets to27 runtime-disc
 clips. Native ranges/modes/morph, eye/mouth patterns and7 feel effects plus bulb
@@ -310,11 +324,12 @@ Each milestone ends with a Philip playtest.
 - [~] **retail-pockets-ui** — original inventory frame, runtime icons/font, animated player/hand, slide, 15-slot selection, Grab/swap and supported net/rod Hold. Corrections cover shared up-left cloth scrolling (Philip's latest direction), source perspective/menu lighting, close/release, grid alignment and held-item rim exposure. Added saved phi/woponese labels and source-scaled bells. Static layout previously looked much better; final retail comparison acceptance remains open. Full retail tags/actions, mail integration and remaining hand/morph/recessed-slot fidelity stay named follow-ups; introduction/rename remains deferred. See backlog/retail-pockets-ui.md.
 - [~] **retail-mail-ui** — ten disc envelope slots, original stationery/font, paged reading and existing compose/send. Philip accepts UI/paper appearance. Follow-up fixes world camera query regression and adds compact Read/Grab/Throw Away/Quit menus, confirmed discard, slot-preserving move/swap and save compatibility. Corrected camera/menu/actions await Philip comparison; separate mail transfer/storage, broader retail tags/keyboard, attachments and paper effects remain open. See backlog/retail-mail-ui.md.
 - [ ] **retail-shop-ui** — first Cranny flow implemented: display-linked purchases, source zone-follow/facing, original Nook dialogue/voice/choices, pockets Sell/Quit and offer confirmation. Disposable purchase/refusal/full-pocket/funds/per-slot sale/cancel and table collision reviewed; Philip acceptance pending. Category previews, paint, tickets, multi-sale/special item flows, services and other layouts remain open; see backlog/retail-shop-ui.md.
-- [ ] **retail-pause-ui** — compare the original pause/save flow and implement its applicable presentation; retain accessible port Settings and Quit controls. See backlog/retail-pause-ui.md.
+- [~] **retail-pause-ui** — native save prompt/choices/font/window assets now replace the text pause overlay. P opens, P/Escape resumes; F1 offers PC Settings and confirmed Quit without saving. Save & Continue / Save & Quit wait for the actual write result; failed commits preserve the previous save and offer retry. Native/no-disc pause, settings, error/locked-file, retry, quit and numeric retention checks passed. Philip comparison remains open; title and the full gyroid/save scene stay deferred. See completed/retail-pause-ui.md.
 - [ ] **retail-hud-ui** — source-backed clock/date, bells and context prompts; replace the current development-style overlay where retail has an equivalent. See backlog/retail-hud-ui.md.
 
 UI order: pockets → mail → shop → pause/save → HUD. Pockets/mail/shop have
-initial implementations; pause/save and remaining HUD presentation stay open.
+initial implementations; pause/save is implemented with comparison pending,
+and remaining HUD presentation stays open.
 Each requires source tracing, runtime disc loading, a usable no-disc fallback
 and Philip's comparison acceptance. This order does not move title-screen or
 rename out of their deferred status.

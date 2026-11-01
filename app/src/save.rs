@@ -19,6 +19,7 @@ use rustimal_logic::inventory::{Inventory, POCKETS_SLOT_COUNT};
 use rustimal_logic::species::{FishType, InsectType};
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
 
 use crate::character::PlayerLook;
@@ -376,13 +377,39 @@ fn read_save() -> Option<SaveData> {
 }
 
 fn write_save(save: &SaveData) -> bool {
-    match serde_json::to_string_pretty(save) {
-        Ok(json) => fs::write(save_path(), json).is_ok(),
-        Err(e) => {
-            println!("Failed to serialize save: {e}");
-            false
+    let json = match serde_json::to_string_pretty(save) {
+        Ok(json) => json,
+        Err(error) => {
+            println!("Failed to serialize save: {error}");
+            return false;
         }
+    };
+    let target = save_path();
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |time| time.as_nanos());
+    let temporary = target.with_file_name(format!(".savegame-{}-{nonce}.tmp", std::process::id()));
+    let mut created = false;
+    // Commit in the same directory: a failed write must leave the previous save intact.
+    let result = (|| -> std::io::Result<()> {
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)?;
+        created = true;
+        file.write_all(json.as_bytes())?;
+        file.sync_all()?;
+        drop(file);
+        fs::rename(&temporary, &target)
+    })();
+    if let Err(error) = result {
+        if created {
+            let _ = fs::remove_file(&temporary);
+        }
+        println!("Failed to commit save: {error}");
+        return false;
     }
+    true
 }
 
 /// Seed for a new player's random look: the clock's nanoseconds.
@@ -681,10 +708,11 @@ fn tick_notification(
 /// F5: write the current state to disk.
 fn quick_save(
     // One tuple param: these systems are at Bevy's 16-parameter limit.
-    (actions, focus, mut request): (
+    (actions, focus, mut request, mut outcome): (
         Res<Actions>,
         Res<InputFocus>,
         ResMut<crate::pause_menu::SaveRequest>,
+        ResMut<crate::pause_menu::SaveOutcome>,
     ),
     player: Query<&Transform, With<Player>>,
     field: Option<Res<FieldItems>>,
@@ -732,8 +760,8 @@ fn quick_save(
 ) {
     // Furniture movement already has an atomic committed destination. Other
     // modal UIs must close before saving to avoid retaining stale UI state.
-    // F5, or Save in the pause menu (taken once play resumes).
-    if !matches!(*focus, InputFocus::World | InputFocus::Furniture) {
+    // A paused menu request saves the frozen snapshot; F5 still requires world/furniture focus.
+    if !request.0 && !matches!(*focus, InputFocus::World | InputFocus::Furniture) {
         return;
     }
     let asked = std::mem::take(&mut request.0);
@@ -781,7 +809,11 @@ fn quick_save(
         save.last_remove_day = r.remove_day;
         save.remove_slot = r.leaver;
     }
-    if write_save(&save) {
+    let written = write_save(&save);
+    if asked {
+        outcome.0 = Some(written);
+    }
+    if written {
         println!("Saved to {}", save_path().display());
         show_notification("Saved!", &mut timer, notify_query);
     } else {
@@ -925,11 +957,16 @@ impl Plugin for SavePlugin {
                     tick_playtime,
                     assign_player_id,
                     renew_personal_events,
-                    quick_save,
                     quick_load.in_set(LoadSet),
                     tick_notification,
                 )
                     .in_set(GameplaySet),
+            )
+            .add_systems(
+                Update,
+                quick_save
+                    .after(crate::pause_menu::PauseInputSet)
+                    .run_if(in_state(crate::states::AppState::InGame)),
             );
     }
 }

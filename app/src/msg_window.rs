@@ -84,7 +84,7 @@ pub(crate) struct MsgAssets {
     pub(crate) font: Handle<Image>,
     /// `mFont_GetCodeWidth(c, TRUE)`.
     pub(crate) widths: [u8; 256],
-    window: Model,
+    pub(crate) window: Model,
     /// The window in the part-time job's cheer colour (`mDemo_Set_talk_window_color`).
     window_cheer: Model,
     /// Name plate per `PLATE_COLORS` entry.
