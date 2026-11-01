@@ -233,7 +233,12 @@ fn animate_faces(
         }
         let talking = face.mouth_hold > 0.0;
         step_mouth(&mut face, talking, frames, rng);
-        let shown = (eye, face.mouth.pattern);
+        let mouth = rigs
+            .iter()
+            .find(|(parent, _)| parent.parent() == face.owner)
+            .and_then(|(_, rig)| rig.mouth_pattern(talking, face.mouth.pattern))
+            .unwrap_or(face.mouth.pattern);
+        let shown = (eye, mouth);
         if shown == face.shown {
             continue;
         }
@@ -257,7 +262,10 @@ pub struct FacePlugin;
 
 impl Plugin for FacePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, animate_faces);
+        app.add_systems(
+            Update,
+            animate_faces.after(crate::character::CharacterAnimationSet),
+        );
     }
 }
 

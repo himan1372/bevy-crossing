@@ -719,6 +719,11 @@ fn rover(
             }
         }
         Step::Talk(choice) => {
+            // aNGD_sitdown2: the final conversation continues while the sit finishes.
+            // Release the completed movement clip to the seated idle before message reactions.
+            if script.sat && script.slide.is_none() && clip.name == Some(clip::SIT) && clip.done {
+                clip.start(clip::SIT_WAIT, false, MORPH);
+            }
             // The order value, not the raised queue: other talk scripts drain that one.
             let value = orders.get(ORDER_NPC0, ORDER_STEP);
             if value != 0 {

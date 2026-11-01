@@ -1,5 +1,20 @@
 # bevy-crossing roadmap (revised 2026-10-14)
 
+2026-11-01 codex: intro-dialogue-reactions (Philip priority3) connects the16
+native Rover/Nook reaction orders and seated/standing resets to27 runtime-disc
+clips. Native ranges/modes/morph, eye/mouth patterns and7 feel effects plus bulb
+glow/sounds now follow message reveal timing. Continuous effects are pooled and
+deduplicated; scripted movement/phone/handovers retain ownership. Rover's final
+sit now releases to seated idle so its last reactions can play. Full synthetic
+train and Nook refusal/acceptance/repeat/cancel/Give flow passed; home2/loan17400,
+starting bag removed. All15 effect meshes hidden afterward; F9 and missing-disc
+completed saves retain numeric state. check/clippy/fmt/capture/default/release
+pass (release7m36s); no tests. Bounded smoke p95/peak13.82/18.24ms, active reactions
+14.22/16.61ms, NO_VSYNC walking13.99/15.81ms; launch variance prevents exact FPS
+parity claims. Actual save unchanged; owned previews closed. Previous smoke
+smoothness was accepted before this selection. Visual/audio acceptance and M4
+remain open; all reaction mappings are source/disc verified, not every reply path.
+
 2026-10-31 codex: intro-camera-framing implements native arrival release at
 Porter's NORMAL greeting, seeded native centre/distance/angle chasing and
 Nook's source NORMAL/TALK table through choices/payment. Native talk midpoint,

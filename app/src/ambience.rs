@@ -39,12 +39,13 @@ pub(crate) fn update_ambience(
         &crate::furniture::sprinkler::SprinklerRig,
         &GlobalTransform,
     )>,
-    (toy, room, current, disc, arrival): (
+    (toy, room, current, disc, arrival, reactions): (
         Res<crate::player_toys::ToyAction>,
         Res<crate::player_room::PlayerRoom>,
         Res<crate::house::CurrentRoom>,
         Option<Res<crate::game_disc::GameDisc>>,
         Res<crate::intro_arrival::Arrival>,
+        Res<crate::intro_reaction_effects::ReactionSounds>,
     ),
 ) {
     let Some(sound) = sound else { return };
@@ -62,6 +63,7 @@ pub(crate) fn update_ambience(
             })
             .into_iter()
             .collect();
+        sources.extend(reactions.0.iter().copied());
         if crate::house::is_player_room(&current, &house) {
             for (entity, slot, at) in &slots {
                 if slot.sound_on {
@@ -146,6 +148,7 @@ pub(crate) fn update_ambience(
     let state = &mut *state;
     let sources = &mut state.sources;
     sources.clear();
+    sources.extend(reactions.0.iter().copied());
     sources.extend(arrival.sound_source());
     for s in &ground.sound_sources {
         let dx = s.block[0] as i32 - block[0];

@@ -257,6 +257,7 @@ pub struct CharacterRig {
     pose_morph: f32,
     /// The special clip playing (`NpcClip`), by name.
     clip: Option<(&'static str, Arc<Animation>, ClipEyes)>,
+    clip_key: (bool, u32),
 }
 
 /// The eye pattern an NPC animation asks for (`aNPC_Animation_c`: `eye_seq_p`, `eye_seq_type`,
@@ -267,6 +268,9 @@ pub(crate) struct ClipEyes {
     table: Option<Arc<[u8]>>,
     kind: i16,
     stop: i16,
+    mouth: Option<Arc<[u8]>>,
+    mouth_kind: i16,
+    mouth_stop: i16,
 }
 
 impl ClipEyes {
@@ -283,10 +287,20 @@ impl ClipEyes {
             rom.slice(RomSource::Rel, offset + o, 2)
                 .map_or(0, |b| i16::from_be_bytes([b[0], b[1]]))
         };
+        let mouth = match rom.pointer_at(RomSource::Rel, offset + 0x2C) {
+            Some(Target::File(RomSource::Rel, p)) => rom
+                .bytes(RomSource::Rel)
+                .get(p as usize..p as usize + frames)
+                .map(Arc::from),
+            _ => None,
+        };
         Self {
             table,
             kind: short(0x28),
             stop: short(0x2A),
+            mouth,
+            mouth_kind: short(0x30),
+            mouth_stop: short(0x32),
         }
     }
 
@@ -306,6 +320,8 @@ impl ClipEyes {
 /// frames (the clip's `morph_counter`).
 #[derive(Component, Default)]
 pub struct NpcClip {
+    pub(crate) revision: u32,
+    pub(crate) range: Option<(f32, f32)>,
     pub name: Option<&'static str>,
     pub once: bool,
     pub morph: f32,
@@ -329,6 +345,7 @@ pub struct NpcGait(pub u8);
 impl NpcClip {
     pub fn start(&mut self, name: &'static str, once: bool, morph: f32) {
         *self = Self {
+            revision: self.revision.wrapping_add(1),
             name: Some(name),
             once,
             morph,
@@ -343,7 +360,11 @@ impl NpcClip {
     }
 
     pub fn stop(&mut self, morph: f32) {
-        *self = Self { morph, ..default() };
+        *self = Self {
+            revision: self.revision.wrapping_add(1),
+            morph,
+            ..default()
+        };
     }
 }
 
@@ -352,8 +373,28 @@ impl CharacterRig {
     /// The eye pattern the playing clip asks for, if it does (`aNPC_tex_anm_ctrl_fix_seq` and the
     /// stop frame of a type-0 sequence).
     pub(crate) fn eye_pattern(&self) -> Option<u8> {
-        let (_, _, eyes) = self.clip.as_ref()?;
+        let (name, _, eyes) = self.clip.as_ref()?;
+        if !name.starts_with("cKF_ba_r_npc_") {
+            return None;
+        }
         eyes.pattern(self.frame)
+    }
+
+    /// NPC mouth tables take precedence over the type-specific lip sequence.
+    pub(crate) fn mouth_pattern(&self, talking: bool, moving: u8) -> Option<u8> {
+        let (name, _, face) = self.clip.as_ref()?;
+        if !name.starts_with("cKF_ba_r_npc_") {
+            return None;
+        }
+        if let Some(table) = &face.mouth {
+            let frame = (self.frame.floor() as usize).saturating_sub(1);
+            return table.get(frame.min(table.len().saturating_sub(1))).copied();
+        }
+        Some(if talking {
+            moving + if face.mouth_kind == 2 { 3 } else { 0 }
+        } else {
+            face.mouth_stop.max(0) as u8
+        })
     }
 
     pub(crate) fn right_hand(&self) -> Option<Entity> {
@@ -598,6 +639,7 @@ fn spawn_rig(
         toy_phase: None,
         pose_morph: 0.0,
         clip: None,
+        clip_key: (false, 0),
     });
     debug!("{} face parts", face_parts.len());
     if !face_parts.is_empty() {
@@ -908,16 +950,22 @@ fn play_clip(
     disc: Option<&GameDisc>,
     ticks: f32,
     transforms: &mut Query<&mut Transform>,
+    reaction: bool,
 ) -> bool {
     let current = rig.clip.as_ref().map(|(n, _, _)| *n);
-    if clip.name != current {
+    if clip.name != current || rig.clip_key != (reaction, clip.revision) {
+        rig.clip_key = (reaction, clip.revision);
         rig.clip = clip.name.and_then(|name| {
             let a = disc?.catalog.get(name)?;
             let anim = Animation::read(&disc?.rom, a.offset, rig.skeleton.joints.len())?;
-            let eyes = ClipEyes::read(disc?, a.offset, anim.frames.max(1) as usize);
+            let eyes = if name.starts_with("cKF_ba_r_npc_") {
+                ClipEyes::read(disc?, a.offset, anim.frames.max(1) as usize)
+            } else {
+                ClipEyes::default()
+            };
             Some((name, Arc::new(anim), eyes))
         });
-        rig.frame = 1.0;
+        rig.frame = clip.range.map_or(1.0, |(first, _)| first);
         // Back to standing restarts its loop too.
         rig.playing = Motion::Wait;
         rig.pose_morph = clip.morph;
@@ -925,7 +973,7 @@ fn play_clip(
     let Some((_, anim, _)) = rig.clip.clone() else {
         return false;
     };
-    let last = anim.frames.max(2) as f32;
+    let (first, last) = clip.range.unwrap_or((1.0, anim.frames.max(2) as f32));
     rig.frame += WAIT_SPEED * ticks;
     if clip.once {
         if rig.frame >= last {
@@ -934,11 +982,11 @@ fn play_clip(
         }
     } else {
         while rig.frame >= last {
-            rig.frame -= last - 1.0;
+            rig.frame -= last - first;
             clip.loops += 1;
         }
     }
-    clip.progress = (rig.frame - 1.0) / (last - 1.0);
+    clip.progress = (rig.frame - first) / (last - first);
     let mut pose = anim.pose(rig.frame);
     if clip.root_motion {
         let first = anim.pose(1.0).translation;
@@ -980,6 +1028,7 @@ fn animate_characters(
             Option<&crate::shop_nook::Shopkeeper>,
             Option<&mut NpcClip>,
             Option<&NpcGait>,
+            Option<&mut crate::intro_reactions::DialogueReaction>,
         ),
         (With<NpcModel>, Without<Player>),
     >,
@@ -1065,7 +1114,14 @@ fn animate_characters(
                         .map(|&joint| transforms.get(joint).copied().unwrap_or_default())
                         .collect::<Vec<_>>()
                 });
-                if play_clip(&mut rig, arm, disc.as_deref(), ticks, &mut transforms) {
+                if play_clip(
+                    &mut rig,
+                    arm,
+                    disc.as_deref(),
+                    ticks,
+                    &mut transforms,
+                    false,
+                ) {
                     if let Some(previous) = previous {
                         let weight = (ticks / rig.pose_morph).min(1.0);
                         for (&joint, old) in rig.joints.iter().zip(previous) {
@@ -1174,16 +1230,42 @@ fn animate_characters(
                     }
                 }
             }
-        } else if let Ok((keeper, clip, gait)) = npcs.get_mut(owner) {
-            let previous = (rig.pose_morph > 0.0).then(|| {
+        } else if let Ok((keeper, clip, gait, reaction)) = npcs.get_mut(owner) {
+            let selected = reaction
+                .as_ref()
+                .map(|r| (&r.clip, true))
+                .or_else(|| clip.as_ref().map(|c| (&**c, false)));
+            let changing = selected.is_some_and(|(c, r)| {
+                rig.clip.as_ref().map(|(name, _, _)| *name) != c.name
+                    || rig.clip_key != (r, c.revision)
+            });
+            let previous = (rig.pose_morph > 0.0 || changing).then(|| {
                 rig.joints
                     .iter()
                     .map(|&joint| transforms.get(joint).copied().unwrap_or_default())
                     .collect::<Vec<_>>()
             });
-            let played = clip.is_some_and(|mut clip| {
-                play_clip(&mut rig, &mut clip, disc.as_deref(), ticks, &mut transforms)
-            });
+            let played = if let Some(mut reaction) = reaction {
+                play_clip(
+                    &mut rig,
+                    &mut reaction.clip,
+                    disc.as_deref(),
+                    ticks,
+                    &mut transforms,
+                    true,
+                )
+            } else {
+                clip.is_some_and(|mut clip| {
+                    play_clip(
+                        &mut rig,
+                        &mut clip,
+                        disc.as_deref(),
+                        ticks,
+                        &mut transforms,
+                        false,
+                    )
+                })
+            };
             if !played {
                 let (motion, speed) = match gait.map(|g| g.0) {
                     // aNPC_set_anime_speed: locked movement clips use 0.5
@@ -1197,7 +1279,11 @@ fn animate_characters(
                 play(&mut rig, motion, speed, ticks, &mut transforms);
             }
             if let Some(previous) = previous {
-                let weight = (ticks / rig.pose_morph).min(1.0);
+                let weight = if rig.pose_morph > 0.0 {
+                    (ticks / rig.pose_morph).min(1.0)
+                } else {
+                    1.0
+                };
                 for (&joint, old) in rig.joints.iter().zip(previous) {
                     if let Ok(mut t) = transforms.get_mut(joint) {
                         t.translation = old.translation.lerp(t.translation, weight);

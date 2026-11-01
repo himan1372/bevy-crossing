@@ -657,6 +657,7 @@ pub(crate) struct IntroHousePlugin;
 impl Plugin for IntroHousePlugin {
     fn build(&self, app: &mut App) {
         crate::intro_camera::install(app);
+        crate::intro_reactions::install(app);
         app.init_resource::<HouseIntro>()
             .add_systems(PreUpdate, lock.after(crate::input::update_focus))
             .add_systems(

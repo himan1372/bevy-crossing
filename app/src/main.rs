@@ -41,6 +41,8 @@ mod intro;
 mod intro_arrival;
 mod intro_camera;
 mod intro_house;
+mod intro_reaction_effects;
+mod intro_reactions;
 mod intro_train;
 mod items;
 mod joan;

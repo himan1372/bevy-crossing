@@ -921,8 +921,9 @@ impl Plugin for SoundPlugin {
                 PostUpdate,
                 (
                     update_music,
-                    play_effects,
-                    crate::ambience::update_ambience,
+                    play_effects.after(crate::intro_reaction_effects::EffectSet),
+                    crate::ambience::update_ambience
+                        .after(crate::intro_reaction_effects::EffectSet),
                     report_mix,
                 )
                     .after(crate::footsteps::play_footsteps)
