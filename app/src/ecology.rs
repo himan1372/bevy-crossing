@@ -878,10 +878,11 @@ fn tool_interact(
     bug_query: Query<(Entity, &Bug, &Transform)>,
     bobber_query: Query<(Entity, &Bobber, &Transform)>,
     fish_query: Query<&Fish>,
-    (mut swing, mut landed, mut net): (
+    (mut swing, mut landed, mut net, mut catalog): (
         ResMut<NetSwing>,
         bevy::ecs::message::MessageWriter<crate::critters::FishCaught>,
         ResMut<crate::player_tools::NetAction>,
+        ResMut<crate::catalog::Catalog>,
     ),
     mut inventory: ResMut<PlayerInventory>,
     mut notify_timer: ResMut<CatchNotifyTimer>,
@@ -924,6 +925,10 @@ fn tool_interact(
                         let item = items::fish(fish.species);
                         let name = items::name(item);
                         if inventory.add(item) {
+                            rustimal_logic::critter_collection::record_catch(
+                                &mut catalog.collection,
+                                item,
+                            );
                             commands.entity(f).despawn();
                             landed.write(crate::critters::FishCaught {
                                 species: fish.species,
@@ -1027,6 +1032,7 @@ fn tool_interact(
                         return;
                     }
                     commands.entity(entity).despawn();
+                    rustimal_logic::critter_collection::record_catch(&mut catalog.collection, item);
                     // AMI_HIT is an obstacle impact; insect capture is TOOL_GET.
                     crate::sound::se_at(crate::sound::se_id::NET_CATCH, bug_transform.translation);
                     show_catch_notify(

@@ -1,7 +1,7 @@
 //! The port's development overlay: the bells/pockets, tool, clock, house and
-//! quest lines. Retail Animal Crossing shows no field HUD (time comes from
-//! the wall clocks in its buildings and furniture clocks, bells from the
-//! pockets screen), so the overlay is hidden by default; F10 toggles it for
+//! quest lines. The retail outdoor clock/date lives in `idle_clock`, and
+//! Bells appear in the pockets screen. These development labels are hidden
+//! by default; F10 toggles them for
 //! playtesting. `Node::display` is used because some of these texts manage
 //! their own `Visibility`.
 use bevy::prelude::*;

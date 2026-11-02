@@ -23,8 +23,12 @@ use crate::skeleton::{Animation, Skeleton};
 
 type Model = Vec<(Handle<Mesh>, Handle<N64Material>)>;
 
+mod collection;
 mod marks;
 mod tags;
+
+#[derive(Component)]
+struct PocketBase;
 
 struct UiRig {
     skeleton: Skeleton,
@@ -83,6 +87,7 @@ struct PocketCarry(Vec2, f32);
 
 #[derive(Resource)]
 pub(crate) struct PocketAssets {
+    collection_frames: collection::Frames,
     marks: Model,
     mark_ticks: f32,
     frame: Model,
@@ -182,7 +187,9 @@ fn icon_frame(disc: &GameDisc, item: u16, present: bool, frame: u8) -> Option<Ve
         }
         table + index * 8
     };
-    let pal = pointer(disc, table)?;
+    // mSM_draw_item: collections use the second back-to-back critter palette.
+    let collection_palette = !present && matches!(item >> 8, 0x23 | 0x2D) && frame != 0;
+    let pal = pointer(disc, table)? + if collection_palette { 32 } else { 0 };
     let tex = pointer(disc, table + 4)?;
     gx_texture::decode(
         disc.rom.slice(RomSource::Rel, tex, 512)?,
@@ -467,6 +474,14 @@ fn setup(
     let portrait = make_view(&mut commands, &mut images, &preview, 2, true);
     let hand_image = make_view(&mut commands, &mut images, &hand, 3, false);
     commands.insert_resource(PocketAssets {
+        collection_frames: collection::load(
+            &disc,
+            &mut meshes,
+            &mut materials,
+            &mut images,
+            &mut patterns,
+            &mut pattern_materials,
+        ),
         marks: marks::load(&disc, &mut meshes, &mut materials, &mut images),
         mark_ticks: 0.0,
         tags: tags::TagModels::load(&disc, &mut meshes, &mut materials, &mut images),
@@ -759,8 +774,13 @@ fn animate(
             rig.releasing = false;
         }
     }
-    let target = selected_mail(&ui, &mail).map_or_else(|| slot_at(ui.selected), mail_at)
-        + Vec2::new(6.0, -6.0);
+    let target = if ui.page != 0 {
+        collection::slot_at(ui.collection_selected)
+    } else if ui.on_money {
+        crate::pockets::money::AT
+    } else {
+        selected_mail(&ui, &mail).map_or_else(|| slot_at(ui.selected), mail_at)
+    } + Vec2::new(6.0, -6.0);
     let delta = target - assets.hand_at;
     let distance = delta.length();
     // mHD_hand_position_move/add_calc: ease, max6/min0.5 pixels/tick.
@@ -784,6 +804,7 @@ fn animate(
     // quarter-texel offsets. Sample down/right so the cloth moves up/left.
     assets.scroll = (assets.scroll + 0.3535 * ticks).rem_euclid(1024.0);
     let phase = assets.scroll * 0.25;
+    collection::animate(&assets.collection_frames, phase, &mut n64);
     for pattern in &assets.patterns {
         if let Some(mut material) = pattern_materials.get_mut(&pattern.material) {
             material.offset = Vec4::new(assets.slide * 16.0, phase, 0.0, 0.0);
@@ -842,6 +863,8 @@ fn draw(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
+    catalog: Res<crate::catalog::Catalog>,
+    mut base: Query<&mut Visibility, With<PocketBase>>,
 ) {
     let open = (ui.open && !mail.open) || mail.listing();
     let visible = open
@@ -873,12 +896,18 @@ fn draw(
             .id();
         for (index, (mesh, material)) in assets.frame.iter().enumerate() {
             let mut entity = commands.spawn((
+                PocketBase,
                 Mesh3d(mesh.clone()),
                 // Retail issues these blended layers in list order. Bevy
                 // needs distinct depths; entity IDs change after reopening.
                 Transform::from_xyz(0.0, 0.0, index as f32 * 0.1),
                 RenderLayers::layer(1),
                 ChildOf(root),
+                if ui.page == 0 {
+                    Visibility::Inherited
+                } else {
+                    Visibility::Hidden
+                },
             ));
             if let Some(pattern) = assets.patterns.iter().find(|p| p.source == *material) {
                 entity.insert(MeshMaterial3d(pattern.material.clone()));
@@ -889,6 +918,7 @@ fn draw(
         // The current player appearance in the upper-left preview well.
         // Composite mIV_set_player's separate perspective view.
         commands.spawn((
+            PocketBase,
             Mesh3d(meshes.add(quad_mesh(Vec2::new(20.0, 9.0), Vec2::splat(128.0)))),
             MeshMaterial3d(materials.add(StandardMaterial {
                 base_color_texture: Some(assets.portrait.clone()),
@@ -899,8 +929,20 @@ fn draw(
             Transform::from_xyz(0.0, 0.0, 80.0),
             RenderLayers::layer(1),
             ChildOf(root),
+            if ui.page == 0 {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            },
         ));
         assets.root = Some(root);
+    }
+    for mut visibility in &mut base {
+        *visibility = if ui.page == 0 {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
     }
     if !fresh
         && !assets.tag_dirty
@@ -909,6 +951,7 @@ fn draw(
         && !identity.is_changed()
         && !mail.is_changed()
         && !mailbox.is_changed()
+        && !catalog.is_changed()
     {
         return;
     }
@@ -929,6 +972,21 @@ fn draw(
         materials: &mut materials,
         root: dynamic,
     };
+    if ui.page != 0 {
+        collection::draw(
+            &mut paint,
+            &disc,
+            &font,
+            &mut assets,
+            &ui,
+            &catalog,
+            &mut images,
+        );
+        return;
+    }
+    if ui.normal_mode() {
+        collection::draw_back_pages(paint.commands, dynamic, &assets, 0);
+    }
     for (slot, &saved_item) in inventory.pockets.pockets.iter().enumerate() {
         let opening = ui.opening.as_ref();
         let bag = opening.is_some_and(|o| o.bag_slot == slot);
@@ -996,6 +1054,8 @@ fn draw(
     let mail_slot = selected_mail(&ui, &mail);
     let at = if ui.on_player {
         PLAYER_AT
+    } else if ui.on_money {
+        crate::pockets::money::AT
     } else {
         mail_slot.map_or_else(|| slot_at(ui.selected), mail_at)
     };
@@ -1061,7 +1121,9 @@ fn draw(
     let labelled = ui
         .grabbed
         .map_or(selected, |from| inventory.pockets.pockets[from]);
-    let label = if let Some(slot) = mail.grabbed.or(mail_slot) {
+    let label = if ui.on_money {
+        "Bells".to_string()
+    } else if let Some(slot) = mail.grabbed.or(mail_slot) {
         mailbox
             .letter_index(slot)
             .and_then(|index| mailbox.letters.get(index))
@@ -1083,7 +1145,9 @@ fn draw(
         crate::items::name(labelled)
     };
     if assets.tags.is_some() {
-        let options = if mail.menu.is_some() {
+        let options = if ui.on_money {
+            crate::pockets::money::options(inventory.bells)
+        } else if mail.menu.is_some() {
             let (written, present) = mail.menu_letter;
             vec![
                 if written { "Rewrite" } else { "Read" },
@@ -1106,9 +1170,9 @@ fn draw(
                 at,
                 &label,
                 &options,
-                mail.menu.or(ui.menu),
+                mail.menu.or(ui.money_menu).or(ui.menu),
                 mail.discard,
-                mail_slot.is_none().then_some(ui.selected / 5),
+                (mail_slot.is_none() && !ui.on_money).then_some(ui.selected / 5),
             );
         }
     } else {
@@ -1153,7 +1217,7 @@ fn draw(
         paint.text(&font, &text, at, color, 130.0);
     }
     // mIV_set_money uses 0.875 scale and the same right edge.
-    let money = scaled_text(&inventory.bells.to_string(), 28);
+    let money = scaled_text(&ui.displayed_bells(inventory.bells).to_string(), 28);
     paint.text(
         &font,
         &money,
@@ -1162,8 +1226,10 @@ fn draw(
         130.0,
     );
     if assets.tags.is_none() {
-        if let Some(choice) = mail.menu.or(ui.menu) {
-            let options = if mail.menu.is_some() {
+        if let Some(choice) = mail.menu.or(ui.money_menu).or(ui.menu) {
+            let options = if ui.on_money {
+                crate::pockets::money::options(inventory.bells)
+            } else if mail.menu.is_some() {
                 mail.action_options().to_vec()
             } else {
                 ui.actions(selected, inventory.pockets.item_cond(ui.selected))

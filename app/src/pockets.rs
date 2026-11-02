@@ -14,10 +14,17 @@ use crate::items;
 use crate::states::GameplaySet;
 
 mod grab_bag;
+pub(crate) mod money;
 
 /// Whether the pockets screen is open. Read by `input::update_focus`.
 #[derive(Resource, Default)]
 pub struct PocketsUi {
+    /// Native inventory / fish collection / insect collection pages.
+    pub(crate) page: usize,
+    pub(crate) collection_selected: usize,
+    pub(crate) on_money: bool,
+    pub(crate) money_menu: Option<usize>,
+    pub(crate) money_counter: Option<rustimal_logic::pocket_money::Counter>,
     pub(super) opening: Option<grab_bag::Opening>,
     pub(crate) bag_warning: bool,
     pub open: bool,
@@ -127,6 +134,9 @@ pub(crate) fn toggle_pockets(
     if ui.open && ui.opening.is_some() {
         return;
     }
+    if ui.open && ui.money_counter.is_some_and(|counter| counter.active()) {
+        return;
+    }
     if ui.open
         && (actions.just_pressed(Action::Cancel) || actions.just_pressed(Action::Back))
         && (mail.menu.is_some() || mail.grabbed.is_some())
@@ -134,6 +144,16 @@ pub(crate) fn toggle_pockets(
         mail.cancel_action();
         actions.consume(Action::Cancel);
         actions.consume(Action::Back);
+        return;
+    }
+    if ui.open
+        && (actions.just_pressed(Action::Cancel) || actions.just_pressed(Action::Back))
+        && ui.money_menu.is_some()
+    {
+        ui.money_menu = None;
+        actions.consume(Action::Cancel);
+        actions.consume(Action::Back);
+        crate::sound::se(crate::sound::se_id::MENU_EXIT);
         return;
     }
     if ui.open
@@ -163,6 +183,10 @@ pub(crate) fn toggle_pockets(
     ui.menu = None;
     ui.grabbed = None;
     ui.on_player = false;
+    ui.page = 0;
+    ui.on_money = false;
+    ui.money_menu = None;
+    ui.money_counter = None;
     ui.opening = None;
     ui.bag_warning = false;
     mail.menu = None;
@@ -312,6 +336,7 @@ pub(crate) fn pockets_input(
     mut warning: ResMut<crate::warning_panel::WarningPanel>,
     mut rand: ResMut<crate::game_rand::GameRand>,
     mut look: ResMut<crate::character::PlayerLook>,
+    keys: Res<ButtonInput<KeyCode>>,
 ) {
     if ui.open && (ui.bag_warning || warning.is_open()) {
         // The retail warning panel: closed by A, B or Start, then the
@@ -322,6 +347,12 @@ pub(crate) fn pockets_input(
         return;
     }
     if !ui.open || *focus != InputFocus::Pockets {
+        return;
+    }
+    if let Some(counter) = ui.money_counter.as_mut().filter(|counter| counter.active()) {
+        counter.advance(time.delta_secs() * 60.0);
+        actions.consume(Action::Confirm);
+        actions.consume(Action::Interact);
         return;
     }
     if let Some(opening) = ui.opening.as_mut() {
@@ -356,6 +387,43 @@ pub(crate) fn pockets_input(
         - i32::from(actions.just_pressed(Action::MoveLeft));
     let dy = i32::from(actions.just_pressed(Action::MoveDown))
         - i32::from(actions.just_pressed(Action::MoveUp));
+    if ui.normal_mode()
+        && ui.menu.is_none()
+        && ui.money_menu.is_none()
+        && ui.grabbed.is_none()
+        && mail.grabbed.is_none()
+        && mail.menu.is_none()
+        && (keys.just_pressed(KeyCode::KeyR)
+            || keys.just_pressed(KeyCode::PageDown)
+            || keys.just_pressed(KeyCode::PageUp))
+    {
+        ui.page = if keys.just_pressed(KeyCode::PageUp) {
+            [1, 2, 0][ui.page]
+        } else {
+            [2, 0, 1][ui.page]
+        };
+        ui.mail_slot = None;
+        ui.on_money = false;
+        ui.on_player = false;
+        actions.consume(Action::Confirm);
+        actions.consume(Action::Interact);
+        crate::sound::se(crate::sound::se_id::CURSOR);
+        return;
+    }
+    if ui.page != 0 {
+        if dx != 0 || dy != 0 {
+            let col = (ui.collection_selected as i32 % 8 + dx).rem_euclid(8);
+            let row = (ui.collection_selected as i32 / 8 + dy).rem_euclid(5);
+            ui.collection_selected = (row * 8 + col) as usize;
+            crate::sound::se(crate::sound::se_id::CURSOR);
+        }
+        actions.consume(Action::Confirm);
+        actions.consume(Action::Interact);
+        return;
+    }
+    if money::input(&mut ui, &mut inventory, &mut actions, &mut warning, dx, dy) {
+        return;
+    }
     if let Some(slot) = ui.mail_slot {
         let confirm =
             actions.just_pressed(Action::Confirm) || actions.just_pressed(Action::Interact);
@@ -636,10 +704,9 @@ fn pockets_listing(inventory: &PlayerInventory) -> String {
         s.push_str(&format!("{:>2}. {label}\n", i + 1));
     }
     s.push_str(&format!(
-        "\n{}/{} used    Bells: {}",
+        "\n{}/{} used",
         inventory.used(),
         POCKETS_SLOT_COUNT,
-        inventory.bells
     ));
     s
 }
@@ -650,6 +717,7 @@ fn refresh_pockets(
     mut text: Query<&mut Text, With<PocketsText>>,
     mut panel: Query<&mut Visibility, With<PocketsPanel>>,
     disc_ui: Option<Res<crate::pockets_disc::PocketAssets>>,
+    catalog: Res<crate::catalog::Catalog>,
 ) {
     if let Ok(mut visibility) = panel.single_mut() {
         *visibility = if ui.open && disc_ui.is_none() {
@@ -662,9 +730,49 @@ fn refresh_pockets(
         return;
     }
     if let Ok(mut t) = text.single_mut() {
+        if ui.page != 0 {
+            let mut listing = format!(
+                "{} collection\n",
+                if ui.page == 1 { "Fish" } else { "Bugs" }
+            );
+            for index in 0..40 {
+                let item = rustimal_logic::critter_collection::item(ui.page, index);
+                let label = item
+                    .filter(|&item| {
+                        rustimal_logic::critter_collection::has(&catalog.collection, item)
+                    })
+                    .map(items::name)
+                    .unwrap_or_else(|| "-".to_string());
+                listing.push_str(&format!(
+                    "{}{:02}{} ",
+                    if index == ui.collection_selected {
+                        ">"
+                    } else {
+                        " "
+                    },
+                    index + 1,
+                    if label == "-" { "-" } else { "*" }
+                ));
+                if index % 8 == 7 {
+                    listing.push('\n');
+                }
+            }
+            let selected =
+                rustimal_logic::critter_collection::item(ui.page, ui.collection_selected)
+                    .filter(|&item| {
+                        rustimal_logic::critter_collection::has(&catalog.collection, item)
+                    })
+                    .map(items::name)
+                    .unwrap_or_else(|| "-".to_string());
+            listing.push_str(&format!("\nSelected: {selected}\n"));
+            listing.push_str("R / Page Up / Page Down: change page");
+            t.0 = listing;
+            return;
+        }
         t.0 = format!(
-            "{}\nSelected: {}  (arrows / Enter)\n{}",
+            "{}    Bells: {}\nSelected: {}  (arrows / Enter)\n{}",
             pockets_listing(&inventory),
+            ui.displayed_bells(inventory.bells),
             ui.selected + 1,
             if let Some(choice) = ui.menu {
                 ui.actions(
@@ -677,6 +785,15 @@ fn refresh_pockets(
                 ""
             }
         );
+        t.0.push_str("\nR: fish / bugs / pockets; Up from top row: wallet");
+        if ui.on_money {
+            t.0.push_str("\nWallet selected");
+            if let Some(choice) = ui.money_menu {
+                if let Some(label) = money::options(inventory.bells).get(choice) {
+                    t.0.push_str(&format!("\n> {label}"));
+                }
+            }
+        }
         if ui.selling {
             let marked = (0..15)
                 .filter(|&s| ui.sale_marks & (1 << s) != 0)
@@ -729,7 +846,9 @@ fn reset_bag_presentation(
     mut warning: ResMut<crate::warning_panel::WarningPanel>,
     mut commands: Commands,
 ) {
-    if reset.read().count() > 0 && (ui.opening.is_some() || ui.bag_warning) {
+    if reset.read().count() > 0
+        && (ui.opening.is_some() || ui.bag_warning || ui.money_counter.is_some())
+    {
         warning.clear(&mut commands);
         *ui = PocketsUi::default();
     }
@@ -742,6 +861,7 @@ fn clear_bag_presentation(
 ) {
     ui.opening = None;
     ui.bag_warning = false;
+    ui.money_counter = None;
     warning.clear(&mut commands);
 }
 

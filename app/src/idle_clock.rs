@@ -169,7 +169,8 @@ fn addressable(
 #[allow(clippy::too_many_arguments)]
 fn update(
     mut commands: Commands,
-    time: Res<Time>,
+    // HUD presentation must finish fading while the PC pause stops virtual time.
+    time: Res<Time<Real>>,
     disc: Res<GameDisc>,
     assets: Res<ClockAssets>,
     mut clock: ResMut<IdleClock>,
@@ -178,6 +179,7 @@ fn update(
     net: Res<NetAction>,
     house: Option<Res<State<crate::house::HouseState>>>,
     shop: Option<Res<State<crate::shop::ShopLocation>>>,
+    intro: Option<Res<crate::intro::Intro>>,
     player: Query<(&GlobalTransform, Option<&Locomotion>), With<Player>>,
     camera: Query<(&Camera, &GlobalTransform), With<WorldCamera>>,
     mut transforms: Query<&mut Transform>,
@@ -200,15 +202,21 @@ fn update(
         .and_then(|(cam, cam_at)| {
             let p = cam.world_to_viewport(cam_at, at.translation()).ok()?;
             let size = cam.logical_viewport_size()?;
-            Some((p.x * 320.0 / size.x, p.y * 240.0 / size.y))
+            // The font camera fixes vertical height and expands horizontally
+            // on widescreen. Preserve its centered native 320x240 coordinates.
+            Some((
+                (p.x - size.x * 0.5) * 240.0 / size.y + 160.0,
+                p.y * 240.0 / size.y,
+            ))
         })
         .unwrap_or((160.0, 120.0));
     let (now, odd_second) = rtc();
+    let first_intro = intro.is_some_and(|i| *i != crate::intro::Intro::Off);
     let input = BantiInput {
         addressable: addressable(*focus, loco, *tool, &net),
         player_screen: screen,
-        submenu_idle: !matches!(*focus, InputFocus::Pockets | InputFocus::Paused),
-        demo: false,
+        submenu_idle: matches!(*focus, InputFocus::World | InputFocus::Furniture),
+        demo: first_intro || *focus == InputFocus::Transition,
         now,
     };
     clock.ticks += time.delta_secs() * 60.0;
@@ -219,7 +227,8 @@ fn update(
     }
 
     let b = clock.banti;
-    let shown = outdoors && b.alpha > 0.01;
+    // banti_draw excludes the first intro independently of its fade state.
+    let shown = outdoors && !first_intro && b.alpha > 0.01;
     let want = Shown {
         displayed: b.displayed,
         next: b.next,
