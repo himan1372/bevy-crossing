@@ -865,6 +865,7 @@ fn draw(
     mut images: ResMut<Assets<Image>>,
     catalog: Res<crate::catalog::Catalog>,
     mut base: Query<&mut Visibility, With<PocketBase>>,
+    quest: Res<crate::quest::QuestState>,
 ) {
     let open = (ui.open && !mail.open) || mail.listing();
     let visible = open
@@ -952,6 +953,7 @@ fn draw(
         && !mail.is_changed()
         && !mailbox.is_changed()
         && !catalog.is_changed()
+        && !quest.is_changed()
     {
         return;
     }
@@ -1145,6 +1147,24 @@ fn draw(
         crate::items::name(labelled)
     };
     if assets.tags.is_some() {
+        let tag_label = if let Some(slot) = mail.grabbed.or(mail_slot) {
+            mailbox
+                .letter_index(slot)
+                .and_then(|index| mailbox.letters.get(index))
+                .map(|letter| tags::Label::mail(letter, &identity.player, slot / 2))
+                .unwrap_or_else(|| tags::Label::ordinary(&label))
+        } else if !ui.on_money && !ui.on_player {
+            tags::delivery_label(
+                &disc,
+                &identity,
+                &inventory,
+                &quest,
+                ui.grabbed.unwrap_or(ui.selected),
+            )
+            .unwrap_or_else(|| tags::Label::ordinary(&label))
+        } else {
+            tags::Label::ordinary(&label)
+        };
         let options = if ui.on_money {
             crate::pockets::money::options(inventory.bells)
         } else if mail.menu.is_some() {
@@ -1162,13 +1182,13 @@ fn draw(
             tags, tag_state, ..
         } = &mut *assets;
         if let Some(models) = tags {
-            tag_state.show(
+            tag_state.show_label(
                 models,
                 &mut paint,
                 &font,
                 root,
                 at,
-                &label,
+                &tag_label,
                 &options,
                 mail.menu.or(ui.money_menu).or(ui.menu),
                 mail.discard,

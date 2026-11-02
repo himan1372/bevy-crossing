@@ -267,11 +267,12 @@ pub(crate) fn update_focus(
     handover: Res<crate::shop_nook::handover::HandOver>,
     twins: Res<crate::shop_nook::Twins>,
     warning: Res<crate::warning_panel::WarningPanel>,
-    (notice, map, names, times): (
+    (notice, map, names, times, mail_motion): (
         Res<crate::notice_board::NoticeUi>,
         Res<crate::town_map::MapUi>,
         Res<crate::name_entry::NameEntry>,
         Res<crate::time_window::TimeWindow>,
+        Res<crate::mail_disc::MailPresentation>,
     ),
     mut focus: ResMut<InputFocus>,
 ) {
@@ -309,7 +310,7 @@ pub(crate) fn update_focus(
         || (pockets.storing.is_some() && !pockets.open)
     {
         InputFocus::Dialogue
-    } else if mail.open {
+    } else if mail.open || mail_motion.closing() {
         InputFocus::Mail
     } else if shop.open || repay.is_some_and(|r| r.0) {
         InputFocus::Shop

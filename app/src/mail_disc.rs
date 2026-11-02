@@ -10,6 +10,7 @@ use crate::mail::{MailUi, Mailbox};
 use crate::msg_window::{text_width, MsgAssets};
 use crate::n64_material::N64Material;
 use crate::pockets_disc::Paint;
+use rustimal_logic::{menu_slide::Slide, notice_board::Roll};
 
 type Paper = (Vec<(Handle<Mesh>, Handle<N64Material>)>, [u8; 4]);
 
@@ -20,10 +21,36 @@ struct MailAssets {
     skin: crate::shop_nook::editor::Skin,
 }
 
-/// How far the paper rolls up to make room for the keyboard.
-const LIFT: f32 = 100.0;
-/// Body lines that show above the keyboard.
-const EDIT_LINES: usize = 5;
+/// Transient submenu presentation; none of this belongs in a saved letter.
+#[derive(Resource, Default)]
+pub(crate) struct MailPresentation {
+    active: bool,
+    closing: bool,
+    slide: Slide,
+    keyboard: Option<Slide>,
+    roll: Roll,
+    roll_ticks: f32,
+    cursor_line: usize,
+}
+
+impl MailPresentation {
+    pub(crate) fn busy(&self) -> bool {
+        self.active
+            && (self.closing
+                || !self.slide.settled()
+                || self.keyboard.is_some_and(|slide| !slide.settled()))
+    }
+
+    pub(crate) fn closing(&self) -> bool {
+        self.active && self.closing
+    }
+}
+
+#[derive(Component)]
+enum LetterPart {
+    Paper,
+    Keyboard,
+}
 
 fn pointer(disc: &GameDisc, name: &str, index: u8) -> Option<u32> {
     let table = disc.catalog.get(name)?;
@@ -147,13 +174,35 @@ fn draw(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut n64: ResMut<Assets<N64Material>>,
     mut images: ResMut<Assets<Image>>,
+    mut motion: ResMut<MailPresentation>,
+    mut reset: MessageReader<crate::sound::ResetAudio>,
 ) {
-    let visible =
-        ui.open && (ui.reading.is_some() || ui.writing) && *focus == crate::input::InputFocus::Mail;
-    if !visible {
+    if reset.read().count() > 0 {
         if let Some(root) = assets.root.take() {
             commands.entity(root).despawn();
         }
+        *motion = MailPresentation::default();
+        return;
+    }
+    let visible =
+        ui.open && (ui.reading.is_some() || ui.writing) && *focus == crate::input::InputFocus::Mail;
+    if !visible {
+        if assets.root.is_some() && !motion.closing {
+            motion.closing = true;
+            if let Some(keyboard) = motion.keyboard.as_mut() {
+                keyboard.close();
+            }
+        }
+        return;
+    }
+    if !motion.active {
+        *motion = MailPresentation {
+            active: true,
+            keyboard: ui.writing.then(Slide::new),
+            ..default()
+        };
+    }
+    if motion.closing {
         return;
     }
     if assets.root.is_some() && !ui.is_changed() && !mailbox.is_changed() && !identity.is_changed()
@@ -164,7 +213,18 @@ fn draw(
         commands.entity(root).despawn();
     }
     let letter = ui.reading.and_then(|i| mailbox.letters.get(i));
-    let index = letter.map_or(0, |l| l.paper);
+    let index = if ui.writing {
+        ui.write_paper
+            .map(|(_, paper)| paper)
+            .or_else(|| {
+                ui.rewriting
+                    .and_then(|i| mailbox.letters.get(i))
+                    .map(|letter| letter.paper)
+            })
+            .unwrap_or(0)
+    } else {
+        letter.map_or(0, |l| l.paper)
+    };
     assets
         .papers
         .entry(index)
@@ -177,21 +237,42 @@ fn draw(
         ))
         .id();
     assets.root = Some(root);
+    let paper_root = commands
+        .spawn((
+            LetterPart::Paper,
+            Transform::default(),
+            Visibility::Inherited,
+            ChildOf(root),
+        ))
+        .id();
     let model = assets.papers[&index].0.clone();
     let color_value = assets.papers[&index].1;
     let color = &color_value;
     let writing = ui.writing;
-    let lift = if writing { LIFT } else { 0.0 };
+    // The editor is drawn over the letter in the native submenu order.
+    // Keep all six body lines, allowing its panel to cover the lower ones.
+    let ink_z = if writing { 209.0 } else { 230.0 };
     for (i, (mesh, material)) in model.iter().enumerate() {
         commands.spawn((
             Mesh3d(mesh.clone()),
             MeshMaterial3d(material.clone()),
-            Transform::from_xyz(0.0, lift * 16.0, 200.0 + i as f32 * 0.1),
+            Transform::from_xyz(0.0, 0.0, 200.0 + i as f32 * 0.1),
             RenderLayers::layer(1),
-            ChildOf(root),
+            ChildOf(paper_root),
         ));
     }
     if writing {
+        if motion.keyboard.is_none() {
+            motion.keyboard = Some(Slide::new());
+        }
+        let keyboard_root = commands
+            .spawn((
+                LetterPart::Keyboard,
+                Transform::default(),
+                Visibility::Inherited,
+                ChildOf(root),
+            ))
+            .id();
         let mut stores = crate::shop_nook::editor::Stores {
             meshes: &mut meshes,
             n64: &mut n64,
@@ -200,7 +281,7 @@ fn draw(
         };
         crate::shop_nook::editor::spawn(
             &mut commands,
-            root,
+            keyboard_root,
             &mut assets.skin,
             &disc,
             &font,
@@ -213,7 +294,7 @@ fn draw(
         commands: &mut commands,
         meshes: &mut meshes,
         materials: &mut materials,
-        root,
+        root: paper_root,
     };
     let recipient = if ui.writing {
         ui.write_recipients
@@ -226,25 +307,23 @@ fn draw(
     let header = letter
         .and_then(|l| l.header.clone())
         .unwrap_or_else(|| format!("To {recipient}"));
-    if !writing {
-        paint.text(&font, &header, Vec2::new(64.0, 36.0), *color, 230.0);
-    }
+    paint.text(&font, &header, Vec2::new(64.0, 36.0), *color, ink_z);
     let body = letter.map_or(ui.write_text.as_str(), |l| l.body.as_str());
     let wrapped = lines(body, &font.widths);
     let count = wrapped.len().div_ceil(6);
     if writing {
-        // The cursor's line, with the five lines that fit above the keyboard.
+        // Native mBD_roll_control keeps the cursor within three body lines.
         let codes = crate::mail::letter_codes(body);
         let cursor = ui.write_cursor.unwrap_or(codes.len()).min(codes.len());
         let (line, column) = rustimal_logic::diary::cursor_line(&codes, cursor, &font.widths);
-        let first = (line + 1).saturating_sub(EDIT_LINES);
-        for (row, text) in wrapped.iter().skip(first).take(EDIT_LINES).enumerate() {
-            let y = 22.0 + row as f32 * 16.0;
-            paint.text(&font, text, Vec2::new(64.0, y), *color, 230.0);
-            if first + row == line {
+        motion.cursor_line = line;
+        for (row, text) in wrapped.iter().take(6).enumerate() {
+            let y = 64.0 + row as f32 * 16.0;
+            paint.text(&font, text, Vec2::new(64.0, y), *color, ink_z);
+            if row == line {
                 let at = Vec2::new(64.0 + column as f32, y);
                 if let Some(caret) =
-                    paint.text(&font, "_", at, crate::shop_nook::editor::CARET_INK, 230.0)
+                    paint.text(&font, "_", at, crate::shop_nook::editor::CARET_INK, ink_z)
                 {
                     paint
                         .commands
@@ -274,15 +353,13 @@ fn draw(
     let from = letter
         .and_then(|l| l.footer.clone())
         .unwrap_or_else(|| format!("From {sender}"));
-    if !writing {
-        paint.text(
-            &font,
-            &from,
-            Vec2::new(256.0 - text_width(&from, &font.widths), 172.0),
-            *color,
-            230.0,
-        );
-    }
+    paint.text(
+        &font,
+        &from,
+        Vec2::new(256.0 - text_width(&from, &font.widths), 172.0),
+        *color,
+        ink_z,
+    );
     if let Some(letter) = letter.filter(|l| l.header.is_none() && !l.subject.is_empty()) {
         let subject = format!(
             "{}{}{}",
@@ -290,7 +367,7 @@ fn draw(
             crate::messages::markup::arg(20),
             letter.subject
         );
-        paint.text(&font, &subject, Vec2::new(64.0, 52.0), *color, 230.0);
+        paint.text(&font, &subject, Vec2::new(64.0, 52.0), *color, ink_z);
     }
     let hints = if writing {
         vec![
@@ -304,6 +381,8 @@ fn draw(
             count
         )]
     };
+    // PC help stays in screen coordinates while stationery and text roll together.
+    paint.root = root;
     for (row, hint) in hints.iter().enumerate() {
         let hint = format!(
             "{}{}{}",
@@ -320,13 +399,82 @@ fn draw(
     }
 }
 
+fn animate(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut motion: ResMut<MailPresentation>,
+    mut assets: ResMut<MailAssets>,
+    mut parts: Query<(&LetterPart, &mut Transform, &mut Visibility)>,
+) {
+    if !motion.active {
+        return;
+    }
+    let ticks = time.delta_secs() * 60.0;
+    motion.roll_ticks += ticks;
+    let roll_ticks = motion.roll_ticks as u32;
+    motion.roll_ticks -= roll_ticks as f32;
+    if motion.closing {
+        if let Some(keyboard) = motion.keyboard.as_mut() {
+            if keyboard.advance(ticks) {
+                motion.keyboard = None;
+            }
+        }
+        // Like mBD_move_Obey, settle the rolled paper as the editor leaves.
+        for _ in 0..roll_ticks {
+            motion.roll.release();
+        }
+        if motion.keyboard.is_none() && motion.roll.position <= 0.0 {
+            if !motion.slide.closing {
+                motion.slide.close();
+            }
+            if motion.slide.advance(ticks) {
+                if let Some(root) = assets.root.take() {
+                    commands.entity(root).despawn();
+                }
+                *motion = MailPresentation::default();
+                return;
+            }
+        }
+    } else {
+        motion.slide.advance(ticks);
+        if let Some(keyboard) = motion.keyboard.as_mut() {
+            keyboard.advance(ticks);
+        }
+        if motion.slide.settled() && motion.keyboard.is_some_and(|keyboard| keyboard.settled()) {
+            let line = motion.cursor_line;
+            for _ in 0..roll_ticks {
+                motion.roll.follow(line);
+            }
+        }
+    }
+    for (part, mut transform, mut visibility) in &mut parts {
+        match part {
+            LetterPart::Paper => {
+                transform.translation.y = (motion.slide.pos + motion.roll.position) * 16.0;
+            }
+            LetterPart::Keyboard => {
+                *visibility = if motion.keyboard.is_some() {
+                    Visibility::Inherited
+                } else {
+                    Visibility::Hidden
+                };
+                transform.translation.y = -motion.keyboard.map_or(300.0, |slide| slide.pos) * 16.0;
+            }
+        }
+    }
+}
+
 pub struct MailDiscPlugin;
 impl Plugin for MailDiscPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<MailAssets>().add_systems(
-            Update,
-            draw.after(crate::input::InteractSet::Ui)
-                .run_if(resource_exists::<MsgAssets>),
-        );
+        app.init_resource::<MailAssets>()
+            .init_resource::<MailPresentation>()
+            .add_systems(
+                Update,
+                (draw, animate)
+                    .chain()
+                    .after(crate::input::InteractSet::Ui)
+                    .run_if(resource_exists::<MsgAssets>),
+            );
     }
 }

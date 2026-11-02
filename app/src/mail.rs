@@ -774,7 +774,14 @@ fn mail_ui_input(
     font: Option<Res<crate::msg_window::MsgAssets>>,
     renderer: Option<Res<crate::pockets_disc::PocketAssets>>,
     warning_panel: Res<crate::warning_panel::WarningPanel>,
+    motion: Res<crate::mail_disc::MailPresentation>,
 ) {
+    if motion.busy() {
+        key_events.clear();
+        actions.consume(Action::Confirm);
+        actions.consume(Action::Interact);
+        return;
+    }
     if !ui.open || *focus != InputFocus::Mail || warning_panel.is_open() {
         return;
     }
@@ -834,6 +841,8 @@ fn mail_ui_input(
                 return;
             }
             ui.write_recipients = book.entries().cloned().collect();
+            // The press that chose Write must not also type the first key.
+            key_events.clear();
             // Rewriting keeps the letter's addressee.
             if let Some(to) = ui
                 .rewriting

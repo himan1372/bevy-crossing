@@ -10,6 +10,8 @@ pub(super) struct Layout {
     pub body: Vec2,
     pub text: Vec2,
     pub arrow: u8,
+    pub special: u8,
+    pub frame_scale: f32,
 }
 
 impl Layout {
@@ -54,6 +56,8 @@ impl Layout {
             text: text_min + text_step * fraction + corner * body_scale,
             body: arrow_min + arrow_step * fraction - corner * body_scale,
             arrow: 0,
+            special: 0,
+            frame_scale: 0.875,
         }
     }
 
@@ -73,6 +77,36 @@ impl Layout {
         tag
     }
 
+    pub(super) fn special(at: Vec2, width: f32, variant: u8) -> Self {
+        let fraction = Vec2::splat((width * 0.75 - 52.5) / 67.5);
+        let minimum = Vec2::new(0.5217391, 0.88235295);
+        let body_scale = minimum + fraction * (Vec2::ONE - minimum);
+        let corner = Vec2::new(-92.0, 34.0);
+        let (arrow_min, arrow_step) = match variant {
+            2 => (Vec2::new(-13.0, 4.0), Vec2::new(-6.0, 10.0)),
+            3 => (Vec2::new(-13.0, 56.0), Vec2::new(-6.0, -2.0)),
+            _ => (Vec2::new(-1.0, 21.0), Vec2::new(-11.0, 5.0)),
+        };
+        let mut tag = Self {
+            base: Vec2::new(at.x - 160.0, 120.0 - at.y),
+            fraction,
+            body_scale,
+            body: arrow_min + arrow_step * fraction - corner * body_scale,
+            text: Vec2::new(22.0, -12.0) + Vec2::new(10.0, -4.0) * fraction + corner * body_scale,
+            arrow: 1,
+            special: variant,
+            frame_scale: 1.0,
+        };
+        if variant == 1 {
+            tag.body.y += 8.0;
+        }
+        if tag.base.x + tag.body.x + body_scale.x * 92.0 > 146.0 {
+            tag.body.x = -tag.body.x;
+            tag.arrow = 2;
+        }
+        tag
+    }
+
     fn half(self) -> Vec2 {
         self.body_scale * Vec2::new(61.25, 64.75)
     }
@@ -85,33 +119,53 @@ impl Layout {
 
     pub(super) fn action(parent: Self, width: f32, rows: usize, pocket_row: Option<usize>) -> Self {
         let mut tag = Self::sized(parent.base, width * 0.875, rows as f32 * 14.0, false);
+        let special = parent.special != 0;
+        let parent_half = if special {
+            Vec2::new(92.0, 34.0)
+        } else {
+            Vec2::new(64.75, 14.0)
+        };
+        let shift = if special {
+            Vec2::new(52.5, 39.375)
+        } else {
+            Vec2::new(27.125, 54.25)
+        };
+        let child_shift = if special {
+            Vec2::new(-27.125, -28.0)
+        } else {
+            Vec2::new(-29.75, -28.875)
+        };
+        let gap = if special { 4.375 } else { 1.75 };
+        let gap_step = if special { 0.0 } else { 1.75 };
+        let body_gap = if special { 7.0 } else { 6.125 };
         // mTG_init_tag_data_select_win_after_item, ordinary name-tag branch.
         let half = tag.half();
-        tag.base.y += 1.75 + parent.body.y - parent.body_scale.y * 14.0 + parent.fraction.y * 1.75;
-        tag.body.y = 6.125 + tag.fraction.y * 8.75 - half.y;
-        tag.base.x += parent.body.x - parent.body_scale.x * 64.75;
+        tag.base.y += gap + parent.body.y - parent.body_scale.y * parent_half.y
+            + parent.fraction.y * gap_step;
+        tag.body.y = body_gap + tag.fraction.y * 8.75 - half.y;
+        tag.base.x += parent.body.x - parent.body_scale.x * parent_half.x;
         tag.body.x = half.x;
         let down = tag.foot() && !(pocket_row == Some(1) && rows == 2);
         if down {
-            tag.base.x += 27.125 + parent.fraction.x * 54.25;
-            tag.body.x += -29.75 - tag.fraction.x * 28.875;
+            tag.base.x += shift.x + parent.fraction.x * shift.y;
+            tag.body.x += child_shift.x + tag.fraction.x * child_shift.y;
         } else {
-            tag.base.y = parent.base.y + parent.body.y + parent.body_scale.y * 14.0
-                - 1.75
-                - parent.fraction.y * 1.75;
-            tag.body.y = half.y - 6.125 - tag.fraction.y * 8.75;
+            tag.base.y = parent.base.y + parent.body.y + parent.body_scale.y * parent_half.y
+                - gap
+                - parent.fraction.y * gap_step;
+            tag.body.y = half.y - body_gap - tag.fraction.y * 8.75;
             let top = tag.base.y + tag.body.y + half.y;
             if top > 120.0 {
                 tag.base.y -= top - 120.0;
             }
-            tag.base.x += 27.125 + parent.fraction.x * 54.25;
-            tag.body.x += -29.75 - tag.fraction.x * 28.875;
+            tag.base.x += shift.x + parent.fraction.x * shift.y;
+            tag.body.x += child_shift.x + tag.fraction.x * child_shift.y;
         }
         let right = tag.right();
         if right >= 167.0 || parent.body.x < 0.0 {
-            tag.base.x = parent.base.x + parent.body.x + parent.body_scale.x * 64.75
-                - (27.125 + parent.fraction.x * 54.25);
-            tag.body.x = -half.x - (-29.75 - tag.fraction.x * 28.875);
+            tag.base.x = parent.base.x + parent.body.x + parent.body_scale.x * parent_half.x
+                - (shift.x + parent.fraction.x * shift.y);
+            tag.body.x = -half.x - (child_shift.x + tag.fraction.x * child_shift.y);
             let left = tag.base.x + tag.body.x - half.x + 134.0;
             if left < 0.0 {
                 tag.body.x -= left;

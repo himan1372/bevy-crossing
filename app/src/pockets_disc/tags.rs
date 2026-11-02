@@ -1,8 +1,10 @@
 //! Original tag artwork, native placement and retained popup motion.
 use super::*;
 
+mod label;
 mod layout;
 mod presentation;
+pub(super) use label::{delivery_label, Label};
 pub(super) use presentation::{animate, Presentation};
 
 struct Shape {
@@ -17,6 +19,9 @@ pub(super) struct TagModels {
     confirm: Shape,
     cursor: Shape,
     arrows: [Shape; 2],
+    special: Shape,
+    special_shadow: Shape,
+    special_arrows: [Shape; 6],
 }
 
 impl Shape {
@@ -134,11 +139,27 @@ impl TagModels {
                 load("sen_itemw_yajirushi_model", [215, 165, 60, 255], [0; 4])?,
                 load("sen_itemw_yajirushi2T_model", [215, 165, 60, 255], [0; 4])?,
             ],
+            special: load(
+                "sen_qitem_wakuT_model",
+                [255, 245, 140, 255],
+                [215, 165, 60, 150],
+            )?,
+            special_shadow: load("sen_qitem_kage_model", [255; 4], [0; 4])?,
+            special_arrows: [
+                load("sen_qitem_yajirushiT_model", [215, 165, 60, 255], [0; 4])?,
+                load("sen_qitem_yajirushi2T_model", [215, 165, 60, 255], [0; 4])?,
+                load("sen_qitem_yajirushi3_model", [215, 165, 60, 255], [0; 4])?,
+                load("sen_qitem_yajirushi4T_model", [215, 165, 60, 255], [0; 4])?,
+                load("sen_qitem_yajirushi5_model", [215, 165, 60, 255], [0; 4])?,
+                load("sen_qitem_yajirushi6T_model", [215, 165, 60, 255], [0; 4])?,
+            ],
         })
     }
 
     fn layout(&self, paint: &mut Paint, layout: layout::Layout, kind: usize) {
-        let (frame, shadow) = if kind == 0 {
+        let (frame, shadow) = if kind == 0 && layout.special != 0 {
+            (&self.special, &self.special_shadow)
+        } else if kind == 0 {
             (&self.item, &self.item_shadow)
         } else if kind == 2 {
             (&self.confirm, &self.action_shadow)
@@ -146,7 +167,7 @@ impl TagModels {
             (&self.action, &self.action_shadow)
         };
         let transform = Transform::from_translation((layout.body * 16.0).extend(0.1))
-            .with_scale((layout.body_scale * 0.875).extend(1.0));
+            .with_scale((layout.body_scale * layout.frame_scale).extend(1.0));
         // Shadow vertices already carry the source offset: share the frame's transform.
         let mut shadow_transform = transform;
         shadow_transform.translation.z -= 0.2;
@@ -161,7 +182,12 @@ impl TagModels {
             },
         );
         if layout.arrow != 0 {
-            self.arrows[usize::from(layout.arrow - 1)].draw(
+            let arrow = if kind == 0 && layout.special != 0 {
+                &self.special_arrows[usize::from((layout.special - 1) * 2 + layout.arrow - 1)]
+            } else {
+                &self.arrows[usize::from(layout.arrow - 1)]
+            };
+            arrow.draw(
                 paint,
                 Transform::from_xyz(0.0, 0.0, 0.05),
                 "retail tag arrow",

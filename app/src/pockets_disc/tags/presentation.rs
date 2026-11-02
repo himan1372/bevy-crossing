@@ -57,6 +57,34 @@ impl Presentation {
         discard: bool,
         pocket_row: Option<usize>,
     ) {
+        self.show_label(
+            models,
+            paint,
+            font,
+            root,
+            at,
+            &Label::ordinary(label),
+            options,
+            choice,
+            discard,
+            pocket_row,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)] // The retained popup family shares one paint context.
+    pub(in crate::pockets_disc) fn show_label(
+        &mut self,
+        models: &TagModels,
+        paint: &mut Paint,
+        font: &MsgAssets,
+        root: Entity,
+        at: Vec2,
+        label: &Label,
+        options: &[&str],
+        choice: Option<usize>,
+        discard: bool,
+        pocket_row: Option<usize>,
+    ) {
         if self.last_open && choice.is_none() {
             // Returning to NONE closes both tags, then restarts its name wait.
             for shown in self.shown.iter_mut().filter_map(Option::take) {
@@ -69,7 +97,16 @@ impl Presentation {
             return;
         }
         self.last_open = choice.is_some();
-        let name = Layout::item(at, text_width(label, &font.widths));
+        let width = label
+            .lines
+            .iter()
+            .map(|line| text_width(line, &font.widths))
+            .fold(0.0, f32::max);
+        let name = if label.special != 0 {
+            Layout::special(at, width, label.special)
+        } else {
+            Layout::item(at, width)
+        };
         let width = options
             .iter()
             .map(|s| text_width(s, &font.widths))
@@ -81,7 +118,7 @@ impl Presentation {
             .fold(0.0, f32::max);
         let confirmation = Layout::confirmation(action, confirm_width, 3, 2);
         for (kind, layout, lines, selected, prompt) in [
-            (0, name, vec![label.to_string()], None, false),
+            (0, name, label.lines.clone(), None, false),
             (
                 1,
                 action,
@@ -97,7 +134,7 @@ impl Presentation {
                 true,
             ),
         ] {
-            let visible = !label.is_empty()
+            let visible = label.lines.iter().any(|line| !line.is_empty())
                 && match kind {
                     0 => true,
                     1 => choice.is_some(),
@@ -222,7 +259,11 @@ fn content(
     }
     for (i, line) in lines.iter().enumerate() {
         let row = i + usize::from(prompt);
-        let at = Vec2::new(160.0 + origin.x, 120.0 - origin.y + row as f32 * 14.0);
+        let special = layout.special != 0;
+        let at = Vec2::new(
+            160.0 + origin.x,
+            120.0 - origin.y + row as f32 * if special { 12.0 } else { 14.0 },
+        );
         let color = if choice == Some(i) {
             [120, 35, 255, 255]
         } else if choice.is_some() {
@@ -230,7 +271,13 @@ fn content(
         } else {
             [90, 60, 50, 255]
         };
-        paint.text(font, &scaled_text(line, 28), at, color, 2.0);
+        paint.text(
+            font,
+            &scaled_text(line, if special { 24 } else { 28 }),
+            at,
+            color,
+            2.0,
+        );
         if choice == Some(i) {
             // mTG_set_win_field: cursor has its own native vertices/offset.
             let cursor = origin + Vec2::new(-3.5, -7.0 - row as f32 * 14.0);
