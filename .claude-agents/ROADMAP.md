@@ -1141,3 +1141,5 @@ Philip acceptance stay open.
 2026-11-01 codex: retail-hud-followup final gates and capture/default/release passed (release5m36s), no tests. All previews closed and real save unchanged; explicit-file publication follows. Philip's play acceptance remains open.
 
 2026-11-02 claude: inventory-mail-polish. Native special quest/delivery and letter tags plus letter paper/editor slide-and-roll motion implemented; Write no longer leaks its Enter into the editor. Bounded Temp QA only; Philip acceptance and M4 remain open. See completed/inventory-mail-polish.md.
+
+2026-11-02 claude: mail-edit-end-check. Letter writing ends through the native Is-this-OK check (Yes / Rewrite / Throw it out); F4 no longer commits directly. Bounded Temp QA only; Philip acceptance and M4 remain open. See completed/mail-edit-end-check.md.

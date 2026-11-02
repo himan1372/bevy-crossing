@@ -31,6 +31,8 @@ pub(crate) struct MailPresentation {
     roll: Roll,
     roll_ticks: f32,
     cursor_line: usize,
+    /// The edit-end window is up: the editor and the rolled paper leave meanwhile.
+    checking: bool,
 }
 
 impl MailPresentation {
@@ -38,7 +40,7 @@ impl MailPresentation {
         self.active
             && (self.closing
                 || !self.slide.settled()
-                || self.keyboard.is_some_and(|slide| !slide.settled()))
+                || (!self.checking && self.keyboard.is_some_and(|slide| !slide.settled())))
     }
 
     pub(crate) fn closing(&self) -> bool {
@@ -205,6 +207,10 @@ fn draw(
     if motion.closing {
         return;
     }
+    let checking = ui.end_check.is_some();
+    if motion.checking != checking {
+        motion.checking = checking;
+    }
     if assets.root.is_some() && !ui.is_changed() && !mailbox.is_changed() && !identity.is_changed()
     {
         return;
@@ -262,7 +268,7 @@ fn draw(
         ));
     }
     if writing {
-        if motion.keyboard.is_none() {
+        if motion.keyboard.is_none_or(|slide| slide.closing) && !motion.checking {
             motion.keyboard = Some(Slide::new());
         }
         let keyboard_root = commands
@@ -435,6 +441,20 @@ fn animate(
                 return;
             }
         }
+    } else if motion.checking {
+        // mED_end_edit_func: the editor leaves at the bottom while the check comes in.
+        motion.slide.advance(ticks);
+        if let Some(keyboard) = motion.keyboard.as_mut() {
+            if !keyboard.closing {
+                keyboard.close();
+            }
+            if keyboard.advance(ticks) {
+                motion.keyboard = None;
+            }
+        }
+        for _ in 0..roll_ticks {
+            motion.roll.release();
+        }
     } else {
         motion.slide.advance(ticks);
         if let Some(keyboard) = motion.keyboard.as_mut() {
@@ -464,6 +484,151 @@ fn animate(
     }
 }
 
+#[derive(Component)]
+struct CheckPart;
+
+/// `mEE_editEndChk_ovl_draw` for `mEE_TYPE_BOARD`: the question and, once accepted once, the
+/// answer window with its cursor. Rebuilt every frame as its size and blink change.
+#[allow(clippy::too_many_arguments)]
+fn draw_check(
+    mut commands: Commands,
+    disc: Res<GameDisc>,
+    font: Res<MsgAssets>,
+    ui: Res<MailUi>,
+    focus: Res<crate::input::InputFocus>,
+    mut assets: ResMut<MailAssets>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut n64: ResMut<Assets<N64Material>>,
+    mut images: ResMut<Assets<Image>>,
+    old: Query<Entity, With<CheckPart>>,
+) {
+    use rustimal_logic::edit_end_check::ANSWERS;
+    for entity in &old {
+        commands.entity(entity).despawn();
+    }
+    let Some(check) = ui.end_check.as_ref() else {
+        return;
+    };
+    if !(ui.open && ui.writing && *focus == crate::input::InputFocus::Mail) {
+        return;
+    }
+    // win_data[mEE_TYPE_BOARD]
+    let (char_x, char_y, answer_x, answer_y, question_x, question_y) =
+        (-81.0, 58.0, 60.0, -71.0, 1.0, -4.0);
+    const Z: f32 = 220.0;
+    let root = commands
+        .spawn((
+            CheckPart,
+            Name::new("retail letter check"),
+            Transform::from_xyz(0.0, -check.slide.pos * 16.0, 0.0),
+            Visibility::default(),
+        ))
+        .id();
+    let mut stores = crate::shop_nook::editor::Stores {
+        meshes: &mut meshes,
+        n64: &mut n64,
+        images: &mut images,
+        materials: &mut materials,
+    };
+    let mode = "lat_kakunin_DL_mode";
+    let alpha = check.question_alpha();
+    let waku = assets.skin.window(
+        &disc,
+        "kakunin-waku",
+        &[mode, "lat_kakunin_wakuT_model"],
+        [255; 4],
+        &mut stores,
+    );
+    let question = assets.skin.window(
+        &disc,
+        &format!("kakunin-c-{alpha}"),
+        &[mode, "lat_kakunin_c_model"],
+        [0, 0, 255, alpha],
+        &mut stores,
+    );
+    let place =
+        |commands: &mut Commands, model: &crate::shop_nook::editor::Model, at: Vec3, scale: f32| {
+            for (index, (mesh, material)) in model.iter().enumerate() {
+                commands.spawn((
+                    Mesh3d(mesh.clone()),
+                    MeshMaterial3d(material.clone()),
+                    Transform::from_translation(at + Vec3::Z * index as f32 * 0.01)
+                        .with_scale(Vec3::new(scale, scale, 1.0)),
+                    RenderLayers::layer(1),
+                    ChildOf(root),
+                ));
+            }
+        };
+    let at = Vec3::new(question_x * 16.0, question_y * 16.0, Z);
+    place(&mut commands, &waku, at, 1.0);
+    place(&mut commands, &question, at + Vec3::Z * 0.2, 1.0);
+    let mut paint = Paint {
+        commands: &mut commands,
+        meshes: stores.meshes,
+        materials: stores.materials,
+        root,
+    };
+    paint.text(
+        &font,
+        "Is this OK?",
+        Vec2::new(107.0 + question_x, 194.0 - question_y),
+        [80, 80, 230, 255],
+        Z + 2.0,
+    );
+    if !check.moving_in {
+        return;
+    }
+    let scale = check.scale;
+    let win = assets.skin.window(
+        &disc,
+        "sentaku-win",
+        &[mode, "lat_sentaku_winT_model"],
+        [255; 4],
+        &mut stores,
+    );
+    let cursor = assets.skin.window(
+        &disc,
+        "sentaku-c",
+        &[mode, "lat_sentaku_c_model"],
+        [255; 4],
+        &mut stores,
+    );
+    let at = Vec3::new(answer_x * 16.0, answer_y * 16.0, Z + 0.4);
+    place(&mut commands, &win, at, scale);
+    if scale >= 1.0 {
+        let at = Vec3::new(
+            answer_x * 16.0,
+            (answer_y - check.selected as f32 * 16.0) * 16.0,
+            Z + 0.6,
+        );
+        place(&mut commands, &cursor, at, 1.0);
+    }
+    let mut paint = Paint {
+        commands: &mut commands,
+        meshes: stores.meshes,
+        materials: stores.materials,
+        root,
+    };
+    let x = 160.0 + answer_x + char_x * scale;
+    let mut y = 120.0 - answer_y - char_y * scale;
+    let size = ((scale * 32.0).round() as u8).max(1);
+    for (i, answer) in ANSWERS.iter().enumerate() {
+        let color = if i == check.selected {
+            [100, 130, 245, 255]
+        } else {
+            [165, 185, 185, 255]
+        };
+        let text = format!(
+            "{}{}{answer}",
+            crate::messages::markup::LINE_SCALE,
+            crate::messages::markup::arg(size)
+        );
+        paint.text(&font, &text, Vec2::new(x, y), color, Z + 2.0);
+        y += scale * 16.0;
+    }
+}
+
 pub struct MailDiscPlugin;
 impl Plugin for MailDiscPlugin {
     fn build(&self, app: &mut App) {
@@ -471,7 +636,7 @@ impl Plugin for MailDiscPlugin {
             .init_resource::<MailPresentation>()
             .add_systems(
                 Update,
-                (draw, animate)
+                (draw, animate, draw_check)
                     .chain()
                     .after(crate::input::InteractSet::Ui)
                     .run_if(resource_exists::<MsgAssets>),

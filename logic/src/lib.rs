@@ -55,6 +55,7 @@ mod fg_data;
 pub mod pocket_money;
 pub mod television;
 pub use fg_data::{parse_fg_records, FgRecord};
+pub mod edit_end_check;
 pub mod field_assessment;
 mod field_gen;
 pub mod field_items;

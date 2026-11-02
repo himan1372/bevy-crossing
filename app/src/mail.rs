@@ -220,6 +220,8 @@ pub struct MailUi {
     pub(crate) write_text: String,
     /// Text cursor (a code index into `write_text`); `None` until the compose view starts.
     pub(crate) write_cursor: Option<usize>,
+    /// `mSM_OVL_EDITENDCHK`: the "Is this OK?" window after the edit ends.
+    pub(crate) end_check: Option<rustimal_logic::edit_end_check::EditEndCheck>,
     pub(crate) write_keyboard: kb::Keyboard,
     write_repeat: kb::ButtonRepeat,
     pub(crate) write_held: crate::shop_nook::editor::Held,
@@ -775,6 +777,7 @@ fn mail_ui_input(
     renderer: Option<Res<crate::pockets_disc::PocketAssets>>,
     warning_panel: Res<crate::warning_panel::WarningPanel>,
     motion: Res<crate::mail_disc::MailPresentation>,
+    disc: Option<Res<crate::game_disc::GameDisc>>,
 ) {
     if motion.busy() {
         key_events.clear();
@@ -855,6 +858,70 @@ fn mail_ui_input(
                     .position(|r| *r == to)
                     .unwrap_or(0);
             }
+        }
+        if ui.end_check.is_some() {
+            use rustimal_logic::edit_end_check::{Answer, Press, Sound};
+            key_events.clear();
+            let press = if keys.any_just_pressed([
+                KeyCode::Enter,
+                KeyCode::NumpadEnter,
+                KeyCode::Space,
+                KeyCode::F4,
+            ]) {
+                Press::Accept
+            } else if actions.just_pressed(Action::Cancel) {
+                Press::Cancel
+            } else if keys.just_pressed(KeyCode::ArrowUp) {
+                Press::Up
+            } else if keys.just_pressed(KeyCode::ArrowDown) {
+                Press::Down
+            } else {
+                Press::None
+            };
+            let update = ui
+                .end_check
+                .as_mut()
+                .map(|check| check.update(time.delta_secs() * 60.0, press))
+                .unwrap_or_default();
+            match update.sound {
+                Some(Sound::Cursor) => crate::sound::se(crate::sound::se_id::CURSOR),
+                Some(Sound::Exit) => crate::sound::se(crate::sound::se_id::MENU_EXIT),
+                Some(Sound::Refuse) => crate::sound::se(GRID_ERROR),
+                None => {}
+            }
+            match update.done {
+                Some(Answer::Yes) => {
+                    ui.end_check = None;
+                    finish_letter(&mut ui, &mut mailbox, &mut inventory, &identity.player);
+                }
+                Some(Answer::Rewrite) => {
+                    // The editor opens again on the same text, its cursor back at the start.
+                    ui.end_check = None;
+                    ui.write_cursor = Some(0);
+                }
+                Some(Answer::ThrowOut) => {
+                    ui.end_check = None;
+                    ui.writing = false;
+                    ui.write_paper = None;
+                    ui.rewriting = None;
+                    ui.write_text.clear();
+                    ui.write_cursor = None;
+                    if ui.from_pockets {
+                        ui.open = false;
+                    }
+                }
+                None => {}
+            }
+            for action in [
+                Action::Confirm,
+                Action::Interact,
+                Action::Back,
+                Action::Pause,
+                Action::Cancel,
+            ] {
+                actions.consume(action);
+            }
+            return;
         }
         if actions.just_pressed(Action::Cancel) {
             key_events.clear();
@@ -965,8 +1032,18 @@ fn mail_ui_input(
         }
         if done {
             ui.write_text = to_text(&codes);
+            ui.write_cursor = Some(cursor);
             crate::sound::se(GRID_START);
-            finish_letter(&mut ui, &mut mailbox, &mut inventory, &identity.player);
+            if disc
+                .as_ref()
+                .is_some_and(|disc| disc.catalog.get("lat_kakunin_wakuT_model").is_some())
+            {
+                // mED_end_edit_func: the editor leaves and the check opens.
+                ui.end_check = Some(rustimal_logic::edit_end_check::EditEndCheck::new());
+                key_events.clear();
+            } else {
+                finish_letter(&mut ui, &mut mailbox, &mut inventory, &identity.player);
+            }
             return;
         }
         // Held keys: the grid (arrows), the text cursor (Ctrl+arrows) and
