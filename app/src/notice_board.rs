@@ -52,6 +52,7 @@ struct View {
     mode: Mode,
     draft: Vec<u8>,
     choice: usize,
+    check: rustimal_logic::edit_end_check::EditEndCheck,
     just_opened: bool,
     revision: u64,
     cursor: usize,
@@ -173,6 +174,7 @@ fn open_board(
         mode: Mode::Read,
         draft: Vec::new(),
         choice: 0,
+        check: rustimal_logic::edit_end_check::EditEndCheck::with_answers(3),
         just_opened: true,
         revision: 0,
         cursor: 0,
@@ -343,6 +345,7 @@ fn input(
                         view.mode = Mode::Confirm;
                         end_edit(&mut view);
                         view.choice = 0;
+                        view.check = rustimal_logic::edit_end_check::EditEndCheck::with_answers(3);
                         crate::sound::se(START);
                         break;
                     }
@@ -425,16 +428,42 @@ fn input(
             }
         }
         Mode::Confirm => {
+            use rustimal_logic::edit_end_check::{Answer, Press, Sound};
             events.clear();
-            if actions.consume(Action::Cancel) {
-                begin_edit(&mut view, &font.widths);
-            } else if actions.consume(Action::MoveUp) {
-                view.choice = (view.choice + 2) % 3;
-            } else if actions.consume(Action::MoveDown) {
-                view.choice = (view.choice + 1) % 3;
-            } else if actions.consume(Action::Confirm) {
-                match board::end_choice(view.choice) {
-                    board::EndChoice::Post => {
+            let press = if keys.any_just_pressed([
+                KeyCode::Enter,
+                KeyCode::NumpadEnter,
+                KeyCode::Space,
+                KeyCode::F4,
+            ]) {
+                Press::Accept
+            } else if actions.just_pressed(Action::Cancel) {
+                Press::Cancel
+            } else if keys.just_pressed(KeyCode::ArrowUp) {
+                Press::Up
+            } else if keys.just_pressed(KeyCode::ArrowDown) {
+                Press::Down
+            } else {
+                Press::None
+            };
+            let update = view.check.update(frames, press);
+            match update.sound {
+                Some(Sound::Cursor) => crate::sound::se(crate::sound::se_id::CURSOR),
+                Some(Sound::Exit) => crate::sound::se(crate::sound::se_id::MENU_EXIT),
+                Some(Sound::Refuse) => crate::sound::se(ERROR),
+                None => {}
+            }
+            for action in [
+                Action::Confirm,
+                Action::Interact,
+                Action::Back,
+                Action::Cancel,
+            ] {
+                actions.consume(action);
+            }
+            if let Some(answer) = update.done {
+                match answer {
+                    Answer::Yes => {
                         let now = crate::clock::now();
                         board::write(
                             &mut post.notices,
@@ -456,8 +485,8 @@ fn input(
                         }
                         close = true;
                     }
-                    board::EndChoice::KeepWriting => begin_edit(&mut view, &font.widths),
-                    board::EndChoice::Cancel => {
+                    Answer::Rewrite => begin_edit(&mut view, &font.widths),
+                    Answer::ThrowOut => {
                         view.mode = Mode::Read;
                         view.page = board::first_page(count + 1).min(count.saturating_sub(1));
                         view.motion.start_read(view.page);
@@ -513,6 +542,13 @@ impl Plugin for NoticeBoardPlugin {
                 Update,
                 (render::draw, render::animate)
                     .chain()
+                    .after(crate::input::InteractSet::Ui)
+                    .in_set(crate::states::GameplaySet)
+                    .run_if(resource_exists::<crate::msg_window::MsgAssets>),
+            )
+            .add_systems(
+                Update,
+                render::draw_check
                     .after(crate::input::InteractSet::Ui)
                     .in_set(crate::states::GameplaySet)
                     .run_if(resource_exists::<crate::msg_window::MsgAssets>),

@@ -10,6 +10,57 @@ use bevy::camera::visibility::RenderLayers;
 
 type Model = Vec<(Handle<Mesh>, Handle<N64Material>)>;
 
+#[derive(Component)]
+pub(super) struct CheckPart;
+
+/// `mEE_editEndChk_ovl_draw` for `mEE_TYPE_NOTICE`: the three-answer window over the board.
+pub(super) fn draw_check(
+    mut commands: Commands,
+    ui: Res<NoticeUi>,
+    disc: Option<Res<GameDisc>>,
+    font: Res<MsgAssets>,
+    mut assets: ResMut<NoticeAssets>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut n64: ResMut<Assets<N64Material>>,
+    mut images: ResMut<Assets<Image>>,
+    old: Query<Entity, With<CheckPart>>,
+) {
+    for entity in &old {
+        commands.entity(entity).despawn();
+    }
+    let (Some(view), Some(disc)) = (ui.0.as_ref(), disc.as_deref()) else {
+        return;
+    };
+    if view.mode != Mode::Confirm {
+        return;
+    }
+    let root = commands
+        .spawn((
+            CheckPart,
+            Name::new("notice board check"),
+            Transform::from_xyz(0.0, -view.check.slide.pos * 16.0, 0.0),
+            Visibility::default(),
+        ))
+        .id();
+    let mut stores = crate::shop_nook::editor::Stores {
+        meshes: &mut meshes,
+        n64: &mut n64,
+        images: &mut images,
+        materials: &mut materials,
+    };
+    crate::edit_end_chk_ui::spawn(
+        &mut commands,
+        root,
+        &mut assets.skin,
+        disc,
+        &font,
+        &mut stores,
+        &view.check,
+        220.0,
+    );
+}
+
 /// The control hints (`mNT_set_key_dl`): the key display, the two page arrows, and the stick
 /// marker (`kei_win_stT_model`, its picture chosen by the stick's area).
 struct Hints {
@@ -222,17 +273,7 @@ pub(super) fn draw(
                 ),
             ]
         }
-        Mode::Confirm => {
-            let options = ["Post it", "Keep writing", "Never mind"];
-            let mut hints = vec!["Post this notice?".to_string()];
-            hints.extend(
-                options
-                    .iter()
-                    .enumerate()
-                    .map(|(i, o)| format!("{} {o}", if view.choice == i { ">" } else { " " })),
-            );
-            hints
-        }
+        Mode::Confirm => Vec::new(),
     };
     let mut paint = Paint {
         commands: &mut commands,
