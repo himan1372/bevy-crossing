@@ -1143,3 +1143,5 @@ Philip acceptance stay open.
 2026-11-02 claude: inventory-mail-polish. Native special quest/delivery and letter tags plus letter paper/editor slide-and-roll motion implemented; Write no longer leaks its Enter into the editor. Bounded Temp QA only; Philip acceptance and M4 remain open. See completed/inventory-mail-polish.md.
 
 2026-11-02 claude: mail-edit-end-check. Letter writing ends through the native Is-this-OK check (Yes / Rewrite / Throw it out); F4 no longer commits directly. Bounded Temp QA only; Philip acceptance and M4 remain open. See completed/mail-edit-end-check.md.
+
+2026-11-02 claude: diary-edit-end-check. Mail and diary end their edits through the native Is-this-OK window (two answers); the earlier three-answer mail layout was corrected. Philip acceptance and M4 remain open. See completed/diary-edit-end-check.md.

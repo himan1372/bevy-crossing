@@ -40,6 +40,8 @@ pub(super) struct View {
     draft: Vec<u8>,
     scroll: usize,
     choice: usize,
+    /// `mSM_OVL_EDITENDCHK` while confirming.
+    check: rustimal_logic::edit_end_check::EditEndCheck,
     just_opened: bool,
     revision: u64,
     /// Text cursor in `draft` while editing.
@@ -158,6 +160,7 @@ pub(super) fn open(room: &mut PlayerRoom) {
         draft: room.diary.as_ref().map_or_else(Vec::new, |n| n.text(month)),
         scroll: 0,
         choice: 0,
+        check: Default::default(),
         just_opened: true,
         revision: 0,
         cursor: 0,
@@ -328,6 +331,7 @@ fn input(
                         // Start ends the edit (`mED_COMMAND_END_EDIT`).
                         view.mode = Mode::Confirm;
                         view.choice = 0;
+                        view.check = Default::default();
                         crate::sound::se(START);
                         break;
                     }
@@ -421,19 +425,52 @@ fn input(
             }
         }
         Mode::Confirm => {
+            use rustimal_logic::edit_end_check::{Answer, Press, Sound};
             events.clear();
-            if actions.consume(Action::Cancel) {
-                begin_edit(&mut view, &font.widths);
-            } else if actions.consume(Action::MoveUp) || actions.consume(Action::MoveDown) {
-                view.choice ^= 1;
-            } else if actions.consume(Action::Confirm) {
-                if native::confirm_writes(view.choice) {
+            let press = if keys.any_just_pressed([
+                KeyCode::Enter,
+                KeyCode::NumpadEnter,
+                KeyCode::Space,
+                KeyCode::F4,
+            ]) {
+                Press::Accept
+            } else if actions.just_pressed(Action::Cancel) {
+                Press::Cancel
+            } else if keys.just_pressed(KeyCode::ArrowUp) {
+                Press::Up
+            } else if keys.just_pressed(KeyCode::ArrowDown) {
+                Press::Down
+            } else {
+                Press::None
+            };
+            let update = view.check.update(time.delta_secs() * 60.0, press);
+            match update.sound {
+                Some(Sound::Cursor) => crate::sound::se(crate::sound::se_id::CURSOR),
+                Some(Sound::Exit) => crate::sound::se(crate::sound::se_id::MENU_EXIT),
+                Some(Sound::Refuse) => crate::sound::se(ERROR),
+                None => {}
+            }
+            match update.done {
+                Some(Answer::Yes) => {
                     room.diary.get_or_insert_with(Notebook::default).months[view.month] =
                         native::entry(&view.draft);
                     close = true;
-                } else {
-                    begin_edit(&mut view, &font.widths);
                 }
+                Some(Answer::Rewrite | Answer::ThrowOut) => {
+                    // mDI_move_Obey: the editor reopens on the same text with its cursor reset.
+                    begin_edit(&mut view, &font.widths);
+                    view.cursor = 0;
+                    follow_cursor(&mut view, &font.widths);
+                }
+                None => {}
+            }
+            for action in [
+                Action::Confirm,
+                Action::Interact,
+                Action::Back,
+                Action::Cancel,
+            ] {
+                actions.consume(action);
             }
         }
     }
@@ -475,7 +512,8 @@ impl Plugin for DiaryPlugin {
             )
             .add_systems(
                 Update,
-                render::draw
+                (render::draw, render::draw_check)
+                    .chain()
                     .after(InteractSet::Ui)
                     .after(crate::save::LoadSet)
                     .in_set(GameplaySet)

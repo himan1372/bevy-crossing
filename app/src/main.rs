@@ -18,6 +18,7 @@ mod disc_gfx;
 mod disc_rig;
 mod disc_town;
 mod ecology;
+mod edit_end_chk_ui;
 mod environment;
 mod face;
 mod field_items;

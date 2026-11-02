@@ -1,6 +1,7 @@
 //! `m_editEndChk_ovl.c` (`mEE_move_Play`): the "Is this OK?" window shown after an edit ends.
 //! The question slides in from the bottom and blinks; the first accept expands the answer window,
 //! the cursor then moves on up/down and a second accept picks. Cancel picks Rewrite at once.
+//! `mEE_TYPE_BOARD` (mail and diary) offers the first two answers; the other types three.
 
 use crate::menu_slide::Slide;
 
@@ -45,6 +46,8 @@ pub struct EditEndCheck {
     /// The answer window's size, 0 to 1.
     pub scale: f32,
     pub selected: usize,
+    /// `win_data[type].answer_num`.
+    pub answers: usize,
     alpha_step: u32,
     alpha_accum: f32,
     answer: Option<Answer>,
@@ -65,8 +68,14 @@ pub struct Update {
 }
 
 impl EditEndCheck {
+    /// Yes / Rewrite, as `mEE_TYPE_BOARD`.
     pub fn new() -> Self {
+        Self::with_answers(2)
+    }
+
+    pub fn with_answers(answers: usize) -> Self {
         Self {
+            answers: answers.clamp(2, ANSWERS.len()),
             slide: Slide::new(),
             moving_in: false,
             scale: 0.0,
@@ -140,7 +149,7 @@ impl EditEndCheck {
                 } else if press == Press::Up && self.selected > 0 {
                     self.selected -= 1;
                     update.sound = Some(Sound::Cursor);
-                } else if press == Press::Down && self.selected + 1 < ANSWERS.len() {
+                } else if press == Press::Down && self.selected + 1 < self.answers {
                     self.selected += 1;
                     update.sound = Some(Sound::Cursor);
                 }
@@ -186,7 +195,7 @@ mod tests {
 
     #[test]
     fn the_second_accept_picks_the_cursor_answer() {
-        let mut check = EditEndCheck::new();
+        let mut check = EditEndCheck::with_answers(3);
         // Input before the window rests is ignored.
         assert_eq!(check.update(1.0, Press::Accept), Update::default());
         settle(&mut check);
@@ -201,6 +210,20 @@ mod tests {
         assert_eq!(check.update(1.0, Press::Down).sound, None);
         assert_eq!(check.update(1.0, Press::Accept).sound, Some(Sound::Refuse));
         assert_eq!(finish(&mut check), Answer::ThrowOut);
+    }
+
+    #[test]
+    fn the_board_window_has_two_answers() {
+        let mut check = EditEndCheck::new();
+        settle(&mut check);
+        check.update(1.0, Press::Accept);
+        for _ in 0..6 {
+            check.update(1.0, Press::None);
+        }
+        assert_eq!(check.update(1.0, Press::Down).sound, Some(Sound::Cursor));
+        assert_eq!(check.update(1.0, Press::Down).sound, None);
+        check.update(1.0, Press::Accept);
+        assert_eq!(finish(&mut check), Answer::Rewrite);
     }
 
     #[test]

@@ -503,7 +503,6 @@ fn draw_check(
     mut images: ResMut<Assets<Image>>,
     old: Query<Entity, With<CheckPart>>,
 ) {
-    use rustimal_logic::edit_end_check::ANSWERS;
     for entity in &old {
         commands.entity(entity).despawn();
     }
@@ -513,10 +512,6 @@ fn draw_check(
     if !(ui.open && ui.writing && *focus == crate::input::InputFocus::Mail) {
         return;
     }
-    // win_data[mEE_TYPE_BOARD]
-    let (char_x, char_y, answer_x, answer_y, question_x, question_y) =
-        (-81.0, 58.0, 60.0, -71.0, 1.0, -4.0);
-    const Z: f32 = 220.0;
     let root = commands
         .spawn((
             CheckPart,
@@ -531,102 +526,16 @@ fn draw_check(
         images: &mut images,
         materials: &mut materials,
     };
-    let mode = "lat_kakunin_DL_mode";
-    let alpha = check.question_alpha();
-    let waku = assets.skin.window(
-        &disc,
-        "kakunin-waku",
-        &[mode, "lat_kakunin_wakuT_model"],
-        [255; 4],
-        &mut stores,
-    );
-    let question = assets.skin.window(
-        &disc,
-        &format!("kakunin-c-{alpha}"),
-        &[mode, "lat_kakunin_c_model"],
-        [0, 0, 255, alpha],
-        &mut stores,
-    );
-    let place =
-        |commands: &mut Commands, model: &crate::shop_nook::editor::Model, at: Vec3, scale: f32| {
-            for (index, (mesh, material)) in model.iter().enumerate() {
-                commands.spawn((
-                    Mesh3d(mesh.clone()),
-                    MeshMaterial3d(material.clone()),
-                    Transform::from_translation(at + Vec3::Z * index as f32 * 0.01)
-                        .with_scale(Vec3::new(scale, scale, 1.0)),
-                    RenderLayers::layer(1),
-                    ChildOf(root),
-                ));
-            }
-        };
-    let at = Vec3::new(question_x * 16.0, question_y * 16.0, Z);
-    place(&mut commands, &waku, at, 1.0);
-    place(&mut commands, &question, at + Vec3::Z * 0.2, 1.0);
-    let mut paint = Paint {
-        commands: &mut commands,
-        meshes: stores.meshes,
-        materials: stores.materials,
+    crate::edit_end_chk_ui::spawn(
+        &mut commands,
         root,
-    };
-    paint.text(
+        &mut assets.skin,
+        &disc,
         &font,
-        "Is this OK?",
-        Vec2::new(107.0 + question_x, 194.0 - question_y),
-        [80, 80, 230, 255],
-        Z + 2.0,
-    );
-    if !check.moving_in {
-        return;
-    }
-    let scale = check.scale;
-    let win = assets.skin.window(
-        &disc,
-        "sentaku-win",
-        &[mode, "lat_sentaku_winT_model"],
-        [255; 4],
         &mut stores,
+        check,
+        220.0,
     );
-    let cursor = assets.skin.window(
-        &disc,
-        "sentaku-c",
-        &[mode, "lat_sentaku_c_model"],
-        [255; 4],
-        &mut stores,
-    );
-    let at = Vec3::new(answer_x * 16.0, answer_y * 16.0, Z + 0.4);
-    place(&mut commands, &win, at, scale);
-    if scale >= 1.0 {
-        let at = Vec3::new(
-            answer_x * 16.0,
-            (answer_y - check.selected as f32 * 16.0) * 16.0,
-            Z + 0.6,
-        );
-        place(&mut commands, &cursor, at, 1.0);
-    }
-    let mut paint = Paint {
-        commands: &mut commands,
-        meshes: stores.meshes,
-        materials: stores.materials,
-        root,
-    };
-    let x = 160.0 + answer_x + char_x * scale;
-    let mut y = 120.0 - answer_y - char_y * scale;
-    let size = ((scale * 32.0).round() as u8).max(1);
-    for (i, answer) in ANSWERS.iter().enumerate() {
-        let color = if i == check.selected {
-            [100, 130, 245, 255]
-        } else {
-            [165, 185, 185, 255]
-        };
-        let text = format!(
-            "{}{}{answer}",
-            crate::messages::markup::LINE_SCALE,
-            crate::messages::markup::arg(size)
-        );
-        paint.text(&font, &text, Vec2::new(x, y), color, Z + 2.0);
-        y += scale * 16.0;
-    }
 }
 
 pub struct MailDiscPlugin;

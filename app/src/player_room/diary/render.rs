@@ -204,15 +204,8 @@ pub(super) fn draw(
                 lines.len()
             ),
         ],
-        Mode::Confirm => vec![
-            "Is this OK?".into(),
-            format!(
-                "{} Yes    {} Rewrite",
-                if view.choice == 0 { ">" } else { " " },
-                if view.choice == 1 { ">" } else { " " }
-            ),
-            "Up/Down: choose   Enter: accept   Esc: rewrite".into(),
-        ],
+        // The disc window carries the question; its own rows would cover the answers.
+        Mode::Confirm => Vec::new(),
     };
     for (row, hint) in hints.iter().enumerate() {
         let small = format!(
@@ -229,4 +222,57 @@ pub(super) fn draw(
             230.0,
         );
     }
+}
+
+#[derive(Component)]
+pub(super) struct CheckPart;
+
+/// The disc's "Is this OK?" window over the diary while confirming; rebuilt every frame because
+/// its slide, blink and answer window animate.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn draw_check(
+    mut commands: Commands,
+    room: Res<PlayerRoom>,
+    disc: Option<Res<GameDisc>>,
+    font: Res<MsgAssets>,
+    mut assets: ResMut<DiaryAssets>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut n64: ResMut<Assets<N64Material>>,
+    mut images: ResMut<Assets<Image>>,
+    old: Query<Entity, With<CheckPart>>,
+) {
+    for entity in &old {
+        commands.entity(entity).despawn();
+    }
+    let (Some(view), Some(disc)) = (room.diary_ui.as_ref(), disc.as_deref()) else {
+        return;
+    };
+    if view.mode != Mode::Confirm {
+        return;
+    }
+    let root = commands
+        .spawn((
+            CheckPart,
+            Name::new("monthly diary check"),
+            Transform::from_xyz(0.0, -view.check.slide.pos * 16.0, 0.0),
+            Visibility::default(),
+        ))
+        .id();
+    let mut stores = crate::shop_nook::editor::Stores {
+        meshes: &mut meshes,
+        n64: &mut n64,
+        images: &mut images,
+        materials: &mut materials,
+    };
+    crate::edit_end_chk_ui::spawn(
+        &mut commands,
+        root,
+        &mut assets.skin,
+        disc,
+        &font,
+        &mut stores,
+        &view.check,
+        220.0,
+    );
 }

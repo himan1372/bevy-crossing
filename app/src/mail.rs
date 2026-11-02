@@ -894,21 +894,11 @@ fn mail_ui_input(
                     ui.end_check = None;
                     finish_letter(&mut ui, &mut mailbox, &mut inventory, &identity.player);
                 }
-                Some(Answer::Rewrite) => {
+                Some(Answer::Rewrite | Answer::ThrowOut) => {
                     // The editor opens again on the same text, its cursor back at the start.
+                    // mEE_TYPE_BOARD has only Yes and Rewrite.
                     ui.end_check = None;
                     ui.write_cursor = Some(0);
-                }
-                Some(Answer::ThrowOut) => {
-                    ui.end_check = None;
-                    ui.writing = false;
-                    ui.write_paper = None;
-                    ui.rewriting = None;
-                    ui.write_text.clear();
-                    ui.write_cursor = None;
-                    if ui.from_pockets {
-                        ui.open = false;
-                    }
                 }
                 None => {}
             }
