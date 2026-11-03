@@ -20,6 +20,7 @@ mod disc_town;
 mod ecology;
 mod edit_end_chk_ui;
 mod environment;
+mod event_today;
 mod face;
 mod field_items;
 mod field_rank;
@@ -182,6 +183,7 @@ fn main() {
         .add_plugins(PocketsPlugin)
         .add_plugins(warning_panel::WarningPanelPlugin)
         .add_plugins(ClockPlugin)
+        .add_plugins(event_today::EventTodayPlugin)
         .add_plugins(idle_clock::IdleClockPlugin)
         .add_plugins(post_office::PostOfficePlugin)
         .add_plugins(police_box::PoliceBoxPlugin)
