@@ -127,3 +127,6 @@ after-select discard positioning. Long From label and both letter-grid edges
 inspected; cursor/root continuity, return/reset and numeric cancellation pass.
 The port's single-line From/To label is retained; source multi-line special mail/
 quest families and Philip acceptance remain separate. No mail transactions changed.
+
+## Acceptance 2026-11-03
+Philip accepted this (mail screens). Closed by claude; M4 stays open.
