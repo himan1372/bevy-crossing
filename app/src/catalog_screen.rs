@@ -448,6 +448,9 @@ struct CatalogPreview {
     center: Vec3,
     scale: f32,
     yaw: f32,
+    /// `mCL_furniture_init`: the table's scale and height with the profile's scale, for a piece the
+    /// original draws from `furniture_draw_data`; the others are fitted to their bounds.
+    exact: Option<(f32, f32, f32)>,
 }
 
 /// Circle centre on the talk-window camera, in overlay units.
@@ -763,12 +766,19 @@ fn show_preview(
         RenderLayers::layer(PREVIEW_LAYER),
         ChildOf(root),
     ));
+    let exact = crate::furniture::furniture_index(item).and_then(|index| {
+        let index = u16::try_from(index).ok()?;
+        let (scale, pos_y) = rustimal_logic::catalog_draw::draw_for(index)?;
+        let profile = crate::furniture::gameplay_profile(&disc, index)?;
+        Some((scale, pos_y, profile.scale))
+    });
     commands.entity(piece).insert((
         CatalogPreview {
             stable: 0,
             center: Vec3::ZERO,
             scale: 1.0,
             yaw: 0.0,
+            exact,
         },
         Transform::from_translation(PREVIEW_ANCHOR),
         Visibility::Hidden,
@@ -840,8 +850,15 @@ fn fit_preview(
             if !ready || count == 0 || !radius.is_finite() || radius < 1.0 {
                 continue;
             }
-            preview.center = (min + max) * 0.5;
-            preview.scale = PREVIEW_VIEW_RADIUS / radius;
+            if let Some((scale, pos_y, profile)) = preview.exact {
+                // The model origin sits at the view centre, lowered by `position.y`, and
+                // turns about the vertical through it (R * S * T * P of `mCL_furniture_draw`).
+                preview.center = Vec3::new(0.0, -pos_y / profile, 0.0);
+                preview.scale = scale * profile;
+            } else {
+                preview.center = (min + max) * 0.5;
+                preview.scale = PREVIEW_VIEW_RADIUS / radius;
+            }
             // Face the long side: the longer floor axis lies across the view.
             preview.yaw = if size.z > size.x {
                 std::f32::consts::FRAC_PI_2

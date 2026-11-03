@@ -39,6 +39,7 @@ pub mod behavior;
 mod bg_check;
 mod bridge_acre;
 mod buried_items;
+pub mod catalog_draw;
 pub mod collection;
 pub mod collision;
 mod collision_temporal;

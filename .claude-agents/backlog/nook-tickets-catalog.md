@@ -105,3 +105,13 @@ visibility (for example the display-list parts of `sum_log_hatoclk`'s joints
 Real save hash unchanged. Parent still open for the cuckoo fit and Philip's
 acceptance. QA lesson: Nook talk needs approach from his north side (message
 0x1092); blind Space presses open the pockets.
+
+## Catalog furniture draw table (2026-11-02, claude)
+`logic/src/catalog_draw.rs` is generated from `m_catalog_ovl.c` (`furniture_draw_data`, 41 entries) and `m_catalog_ovl_data.c_inc` (`mCL_furniture_list`, 601 entries); `draw_for(ftr_idx)`.
+`catalog_screen.rs` draws a listed piece at table scale x profile scale, the model origin at the view centre lowered by the table's `pos_y` (R*S*T*P of `mCL_furniture_draw`) instead of
+fitting its bounds; unlisted pieces (umbrellas, notebooks, dinosaur parts) keep the bounds fit. check / clippy / fmt pass; one own test. Driven live (bed, cabinet, clock, lamp): pieces now
+draw at the original's size, smaller than the old fit, and the tall blue clock is cut by the circle-sized viewport.
+Not done / open: the original's view is a 256 px square of a 480 px high screen centred by `change_view_proc`'s `vp_x/vp_y`, larger than the circle; making the port's viewport that big
+(tried, radius = height * 256/480 / 2) made the bed spill past the circle and over the list, so it was reverted until retail is compared. The spire's rendering cause is also open.
+QA lesson: the Temp QA teleport into the shop room does not enter the shop (`ShopLocation::Inside`), so Nook will not talk or follow; walk in through the door (KeyD 0.5 s, KeyW 1.2 s from the
+plaza start), wait ~4 s for his greeting, then use the teleport helper.
