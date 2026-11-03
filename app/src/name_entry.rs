@@ -1,6 +1,6 @@
-//! The name window of `m_ledit_ovl.c` (`mLE_TYPE_PLAYER_NAME`, `mLE_TYPE_COUNTRY_NAME`): a titled
-//! window that slides in from the top with the editor's keyboard coming up from the bottom, and a
-//! single-line field of eight characters. Ending the edit is refused for an empty name and for the
+//! The name window of `m_ledit_ovl.c` (`mLE_TYPE_PLAYER_NAME`, `mLE_TYPE_COUNTRY_NAME`,
+//! `mLE_TYPE_REQUEST`): a titled window that slides in from the top with the editor's keyboard coming up
+//! from the bottom, and a single-line field of eight characters (sixteen for a song request). Ending the edit is refused for an empty name and for the
 //! disc's list of banned words (`mED_all_space_check`, `mED_ng_word_check`).
 use bevy::camera::visibility::RenderLayers;
 use bevy::input::keyboard::{Key, KeyboardInput};
@@ -19,9 +19,13 @@ use crate::pockets_disc::Paint;
 pub enum Kind {
     Player,
     Country,
+    /// K.K. Slider's "Request a song!" (`mLE_TYPE_REQUEST`, `mIN_ITEM_NAME_LEN` = 16).
+    Request,
 }
 
-/// `mLE_win_data`: the window's art, title, where the field sits and its ink.
+/// `mLE_win_data`: the window's art, title, where the field sits and its ink. `edit_at` is the table's
+/// `edit_ofs` (the first pair), `title_at` its `title_ofs` (the second); `mLE_set_dl` draws the field text at
+/// the first and the title at the second.
 struct Window {
     mode: &'static str,
     model: &'static str,
@@ -38,21 +42,48 @@ impl Kind {
                 mode: "nam_win_mode",
                 model: "nam_win_model",
                 title: "Enter your name.",
-                title_at: Vec2::new(120.0, 72.0),
-                edit_at: Vec2::new(132.0, 45.0),
+                title_at: Vec2::new(132.0, 45.0),
+                edit_at: Vec2::new(120.0, 72.0),
                 ink: [0, 0, 255, 255],
             },
             Kind::Country => Window {
                 mode: "mra_win_mode",
                 model: "mra_win_model",
                 title: "Enter Destination.",
-                title_at: Vec2::new(118.0, 74.0),
-                edit_at: Vec2::new(134.0, 43.0),
+                title_at: Vec2::new(134.0, 43.0),
+                edit_at: Vec2::new(118.0, 74.0),
                 ink: [215, 15, 0, 255],
+            },
+            Kind::Request => Window {
+                mode: "req_win_mode",
+                model: "req_win_model",
+                title: "Request a song!",
+                title_at: Vec2::new(138.0, 41.0),
+                edit_at: Vec2::new(82.0, 76.0),
+                ink: [50, 50, 235, 255],
             },
         }
     }
+
+    /// Characters the field takes (`PLAYER_NAME_LEN`, `LAND_NAME_SIZE`, `mIN_ITEM_NAME_LEN`).
+    fn max_len(self) -> usize {
+        match self {
+            Kind::Player | Kind::Country => 8,
+            Kind::Request => FIELD,
+        }
+    }
+
+    fn slot(self) -> usize {
+        match self {
+            Kind::Player => 0,
+            Kind::Country => 1,
+            Kind::Request => 2,
+        }
+    }
 }
+
+/// The field's storage: the longest of the kinds.
+const FIELD: usize = 16;
 
 /// `mED_NG_WORD_START` and the lengths of its `mED_NG_WORD_NUM` words.
 const NG_WORD_START: usize = 0x74A;
@@ -70,7 +101,7 @@ const ERROR: u16 = 0x1003;
 
 struct View {
     kind: Kind,
-    field: kb::Field<8>,
+    field: kb::Field<FIELD>,
     keyboard: kb::Keyboard,
     repeat: kb::ButtonRepeat,
     held: crate::shop_nook::editor::Held,
@@ -80,7 +111,7 @@ struct View {
     /// `mSM_MOVE_IN_BOTTOM` / `OUT_BOTTOM`: the keyboard.
     keys: Slide,
     /// The name, once it has been accepted; the window is leaving.
-    accepted: Option<[u8; 8]>,
+    accepted: Option<[u8; FIELD]>,
     just_opened: bool,
     revision: u64,
 }
@@ -89,7 +120,7 @@ struct View {
 #[derive(Resource, Default)]
 pub(crate) struct NameEntry {
     view: Option<View>,
-    finished: Option<[u8; 8]>,
+    finished: Option<[u8; FIELD]>,
 }
 
 impl NameEntry {
@@ -118,6 +149,15 @@ impl NameEntry {
 
     /// The name, once the window has left.
     pub(crate) fn take(&mut self) -> Option<[u8; 8]> {
+        self.finished.take().map(|t| {
+            let mut name = [0; 8];
+            name.copy_from_slice(&t[..8]);
+            name
+        })
+    }
+
+    /// The song request, once the window has left (sixteen characters, space padded).
+    pub(crate) fn take_request(&mut self) -> Option<[u8; FIELD]> {
         self.finished.take()
     }
 }
@@ -135,7 +175,7 @@ fn direction(keys: &ButtonInput<KeyCode>) -> Option<kb::Direction> {
 }
 
 /// `mED_all_space_check` / `mED_ng_word_check`: whether the name may be kept.
-fn acceptable(field: &kb::Field<8>, disc: &GameDisc) -> bool {
+fn acceptable(field: &kb::Field<FIELD>, disc: &GameDisc) -> bool {
     if field.text[..field.len].iter().all(|&c| c == kb::CHAR_SPACE) {
         return false;
     }
@@ -155,7 +195,7 @@ fn acceptable(field: &kb::Field<8>, disc: &GameDisc) -> bool {
 }
 
 fn type_code(view: &mut View, code: u8) {
-    if view.field.insert(code) {
+    if view.field.len < view.kind.max_len() && view.field.insert(code) {
         crate::shop_nook::editor::speak(code, false);
     } else {
         crate::sound::se(ERROR);
@@ -355,7 +395,7 @@ fn creep(
 #[derive(Resource, Default)]
 pub(crate) struct NameAssets {
     slide: f32,
-    windows: [Option<Model>; 2],
+    windows: [Option<Model>; 3],
     root: Option<Entity>,
     shown: Option<(Kind, u64, bool)>,
     skin: crate::shop_nook::editor::Skin,
@@ -368,8 +408,8 @@ struct WindowRoot;
 struct KeyboardGroup;
 
 /// The width in pixels of the field's first `chars` characters.
-fn width_before(field: &kb::Field<8>, chars: usize, widths: &[u8; 256]) -> f32 {
-    field.text[..chars.min(8)]
+fn width_before(field: &kb::Field<FIELD>, chars: usize, widths: &[u8; 256]) -> f32 {
+    field.text[..chars.min(FIELD)]
         .iter()
         .map(|&c| f32::from(widths[usize::from(c)]))
         .sum()
@@ -401,7 +441,7 @@ fn draw(
     if assets.shown == Some(signature) && assets.root.is_some() {
         return;
     }
-    let slot = usize::from(view.kind == Kind::Country);
+    let slot = view.kind.slot();
     if assets.windows[slot].is_none() {
         let window = view.kind.window();
         let lists: Vec<_> = ["ledit_common_mode", window.mode, window.model]

@@ -14,9 +14,13 @@
 //! record), says `+10`, puts the disc in the pockets and hands it over with `+0xC` (`+0xB` when the pockets
 //! are full).
 //!
-//! Not built yet: the typed request (the letter-editor submenu behind the offer's second answer), the live
-//! song and the staff-roll cinematic that the original plays between `+10` and the gift (`mikanbox`,
-//! `majin5`, `think` ROLL states), his guitar animation (`aNPC_ANIM_ENSOU_E1`).
+//! The offer's second answer opens the request window (`mLE_TYPE_REQUEST`, sixteen characters): the typed
+//! text must equal a disc minidisk name exactly (padded with spaces, `mem_cmp`); a match gives that song
+//! (`+8` for songs from 0x34 on, else `+9`, then the gift as above), anything else gets `+6` and no disc.
+//!
+//! Not built yet: the live song and the staff-roll cinematic that the original plays between the pick and
+//! the gift (`mikanbox`, `majin5`, `think` ROLL states; for an unknown request he plays a random bonus
+//! tune), his guitar animation (`aNPC_ANIM_ENSOU_E1`).
 
 use bevy::prelude::*;
 use rustimal_logic::event_schedule::ev;
@@ -135,6 +139,8 @@ enum Step {
     Greeting { next: Vec<Option<usize>> },
     /// The offer's question is up (`+5`).
     Offer,
+    /// The request window is open.
+    Typing,
     /// `+10` is up; the gift follows (`Some(item)`, or `None` when the pockets were full).
     Picked(Option<u16>),
     /// `+0xC` is up: the disc changes hands when it ends.
@@ -219,6 +225,42 @@ fn pick_song(
     song
 }
 
+/// The disc minidisk names as the editor holds them: sixteen codes, space padded (`mLE_md_name`).
+fn song_name_codes(name: &str) -> [u8; 16] {
+    let mut codes = [rustimal_logic::editor_keyboard::CHAR_SPACE; 16];
+    for (slot, ch) in codes.iter_mut().zip(name.chars()) {
+        *slot = crate::messages::ac_code_opt(ch).unwrap_or(0);
+    }
+    codes
+}
+
+/// `mLE_move_Wait`: the song whose name the typed text equals, if any.
+fn requested_song(typed: &[u8; 16]) -> Option<u8> {
+    (0..rustimal_logic::radio::MINIDISK_NUM as u8).find(|&song| {
+        let name = crate::items::name(native::collection::MINIDISK_START + u16::from(song));
+        !name.is_empty() && song_name_codes(&name) == *typed
+    })
+}
+
+/// `aTTN_give_merody`: the disc goes into the pockets now (none free, none given), and a given one is
+/// recorded as an aircheck for this player and this evening.
+fn give_song(
+    song: u8,
+    inventory: &mut PlayerInventory,
+    identity: &mut crate::save::PlayerIdentity,
+    visit: &mut Visit,
+) -> Option<u16> {
+    let item = native::collection::MINIDISK_START + u16::from(song);
+    if !inventory.add(item) {
+        return None;
+    }
+    let [w0, w1] = identity.kk_aircheck;
+    let (w0, w1) = native::collect(w0, w1, song);
+    identity.kk_aircheck = [w0, w1];
+    visit.aircheck = true;
+    Some(item)
+}
+
 /// He turns to face the player while they talk.
 fn face(
     time: Res<Time>,
@@ -257,6 +299,7 @@ fn talk(
     mut handover: ResMut<HandOver>,
     mut identity: ResMut<crate::save::PlayerIdentity>,
     mut rand: ResMut<crate::game_rand::GameRand>,
+    mut names: ResMut<crate::name_entry::NameEntry>,
 ) {
     let Some(disc) = disc.filter(|d| d.text.is_some()) else {
         return;
@@ -267,6 +310,43 @@ fn talk(
     let Ok((actor, actor_at)) = kk.single() else {
         return;
     };
+    // `aNTT_talk_submenu2`: the window has gone; what was typed decides the song.
+    if matches!(flow.step, Step::Typing) {
+        let Some(typed) = names.take_request() else {
+            return;
+        };
+        *focus = InputFocus::Dialogue;
+        let text: String = typed
+            .iter()
+            .map(|&c| crate::messages::char_of(c).unwrap_or('?'))
+            .collect::<String>()
+            .trim_end()
+            .to_string();
+        flow.context.items[3] = text.clone();
+        match requested_song(&typed) {
+            Some(song) => {
+                flow.context.items[2] =
+                    crate::items::name(native::collection::MINIDISK_START + u16::from(song));
+                let visit = &mut flow.visit;
+                let given = give_song(song, &mut inventory, &mut identity, visit);
+                info!(
+                    "K.K. Slider: requested {text:?} is song {song}, given: {}",
+                    given.is_some()
+                );
+                let offset = if native::request_is_long(song) { 8 } else { 9 };
+                say(&disc, &mut dialogue, actor, &flow.context, msg(offset));
+                flow.step = Step::Picked(given);
+            }
+            None => {
+                // He does not know it: a random bonus tune that the cinematic would play, and no disc.
+                let bonus = native::request_fallback_song(rand.0.random(3) as u8);
+                info!("K.K. Slider: requested {text:?} is unknown; bonus tune {bonus}");
+                say(&disc, &mut dialogue, actor, &flow.context, msg(6));
+                flow.step = Step::Close;
+            }
+        }
+        return;
+    }
     // Only his own answers; other talkers in town take theirs.
     let answer = if dialogue.speaker == Some(actor) {
         dialogue.external_result.take()
@@ -311,22 +391,20 @@ fn talk(
                     let name = crate::items::name(item);
                     flow.context.items[1] = name.clone();
                     flow.context.items[2] = name;
-                    // `aTTN_give_merody`: the disc goes into the pockets now; none free, none given.
-                    let given = inventory.add(item);
-                    if given {
-                        let [w0, w1] = identity.kk_aircheck;
-                        let (w0, w1) = native::collect(w0, w1, song);
-                        identity.kk_aircheck = [w0, w1];
-                        flow.visit.aircheck = true;
-                    }
-                    info!("K.K. Slider picked song {song} (disc {item:#06x}), given: {given}");
+                    let visit = &mut flow.visit;
+                    let given = give_song(song, &mut inventory, &mut identity, visit);
+                    info!(
+                        "K.K. Slider picked song {song} (disc {item:#06x}), given: {}",
+                        given.is_some()
+                    );
                     say(&disc, &mut dialogue, actor, &flow.context, msg(10));
-                    flow.step = Step::Picked(given.then_some(item));
+                    flow.step = Step::Picked(given);
                 }
                 _ => {
-                    // The typed request needs the letter editor; not built.
-                    info!("K.K. Slider: the song request is not built yet");
-                    end(&mut dialogue, &mut focus, &mut flow);
+                    // `aNTT_talk_select1`: the window for the typed request.
+                    *dialogue = DialogueState::default();
+                    names.begin(crate::name_entry::Kind::Request);
+                    flow.step = Step::Typing;
                 }
             },
             Step::Picked(Some(item)) => {
@@ -346,7 +424,9 @@ fn talk(
                 });
                 flow.step = Step::Handing;
             }
-            Step::Close | Step::Handing | Step::Idle => end(&mut dialogue, &mut focus, &mut flow),
+            Step::Close | Step::Handing | Step::Typing | Step::Idle => {
+                end(&mut dialogue, &mut focus, &mut flow)
+            }
         }
         return;
     }
