@@ -69,6 +69,7 @@ pub mod edit_end_check;
 pub mod engine_tables;
 pub mod event_day;
 pub mod event_map_npc;
+pub mod event_schedule;
 pub mod event_visitors;
 pub mod famicom;
 pub mod field_assessment;
