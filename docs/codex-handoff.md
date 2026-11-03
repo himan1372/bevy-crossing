@@ -1,25 +1,170 @@
 # Codex handoff - 2026-10-25
 
-## Philip's handoff request - 2026-10-31 (read first)
+## Claude session - 2026-11-02/03 (NEWEST; read first, it supersedes the budget wrap-up below)
 
-Philip explicitly requested this update and instructed the next agent to list
-the three remaining intro priorities at the END of its first catch-up reply.
-Use the exact order and scope listed at the end of this file. These replace the
-older seasonal-work recommendation for this continuation. Do not start any of
-the three without Philip selecting it.
+Identity `claude`, `main`, pushed (last code commit `209c4304`). Uncommitted and not to be committed: `.gitignore`, `savegame.json`. Real save never used for automation (Temp copies of the capture exe,
+synthetic saves; `qa.py` helpers in `Temp/bevy-*-20261102`). The inventory-mail-polish work noted below as incomplete was finished by this session (commits `898244b9`..`3f77754c`, see its completed note).
 
-Published main: **65eae995** (native NPC speed correction), following
-**fe1a3b2e** (Nook welcome, house selection/payment and first-job handoff).
-Philip said the Nook flow works, then requested original-game NPC speeds; the
-speed fix is built, measured and pushed, with his visual acceptance still open.
-All required builds/checks passed; no tests added/run. Both tasks are completed.
+Done, each with a note in `.claude-agents/completed/`:
+- **Notice board end-of-edit window** (`notice-board-edit-end-check`): the board's own Post it / Keep writing / Never mind list is replaced by the shared `EditEndCheck::with_answers(3)`
+  (`mEE_TYPE_NOTICE`), drawn by `notice_board/render.rs::draw_check`. Driven live: Rewrite, Yes (one notice posted), Throw it out.
+- **Mail QA** (`mail-qa-remaining`, `mail-qa-written`): paging past page 1, right-edge tag flip, the three tag arrow variants, Museum / villager colours, Rewrite cancel and commit, full-mailbox Write
+  refusal all passed with no code change. **Rewrite now keeps the letter's own addressee** (`mail.rs`; the original opens the board on the letter, only Write uses the address book). Hint line still
+  says "PgUp/PgDn: change" for a one-entry list (cosmetic).
+- **Catalog circle** (`nook-tickets-catalog`, accepted by Philip): `logic/src/catalog_draw.rs` is the original's `furniture_draw_data` (41) + `mCL_furniture_list` (601); `catalog_screen.rs` draws listed pieces
+  at table scale x profile scale and looks at 25 units above the model origin (`change_view_proc(330, 25, ..)`; every piece used to sit too high). Unlisted pieces keep the bounds fit. Open, not scheduled:
+  the original's viewport is a 256 px square of a 480 px high screen (larger than the circle); a bigger port viewport made the bed spill over the list, so it is not applied.
+- **Migration slice 1** (`migrate-event-day`): `logic/src/event_day.rs` copied from rustimal-crossing (`pc_ed_*` ABI removed), 7 own tests, not called by the app yet. 94 Rustimal modules are still
+  source-only (`rust/src` vs `logic/src`): `game_math` + `game_math_tables` are needed by `calendar.rs`; then the event actors (`totakeke`, `gulliver`, `fireworks`, `harvest`, `halloween`, ...). Reuse the
+  existing `logic/` modules first (memory rule) and check each against the original C.
+- Closed by Philip's acceptance: `retail-mail-ui`, `net-render-fidelity`, `nook-tickets-catalog`. Still open and waiting on Philip: `retail-pockets-ui`, `retail-shop-ui`, the four audio notes. `retire-town-gen`
+  is NOT wanted (Philip: town_gen does not need retiring); its backlog note has an audit I wrote, ignore it.
 
-Last interactive preview: PID24212, executable
-Temp/bevy-npc-retail-speed-20261031/nook-qa.exe, launched at the station with
-synthetic save and corrected speeds. It may have been closed since: verify its
-identity and owned-pid.txt/log-name.txt before attaching or stopping it. No
-automated input is pending. Preserve the real save and unrelated .gitignore.
-Read the task notes below for source evidence and remaining fidelity limits.
+QA traps learned: the Temp QA teleport into the shop room does not enter the shop (`ShopLocation::Inside`), so Nook will neither talk nor follow; walk in through the door (KeyD 0.5 s, KeyW 1.2 s from the plaza
+start), wait about 4 s for the greeting, then use the teleport helper. Pockets reopen with the cursor where it was left; navigate by screenshot. `Escape` in the pockets grid closes the whole panel.
+
+### FIRST THING TO DO (Philip's instruction)
+In your first reply, after catching up, give Philip a list of **3-4 things we should do next**, each with one line on why, then stop and wait for him to choose. Candidates to weigh: migration slice 2
+(`game_math`, then `calendar.rs`) and the event actors; closing the open acceptance notes; the catalog viewport size against retail; wiring `event_day` into the app's holiday handling.
+
+## Budget wrap-up - 2026-11-02 (older)
+
+Philip has under3% weekly usage left and requested an immediate wrap-up/handoff.
+Stop further builds/runtime work this session. Main/origin main are **915ede8c**.
+The current **inventory-mail-polish** implementation is UNCOMMITTED and INCOMPLETE;
+preserve it and resume its existing plan rather than starting another feature.
+Philip already selected this work ("inve/mail"); no new scope-selection question
+is needed when he resumes. This section supersedes stale instructions below.
+
+### Completed and accepted this session
+
+915ede8c restores native fish/bug inventory pages, saved actual-catch records,
+wallet deposit/withdraw controls and the native42-tick counter animation, plus
+idle-clock intro/modal/pause/widescreen adapters. Check/clippy/fmt and capture/
+default/release passed; release5m36s. Real Cricket catch, exact transactions and
+refusals, animated counter intermediates, F9, month rollover, intro and no-disc
+were checked. All owned previews closed. Evidence: Temp/bevy-hud-20261101.
+Task: .claude-agents/completed/retail-hud-followup.md. Philip said **"they work"**
+before selecting inventory/mail next; record that acceptance without closing M4.
+Custom design/editor is still absent (he asked whether it worked; no build request).
+Old catch history was not recorded. Full inventory page-exchange motion and native
+held withdrawal-bag choreography remain separate presentation work.
+
+### Current partial work and exact resume point
+
+Task: .claude-agents/backlog/inventory-mail-polish.md.
+Spec/plan: docs/superpowers/specs/2026-11-01-inventory-mail-design.md and
+docs/superpowers/plans/2026-11-01-inventory-mail.md.
+
+- Parent changes: pockets_disc.rs; tags.rs; tags/layout.rs; tags/presentation.rs;
+  NEW tags/label.rs. Native sen_qitem frame/shadow/six pointers, three-line
+  Letter to / Delivery for labels, colored names,0.75 typography, native special
+  parent action placement. Labels use existing letter/active delivery/first-job
+  metadata; no save schema or item-condition changes. Ordinary tag APIs retained.
+- One reused subagent changed ONLY mail_disc.rs: native menu Slide for paper and
+  keyboard, notice_board::Roll for body cursor following, actual stationery for
+  Write/Rewrite, retained close snapshot, ResetAudio cleanup. Static paper moves
+  as a whole in native m_board_ovl; there is no deformation rig. Writing ink at209
+  sits below editor210+, allowing all six lines instead of old five-line crop.
+- Parent integration in mail.rs/input.rs: clear input events and hold actions
+  while MailPresentation::busy(); retain Mail focus while closing().
+- Last verification: cargo fmt --all then **cargo check --workspace -j1 PASSED**
+  (10.45s). Initial Rust visibility errors were fixed with pub(in crate::pockets_disc).
+  No clippy, capture/default/release build or runtime QA for this partial task.
+  No tests added/run. The final requested subagent review failed from usage limit;
+  do NOT treat it as a clean review. No preview or Cargo process remains running.
+
+Resume by reviewing the diff and native source, then finishing gates and Temp QA.
+Specific review concern: delivery_label currently requires first-job pockets_idx
+to equal the selected slot; existing first_job_talk searches all slots, so moving
+the quest item could lose its special label. Check ownership semantics before
+changing it. Also verify special arrow variants/action bounds, rich name colors,
+paper/editor timing/depth, rapid close/reopen and input release/no leaked typing.
+Drive read, Write/cancel, Rewrite/cancel/commit, long legacy paging, presents and
+refusals with complete numeric comparisons. F4 still uses the existing direct
+commit; native edit-end confirmation is a separate gap, not implemented here.
+
+Original C: m_tag_ovl.c1360-1450/1696-2000/2280-2420/8260-8830,
+m_quest.c449+, m_board_ovl.c and existing notice_board Roll/Slide integration.
+Older completed retail-tag-art/layout-motion and letters-retail-grid notes are
+relevant; accent/voices already completed later and must not be rebuilt.
+
+Task ownership is released at this handoff, not completed. No partial gameplay
+commit/push. Finish review/QA/builds, update roadmaps/comms, complete claim and
+publish explicit task files after resuming. Preserve unrelated .gitignore and
+the existing older handoff edits. Real save/settings were never used for automation;
+actual save SHA256 remains
+0495927D27B005E9FD0A4AED424EAAD883F56BBD8A9C4F5910167C1F9BBB1BD9.
+
+Current next steps:
+1. Finish the existing uncommitted inventory/mail tags and paper-motion task.
+2. Philip play-checks special tags, letter reading/writing/Rewrite and transitions.
+3. Reconcile remaining M4 shop/audio/render/UI polish against completed notes;
+   custom designs, title/rename and held-net appearance remain separate/deferred.
+
+## Philip's handoff request - 2026-11-01 (read first)
+
+Philip requested a fast handoff update. The next agent MUST END its first
+catch-up reply with the numbered next steps at the bottom of this file, then
+wait for Philip to select work. The previous three intro priorities are all
+implemented; do not propose them again as missing. Historical entries below
+can be stale: newer completed task notes take precedence. Philip explicitly
+said this handoff-only edit does not need a task claim or coordination work.
+
+Published main: **72adeb3c** (retail pause/save), following **9f7f5c63** (intro
+reactions), **53c42320** (intro cameras and smoke hitch fix), **407d40a6** (train
+engineer/smoke/steam/sounds). All implementation tasks are completed and pushed.
+Final check/clippy/fmt and capture/default/release builds passed; no tests added
+or run. Philip confirmed the prior corrected build "was smooth" before selecting
+reactions. New reaction/pause visual/audio acceptance and broader M4 remain open.
+
+### Latest pause/save work
+
+P opens the native30CD save question and select1AE/1AF Save & Quit / Save &
+Continue choices, rendered with runtime-disc message/choice/font/cursor assets.
+P/Escape resumes; F1 opens PC Settings and confirmed Quit without saving.
+Choices sit above the question for readability. Settings supports physical
+Enter/NumpadEnter/Escape/Backspace, P as text and preservation of other keys.
+The world stays paused through the actual synchronous save result; only success
+can reach the saved/quit acknowledgement. Failed saves offer retry/back.
+The writer uses a unique exclusive same-directory temporary, write/sync/close,
+then rename-replace; failures preserve the old save and clean their temporary.
+Simultaneous P+save/retry cannot accidentally resume the world.
+
+Native and no-disc resume/cancel/settings/save/F9/quit paths passed with a
+synthetic town: Bells543, loan17400, house2, quest item slot7/condition32768,
+room and identity retained. Failed settings writes, destination-directory and
+locked-original-save failures were driven; old bytes stayed intact, retry
+succeeded,0 temporary files remained, and both explicit exit paths exited.
+Release5m20s passed. Task: .claude-agents/completed/retail-pause-ui.md.
+Plan: docs/superpowers/plans/2026-11-01-retail-pause-save.md.
+This adapts the save conversation to PC pause; it does not implement the full
+gyroid/house save scene or the deferred title screen.
+
+### Intro and performance continuation
+
+Train engineer, native smoke/steam and train audio are implemented. Cameras use
+native arrival release/Nook framing with temporary foreground culling. The smoke
+hitch was full-town material invalidation on every puff birth/death; environment
+now initializes only Added/Loaded materials and refreshes existing ones on time/
+scene changes. Preserve this fix; never key lighting refresh on material count.
+Rover/Nook now use16 native reaction orders,27 disc clips, eye/mouth metadata,
+7 feel effects plus bulb glow/sounds. Scripted sitting/phone/movement/handovers
+retain ownership. Rover's final sit releases to seated idle for its last reactions.
+Full train and Nook refusal/acceptance/repeat/payment-cancel/Give flow passed;
+home2/loan17400/starting bag removed. All15 pooled effect meshes hide afterward;
+F9 and missing-disc numeric retention passed. Bounded final smoke/reaction/walking
+peaks18.24/16.61/15.81ms; launches vary, so do not claim exact FPS parity/speedup.
+Task notes: completed/intro-train-effects.md, completed/intro-camera-framing.md,
+completed/intro-dialogue-reactions.md under .claude-agents/.
+
+All owned previews are closed; no automated input is pending. Evidence remains
+in Temp/bevy-pause-save-20261101 and Temp/bevy-intro-reactions-20261101.
+Actual save baseline/final SHA256:
+0495927D27B005E9FD0A4AED424EAAD883F56BBD8A9C4F5910167C1F9BBB1BD9.
+Preserve unrelated .gitignore and untracked savegame.json. Actual save/settings
+were never used for automation. No tests unless Philip explicitly requests them;
+use sequential Cargo gates/builds only when code changes require them.
 
 ## NPC speed correction - 2026-10-31 (newest)
 
@@ -660,9 +805,16 @@ on the selected task; rewrite this file again when requested or when an actual
 handoff needs it. Finish with current evidence, remaining limits and ownership
 released; do not invent acceptance or silently start the next proposal.
 Complete all authorized repository work and confirm publication/status first,
-then tell Philip the next concrete step. End the first catch-up reply with these
-three priorities, in this order (do not start them without a selection):
+then tell Philip the next concrete step. The next agent MUST END its first
+catch-up reply by listing these next steps, in this order; wait for selection:
 
-1. **Train arrival:** add the engineer, smoke/steam, and train sounds.
-2. **Camera movement:** match the original arrival and Nook-tour framing.
-3. **Character reactions:** finish the original expressions and gestures during dialogue.
+1. **Finish the existing inventory/mail task:** review and verify the uncommitted
+   special tags and paper/editor motion; follow the CURRENT budget handoff above.
+2. **Philip play-checks inventory/mail:** special quest/letter labels, paper
+   transitions, reading, writing, Rewrite and input ownership.
+3. **Remaining M4 polish and acceptance:** reconcile shop/audio/render/UI gaps
+   against completed notes before coding. HUD, collections and wallet controls
+   are implemented and Philip accepted them; do not restart them as missing.
+
+Held-net appearance, title screen and rename remain deferred by Philip. M4 is
+still open; implementing individual slices does not imply blanket acceptance.
