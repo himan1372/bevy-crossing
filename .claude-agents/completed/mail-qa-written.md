@@ -12,3 +12,8 @@ Driven in `Temp/bevy-mailqa-20261102` with a synthetic 10-letter mailbox (writte
 - Write on stationery with ten letters shows "You can't carry any more letters, so you can't write a new one!".
 Observation, not changed: Rewrite keeps the addressee only if they are still in the address book; otherwise `write_recipient` falls back to the first entry (the Museum), so a letter to a villager the
 player no longer "remembers" is re-addressed on commit. Check `mAD` / `mMl` source before touching it. Philip acceptance open.
+
+## Follow-up 2026-11-03 (claude): Rewrite keeps the letter's addressee
+Original: `mTG_rewrite_proc` opens the board on the letter (`mSM_BD_OPEN_REWRITE`); only Write opens the address book (`mSM_OVL_ADDRESS`), so a rewrite never re-chooses or loses its addressee.
+`mail.rs` compose view: a rewrite of a letter with `to` now uses that single recipient (no fallback to the first address-book entry, no refusal when the book is empty). Driven live: Rewrite on the
+letter to Bluebear (not in the synthetic address book) opens "To Bluebear". The "PgUp/PgDn: change" hint still shows for a one-entry list (cosmetic). check/clippy/fmt pass.

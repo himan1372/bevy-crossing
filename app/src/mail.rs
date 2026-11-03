@@ -832,7 +832,13 @@ fn mail_ui_input(
                     .map(|(_, v)| Recipient::Villager(v.name.to_string()))
                     .collect(),
             );
-            if book.is_empty() {
+            // `mTG_rewrite_proc` opens the board on the letter itself: only Write goes through the
+            // address book, so a rewrite keeps the letter's addressee.
+            let rewrite_to = ui
+                .rewriting
+                .and_then(|i| mailbox.letters.get(i))
+                .and_then(|l| l.to.clone());
+            if book.is_empty() && rewrite_to.is_none() {
                 // mAD_PROC_REFUSE: nobody to write to.
                 ui.writing = false;
                 ui.write_paper = None;
@@ -843,21 +849,13 @@ fn mail_ui_input(
                 crate::sound::se(crate::sound::se_id::MENU_EXIT);
                 return;
             }
-            ui.write_recipients = book.entries().cloned().collect();
+            ui.write_recipients = match rewrite_to {
+                Some(to) => vec![to],
+                None => book.entries().cloned().collect(),
+            };
+            ui.write_recipient = 0;
             // The press that chose Write must not also type the first key.
             key_events.clear();
-            // Rewriting keeps the letter's addressee.
-            if let Some(to) = ui
-                .rewriting
-                .and_then(|i| mailbox.letters.get(i))
-                .and_then(|l| l.to.clone())
-            {
-                ui.write_recipient = ui
-                    .write_recipients
-                    .iter()
-                    .position(|r| *r == to)
-                    .unwrap_or(0);
-            }
         }
         if ui.end_check.is_some() {
             use rustimal_logic::edit_end_check::{Answer, Press, Sound};
