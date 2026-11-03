@@ -115,3 +115,9 @@ Not done / open: the original's view is a 256 px square of a 480 px high screen 
 (tried, radius = height * 256/480 / 2) made the bed spill past the circle and over the list, so it was reverted until retail is compared. The spire's rendering cause is also open.
 QA lesson: the Temp QA teleport into the shop room does not enter the shop (`ShopLocation::Inside`), so Nook will not talk or follow; walk in through the door (KeyD 0.5 s, KeyW 1.2 s from the
 plaza start), wait ~4 s for his greeting, then use the teleport helper.
+
+## Catalog look-at height (2026-11-02, claude)
+Philip: every piece sat too high, its bottom at the circle centre. Cause: `change_view_proc(330, 25, ..)`'s second argument is `y_lookAt`, so the original looks at 25 units above the model origin
+(`mSM_change_view`: `y_eye = y_lookAt + eye_dist * sin(angle)`); the port looked at the origin. `preview_pose` now lowers a table-drawn piece by 25. Driven live: bed, chair, desk, blue clock
+are centred and the tall clock is no longer cut at the top. The spire is moot for listed pieces (the cabin clock 0xC1 is in the table, so its bounds fit is not used). Viewport size and
+retail comparison stay open; Philip acceptance open.

@@ -791,8 +791,13 @@ fn preview_pose(preview: &CatalogPreview) -> Transform {
     // Spin around the vertical through the bounds centre. The camera, not a
     // tilt of the mesh, is what looks slightly down on the side.
     let rotation = Quat::from_rotation_y(preview.yaw);
+    // `change_view_proc(330, 25, ..)`: the original looks at 25 units above the model origin, so
+    // a piece drawn from its origin stands below the view centre.
+    let look_at = if preview.exact.is_some() { 25.0 } else { 0.0 };
     Transform {
-        translation: PREVIEW_ANCHOR - rotation * (preview.center * preview.scale),
+        translation: PREVIEW_ANCHOR
+            - Vec3::Y * look_at
+            - rotation * (preview.center * preview.scale),
         rotation,
         scale: Vec3::splat(preview.scale),
     }
