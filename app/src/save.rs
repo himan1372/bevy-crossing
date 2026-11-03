@@ -68,6 +68,12 @@ pub(crate) struct PlayerIdentity {
     /// The new-game intro has been played (or skipped). Saves from before it never run it.
     #[serde(default = "intro_done_on")]
     pub intro_done: bool,
+    /// `mPr_FLAG_TOTAKEKE_INTRODUCTION`: K.K. Slider has introduced himself to this player.
+    #[serde(default)]
+    pub kk_introduced: bool,
+    /// `aircheck_collect_bitfield[2]`: the K.K. songs this player has been given (bit n = song n).
+    #[serde(default)]
+    pub kk_aircheck: [u32; 2],
 }
 
 fn map_flag_on() -> bool {
@@ -164,6 +170,8 @@ impl Default for PlayerIdentity {
             map_flag: true,
             first_job: None,
             intro_done: false,
+            kk_introduced: false,
+            kk_aircheck: [0; 2],
         }
     }
 }
