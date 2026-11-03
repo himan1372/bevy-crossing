@@ -170,7 +170,7 @@ impl Town {
 
     /// Public buildings, posed player-home bodies, board units and house
     /// accessories block movement; the reserved cells around them don't.
-    fn in_retail_obstacle(&self, p: Vec3) -> bool {
+    pub fn in_retail_obstacle(&self, p: Vec3) -> bool {
         let Some(retail) = &self.retail else {
             return false;
         };

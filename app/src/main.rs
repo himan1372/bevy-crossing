@@ -49,6 +49,7 @@ mod intro_train;
 mod items;
 mod joan;
 mod job_end;
+mod kk_slider;
 mod locomotion;
 mod mail;
 mod mail_disc;
@@ -192,6 +193,7 @@ fn main() {
         .add_plugins(museum_insect::MuseumInsectPlugin)
         .add_plugins(copper::CopperPlugin)
         .add_plugins(joan::JoanPlugin)
+        .add_plugins(kk_slider::KkSliderPlugin)
         .add_plugins(field_rank::FieldRankPlugin)
         .add_plugins(post::PostPlugin)
         .add_plugins(catalog::CatalogPlugin)

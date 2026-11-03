@@ -647,3 +647,5 @@
 {"action":"complete","task":"migrate-event-actors-3","agent":"claude","timestamp":"2026-11-03T20:09:07Z"}
 {"action":"claim","task":"migrate-modules-4","agent":"claude","timestamp":"2026-11-03T20:14:27Z"}
 {"action":"complete","task":"migrate-modules-4","agent":"claude","timestamp":"2026-11-03T20:16:40Z"}
+{"action":"claim","task":"event-schedule-resolver","agent":"claude","timestamp":"2026-11-03T20:22:07Z"}
+{"action":"complete","task":"event-schedule-resolver","agent":"claude","timestamp":"2026-11-03T20:47:26Z"}

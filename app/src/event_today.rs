@@ -66,7 +66,7 @@ fn describe(events: &[ActiveEvent], hour: u8) -> String {
     }
 }
 
-fn refresh(mut today: ResMut<TodayEvents>) {
+pub fn refresh(mut today: ResMut<TodayEvents>) {
     let n = clock::now();
     let now = to_schedule_now(&n);
     let date = (n.year, n.month, n.day);
