@@ -13,3 +13,8 @@ Code done: the notice board's own Post it / Keep writing / Never mind list is re
 (`mEE_TYPE_NOTICE`, window `win_data[1]`) drawn by `render::draw_check` through `edit_end_chk_ui`. Yes posts, Rewrite reopens the editor,
 Throw it out returns to the last page (`mNT_move_Obey`). check / clippy -D warnings / fmt pass. **Not run in the game**: no Temp-copy QA of
 F4 -> window -> each answer yet; the window's depth (z 220) over the board is a copy of the diary's. Philip acceptance open.
+
+## QA 2026-11-02 (claude)
+Driven in `Temp/bevy-notice-20261102` (capture exe copy, synthetic save, board at world (0.0, -24.5)): F4 -> the question slides in and blinks ("Is this OK?"), a first accept opens the three answers
+over the paper (depth correct), Rewrite reopened the editor on the same text (one more char typed, F4 again), Yes posted exactly one notice (4 chars, saved `notices` has 1 entry), Throw it out on a
+second draft returned to the last page with no new notice. Real save untouched. Not driven: Escape-as-Rewrite, the first-job notice finish, a full six-line post. Philip acceptance open.
