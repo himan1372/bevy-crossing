@@ -121,3 +121,6 @@ Philip: every piece sat too high, its bottom at the circle centre. Cause: `chang
 (`mSM_change_view`: `y_eye = y_lookAt + eye_dist * sin(angle)`); the port looked at the origin. `preview_pose` now lowers a table-drawn piece by 25. Driven live: bed, chair, desk, blue clock
 are centred and the tall clock is no longer cut at the top. The spire is moot for listed pieces (the cabin clock 0xC1 is in the table, so its bounds fit is not used). Viewport size and
 retail comparison stay open; Philip acceptance open.
+
+## Acceptance 2026-11-02
+Philip accepted the catalog (previews with the original draw table and look-at height). Remaining, not scheduled: viewport size against retail. M4 stays open.
