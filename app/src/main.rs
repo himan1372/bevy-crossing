@@ -27,6 +27,7 @@ mod face;
 mod field_items;
 mod field_rank;
 mod first_job_talk;
+mod footrace;
 mod footsteps;
 mod franklin;
 mod furniture;
@@ -228,6 +229,7 @@ fn main() {
         .add_plugins(groundhog::GroundhogPlugin)
         .add_plugins(soncho::SonchoPlugin)
         .add_plugins(aerobics::AerobicsPlugin)
+        .add_plugins(footrace::FootRacePlugin)
         .add_plugins(tourney::TourneyPlugin)
         .add_plugins(spirits::SpiritsPlugin)
         .add_plugins(field_rank::FieldRankPlugin)

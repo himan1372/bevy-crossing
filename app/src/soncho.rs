@@ -123,6 +123,8 @@ struct Soncho {
     event: u8,
     /// He stands in the aerobics line (`SP_NPC_SONCHO_D078`) rather than at his own place.
     lined: bool,
+    /// He stands by the foot race (unit (5, 8)).
+    foot: bool,
     /// `soncho->item`.
     item: u16,
 }
@@ -203,11 +205,18 @@ fn visit(
     let event = running_event(&today, now.hour);
     let lined = event.is_some_and(|e| SPORTS_FAIRS.contains(&e))
         && today.is_active(ev::SPORTS_FAIR_AEROBICS, now.hour);
+    let foot = event.is_some_and(|e| SPORTS_FAIRS.contains(&e))
+        && today.is_active(ev::SPORTS_FAIR_FOOT_RACE, now.hour);
     let out = event.is_some()
         && *state.get() == ShopLocation::Town
         && *house.get() == crate::house::HouseState::Town;
     for (entity, s) in &existing {
-        if !out || s.day != now.day_number || Some(s.event) != event || s.lined != lined {
+        if !out
+            || s.day != now.day_number
+            || Some(s.event) != event
+            || s.lined != lined
+            || s.foot != foot
+        {
             commands.entity(entity).despawn();
         }
     }
@@ -219,6 +228,8 @@ fn visit(
     }
     let unit = if lined {
         crate::aerobics::LEADER_UNIT
+    } else if foot {
+        crate::footrace::TORTIMER_UNIT
     } else {
         (11, 6)
     };
@@ -232,6 +243,7 @@ fn visit(
             day: now.day_number,
             event,
             lined,
+            foot,
             item,
         },
         NpcClip::default(),
