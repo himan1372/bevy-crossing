@@ -27,6 +27,7 @@ mod field_items;
 mod field_rank;
 mod first_job_talk;
 mod footsteps;
+mod franklin;
 mod furniture;
 mod game_disc;
 mod game_rand;
@@ -212,6 +213,7 @@ fn main() {
         .add_plugins(redd::ReddPlugin)
         .add_plugins(broker_tent::BrokerTentPlugin)
         .add_plugins(jingle::JinglePlugin)
+        .add_plugins(franklin::FranklinPlugin)
         .add_plugins(field_rank::FieldRankPlugin)
         .add_plugins(post::PostPlugin)
         .add_plugins(catalog::CatalogPlugin)
