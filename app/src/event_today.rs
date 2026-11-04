@@ -79,6 +79,11 @@ impl TodayEvents {
         &self.events
     }
 
+    /// Whether Gulliver has finished his errand this week (`dozaemon_completed`).
+    pub fn gulliver_completed(&self) -> bool {
+        self.weekly.gulliver_completed
+    }
+
     /// The weekly state to write into the save.
     pub fn weekly_save(&self) -> WeeklySave {
         self.weekly.into()

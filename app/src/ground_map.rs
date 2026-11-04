@@ -243,6 +243,12 @@ impl GroundMap {
             && self.game_y(x, z).is_some_and(|y| 20.0 - y >= 20.0)
     }
 
+    /// Whether the unit under a scene position is a wave unit (`mCoBG_CheckWaveAttr`).
+    pub fn is_wave(&self, x: f32, z: f32) -> bool {
+        // 25, 26 and 36 are the shore variants `mCoBG_CheckWaveAttr` also accepts.
+        matches!(self.attribute_at(x, z), Some(ATTR_WAVE | 25 | 26 | 36))
+    }
+
     /// Collision attribute of the unit under a scene position.
     pub fn attribute_at(&self, x: f32, z: f32) -> Option<u8> {
         self.locate(x, z).map(|(u, ..)| u.attribute)

@@ -31,6 +31,7 @@ mod game_disc;
 mod game_rand;
 mod goods;
 mod ground_map;
+mod gulliver;
 mod gyroid;
 mod home;
 mod house;
@@ -194,6 +195,7 @@ fn main() {
         .add_plugins(copper::CopperPlugin)
         .add_plugins(joan::JoanPlugin)
         .add_plugins(kk_slider::KkSliderPlugin)
+        .add_plugins(gulliver::GulliverPlugin)
         .add_plugins(field_rank::FieldRankPlugin)
         .add_plugins(post::PostPlugin)
         .add_plugins(catalog::CatalogPlugin)
