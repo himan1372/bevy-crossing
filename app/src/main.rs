@@ -83,6 +83,7 @@ mod quest;
 mod raffle;
 mod remote;
 mod roster;
+mod saharah;
 mod save;
 mod scene_wipe;
 mod shop;
@@ -202,6 +203,7 @@ fn main() {
         .add_plugins(katrina::KatrinaPlugin)
         .add_plugins(halloween::HalloweenPlugin)
         .add_plugins(wendell::WendellPlugin)
+        .add_plugins(saharah::SaharahPlugin)
         .add_plugins(field_rank::FieldRankPlugin)
         .add_plugins(post::PostPlugin)
         .add_plugins(catalog::CatalogPlugin)
