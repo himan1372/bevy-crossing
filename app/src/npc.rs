@@ -149,6 +149,16 @@ enum Act {
 }
 
 impl Villager {
+    /// Runs at `target` (the Halloween trick-or-treaters chasing the player: `aNPC_ACT_RUN`, `ACT_TYPE_SEARCH`,
+    /// `ACT_OBJ_PLAYER`). Called every frame, it keeps them running until the next talk.
+    pub(crate) fn run_at(&mut self, target: Vec3) {
+        if matches!(self.act, Act::GoHome) {
+            return;
+        }
+        self.act = Act::Run(target);
+        self.timer = MOVE_TIMEOUT_SECS;
+    }
+
     /// Where they step out of / go into their house.
     pub fn door(&self) -> Vec3 {
         self.door
@@ -368,14 +378,17 @@ fn villager_schedule(
         &mut Transform,
         &mut Visibility,
         Has<Indoors>,
+        Has<crate::character::Costume>,
     )>,
 ) {
     // `aNPC_check_chg_schedule`: no schedule change mid-conversation.
     if dialogue.active {
         return;
     }
-    for (entity, mut v, mut transform, mut vis, indoors) in villagers.iter_mut() {
-        let out = is_out(schedule_now(v.looks, identity.events.first_job));
+    for (entity, mut v, mut transform, mut vis, indoors, costumed) in villagers.iter_mut() {
+        // A Halloween villager in costume is out whatever the schedule says (`aHWN_schedule_init_proc`:
+        // `aNPC_THINK_LEAVE_HOUSE`, then the special think).
+        let out = costumed || is_out(schedule_now(v.looks, identity.events.first_job));
         if out && indoors {
             commands.entity(entity).remove::<Indoors>();
             *vis = Visibility::Inherited;

@@ -828,6 +828,16 @@ struct CharacterModelDone;
 #[derive(Component, Clone, Copy)]
 pub struct NpcModel(pub u32);
 
+/// A costume a villager wears (`mEvMN_GetHalloweenNpcName`: the event NPC's `texture_id`): the draw entry
+/// at this index (`ALL_NPC_NUM` + id - `SP_NPC_START`) is drawn in place of the villager's own, while the
+/// villager's identity stays.
+#[derive(Component, Clone, Copy)]
+pub struct Costume(pub u32);
+
+/// The draw entry a villager's rig was built from (`None`: its own), so a changed [`Costume`] is noticed.
+#[derive(Component)]
+struct WornModel(Option<u32>);
+
 /// Tom Nook in the first shop (`SP_NPC_SHOP_MASTER`, `cKF_bs_r_rcn_1`).
 pub const NOOK: u32 = 238 + 8;
 
@@ -871,16 +881,19 @@ fn spawn_npc_models(
 fn spawn_villager_models(
     mut commands: Commands,
     disc: Option<Res<GameDisc>>,
-    villagers: Query<(Entity, &Villager), Without<CharacterModelDone>>,
+    villagers: Query<(Entity, &Villager, Option<&Costume>), Without<CharacterModelDone>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<N64Material>>,
     mut images: ResMut<Assets<Image>>,
     mut bindposes: ResMut<Assets<SkinnedMeshInverseBindposes>>,
 ) {
     let Some(disc) = disc else { return };
-    for (entity, villager) in &villagers {
-        commands.entity(entity).insert(CharacterModelDone);
-        let Some(src) = villager.npc_index.and_then(|i| villager_source(&disc, i)) else {
+    for (entity, villager, costume) in &villagers {
+        let index = costume.map(|c| c.0).or(villager.npc_index);
+        commands
+            .entity(entity)
+            .insert((CharacterModelDone, WornModel(costume.map(|c| c.0))));
+        let Some(src) = index.and_then(|i| villager_source(&disc, i)) else {
             warn!("no disc model for villager {}", villager.name);
             continue;
         };
@@ -896,6 +909,27 @@ fn spawn_villager_models(
                 villager.name
             );
         }
+    }
+}
+
+/// Rebuilds a villager's model when it puts on or takes off a [`Costume`].
+fn refit_costumes(
+    mut commands: Commands,
+    villagers: Query<(Entity, Option<&Costume>, &WornModel), With<Villager>>,
+    rigs: Query<(Entity, &ChildOf), With<CharacterRig>>,
+) {
+    for (entity, costume, worn) in &villagers {
+        if worn.0 == costume.map(|c| c.0) {
+            continue;
+        }
+        for (rig, parent) in &rigs {
+            if parent.parent() == entity {
+                commands.entity(rig).despawn();
+            }
+        }
+        commands
+            .entity(entity)
+            .remove::<(CharacterModelDone, WornModel)>();
     }
 }
 
@@ -1344,6 +1378,7 @@ impl Plugin for CharacterPlugin {
             Update,
             (
                 spawn_player_model,
+                refit_costumes,
                 spawn_villager_models,
                 spawn_npc_models,
                 animate_characters

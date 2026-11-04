@@ -33,6 +33,7 @@ mod goods;
 mod ground_map;
 mod gulliver;
 mod gyroid;
+mod halloween;
 mod home;
 mod house;
 mod idle_clock;
@@ -198,6 +199,7 @@ fn main() {
         .add_plugins(kk_slider::KkSliderPlugin)
         .add_plugins(gulliver::GulliverPlugin)
         .add_plugins(katrina::KatrinaPlugin)
+        .add_plugins(halloween::HalloweenPlugin)
         .add_plugins(field_rank::FieldRankPlugin)
         .add_plugins(post::PostPlugin)
         .add_plugins(catalog::CatalogPlugin)
