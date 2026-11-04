@@ -82,7 +82,7 @@ fn wave_units(town: &Town, ax: usize) -> Vec<(usize, usize)> {
 }
 
 /// Where he washes up on `day`: the nearest clear ground to a wave unit of the day's block.
-fn beach_spot(town: &Town, day: i64) -> Option<Vec3> {
+pub(crate) fn beach_spot(town: &Town, day: i64) -> Option<Vec3> {
     let h = mix(day as u64);
     // The columns, starting from the day's pick, until one has waves (`search_seaside_unit` retries blocks).
     for step in 0..ACRE_WIDTH {

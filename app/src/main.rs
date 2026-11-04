@@ -51,6 +51,7 @@ mod intro_reaction_effects;
 mod intro_reactions;
 mod intro_train;
 mod items;
+mod jingle;
 mod joan;
 mod job_end;
 mod katrina;
@@ -210,6 +211,7 @@ fn main() {
         .add_plugins(gracie::GraciePlugin)
         .add_plugins(redd::ReddPlugin)
         .add_plugins(broker_tent::BrokerTentPlugin)
+        .add_plugins(jingle::JinglePlugin)
         .add_plugins(field_rank::FieldRankPlugin)
         .add_plugins(post::PostPlugin)
         .add_plugins(catalog::CatalogPlugin)

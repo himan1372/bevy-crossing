@@ -368,6 +368,9 @@ pub struct SaveData {
     /// Redd's event area (the three pieces and what was bought).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) broker_event: Option<crate::redd::BrokerEvent>,
+    /// Jingle's event area (the wish, the talk counter, the shirts he gave for).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) jingle_event: Option<crate::jingle::JingleEvent>,
 }
 
 /// Save data loaded at startup (PreStartup), consumed by Startup systems.
@@ -686,6 +689,7 @@ fn collect_save(
         carpet_event: None,
         designer_event: None,
         broker_event: None,
+        jingle_event: None,
     }
 }
 
@@ -778,7 +782,7 @@ fn quick_save(
         memory,
         house_mail,
         catalog,
-        (today, artist, carpet, designer, broker),
+        (today, artist, carpet, designer, broker, jingle),
     ): (
         Res<PlayerLook>,
         Option<Res<crate::roster::TownRoster>>,
@@ -799,6 +803,7 @@ fn quick_save(
             Option<Res<crate::saharah::CarpetEvent>>,
             Option<Res<crate::gracie::DesignerEvent>>,
             Option<Res<crate::redd::BrokerEvent>>,
+            Option<Res<crate::jingle::JingleEvent>>,
         ),
     ),
 ) {
@@ -849,6 +854,7 @@ fn quick_save(
     save.carpet_event = carpet.map(|c| c.clone());
     save.designer_event = designer.map(|d| d.clone());
     save.broker_event = broker.map(|b| b.clone());
+    save.jingle_event = jingle.map(|j| j.clone());
     if let Some(r) = roster {
         save.villagers = Some(r.residents.iter().map(|e| e.index).collect());
         save.villagers_appeared = r.appeared.clone();
@@ -911,6 +917,7 @@ fn quick_load(
         carpet,
         designer,
         broker,
+        jingle,
     ): (
         Option<ResMut<crate::home::PlayerHouse>>,
         ResMut<crate::player_room::floors::HomeFloors>,
@@ -927,6 +934,7 @@ fn quick_load(
         Option<ResMut<crate::saharah::CarpetEvent>>,
         Option<ResMut<crate::gracie::DesignerEvent>>,
         Option<ResMut<crate::redd::BrokerEvent>>,
+        Option<ResMut<crate::jingle::JingleEvent>>,
     ),
 ) {
     if !actions.just_pressed(Action::QuickLoad)
@@ -973,6 +981,9 @@ fn quick_load(
     }
     if let Some(mut broker) = broker {
         *broker = save.broker_event.clone().unwrap_or_default();
+    }
+    if let Some(mut jingle) = jingle {
+        *jingle = save.jingle_event.clone().unwrap_or_default();
     }
     room.restore(save.home_furniture.as_ref(), disc.as_deref());
     if disc.is_some() {
