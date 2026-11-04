@@ -80,6 +80,37 @@ impl Calendar {
             && now.hour == self.hour
             && self.offer.is_some()
     }
+    /// `special_event.type` as an `event_schedule::ev` id with `dates[SPECIAL0..3]`: when it was rolled, its
+    /// start and end dates and its start hour. `None` while no valid event is saved.
+    pub fn special_event(&self) -> Option<(u16, [u16; 4])> {
+        use rustimal_logic::event_schedule::ev;
+        if !self.valid() {
+            return None;
+        }
+        let id = [
+            ev::SHOP_SALE,
+            ev::DESIGNER,
+            ev::BROKER_SALE,
+            ev::ARTIST,
+            ev::CARPET_PEDDLER,
+            ev::GYPSY,
+        ][usize::from(self.event)];
+        let md = |d: Date| (u16::from(d.1) << 8) | u16::from(d.2);
+        let end = if self.event == 0 {
+            self.date
+        } else {
+            shift(self.date, 1)
+        };
+        Some((
+            id,
+            [
+                md(self.created),
+                md(self.date),
+                md(end),
+                u16::from(self.hour),
+            ],
+        ))
+    }
     pub fn bargain_date(&self) -> Option<Date> {
         (self.valid() && self.event == 0).then_some(self.date)
     }

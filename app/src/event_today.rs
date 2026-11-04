@@ -56,6 +56,8 @@ pub struct TodayEvents {
     events: Vec<ActiveEvent>,
     /// Last hour whose active set was logged.
     logged_hour: Option<u8>,
+    /// The special event (`special_event.type`, `dates[SPECIAL0..3]`) `events` was computed with.
+    special: Option<(u16, [u16; 4])>,
 }
 
 // `is_active` / `all` are for the event NPCs (K.K. Slider is the first); nothing reads them yet.
@@ -137,11 +139,13 @@ fn describe(events: &[ActiveEvent], hour: u8) -> String {
     }
 }
 
-pub fn refresh(mut today: ResMut<TodayEvents>) {
+pub fn refresh(mut today: ResMut<TodayEvents>, shop: Option<Res<crate::shop::ShopData>>) {
     let n = clock::now();
     let now = to_schedule_now(&n);
     let date = (n.year, n.month, n.day);
     let new_day = today.date != Some(date);
+    // The shop's calendar holds the rolled special event (`init_special_event`).
+    let special = shop.and_then(|s| s.events.special_event());
     if new_day {
         // `update_schedule_today` runs after the weekly picker on a new day.
         let mut weekly = today.weekly;
@@ -152,15 +156,26 @@ pub fn refresh(mut today: ResMut<TodayEvents>) {
             // A new Gulliver day: his event save area starts empty.
             today.dozaemon_flags = 0;
         }
+    }
+    if new_day || today.special != special {
+        let mut dates = [0; sch::save_date::NUM];
+        if let Some((_, slots)) = special {
+            dates[sch::save_date::SPECIAL0] = slots[0];
+            dates[sch::save_date::SPECIAL1] = slots[1];
+            dates[sch::save_date::SPECIAL2] = slots[2];
+            dates[sch::save_date::SPECIAL3] = slots[3];
+        }
         let inputs = Inputs {
             now,
             town_day: 0,
-            dates: [0; sch::save_date::NUM],
-            weekly,
+            dates,
+            weekly: today.weekly,
+            special_type: special.map(|(event, _)| event),
         };
         // The port keeps no birthday yet.
         today.events = sch::events_today(&inputs, None);
         today.date = Some(date);
+        today.special = special;
         today.logged_hour = None;
         println!(
             "Weekly visitor {} on {:02}-{:02}{}",

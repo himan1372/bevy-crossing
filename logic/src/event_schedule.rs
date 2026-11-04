@@ -12,7 +12,9 @@
 //! Gulliver on a weekday, Blanca / bridge flags as inputs).
 //!
 //! NOT supported yet (their rows stay inactive, see `row_supported`): the shop / designer / broker /
-//! gypsy / artist special-event rows (`update_special_event` needs the special-event save slots),
+//! gypsy / artist special-event rows are supported when `Inputs::special_type` and `dates[SPECIAL0..3]` are
+//! filled in (`update_special_event`); the two handbill rows (leaflets) stay off. Before, the
+//! rows were off (`update_special_event` needs the special-event save slots),
 //! lighthouse vacation, soncho fishing-tourney gating, the harvest-moon / fishing-tourney gossip rows
 //! (`update_event_rumor`), and the ghost and bridge-make rows (wisp / bridge save state). The
 //! `update_soncho_event2` side effects (clearing the weekly flag) are not applied.
@@ -1071,6 +1073,9 @@ pub struct Inputs {
     /// `event_save_common.dates` (`TODAY`, `BIRTHDAY` and `WEEKLY` are refreshed by `events_today`).
     pub dates: [u16; save_date::NUM],
     pub weekly: WeeklyState,
+    /// `event_save_common.special_event.type`: which of the six special events (`SHOP_SALE`, `DESIGNER`,
+    /// `BROKER_SALE`, `ARTIST`, `CARPET_PEDDLER`, `GYPSY`) is the current one, if any.
+    pub special_type: Option<u16>,
 }
 
 /// `lbRTC_IS_LEAPYEAR`.
@@ -1233,13 +1238,7 @@ impl ActiveEvent {
 pub fn row_supported(event: u16) -> bool {
     !matches!(
         event,
-        ev::ARTIST
-            | ev::BROKER_SALE
-            | ev::DESIGNER
-            | ev::GYPSY
-            | ev::SHOP_SALE
-            | ev::CARPET_PEDDLER
-            | ev::HANDBILL_SHOP_SALE
+        ev::HANDBILL_SHOP_SALE
             | ev::HANDBILL_BROKER
             | ev::SONCHO_VACATION_JANUARY
             | ev::SONCHO_VACATION_FEBRUARY
@@ -1253,6 +1252,19 @@ pub fn row_supported(event: u16) -> bool {
             | ev::BRIDGE_MAKE
             | ev::SONCHO_BRIDGE_MAKE
     )
+}
+
+/// `update_special_event`: the six special-event rows run only while they are the saved special event.
+fn special_allows(event: u16, current: Option<u16>) -> bool {
+    match event {
+        ev::ARTIST
+        | ev::BROKER_SALE
+        | ev::DESIGNER
+        | ev::GYPSY
+        | ev::SHOP_SALE
+        | ev::CARPET_PEDDLER => current == Some(event),
+        _ => true,
+    }
 }
 
 /// `update_weekly_event`: whether the weekly state lets this row run.
@@ -1323,7 +1335,9 @@ pub fn events_today(inp: &Inputs, birthday: Option<(u8, u8)>) -> Vec<ActiveEvent
     for row in ROWS.iter() {
         let mut begin = row.begin;
         let mut end = row.end;
-        let mut live = row_supported(row.event) && weekly_allows(row.event, &inp.weekly);
+        let mut live = row_supported(row.event)
+            && weekly_allows(row.event, &inp.weekly)
+            && special_allows(row.event, inp.special_type);
 
         // update_sports_fair
         match row.event {
@@ -1478,6 +1492,7 @@ mod tests {
             town_day: 0,
             dates: [0; save_date::NUM],
             weekly: WeeklyState::default(),
+            special_type: None,
         }
     }
 
@@ -1485,6 +1500,38 @@ mod tests {
         events_today(inp, birthday)
             .into_iter()
             .find(|a| a.event == event)
+    }
+
+    #[test]
+    fn special_visitors_run_only_as_the_saved_special_event() {
+        // Katrina (GYPSY): saved start 11-10, end 11-11, start hour 21 (SPECIAL3); row 21:00 .. 05:59 next day.
+        let md = |m: u8, d: u8| (u16::from(m) << 8) | u16::from(d);
+        let mut inp = inputs(at(2026, 11, 10, 22));
+        inp.dates[save_date::SPECIAL0] = md(11, 8);
+        inp.dates[save_date::SPECIAL1] = md(11, 10);
+        inp.dates[save_date::SPECIAL2] = md(11, 11);
+        inp.dates[save_date::SPECIAL3] = 21;
+        assert!(
+            active(&inp, None, ev::GYPSY).is_none(),
+            "no special event saved"
+        );
+        inp.special_type = Some(ev::ARTIST);
+        assert!(
+            active(&inp, None, ev::GYPSY).is_none(),
+            "a different one is saved"
+        );
+        inp.special_type = Some(ev::GYPSY);
+        let a = active(&inp, None, ev::GYPSY).expect("gypsy");
+        assert!(a.active_at(21) && a.active_at(23) && !a.active_at(20));
+        // The next morning she is still around until the end hour of the second day.
+        let mut next = inp;
+        next.now = at(2026, 11, 11, 3);
+        let b = active(&next, None, ev::GYPSY).expect("gypsy next morning");
+        assert!(b.active_at(0) && b.active_at(3));
+        // Another day entirely.
+        let mut other = inp;
+        other.now = at(2026, 11, 14, 22);
+        assert!(active(&other, None, ev::GYPSY).is_none());
     }
 
     #[test]
@@ -1652,7 +1699,7 @@ mod tests {
     #[test]
     fn unsupported_rows_stay_off() {
         for e in [
-            ev::SHOP_SALE,
+            ev::HANDBILL_SHOP_SALE,
             ev::GHOST,
             ev::BRIDGE_MAKE,
             ev::SONCHO_BRIDGE_MAKE,
