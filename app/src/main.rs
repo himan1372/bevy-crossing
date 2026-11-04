@@ -82,6 +82,7 @@ mod postman;
 mod prop;
 mod quest;
 mod raffle;
+mod redd;
 mod remote;
 mod roster;
 mod saharah;
@@ -206,6 +207,7 @@ fn main() {
         .add_plugins(wendell::WendellPlugin)
         .add_plugins(saharah::SaharahPlugin)
         .add_plugins(gracie::GraciePlugin)
+        .add_plugins(redd::ReddPlugin)
         .add_plugins(field_rank::FieldRankPlugin)
         .add_plugins(post::PostPlugin)
         .add_plugins(catalog::CatalogPlugin)
