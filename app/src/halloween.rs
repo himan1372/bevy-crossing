@@ -15,9 +15,12 @@
 //! the Halloween2 furniture list; otherwise the player puts on the costume shirt (`ITM_CLOTH017`). Then
 //! `0x98D + looks * 6`. All the `looks * 6` lines are the villager's personality (`mNpc_GetLooks`).
 //!
+//! Afterwards a talk the player starts (`aHWN_norm_talk_request`) is the single line `2479 + looks`; one started
+//! before the forced greeting is the greeting (the approach think still has `aHWN_force_talk_request`).
+//!
 //! Port adaptations: a hand-over plays before the line that follows it (as with K.K. Slider), the quest-item
 //! condition keeps an item from being offered, and the shirt change has no change animation or sparkle (nor does the
-//! item trick have its player animation, order `0xFD`). The ordinary talk afterwards (`2479 + looks`) is not built.
+//! item trick have its player animation, order `0xFD`).
 
 use std::collections::HashSet;
 
@@ -32,6 +35,7 @@ use crate::event_today::TodayEvents;
 use crate::game_disc::GameDisc;
 use crate::input::{InputFocus, InteractSet};
 use crate::interaction::PlayerInventory;
+use crate::interaction::TalkEvent;
 use crate::messages::MsgChoice;
 use crate::npc::{Indoors, Villager};
 use crate::player::Player;
@@ -231,6 +235,7 @@ fn talk(
     mut handover: ResMut<HandOver>,
     mut look: ResMut<PlayerLook>,
     mut rand: ResMut<crate::game_rand::GameRand>,
+    mut claim: ResMut<crate::quest::QuestClaim>,
 ) {
     let Some(disc) = disc.filter(|d| d.text.is_some()) else {
         return;
@@ -259,11 +264,17 @@ fn talk(
         info!("Halloween: {} says message {msg:#06x}", villager.name);
         asked.map(|(_, c)| c)
     };
-    let end = |dialogue: &mut DialogueState, focus: &mut InputFocus, flow: &mut Talk| {
+    let end = |dialogue: &mut DialogueState,
+               focus: &mut InputFocus,
+               flow: &mut Talk,
+               claim: &mut crate::quest::QuestClaim| {
         *dialogue = DialogueState::default();
         *focus = InputFocus::World;
         flow.villager = None;
         flow.step = Step::Idle;
+        // The ordinary talk of this villager was ours (see `intercept_talk`).
+        claim.0 = None;
+        info!("Halloween: the talk ends");
     };
 
     // A talk in progress belongs to one villager.
@@ -271,7 +282,7 @@ fn talk(
         let Ok((_, villager, _)) = villagers.get(entity) else {
             // They took the costume off or went away: the talk is over.
             pockets.halloween = false;
-            end(&mut dialogue, &mut focus, &mut flow);
+            end(&mut dialogue, &mut focus, &mut flow, &mut claim);
             return;
         };
         let looks = villager.looks;
@@ -426,7 +437,7 @@ fn talk(
                         flow.step = Step::Hand(Then::Trick);
                     }
                     Step::Said(After::Close) | Step::Idle | Step::Picking | Step::Hand(_) => {
-                        end(&mut dialogue, &mut focus, &mut flow);
+                        end(&mut dialogue, &mut focus, &mut flow, &mut claim);
                     }
                 }
             }
@@ -461,6 +472,71 @@ fn talk(
     }
 }
 
+/// A talk the player starts with a costumed villager is ours, not the ordinary villager talk
+/// (`aHWN_norm_talk_request` / `aHWN_force_talk_request`): the single line `2479 + looks` once they have greeted,
+/// the forced greeting if they have not.
+#[allow(clippy::too_many_arguments)]
+fn intercept_talk(
+    mut events: MessageReader<TalkEvent>,
+    disc: Option<Res<GameDisc>>,
+    state: Res<State<ShopLocation>>,
+    house: Res<State<crate::house::HouseState>>,
+    mut focus: ResMut<InputFocus>,
+    villagers: Query<&Villager, (With<Costume>, Without<Indoors>)>,
+    mut flow: ResMut<Talk>,
+    mut dialogue: ResMut<DialogueState>,
+    mut claim: ResMut<crate::quest::QuestClaim>,
+) {
+    let Some(disc) = disc.filter(|d| d.text.is_some()) else {
+        events.clear();
+        return;
+    };
+    let Some(text) = disc.text.as_ref() else {
+        return;
+    };
+    if *state.get() != ShopLocation::Town || *house.get() != crate::house::HouseState::Town {
+        events.clear();
+        return;
+    }
+    for event in events.read() {
+        let Ok(villager) = villagers.get(event.villager) else {
+            continue;
+        };
+        if !matches!(flow.step, Step::Idle) || dialogue.active {
+            continue;
+        }
+        let entity = event.villager;
+        let (msg, step) = if flow.greeted.contains(&entity) {
+            (
+                native::msg::normal_talk(villager.looks),
+                Step::Said(After::Close),
+            )
+        } else {
+            flow.greeted.insert(entity);
+            (native::msg::FIRST_GREETING, Step::Greeting)
+        };
+        let ctx =
+            crate::dialogue::disc_message_context(&disc, villager, None, &crate::clock::now());
+        let (pages, asked) = text.talk_asking(usize::from(msg), &ctx, &mut |_| 0);
+        dialogue.begin_special(
+            entity,
+            villager.name,
+            (villager.npc_index.unwrap_or(0), 0),
+            pages,
+            asked.map(|(_, c)| c.labels),
+        );
+        info!(
+            "Halloween: {} says message {msg:#06x} (asked)",
+            villager.name
+        );
+        *focus = InputFocus::Dialogue;
+        claim.0 = Some(entity);
+        flow.villager = Some(entity);
+        flow.step = step;
+        break;
+    }
+}
+
 /// While a talk is in any step the villagers stand still, as in a conversation.
 fn pause_villagers(talk: Res<Talk>, mut pause: ResMut<crate::npc::VillagerPause>) {
     pause.0 = !matches!(talk.step, Step::Idle);
@@ -476,6 +552,13 @@ impl Plugin for HalloweenPlugin {
                 (assign_costumes, approach)
                     .chain()
                     .after(crate::event_today::refresh)
+                    .in_set(GameplaySet),
+            )
+            .add_systems(
+                Update,
+                intercept_talk
+                    .in_set(crate::quest::QuestInputSet)
+                    .after(crate::interaction::interact)
                     .in_set(GameplaySet),
             )
             .add_systems(Update, talk.in_set(InteractSet::Talk).in_set(GameplaySet))
