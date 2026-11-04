@@ -1052,11 +1052,15 @@ pub struct WeeklyState {
     pub flags: Option<u16>,
     /// `dozaemon_completed`.
     pub gulliver_completed: bool,
+    /// `event_save_common.ghost_day`: the day Wisp (Spooky) is due, as a month/day value (0 = never set).
+    pub ghost_day: u16,
 }
 
 /// What `init_weekly_event` reads besides the clock.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct WeeklyContext {
+    /// `RANDOM(3)` for a new ghost day (`2 + RANDOM(3)` days ahead); only read when one is rolled.
+    pub ghost_roll: u8,
     /// The player is not a foreigner, the town is full (`now_npc_max >= ANIMAL_NUM_MAX`), no bridge exists
     /// and the lighthouse trip is not under way: Tortimer's bridge event may be scheduled.
     pub bridge_make_ok: bool,
@@ -1248,7 +1252,6 @@ pub fn row_supported(event: u16) -> bool {
             | ev::TALK_FISHING_TOURNEY_2
             | ev::RUMOR_HARVEST_MOON_DAY
             | ev::RUMOR_HARVEST_FESTIVAL
-            | ev::GHOST
             | ev::BRIDGE_MAKE
             | ev::SONCHO_BRIDGE_MAKE
     )
@@ -1337,6 +1340,7 @@ pub fn events_today(inp: &Inputs, birthday: Option<(u8, u8)>) -> Vec<ActiveEvent
         let mut end = row.end;
         let mut live = row_supported(row.event)
             && weekly_allows(row.event, &inp.weekly)
+            && (row.event != ev::GHOST || ghost_due(&inp.now, &inp.weekly))
             && special_allows(row.event, inp.special_type);
 
         // update_sports_fair
@@ -1470,6 +1474,18 @@ pub fn init_weekly_event(now: &Now, w: &mut WeeklyState, ctx: &WeeklyContext) {
         Some(1) => None,
         other => other,
     };
+
+    // The wisp setup: Wisp's date is refreshed when it falls outside [Monday of last week, Friday].
+    let monday = after_n_day(now.year, today, -7);
+    let friday = after_n_day(now.year, today, 4);
+    if w.ghost_day == 0 || !check_date_range(w.ghost_day, monday, friday) {
+        w.ghost_day = after_n_day(now.year, today, 2 + i32::from(ctx.ghost_roll.min(2)));
+    }
+}
+
+/// `ghost_event_type == mEv_EVENT_GHOST`: the ghost day lies in [today - 7, today].
+fn ghost_due(now: &Now, w: &WeeklyState) -> bool {
+    w.ghost_day != 0 && check_date_range(w.ghost_day, after_n_day(now.year, now.md(), -7), now.md())
 }
 
 #[cfg(test)]
@@ -1700,13 +1716,38 @@ mod tests {
     fn unsupported_rows_stay_off() {
         for e in [
             ev::HANDBILL_SHOP_SALE,
-            ev::GHOST,
             ev::BRIDGE_MAKE,
             ev::SONCHO_BRIDGE_MAKE,
         ] {
             assert!(!row_supported(e));
             assert!(active(&inputs(at(2026, 11, 3, 12)), None, e).is_none());
         }
+    }
+
+    #[test]
+    fn the_ghost_runs_from_midnight_to_three_on_and_after_its_day() {
+        let mut inp = inputs(at(2026, 11, 3, 1));
+        // Not due: the day is in the future.
+        inp.weekly.ghost_day = (11 << 8) | 5;
+        assert!(active(&inp, None, ev::GHOST).is_none());
+        // Due: the day was yesterday.
+        inp.weekly.ghost_day = (11 << 8) | 2;
+        let a = active(&inp, None, ev::GHOST).expect("due");
+        assert!(a.active_at(0) && a.active_at(3) && !a.active_at(12));
+    }
+
+    #[test]
+    fn a_new_ghost_day_is_two_to_four_days_ahead() {
+        let mut w = WeeklyState::default();
+        let ctx = WeeklyContext {
+            ghost_roll: 1,
+            ..WeeklyContext::default()
+        };
+        init_weekly_event(&at(2026, 11, 3, 12), &mut w, &ctx);
+        assert_eq!(w.ghost_day, (11 << 8) | 6);
+        // Kept while it lies in [last Monday, Friday].
+        init_weekly_event(&at(2026, 11, 4, 12), &mut w, &WeeklyContext::default());
+        assert_eq!(w.ghost_day, (11 << 8) | 6);
     }
 
     #[test]

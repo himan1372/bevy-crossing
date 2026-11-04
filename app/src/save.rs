@@ -374,6 +374,9 @@ pub struct SaveData {
     /// Franklin's event area (the presents he has given).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) franklin_event: Option<crate::franklin::FranklinEvent>,
+    /// Spooky's event area (the night's found and returned bits).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) spooky_event: Option<crate::spooky::SpookyEvent>,
 }
 
 /// Save data loaded at startup (PreStartup), consumed by Startup systems.
@@ -694,6 +697,7 @@ fn collect_save(
         broker_event: None,
         jingle_event: None,
         franklin_event: None,
+        spooky_event: None,
     }
 }
 
@@ -786,7 +790,7 @@ fn quick_save(
         memory,
         house_mail,
         catalog,
-        (today, artist, carpet, designer, broker, jingle, franklin),
+        (today, artist, carpet, designer, broker, jingle, franklin, spooky),
     ): (
         Res<PlayerLook>,
         Option<Res<crate::roster::TownRoster>>,
@@ -809,6 +813,7 @@ fn quick_save(
             Option<Res<crate::redd::BrokerEvent>>,
             Option<Res<crate::jingle::JingleEvent>>,
             Option<Res<crate::franklin::FranklinEvent>>,
+            Option<Res<crate::spooky::SpookyEvent>>,
         ),
     ),
 ) {
@@ -861,6 +866,7 @@ fn quick_save(
     save.broker_event = broker.map(|b| b.clone());
     save.jingle_event = jingle.map(|j| j.clone());
     save.franklin_event = franklin.map(|f| f.clone());
+    save.spooky_event = spooky.map(|s| s.clone());
     if let Some(r) = roster {
         save.villagers = Some(r.residents.iter().map(|e| e.index).collect());
         save.villagers_appeared = r.appeared.clone();
@@ -923,7 +929,7 @@ fn quick_load(
         carpet,
         designer,
         broker,
-        (jingle, franklin),
+        (jingle, franklin, spooky),
     ): (
         Option<ResMut<crate::home::PlayerHouse>>,
         ResMut<crate::player_room::floors::HomeFloors>,
@@ -943,6 +949,7 @@ fn quick_load(
         (
             Option<ResMut<crate::jingle::JingleEvent>>,
             Option<ResMut<crate::franklin::FranklinEvent>>,
+            Option<ResMut<crate::spooky::SpookyEvent>>,
         ),
     ),
 ) {
@@ -996,6 +1003,9 @@ fn quick_load(
     }
     if let Some(mut franklin) = franklin {
         *franklin = save.franklin_event.clone().unwrap_or_default();
+    }
+    if let Some(mut spooky) = spooky {
+        *spooky = save.spooky_event.clone().unwrap_or_default();
     }
     room.restore(save.home_furniture.as_ref(), disc.as_deref());
     if disc.is_some() {

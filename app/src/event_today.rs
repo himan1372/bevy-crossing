@@ -33,6 +33,9 @@ pub struct WeeklySave {
     /// `mEv_dozaemon_c.flags` (`ac_ev_dozaemon.h`): woke up, gave the gift, gave it on the first talk.
     #[serde(default)]
     pub dozaemon_flags: u16,
+    /// `ghost_day`: when Spooky is due, as a month/day value.
+    #[serde(default)]
+    pub ghost_day: u16,
 }
 
 impl From<WeeklySave> for WeeklyState {
@@ -42,6 +45,7 @@ impl From<WeeklySave> for WeeklyState {
             kind: w.kind,
             flags: w.flags,
             gulliver_completed: w.gulliver_completed,
+            ghost_day: w.ghost_day,
         }
     }
 }
@@ -102,6 +106,7 @@ impl TodayEvents {
             flags: self.weekly.flags,
             gulliver_completed: self.weekly.gulliver_completed,
             dozaemon_flags: self.dozaemon_flags,
+            ghost_day: self.weekly.ghost_day,
         }
     }
 
@@ -139,7 +144,11 @@ fn describe(events: &[ActiveEvent], hour: u8) -> String {
     }
 }
 
-pub fn refresh(mut today: ResMut<TodayEvents>, shop: Option<Res<crate::shop::ShopData>>) {
+pub fn refresh(
+    mut today: ResMut<TodayEvents>,
+    shop: Option<Res<crate::shop::ShopData>>,
+    mut rand: ResMut<crate::game_rand::GameRand>,
+) {
     let n = clock::now();
     let now = to_schedule_now(&n);
     let date = (n.year, n.month, n.day);
@@ -150,7 +159,11 @@ pub fn refresh(mut today: ResMut<TodayEvents>, shop: Option<Res<crate::shop::Sho
         // `update_schedule_today` runs after the weekly picker on a new day.
         let mut weekly = today.weekly;
         let rolled_from = weekly.date;
-        sch::init_weekly_event(&now, &mut weekly, &WeeklyContext::default());
+        let ctx = WeeklyContext {
+            ghost_roll: rand.0.random(3) as u8,
+            ..WeeklyContext::default()
+        };
+        sch::init_weekly_event(&now, &mut weekly, &ctx);
         today.weekly = weekly;
         if weekly.date != rolled_from {
             // A new Gulliver day: his event save area starts empty.
