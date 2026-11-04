@@ -345,6 +345,9 @@ pub struct SaveData {
     /// `remove_animal_idx`: the slot of the villager thinking of moving.
     #[serde(default)]
     pub remove_slot: Option<usize>,
+    /// The weekly visitor and Gulliver's day; absent in saves from before it was kept.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) weekly_event: Option<crate::event_today::WeeklySave>,
 }
 
 /// Save data loaded at startup (PreStartup), consumed by Startup systems.
@@ -658,6 +661,7 @@ fn collect_save(
         villager_slots: Vec::new(),
         last_remove_day: None,
         remove_slot: None,
+        weekly_event: None,
     }
 }
 
@@ -750,6 +754,7 @@ fn quick_save(
         memory,
         house_mail,
         catalog,
+        today,
     ): (
         Res<PlayerLook>,
         Option<Res<crate::roster::TownRoster>>,
@@ -764,6 +769,7 @@ fn quick_save(
         Option<Res<crate::villager_memory::VillagerMemory>>,
         Option<Res<crate::mail::HouseMailbox>>,
         Option<Res<crate::catalog::Catalog>>,
+        Option<Res<crate::event_today::TodayEvents>>,
     ),
 ) {
     // Furniture movement already has an atomic committed destination. Other
@@ -808,6 +814,7 @@ fn quick_save(
     save.house_mail = house_mail.map(|h| h.0.letters.clone()).unwrap_or_default();
     save.catalog = catalog.map(|c| c.save());
     save.player_cloth = Some(look.cloth as u16);
+    save.weekly_event = today.map(|t| t.weekly_save());
     if let Some(r) = roster {
         save.villagers = Some(r.residents.iter().map(|e| e.index).collect());
         save.villagers_appeared = r.appeared.clone();
@@ -854,7 +861,19 @@ fn quick_load(
     mut quest: ResMut<crate::quest::QuestState>,
     mut timer: ResMut<NotifyTimer>,
     notify_query: Query<&mut Text, With<NotifyText>>,
-    (home, mut floors, mut commands, lost, museum, post, memory, house_mail, catalog, mut rank): (
+    (
+        home,
+        mut floors,
+        mut commands,
+        lost,
+        museum,
+        post,
+        memory,
+        house_mail,
+        catalog,
+        mut rank,
+        today,
+    ): (
         Option<ResMut<crate::home::PlayerHouse>>,
         ResMut<crate::player_room::floors::HomeFloors>,
         Commands,
@@ -865,6 +884,7 @@ fn quick_load(
         Option<ResMut<crate::mail::HouseMailbox>>,
         Option<ResMut<crate::catalog::Catalog>>,
         ResMut<crate::field_rank::FieldRank>,
+        Option<ResMut<crate::event_today::TodayEvents>>,
     ),
 ) {
     if !actions.just_pressed(Action::QuickLoad)
@@ -896,6 +916,9 @@ fn quick_load(
     }
     if let Some(mut catalog) = catalog {
         catalog.restore(save.catalog.as_ref());
+    }
+    if let Some(mut today) = today {
+        today.restore_weekly(save.weekly_event);
     }
     room.restore(save.home_furniture.as_ref(), disc.as_deref());
     if disc.is_some() {
