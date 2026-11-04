@@ -108,6 +108,7 @@ mod statue;
 mod talk;
 mod time_window;
 mod tortimer;
+mod tourney;
 mod town;
 mod town_map;
 mod villager_memory;
@@ -225,6 +226,7 @@ fn main() {
         .add_plugins(miko::MikoPlugin)
         .add_plugins(groundhog::GroundhogPlugin)
         .add_plugins(soncho::SonchoPlugin)
+        .add_plugins(tourney::TourneyPlugin)
         .add_plugins(spirits::SpiritsPlugin)
         .add_plugins(field_rank::FieldRankPlugin)
         .add_plugins(post::PostPlugin)
