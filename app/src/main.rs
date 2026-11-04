@@ -52,6 +52,7 @@ mod intro_reaction_effects;
 mod intro_reactions;
 mod intro_train;
 mod items;
+mod jack;
 mod jingle;
 mod joan;
 mod job_end;
@@ -213,6 +214,7 @@ fn main() {
         .add_plugins(redd::ReddPlugin)
         .add_plugins(broker_tent::BrokerTentPlugin)
         .add_plugins(jingle::JinglePlugin)
+        .add_plugins(jack::JackPlugin)
         .add_plugins(franklin::FranklinPlugin)
         .add_plugins(field_rank::FieldRankPlugin)
         .add_plugins(post::PostPlugin)

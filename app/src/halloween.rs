@@ -174,7 +174,7 @@ struct Talk {
 }
 
 /// `aHWN_get_trick_type`: the trick this time. An item trick changes one pocket now and returns true.
-fn trick(
+pub(crate) fn trick(
     inventory: &mut PlayerInventory,
     look: &mut PlayerLook,
     rand: &mut crate::game_rand::GameRand,
@@ -214,7 +214,7 @@ fn trick(
     }
 }
 
-fn is_tool(item: u16) -> bool {
+pub(crate) fn is_tool(item: u16) -> bool {
     native::items::is_tool_range(item)
 }
 
