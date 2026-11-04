@@ -27,6 +27,7 @@ mod event_today;
 mod face;
 mod field_items;
 mod field_rank;
+mod fireworks;
 mod first_job_talk;
 mod footrace;
 mod footsteps;
@@ -237,6 +238,7 @@ fn main() {
         .add_plugins(balltoss::BallTossPlugin)
         .add_plugins(tugofwar::TugOfWarPlugin)
         .add_plugins(hatsumode::HatsumodePlugin)
+        .add_plugins(fireworks::FireworksPlugin)
         .add_plugins(tourney::TourneyPlugin)
         .add_plugins(spirits::SpiritsPlugin)
         .add_plugins(field_rank::FieldRankPlugin)

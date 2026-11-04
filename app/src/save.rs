@@ -396,6 +396,9 @@ pub struct SaveData {
     /// The fishing tourney's area (the record and who holds it).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) tourney_event: Option<crate::tourney::TourneyEvent>,
+    /// The fireworks show's night stall (the goods left).
+    #[serde(default)]
+    pub(crate) stall_event: Option<crate::fireworks::StallEvent>,
 }
 
 /// Save data loaded at startup (PreStartup), consumed by Startup systems.
@@ -718,6 +721,7 @@ fn collect_save(
         franklin_event: None,
         spooky_event: None,
         tourney_event: None,
+        stall_event: None,
     }
 }
 
@@ -810,7 +814,7 @@ fn quick_save(
         memory,
         house_mail,
         catalog,
-        (today, artist, carpet, designer, broker, jingle, franklin, spooky, tourney),
+        (today, artist, carpet, designer, broker, jingle, franklin, spooky, (tourney, stall)),
     ): (
         Res<PlayerLook>,
         Option<Res<crate::roster::TownRoster>>,
@@ -834,7 +838,10 @@ fn quick_save(
             Option<Res<crate::jingle::JingleEvent>>,
             Option<Res<crate::franklin::FranklinEvent>>,
             Option<Res<crate::spooky::SpookyEvent>>,
-            Option<Res<crate::tourney::TourneyEvent>>,
+            (
+                Option<Res<crate::tourney::TourneyEvent>>,
+                Option<Res<crate::fireworks::StallEvent>>,
+            ),
         ),
     ),
 ) {
@@ -889,6 +896,7 @@ fn quick_save(
     save.franklin_event = franklin.map(|f| f.clone());
     save.spooky_event = spooky.map(|s| s.clone());
     save.tourney_event = tourney.map(|t| t.clone());
+    save.stall_event = stall.map(|s| s.clone());
     if let Some(r) = roster {
         save.villagers = Some(r.residents.iter().map(|e| e.index).collect());
         save.villagers_appeared = r.appeared.clone();
@@ -951,7 +959,7 @@ fn quick_load(
         carpet,
         designer,
         broker,
-        (jingle, franklin, spooky, tourney),
+        (jingle, franklin, spooky, (tourney, stall)),
     ): (
         Option<ResMut<crate::home::PlayerHouse>>,
         ResMut<crate::player_room::floors::HomeFloors>,
@@ -972,7 +980,10 @@ fn quick_load(
             Option<ResMut<crate::jingle::JingleEvent>>,
             Option<ResMut<crate::franklin::FranklinEvent>>,
             Option<ResMut<crate::spooky::SpookyEvent>>,
-            Option<ResMut<crate::tourney::TourneyEvent>>,
+            (
+                Option<ResMut<crate::tourney::TourneyEvent>>,
+                Option<ResMut<crate::fireworks::StallEvent>>,
+            ),
         ),
     ),
 ) {
@@ -1032,6 +1043,9 @@ fn quick_load(
     }
     if let Some(mut tourney) = tourney {
         *tourney = save.tourney_event.clone().unwrap_or_default();
+    }
+    if let Some(mut stall) = stall {
+        *stall = save.stall_event.clone().unwrap_or_default();
     }
     room.restore(save.home_furniture.as_ref(), disc.as_deref());
     if disc.is_some() {
