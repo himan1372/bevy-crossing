@@ -30,17 +30,9 @@ pub struct WeeklySave {
     pub flags: Option<u16>,
     #[serde(default)]
     pub gulliver_completed: bool,
-}
-
-impl From<WeeklyState> for WeeklySave {
-    fn from(w: WeeklyState) -> Self {
-        Self {
-            date: w.date,
-            kind: w.kind,
-            flags: w.flags,
-            gulliver_completed: w.gulliver_completed,
-        }
-    }
+    /// `mEv_dozaemon_c.flags` (`ac_ev_dozaemon.h`): woke up, gave the gift, gave it on the first talk.
+    #[serde(default)]
+    pub dozaemon_flags: u16,
 }
 
 impl From<WeeklySave> for WeeklyState {
@@ -59,6 +51,8 @@ pub struct TodayEvents {
     /// The date `events` was computed for (year, month, day); `None` before the first update.
     date: Option<(u16, u8, u8)>,
     weekly: WeeklyState,
+    /// `mEv_dozaemon_c.flags`; cleared whenever a new Gulliver day is rolled.
+    dozaemon_flags: u16,
     events: Vec<ActiveEvent>,
     /// Last hour whose active set was logged.
     logged_hour: Option<u8>,
@@ -84,15 +78,37 @@ impl TodayEvents {
         self.weekly.gulliver_completed
     }
 
+    /// Gulliver's event flags (`aEDZ_SAVE_FLAG_*`).
+    pub fn dozaemon_flags(&self) -> u16 {
+        self.dozaemon_flags
+    }
+
+    pub fn set_dozaemon_flags(&mut self, flags: u16) {
+        self.dozaemon_flags = flags;
+    }
+
+    /// `Save_Get(event_save_common).dozaemon_completed = TRUE`.
+    pub fn complete_gulliver(&mut self) {
+        self.weekly.gulliver_completed = true;
+    }
+
     /// The weekly state to write into the save.
     pub fn weekly_save(&self) -> WeeklySave {
-        self.weekly.into()
+        WeeklySave {
+            date: self.weekly.date,
+            kind: self.weekly.kind,
+            flags: self.weekly.flags,
+            gulliver_completed: self.weekly.gulliver_completed,
+            dozaemon_flags: self.dozaemon_flags,
+        }
     }
 
     /// Takes the saved weekly state (`None`: a save from before it existed, treated as never set) and
     /// forces today's events to be computed again from it.
     pub fn restore_weekly(&mut self, saved: Option<WeeklySave>) {
-        self.weekly = saved.unwrap_or_default().into();
+        let saved = saved.unwrap_or_default();
+        self.dozaemon_flags = saved.dozaemon_flags;
+        self.weekly = saved.into();
         self.date = None;
         self.events.clear();
     }
@@ -129,8 +145,13 @@ pub fn refresh(mut today: ResMut<TodayEvents>) {
     if new_day {
         // `update_schedule_today` runs after the weekly picker on a new day.
         let mut weekly = today.weekly;
+        let rolled_from = weekly.date;
         sch::init_weekly_event(&now, &mut weekly, &WeeklyContext::default());
         today.weekly = weekly;
+        if weekly.date != rolled_from {
+            // A new Gulliver day: his event save area starts empty.
+            today.dozaemon_flags = 0;
+        }
         let inputs = Inputs {
             now,
             town_day: 0,
