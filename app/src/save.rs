@@ -63,6 +63,9 @@ pub(crate) struct PlayerIdentity {
     /// `radiocard`: the date of the last stamp (year, month, day; year 0 never) and the days stamped.
     #[serde(default)]
     pub radio_card: ((u16, u8, u8), u8),
+    /// `LightHouse_c`: Tortimer's lighthouse quest.
+    #[serde(default)]
+    pub lighthouse: crate::lighthouse::LightHouse,
     /// `Common(map_flag)`: the player has the town map. Off from the new-game intro until the
     /// guide hands it over; towns that never ran the job always have it.
     #[serde(default = "map_flag_on")]
@@ -185,6 +188,7 @@ impl Default for PlayerIdentity {
             soncho_trophies: 0,
             soncho_calendar: Vec::new(),
             radio_card: ((0, 0, 0), 0),
+            lighthouse: Default::default(),
             map_flag: true,
             first_job: None,
             intro_done: false,

@@ -49,6 +49,13 @@ const TOY_DAY: u8 = 25;
 const TOWN_DAY: u8 = 4;
 const GROUNDHOG_DAY: u8 = 13;
 const NEW_YEARS_DAY: u8 = 0;
+/// `mSC_SPECIAL_EVENT_JAN_VACATION` and `mSC_SPECIAL_EVENT_FEB_VACATION`, and the lighthouse messages' bases.
+const JAN_VACATION: u8 = 101;
+const FEB_VACATION: u8 = 102;
+const MSG_LIGHTHOUSE: [u16; 2] = [0x33F4, 0x340B];
+/// The strings of the days of the month (`mString_Load_DayStringFromRom`).
+const DAY_STRINGS: usize = 0x64E;
+
 /// The sports fairs (`mSC_EVENT_SPRING_SPORTS_FAIR` and `_FALL_`): during the aerobics and the ball toss he does not
 /// talk (`aES2_THINK_AEROBICS`, `aES2_THINK_BALL_TOSS`: no talk request).
 const SPORTS_FAIRS: [u8; 2] = [8, 20];
@@ -138,7 +145,19 @@ fn running_event(today: &TodayEvents, hour: u8) -> Option<u8> {
     let mut order = (0..EVENT_ROWS.len() as u8)
         .filter(|&e| e != 22)
         .chain(std::iter::once(22));
-    order.find(|&e| today.is_active(EVENT_ROWS[usize::from(e)], hour))
+    order
+        .find(|&e| today.is_active(EVENT_ROWS[usize::from(e)], hour))
+        // Then the lighthouse vacations (`mSC_SPECIAL_EVENT_JAN_VACATION` and `_FEB_`).
+        .or_else(|| {
+            today
+                .is_active(ev::SONCHO_VACATION_JANUARY, hour)
+                .then_some(JAN_VACATION)
+        })
+        .or_else(|| {
+            today
+                .is_active(ev::SONCHO_VACATION_FEBRUARY, hour)
+                .then_some(FEB_VACATION)
+        })
 }
 
 /// `aES2_wait`: the field event of a sports fair that keeps him from talking (in the aerobics he talks from the line).
@@ -160,6 +179,9 @@ fn calendar_marked(identity: &crate::save::PlayerIdentity, event: u8) -> bool {
 
 /// `mSC_trophy_item`.
 fn trophy_item(event: u8, female: bool, rand: &mut crate::game_rand::GameRand) -> u16 {
+    if event >= JAN_VACATION {
+        return EMPTY_NO;
+    }
     match event {
         NEW_YEARS_DAY => 0x2B00 + (rand.0.random(15) & 15) as u16,
         TOY_DAY => {
@@ -202,6 +224,7 @@ fn visit(
     house: Res<State<crate::house::HouseState>>,
     existing: Query<(Entity, &Soncho)>,
     look: Res<crate::character::PlayerLook>,
+    identity: Res<crate::save::PlayerIdentity>,
     mut rand: ResMut<crate::game_rand::GameRand>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
@@ -234,6 +257,14 @@ fn visit(
         return;
     };
     if !existing.is_empty() {
+        return;
+    }
+    // `aES2_wait`: once somebody has started the quest he does not come out for the vacation again.
+    if event >= JAN_VACATION
+        && identity
+            .lighthouse
+            .talk_after((now.year, now.month, now.day))
+    {
         return;
     }
     let unit = if lined {
@@ -281,6 +312,8 @@ enum Step {
     Idle,
     /// A line is up; the talk ends with it.
     Line,
+    /// A question is up (the lighthouse offer); each answer's own follow-up line.
+    Ask(Vec<Option<usize>>),
     /// `msg(0)` / `msg(1)` is up: the item (or the full-pockets line) follows.
     BeforeGive,
     /// `msg(3)` is up: the item is handed over next.
@@ -313,6 +346,26 @@ fn context(identity: &crate::save::PlayerIdentity, item: u16) -> MsgContext {
     }
 }
 
+fn say_with(
+    disc: &GameDisc,
+    dialogue: &mut DialogueState,
+    actor: Entity,
+    ctx: &MsgContext,
+    message: u16,
+) -> Option<Vec<Option<usize>>> {
+    let text = disc.text.as_ref()?;
+    let (pages, asked) = text.talk_asking(usize::from(message), ctx, &mut |_| 0);
+    dialogue.begin_special(
+        actor,
+        "Tortimer",
+        (SONCHO2_NPC, SOUND),
+        pages,
+        asked.as_ref().map(|(_, c)| c.labels.clone()),
+    );
+    info!("Tortimer message {message:#06x}");
+    asked.map(|(_, c)| c.next)
+}
+
 fn say(
     disc: &GameDisc,
     dialogue: &mut DialogueState,
@@ -334,6 +387,38 @@ fn say(
         asked.as_ref().map(|(_, c)| c.labels.clone()),
     );
     info!("Tortimer message {message:#06x}");
+}
+
+/// `aES2_set_norm_talk_info` for the lighthouse vacations: the quest's offer, which starts it
+/// (`mSC_LightHouse_Quest_Start`, the free strings the days a week and a week and a day on), or after it `+ 6 + RANDOM(3)`.
+fn lighthouse_talk(
+    disc: &GameDisc,
+    dialogue: &mut DialogueState,
+    actor: Entity,
+    identity: &mut crate::save::PlayerIdentity,
+    event: u8,
+    rand: &mut crate::game_rand::GameRand,
+) -> Option<Vec<Option<usize>>> {
+    let now = crate::clock::now();
+    let date = (now.year, now.month, now.day);
+    let base = MSG_LIGHTHOUSE[usize::from(event - JAN_VACATION)];
+    let mut ctx = context(identity, EMPTY_NO);
+    if identity.lighthouse.talk_after(date) {
+        let msg = base + 6 + rand.0.random(3) as u16;
+        return say_with(disc, dialogue, actor, &ctx, msg);
+    }
+    // The quest starts as the talk does; the two days are named in the offer.
+    identity.lighthouse.quest_start(date);
+    if let Some(text) = disc.text.as_ref() {
+        for (slot, n) in [(0usize, 7), (1, 8)] {
+            let (_, day) = crate::lighthouse::after_days(now.year, now.month, now.day, n);
+            ctx.free[slot] = text
+                .string(DAY_STRINGS + usize::from(day) - 1)
+                .unwrap_or_default();
+        }
+    }
+    info!("The lighthouse quest starts on {date:?}");
+    say_with(disc, dialogue, actor, &ctx, base)
 }
 
 /// He faces the player while they talk.
@@ -390,9 +475,22 @@ fn talk(
     } else {
         None
     };
-    if answered.is_some() {
+    if let Some(choice) = answered {
         *focus = InputFocus::Dialogue;
         match std::mem::take(&mut flow.step) {
+            Step::Ask(next) => {
+                let ctx = context(&identity, me.item);
+                match next.get(choice).copied().flatten() {
+                    Some(m) => {
+                        flow.step = say_with(&disc, &mut dialogue, actor, &ctx, m as u16)
+                            .map_or(Step::Line, Step::Ask);
+                    }
+                    None => {
+                        *dialogue = DialogueState::default();
+                        *focus = InputFocus::World;
+                    }
+                }
+            }
             Step::BeforeGive => {
                 // `aES2_talk_before_give`.
                 if !inventory.pockets.pockets.contains(&EMPTY_NO) {
@@ -471,6 +569,11 @@ fn talk(
     actions.consume(Action::Interact);
     *focus = InputFocus::Dialogue;
     let event = me.event;
+    if event >= JAN_VACATION {
+        let asked = lighthouse_talk(&disc, &mut dialogue, actor, &mut identity, event, &mut rand);
+        flow.step = asked.map_or(Step::Line, Step::Ask);
+        return;
+    }
     let marked = calendar_marked(&identity, event);
     // `aES2_talk_init`: the calendar mark is made as the talk starts.
     let now = crate::clock::now();

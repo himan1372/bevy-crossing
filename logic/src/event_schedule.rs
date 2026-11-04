@@ -1080,6 +1080,8 @@ pub struct Inputs {
     /// `event_save_common.special_event.type`: which of the six special events (`SHOP_SALE`, `DESIGNER`,
     /// `BROKER_SALE`, `ARTIST`, `CARPET_PEDDLER`, `GYPSY`) is the current one, if any.
     pub special_type: Option<u16>,
+    /// `mSC_LightHouse_Event_Start()`: the lighthouse data is free, so Tortimer's two vacation rows may run.
+    pub lighthouse_open: bool,
 }
 
 /// `lbRTC_IS_LEAPYEAR`.
@@ -1244,8 +1246,6 @@ pub fn row_supported(event: u16) -> bool {
         event,
         ev::HANDBILL_SHOP_SALE
             | ev::HANDBILL_BROKER
-            | ev::SONCHO_VACATION_JANUARY
-            | ev::SONCHO_VACATION_FEBRUARY
             | ev::SONCHO_FISHING_TOURNEY_1
             | ev::SONCHO_FISHING_TOURNEY_2
             | ev::TALK_FISHING_TOURNEY_1
@@ -1341,6 +1341,10 @@ pub fn events_today(inp: &Inputs, birthday: Option<(u8, u8)>) -> Vec<ActiveEvent
         let mut live = row_supported(row.event)
             && weekly_allows(row.event, &inp.weekly)
             && (row.event != ev::GHOST || ghost_due(&inp.now, &inp.weekly))
+            && (!matches!(
+                row.event,
+                ev::SONCHO_VACATION_JANUARY | ev::SONCHO_VACATION_FEBRUARY
+            ) || inp.lighthouse_open)
             && special_allows(row.event, inp.special_type);
 
         // update_sports_fair
@@ -1509,6 +1513,7 @@ mod tests {
             dates: [0; save_date::NUM],
             weekly: WeeklyState::default(),
             special_type: None,
+            lighthouse_open: true,
         }
     }
 
@@ -1748,6 +1753,16 @@ mod tests {
         // Kept while it lies in [last Monday, Friday].
         init_weekly_event(&at(2026, 11, 4, 12), &mut w, &WeeklyContext::default());
         assert_eq!(w.ghost_day, (11 << 8) | 6);
+    }
+
+    #[test]
+    fn the_vacation_rows_run_only_while_the_lighthouse_data_is_free() {
+        let mut inp = inputs(at(2027, 1, 16, 12));
+        assert!(active(&inp, None, ev::SONCHO_VACATION_JANUARY).is_some());
+        inp.lighthouse_open = false;
+        assert!(active(&inp, None, ev::SONCHO_VACATION_JANUARY).is_none());
+        let inp = inputs(at(2027, 2, 14, 12));
+        assert!(active(&inp, None, ev::SONCHO_VACATION_FEBRUARY).is_some());
     }
 
     #[test]

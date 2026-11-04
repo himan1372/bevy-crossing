@@ -62,6 +62,7 @@ mod joan;
 mod job_end;
 mod katrina;
 mod kk_slider;
+mod lighthouse;
 mod locomotion;
 mod mail;
 mod mail_disc;

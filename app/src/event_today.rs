@@ -144,10 +144,17 @@ fn describe(events: &[ActiveEvent], hour: u8) -> String {
     }
 }
 
+/// `mSC_LightHouse_Event_Start` for today.
+fn lighthouse_open(identity: &mut crate::save::PlayerIdentity) -> bool {
+    let n = clock::now();
+    identity.lighthouse.event_start((n.year, n.month, n.day))
+}
+
 pub fn refresh(
     mut today: ResMut<TodayEvents>,
     shop: Option<Res<crate::shop::ShopData>>,
     mut rand: ResMut<crate::game_rand::GameRand>,
+    mut identity: ResMut<crate::save::PlayerIdentity>,
 ) {
     let n = clock::now();
     let now = to_schedule_now(&n);
@@ -184,6 +191,7 @@ pub fn refresh(
             dates,
             weekly: today.weekly,
             special_type: special.map(|(event, _)| event),
+            lighthouse_open: lighthouse_open(&mut identity),
         };
         // The port keeps no birthday yet.
         today.events = sch::events_today(&inputs, None);
