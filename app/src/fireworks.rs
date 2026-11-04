@@ -106,7 +106,7 @@ struct Spark {
 }
 
 /// The acre with the most water.
-fn water_acre(town: &Town) -> Option<(usize, usize)> {
+pub(crate) fn water_acre(town: &Town) -> Option<(usize, usize)> {
     let mut counts = std::collections::HashMap::new();
     for &(ax, az, ..) in &town.river_tiles {
         *counts.entry((ax, az)).or_insert(0usize) += 1;
@@ -118,7 +118,7 @@ fn water_acre(town: &Town) -> Option<(usize, usize)> {
 }
 
 /// A clear spot near unit (cx, cz) of an acre.
-fn unit_spot(town: &Town, acre: (usize, usize), unit: (usize, usize)) -> Option<Vec3> {
+pub(crate) fn unit_spot(town: &Town, acre: (usize, usize), unit: (usize, usize)) -> Option<Vec3> {
     for r in 0..4i32 {
         for dz in -r..=r {
             for dx in -r..=r {
@@ -305,12 +305,23 @@ fn fireworks(
     }
     *next = 1.2 + rand.0.fqrand() * 2.8;
     let centre = Town::cell_to_world(acre.0, acre.1, 8, 8);
-    let burst = centre
+    let at = centre
         + Vec3::new(
             (rand.0.fqrand() - 0.5) * 10.0,
             9.0 + rand.0.fqrand() * 4.0,
             (rand.0.fqrand() - 0.5) * 10.0,
         );
+    burst(&mut commands, &mut meshes, &mut materials, &mut rand, at);
+}
+
+/// One burst of coloured sparks (`eEC_EFFECT_HANABI_*` stand-in).
+pub(crate) fn burst(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    rand: &mut crate::game_rand::GameRand,
+    burst: Vec3,
+) {
     let hue = rand.0.fqrand() * 360.0;
     let colour = Color::hsl(hue, 1.0, 0.6);
     let linear = colour.to_linear();
@@ -337,7 +348,7 @@ fn fireworks(
     }
 }
 
-fn context(
+pub(crate) fn context(
     identity: &crate::save::PlayerIdentity,
     disc: &GameDisc,
     index: u32,

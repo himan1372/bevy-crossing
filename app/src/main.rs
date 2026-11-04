@@ -35,6 +35,7 @@ mod franklin;
 mod furniture;
 mod game_disc;
 mod game_rand;
+mod gatherings;
 mod goods;
 mod gracie;
 mod ground_map;
@@ -239,6 +240,7 @@ fn main() {
         .add_plugins(tugofwar::TugOfWarPlugin)
         .add_plugins(hatsumode::HatsumodePlugin)
         .add_plugins(fireworks::FireworksPlugin)
+        .add_plugins(gatherings::GatheringsPlugin)
         .add_plugins(tourney::TourneyPlugin)
         .add_plugins(spirits::SpiritsPlugin)
         .add_plugins(field_rank::FieldRankPlugin)
