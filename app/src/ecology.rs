@@ -878,11 +878,12 @@ fn tool_interact(
     bug_query: Query<(Entity, &Bug, &Transform)>,
     bobber_query: Query<(Entity, &Bobber, &Transform)>,
     fish_query: Query<&Fish>,
-    (mut swing, mut landed, mut net, mut catalog): (
+    (mut swing, mut landed, mut net, mut catalog, spirit_query): (
         ResMut<NetSwing>,
         bevy::ecs::message::MessageWriter<crate::critters::FishCaught>,
         ResMut<crate::player_tools::NetAction>,
         ResMut<crate::catalog::Catalog>,
+        Query<(Entity, &Transform), With<crate::spirits::Spirit>>,
     ),
     mut inventory: ResMut<PlayerInventory>,
     mut notify_timer: ResMut<CatchNotifyTimer>,
@@ -1014,6 +1015,33 @@ fn tool_interact(
                 if best.is_none_or(|(_, d)| dist < d) {
                     best = Some((entity, dist));
                 }
+            }
+            // Spooky's spirits (`mHD_prepare_drop_wisp`): the nearest in reach, if nearer than any bug.
+            let mut spirit: Option<(Entity, f32)> = None;
+            for (entity, at) in spirit_query.iter() {
+                let to = at.translation - player_pos;
+                let dist = to.length();
+                if dist > NET_RANGE || dist < 0.001 || facing.dir.dot(to / dist) < FACING_DOT {
+                    continue;
+                }
+                if spirit.is_none_or(|(_, d)| dist < d) {
+                    spirit = Some((entity, dist));
+                }
+            }
+            if let Some((entity, _)) = spirit.filter(|&(_, d)| best.is_none_or(|(_, b)| d < b)) {
+                if crate::spirits::catch(&mut inventory) {
+                    commands.entity(entity).despawn();
+                    crate::sound::se(crate::sound::se_id::NET_CATCH);
+                    show_catch_notify("Caught a spirit!", &mut notify_timer, &mut notify_query);
+                    println!("Caught a spirit ({}/15 pockets)", inventory.used());
+                } else {
+                    show_catch_notify(
+                        "Your pockets are full!",
+                        &mut notify_timer,
+                        &mut notify_query,
+                    );
+                }
+                return;
             }
             match best {
                 Some((entity, _)) => {

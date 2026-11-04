@@ -98,6 +98,7 @@ mod shop_nook;
 mod skeleton;
 mod sound;
 mod sound_rom;
+mod spirits;
 mod spooky;
 mod states;
 mod statue;
@@ -218,6 +219,7 @@ fn main() {
         .add_plugins(jack::JackPlugin)
         .add_plugins(franklin::FranklinPlugin)
         .add_plugins(spooky::SpookyPlugin)
+        .add_plugins(spirits::SpiritsPlugin)
         .add_plugins(field_rank::FieldRankPlugin)
         .add_plugins(post::PostPlugin)
         .add_plugins(catalog::CatalogPlugin)
