@@ -13,8 +13,13 @@
 //! handed over into the first free pocket and recorded with the event's save (`mEv_designer_c`, kept as
 //! [`DesignerEvent`]); `mEv_SPECL_DESIGNER_COMPLETE` goes on when the game is over.
 //!
-//! Not built: her car (the `s_car` structure), the player's wash-car animation, the camera and the wash speed; a plain
-//! counter on screen stands in for the game's view.
+//! Her car (`ac_s_car.c`, `DESIGNER_CAR`) stands two cells north and one west of her
+//! (`aEDSN_think_init_proc`: she is placed at the car + (1, 2) cells). It is `s_car_DL_model`, drawn with the primitive
+//! colour `remaining * (150, 120, 100) + done * 255` per channel (`aSCR_set_prim_col`, `done` being the presses over
+//! 100), so it turns from dull to white as it is washed; the wash stays on it while it is there.
+//!
+//! Not built: the car's ground offsets and shadow, its sparkles at 100 presses (`eEC_EFFECT_CAR_BLIGHT`), the player's
+//! wash-car animation, the camera and the wash speed; a plain counter on screen stands in for the game's view.
 
 use bevy::prelude::*;
 use rustimal_logic::event_schedule::ev;
@@ -29,6 +34,7 @@ use crate::game_disc::GameDisc;
 use crate::input::{Action, Actions, InputFocus, InteractSet};
 use crate::interaction::{Facing, PlayerInventory};
 use crate::messages::{MsgChoice, MsgContext};
+use crate::n64_material::N64Material;
 use crate::player::Player;
 use crate::save::LoadedSave;
 use crate::shop::ShopLocation;
@@ -71,6 +77,32 @@ struct Gracie {
 #[derive(Component)]
 struct WashText;
 
+/// Her car: the display list's materials at each wash level (0..=5, 20% steps), the level shown, and the game day.
+#[derive(Component)]
+struct GracieCar {
+    day: i64,
+    level: usize,
+    /// `variants[level][part]`.
+    variants: Vec<Vec<Handle<N64Material>>>,
+    /// The parts' entities, in the same order.
+    parts: Vec<Entity>,
+}
+
+/// `aSCR_set_prim_col` for a wash of `percent` (0..=100).
+fn car_colour(percent: f32) -> [u8; 4] {
+    let done = percent / 100.0;
+    let remaining = 1.0 - done;
+    [
+        (remaining * 150.0 + done * 255.0) as u8,
+        (remaining * 120.0 + done * 255.0) as u8,
+        (remaining * 100.0 + done * 255.0) as u8,
+        255,
+    ]
+}
+
+/// The washing levels of the car (20% steps).
+const CAR_LEVELS: usize = 6;
+
 /// Startup: the saved event area.
 fn apply_loaded(loaded: Res<LoadedSave>, mut event: ResMut<DesignerEvent>) {
     if let Some(save) = loaded.0.as_ref() {
@@ -88,7 +120,11 @@ fn visit(
     state: Res<State<ShopLocation>>,
     house: Res<State<crate::house::HouseState>>,
     existing: Query<(Entity, &Gracie)>,
+    cars: Query<(Entity, &GracieCar)>,
+    disc: Option<Res<GameDisc>>,
     mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<N64Material>>,
+    mut images: ResMut<Assets<Image>>,
     mut flow: ResMut<Talk>,
 ) {
     let now = crate::clock::now();
@@ -106,6 +142,11 @@ fn visit(
             commands.entity(entity).despawn();
         }
     }
+    for (entity, car) in &cars {
+        if !out || car.day != day {
+            commands.entity(entity).despawn();
+        }
+    }
     if !out || !existing.is_empty() {
         return;
     }
@@ -113,6 +154,26 @@ fn visit(
     let Some(at) = crate::joan::spot(&town, &items, day) else {
         return;
     };
+    // The car stands on a lot of clear ground (`make_FG_somewhere_lot4sale`): the nearest spot to the pick where the
+    // car's 3 x 3 cells and her own are clear.
+    let clear = |p: Vec3| town.is_clear_ground(p) && !town.in_retail_obstacle(p);
+    let fits = |g: Vec3| {
+        let car = g + Vec3::new(-1.0, 0.0, -2.0);
+        clear(g)
+            && (-1..=1)
+                .all(|dz| (-1..=1).all(|dx| clear(car + Vec3::new(dx as f32, 0.0, dz as f32))))
+    };
+    let mut best: Option<(f32, Vec3)> = None;
+    for dz in -10i32..=10 {
+        for dx in -10i32..=10 {
+            let g = at + Vec3::new(dx as f32, 0.0, dz as f32);
+            let d = (g - at).length();
+            if fits(g) && best.is_none_or(|(b, _)| d < b) {
+                best = Some((d, g));
+            }
+        }
+    }
+    let at = best.map_or(at, |(_, g)| g.with_y(town.ground_y(g)));
     commands.spawn((
         Name::new("Gracie"),
         Gracie { day },
@@ -124,7 +185,73 @@ fn visit(
     ));
     // `designer->complete_flag` belongs to the actor.
     flow.complete_flag = false;
+    flow.car_presses = 0;
     info!("Gracie is out at {at:?}");
+    // Her car, two cells north and one west of her.
+    let Some(disc) = disc else { return };
+    let Some(model) = disc.catalog.get("s_car_DL_model") else {
+        return;
+    };
+    let lists = [model.offset];
+    let car_at = at + Vec3::new(-1.0, 0.0, -2.0);
+    let car_at = car_at.with_y(town.ground_y(car_at));
+    let mut variants = Vec::with_capacity(CAR_LEVELS);
+    let mut shapes: Vec<Handle<Mesh>> = Vec::new();
+    for level in 0..CAR_LEVELS {
+        let colours = crate::disc_town::DrawColors {
+            prim: car_colour(level as f32 * 20.0),
+            prim_lod: 128,
+            env: [0; 4],
+        };
+        let built = crate::disc_town::build_model_full(
+            &disc,
+            &lists,
+            None,
+            colours,
+            false,
+            (&crate::disc_gfx::Segments::default(), &[]),
+            (&mut meshes, &mut materials, &mut images),
+        );
+        if level == 0 {
+            shapes = built.iter().map(|(mesh, _)| mesh.clone()).collect();
+        }
+        variants.push(
+            built
+                .into_iter()
+                .map(|(_, material)| material)
+                .collect::<Vec<_>>(),
+        );
+    }
+    if shapes.is_empty() {
+        return;
+    }
+    let root = commands
+        .spawn((
+            Name::new("Gracie's car"),
+            Transform::from_translation(car_at),
+            Visibility::default(),
+        ))
+        .id();
+    let parts: Vec<Entity> = shapes
+        .into_iter()
+        .zip(variants[0].iter())
+        .map(|(mesh, material)| {
+            commands
+                .spawn((
+                    Mesh3d(mesh),
+                    MeshMaterial3d(material.clone()),
+                    ChildOf(root),
+                ))
+                .id()
+        })
+        .collect();
+    commands.entity(root).insert(GracieCar {
+        day,
+        level: 0,
+        variants,
+        parts,
+    });
+    info!("Gracie's car stands at {car_at:?}");
 }
 
 /// A new special event starts the event area empty (`mEv_reserve_save_area`).
@@ -178,6 +305,8 @@ struct Talk {
     complete_flag: bool,
     /// `designer->wear_flag`.
     wear_flag: u8,
+    /// `designer_common->button_presses`: the wash so far, kept for the car's colour while it stands.
+    car_presses: u32,
 }
 
 fn context(identity: &crate::save::PlayerIdentity, present: Option<u16>) -> MsgContext {
@@ -293,6 +422,7 @@ fn wash(
             },
         ));
     }
+    let shown = *presses;
     let result = if *presses >= PRESSES {
         // `designer->wash_time <= 360 ? 1 : 0`.
         Some(if *left <= SLOW_SECS { 1 } else { 0 })
@@ -304,6 +434,27 @@ fn wash(
     if let Some(result) = result {
         info!("Gracie: the wash is over, result {result} ({presses} presses, {left:.1} s left)");
         flow.step = Step::Washed(result);
+    }
+    flow.car_presses = shown.min(PRESSES);
+}
+
+/// `aSCR_set_prim_col`: the car's colour follows the wash.
+fn car_colour_update(
+    flow: Res<Talk>,
+    mut cars: Query<&mut GracieCar>,
+    mut parts: Query<&mut MeshMaterial3d<N64Material>>,
+) {
+    for mut car in &mut cars {
+        let level = ((flow.car_presses as f32 / 20.0).round() as usize).min(CAR_LEVELS - 1);
+        if level == car.level {
+            continue;
+        }
+        car.level = level;
+        for (part, material) in car.parts.iter().zip(&car.variants[level]) {
+            if let Ok(mut shown) = parts.get_mut(*part) {
+                shown.0 = material.clone();
+            }
+        }
     }
 }
 
@@ -530,7 +681,7 @@ impl Plugin for GraciePlugin {
                     .chain()
                     .in_set(GameplaySet),
             )
-            .add_systems(Update, (face, wash).in_set(GameplaySet))
+            .add_systems(Update, (face, wash, car_colour_update).in_set(GameplaySet))
             .add_systems(Update, talk.in_set(InteractSet::Talk).in_set(GameplaySet));
     }
 }
