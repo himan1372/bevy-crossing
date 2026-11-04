@@ -340,6 +340,7 @@ fn talk(
     mut actions: ResMut<Actions>,
     player: Query<(&Transform, &Facing), (With<Player>, Without<Racer>)>,
     racers: Query<(Entity, &Transform, &Racer)>,
+    models: Query<&NpcModel>,
     mut dialogue: ResMut<DialogueState>,
     identity: Res<crate::save::PlayerIdentity>,
     mut rand: ResMut<crate::game_rand::GameRand>,
@@ -391,7 +392,8 @@ fn talk(
         },
     };
     let msg = base + offset + rand.0.random(2) as u16;
-    let ctx = context(&identity, "Villager");
+    let mut ctx = context(&identity, "Villager");
+    ctx.tail = crate::dialogue::catchphrase(&disc, models.get(actor).map_or(u32::MAX, |m| m.0));
     let Some(text) = disc.text.as_ref() else {
         return;
     };

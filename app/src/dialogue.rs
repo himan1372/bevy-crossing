@@ -459,6 +459,27 @@ fn on_talk(
     }
 }
 
+/// A villager's catchphrase (`npc_def_list[index].catchphrase_str_idx`); empty for an event model.
+pub(crate) fn catchphrase(disc: &crate::game_disc::GameDisc, index: u32) -> String {
+    /// `mNpc_Default_Data_c`: cloth u16, catchphrase string u16, umbrella.
+    const DEFAULT_SIZE: u32 = 6;
+    if index >= 238 {
+        return String::new();
+    }
+    (|| {
+        let list = disc.catalog.get("npc_def_list")?;
+        let b = disc.rom.slice(
+            disc::RomSource::Rel,
+            list.offset + index * DEFAULT_SIZE + 2,
+            2,
+        )?;
+        disc.text
+            .as_ref()?
+            .string(u16::from_be_bytes([b[0], b[1]]) as usize)
+    })()
+    .unwrap_or_default()
+}
+
 /// What the game fills into a villager's message: names, their
 /// catchphrase (`npc_def_list[id].catchphrase_str_idx` in the string bank),
 /// the topic's item, and the date and time.

@@ -46,6 +46,13 @@ struct Speaker {
     day: i64,
 }
 
+/// One of the four villagers watching (`ac_groundhog_npc0`).
+#[derive(Component)]
+struct Audience {
+    looks: u8,
+    index: u32,
+}
+
 #[derive(Component)]
 struct Groundhog;
 
@@ -137,6 +144,7 @@ fn visit(
     house: Res<State<crate::house::HouseState>>,
     existing: Query<(Entity, &Speaker)>,
     mut show: ResMut<Show>,
+    roster: Option<Res<crate::roster::TownRoster>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
     let now = crate::clock::now();
@@ -173,6 +181,33 @@ fn visit(
         Transform::from_translation(at + Vec3::Y),
     ));
     info!("Tortimer waits for the groundhog at {at:?}");
+    // The audience (`l_gh_map`, `aGH0_schedule_init_proc`): units, nudges and facings.
+    const UNITS: [(usize, usize); 4] = [(5, 12), (6, 12), (8, 12), (10, 12)];
+    const NUDGE: [(f32, f32); 4] = [(0.0, -20.0), (20.0, 0.0), (20.0, 0.0), (0.0, -20.0)];
+    const ANGLE: [u16; 4] = [0x6B00, 0x8000, 0x8000, 0x9500];
+    let Some(roster) = roster else { return };
+    for (i, entry) in roster.residents.iter().take(4).enumerate() {
+        let Some(at) = crate::tortimer::shrine_cell(&town, UNITS[i].0, UNITS[i].1) else {
+            continue;
+        };
+        let at = at + Vec3::new(NUDGE[i].0, 0.0, NUDGE[i].1) / 40.0;
+        let yaw = f32::from(ANGLE[i]) * std::f32::consts::TAU / 65536.0;
+        commands.spawn((
+            Name::new(format!("{} (groundhog audience)", entry.name)),
+            Speaker {
+                day: now.day_number,
+            },
+            Audience {
+                looks: entry.looks,
+                index: entry.index,
+            },
+            NpcClip::default(),
+            NpcGait::default(),
+            NpcModel(entry.index),
+            Mesh3d(meshes.add(Capsule3d::new(0.35, 0.9))),
+            Transform::from_translation(at + Vec3::Y).with_rotation(Quat::from_rotation_y(yaw)),
+        ));
+    }
 }
 
 /// The show: `aGHC_birth_reset` and the actors' speeches, in order.
@@ -301,6 +336,7 @@ fn talk(
     mut actions: ResMut<Actions>,
     player: Query<(&Transform, &Facing), With<Player>>,
     tortimer: Query<(Entity, &Transform), With<SpeechTortimer>>,
+    audience: Query<(Entity, &Transform, &Audience)>,
     mut dialogue: ResMut<DialogueState>,
     identity: Res<crate::save::PlayerIdentity>,
     mut rand: ResMut<crate::game_rand::GameRand>,
@@ -308,6 +344,57 @@ fn talk(
     let Some(disc) = disc.filter(|d| d.text.is_some()) else {
         return;
     };
+    // The audience (`aGH0_set_norm_talk_info`): `base(looks) + term * 3 + RANDOM(3)`, quiet in the last minute.
+    if dialogue.active
+        && dialogue.speaker.is_some_and(|e| audience.get(e).is_ok())
+        && dialogue.external_result.take().is_some()
+    {
+        *dialogue = DialogueState::default();
+        *focus = InputFocus::World;
+        return;
+    }
+    if focus.is_world() && actions.just_pressed(Action::Interact) {
+        if let Ok((at, facing)) = player.single() {
+            let near = audience.iter().find(|(_, t, _)| {
+                let delta = (t.translation - at.translation).with_y(0.0);
+                delta.length() < 1.8 && facing.dir.dot(delta.normalize_or_zero()) >= 0.5
+            });
+            if let Some((who, _, a)) = near {
+                const BASE: [u16; 6] = [15698, 15729, 15605, 15636, 15667, 15760];
+                let secs = crate::clock::now().day_secs;
+                let hour = 3600;
+                // `aGHC_get_now_term`, with the 1-minute term mute and the later terms shifted down by one.
+                let term = match secs {
+                    s if s >= 8 * hour => Some(4),
+                    s if s >= 8 * hour - 60 => None,
+                    s if s >= 8 * hour - 5 * 60 => Some(3),
+                    s if s >= 8 * hour - 15 * 60 => Some(2),
+                    s if s >= 8 * hour - 30 * 60 => Some(1),
+                    _ => Some(0),
+                };
+                if let Some(term) = term {
+                    actions.consume(Action::Interact);
+                    let msg =
+                        BASE[usize::from(a.looks).min(5)] + term * 3 + rand.0.random(3) as u16;
+                    let mut ctx = context(&identity, "Villager");
+                    ctx.tail = crate::dialogue::catchphrase(&disc, a.index);
+                    if let Some(text) = disc.text.as_ref() {
+                        let (pages, asked) = text.talk_asking(usize::from(msg), &ctx, &mut |_| 0);
+                        *focus = InputFocus::Dialogue;
+                        dialogue.begin_special(
+                            who,
+                            "Villager",
+                            (0, SOUND),
+                            pages,
+                            asked.as_ref().map(|(_, c)| c.labels.clone()),
+                        );
+                        info!("Groundhog audience message {msg}");
+                    }
+                    return;
+                }
+            }
+        }
+    }
     let Ok((actor, actor_at)) = tortimer.single() else {
         return;
     };

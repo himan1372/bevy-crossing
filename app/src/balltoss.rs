@@ -413,6 +413,7 @@ fn talk(
     player: Query<(&Transform, &Facing), (With<Player>, Without<Toss>)>,
     tossers: Query<(Entity, &Transform, &Tosser)>,
     leaders: Query<(Entity, &Transform, &Leader)>,
+    models: Query<&NpcModel>,
     mut dialogue: ResMut<DialogueState>,
     identity: Res<crate::save::PlayerIdentity>,
     mut rand: ResMut<crate::game_rand::GameRand>,
@@ -467,7 +468,8 @@ fn talk(
     let Some(text) = disc.text.as_ref() else {
         return;
     };
-    let ctx = context(&identity);
+    let mut ctx = context(&identity);
+    ctx.tail = crate::dialogue::catchphrase(&disc, models.get(actor).map_or(u32::MAX, |m| m.0));
     let (pages, asked) = text.talk_asking(usize::from(msg), &ctx, &mut |_| 0);
     *focus = InputFocus::Dialogue;
     dialogue.begin_special(

@@ -422,6 +422,7 @@ fn talk(
     mut actions: ResMut<Actions>,
     player: Query<(&Transform, &Facing), (With<Player>, Without<Line>)>,
     line: Query<(Entity, &Transform, &Role), With<Line>>,
+    models: Query<&NpcModel>,
     mut flow: ResMut<Talk>,
     mut dialogue: ResMut<DialogueState>,
     mut inventory: ResMut<PlayerInventory>,
@@ -513,6 +514,8 @@ fn talk(
             );
         }
         Role::Villager(place, looks) => {
+            ctx.tail =
+                crate::dialogue::catchphrase(&disc, models.get(actor).map_or(u32::MAX, |m| m.0));
             let msg = MSG_BASE[event][usize::from(looks).min(5)]
                 + rand.0.random(2) as u16
                 + u16::from(place) * 3;
