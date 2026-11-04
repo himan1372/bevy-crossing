@@ -50,6 +50,7 @@ mod intro_train;
 mod items;
 mod joan;
 mod job_end;
+mod katrina;
 mod kk_slider;
 mod locomotion;
 mod mail;
@@ -196,6 +197,7 @@ fn main() {
         .add_plugins(joan::JoanPlugin)
         .add_plugins(kk_slider::KkSliderPlugin)
         .add_plugins(gulliver::GulliverPlugin)
+        .add_plugins(katrina::KatrinaPlugin)
         .add_plugins(field_rank::FieldRankPlugin)
         .add_plugins(post::PostPlugin)
         .add_plugins(catalog::CatalogPlugin)

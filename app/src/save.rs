@@ -74,6 +74,12 @@ pub(crate) struct PlayerIdentity {
     /// `aircheck_collect_bitfield[2]`: the K.K. songs this player has been given (bit n = song n).
     #[serde(default)]
     pub kk_aircheck: [u32; 2],
+    /// `mPr_destiny_c.type` (`event_visitors::destiny`): Katrina's fortune, valid for `destiny_day` only.
+    #[serde(default)]
+    pub destiny: u8,
+    /// The game day the fortune was told.
+    #[serde(default)]
+    pub destiny_day: i64,
 }
 
 fn map_flag_on() -> bool {
@@ -172,6 +178,8 @@ impl Default for PlayerIdentity {
             intro_done: false,
             kk_introduced: false,
             kk_aircheck: [0; 2],
+            destiny: 0,
+            destiny_day: 0,
         }
     }
 }

@@ -40,7 +40,7 @@ struct Joan {
 
 /// `search_free_unit`, over this town's acres: the day picks an acre, and her
 /// spot is the clear, empty unit nearest its middle.
-fn spot(town: &Town, items: &crate::field_items::FieldItems, day: i64) -> Option<Vec3> {
+pub(crate) fn spot(town: &Town, items: &crate::field_items::FieldItems, day: i64) -> Option<Vec3> {
     let n = (ACRE_WIDTH * ACRE_DEPTH) as i64;
     for cur in (1..=n).rev() {
         let pick = ((day * 31 + cur * 3 + 9 * i64::from(crate::clock::now().month)).rem_euclid(n))
