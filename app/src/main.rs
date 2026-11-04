@@ -100,6 +100,7 @@ mod town;
 mod town_map;
 mod villager_memory;
 mod warning_panel;
+mod wendell;
 
 use assets::GameAssetsPlugin;
 use clock::ClockPlugin;
@@ -200,6 +201,7 @@ fn main() {
         .add_plugins(gulliver::GulliverPlugin)
         .add_plugins(katrina::KatrinaPlugin)
         .add_plugins(halloween::HalloweenPlugin)
+        .add_plugins(wendell::WendellPlugin)
         .add_plugins(field_rank::FieldRankPlugin)
         .add_plugins(post::PostPlugin)
         .add_plugins(catalog::CatalogPlugin)

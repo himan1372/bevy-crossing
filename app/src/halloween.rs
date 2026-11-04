@@ -281,7 +281,7 @@ fn talk(
     if let Some(entity) = flow.villager {
         let Ok((_, villager, _)) = villagers.get(entity) else {
             // They took the costume off or went away: the talk is over.
-            pockets.halloween = false;
+            pockets.give_any = false;
             end(&mut dialogue, &mut focus, &mut flow, &mut claim);
             return;
         };
@@ -292,7 +292,7 @@ fn talk(
             if pockets.open {
                 return;
             }
-            pockets.halloween = false;
+            pockets.give_any = false;
             *focus = InputFocus::Dialogue;
             match pockets.sell_slot.take() {
                 None => {
@@ -382,7 +382,7 @@ fn talk(
                             // `aHWN_trick_or_treat_talk_proc`: Treat opens the pockets in the give mode.
                             *pockets = PocketsUi {
                                 open: true,
-                                halloween: true,
+                                give_any: true,
                                 ..default()
                             };
                             *dialogue = DialogueState::default();

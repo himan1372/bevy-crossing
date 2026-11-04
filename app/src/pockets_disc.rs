@@ -1267,7 +1267,7 @@ fn draw(
             let compact = mail.menu.is_some()
                 || ui.selling
                 || ui.donating
-                || ui.halloween
+                || ui.give_any
                 || ui.sending
                 || ui.giving.is_some()
                 || ui.mailing

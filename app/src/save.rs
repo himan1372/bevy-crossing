@@ -356,6 +356,9 @@ pub struct SaveData {
     /// The weekly visitor and Gulliver's day; absent in saves from before it was kept.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) weekly_event: Option<crate::event_today::WeeklySave>,
+    /// Wendell's event area (the wallpapers he gave this special event).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) artist_event: Option<crate::wendell::ArtistEvent>,
 }
 
 /// Save data loaded at startup (PreStartup), consumed by Startup systems.
@@ -670,6 +673,7 @@ fn collect_save(
         last_remove_day: None,
         remove_slot: None,
         weekly_event: None,
+        artist_event: None,
     }
 }
 
@@ -763,6 +767,7 @@ fn quick_save(
         house_mail,
         catalog,
         today,
+        artist,
     ): (
         Res<PlayerLook>,
         Option<Res<crate::roster::TownRoster>>,
@@ -778,6 +783,7 @@ fn quick_save(
         Option<Res<crate::mail::HouseMailbox>>,
         Option<Res<crate::catalog::Catalog>>,
         Option<Res<crate::event_today::TodayEvents>>,
+        Option<Res<crate::wendell::ArtistEvent>>,
     ),
 ) {
     // Furniture movement already has an atomic committed destination. Other
@@ -823,6 +829,7 @@ fn quick_save(
     save.catalog = catalog.map(|c| c.save());
     save.player_cloth = Some(look.cloth as u16);
     save.weekly_event = today.map(|t| t.weekly_save());
+    save.artist_event = artist.map(|a| a.clone());
     if let Some(r) = roster {
         save.villagers = Some(r.residents.iter().map(|e| e.index).collect());
         save.villagers_appeared = r.appeared.clone();
@@ -881,6 +888,7 @@ fn quick_load(
         catalog,
         mut rank,
         today,
+        artist,
     ): (
         Option<ResMut<crate::home::PlayerHouse>>,
         ResMut<crate::player_room::floors::HomeFloors>,
@@ -893,6 +901,7 @@ fn quick_load(
         Option<ResMut<crate::catalog::Catalog>>,
         ResMut<crate::field_rank::FieldRank>,
         Option<ResMut<crate::event_today::TodayEvents>>,
+        Option<ResMut<crate::wendell::ArtistEvent>>,
     ),
 ) {
     if !actions.just_pressed(Action::QuickLoad)
@@ -927,6 +936,9 @@ fn quick_load(
     }
     if let Some(mut today) = today {
         today.restore_weekly(save.weekly_event);
+    }
+    if let Some(mut artist) = artist {
+        *artist = save.artist_event.clone().unwrap_or_default();
     }
     room.restore(save.home_furniture.as_ref(), disc.as_deref());
     if disc.is_some() {

@@ -277,6 +277,12 @@ pub fn wendell_msg(class: u8) -> u16 {
     WENDELL_MSG[(class.min(4)) as usize]
 }
 
+/// The message for an item class from [`wendell_classify`] (`FISH`..`OTHER`). `WENDELL_MSG` is indexed by
+/// `idx` = class + 1 (index 0 is "nothing given"), so [`wendell_msg`] must be given that index, not the class.
+pub fn wendell_msg_for(class: u8) -> u16 {
+    WENDELL_MSG[(class.min(3) + 1) as usize]
+}
+
 /// Wendell's next-action markers (Rust-side; the C action IDs stay in
 /// the actor code). CORRECTED: only FISH goes to the gift demo;
 /// FOOD takes the ordinary talk-end path.
@@ -488,6 +494,10 @@ mod tests {
         assert_eq!(wendell_classify(2, 2), wendell_class::TOOL);
         assert_eq!(wendell_classify(2, 9), wendell_class::OTHER);
         assert_eq!(wendell_classify(1, 3), wendell_class::OTHER); // not ITEM1
+        assert_eq!(wendell_msg_for(wendell_class::FISH), 0x02F9);
+        assert_eq!(wendell_msg_for(wendell_class::FOOD), 0x02F8);
+        assert_eq!(wendell_msg_for(wendell_class::TOOL), 0x02FC);
+        assert_eq!(wendell_msg_for(wendell_class::OTHER), 0x02F7);
         assert_eq!(wendell_msg(0), 0x02F6);
         assert_eq!(wendell_msg(1), 0x02F9);
         assert_eq!(wendell_msg(2), 0x02F8);
