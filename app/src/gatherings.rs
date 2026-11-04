@@ -41,6 +41,8 @@ enum Kind {
     Cherry,
     Moon,
     Count,
+    Meteor,
+    Harvest,
 }
 
 /// The cherry viewing's units and facings (degrees), the fifth wanders.
@@ -70,6 +72,23 @@ const MOON_POS: [(f32, f32); 7] = [
     (1.0, 1.0),
 ];
 const MOON_BASE: [u16; 6] = [0x1EB0, 0x1EBF, 0x1EA1, 0x1ECE, 0x1EDD, 0x1EEC];
+/// The meteor shower's lines (`msg_base2`) and layouts (`l_ms_pule*`).
+const METEOR_BASE: [u16; 6] = [0x3F46, 0x3F55, 0x3F37, 0x3F64, 0x3F73, 0x3F82];
+const METEOR: [[(usize, usize); 4]; 7] = [
+    [(13, 7), (3, 3), (2, 4), (12, 2)],
+    [(3, 8), (12, 13), (13, 12), (13, 2)],
+    [(9, 13), (12, 3), (13, 3), (4, 4)],
+    [(9, 12), (3, 2), (2, 3), (8, 2)],
+    [(9, 2), (12, 6), (13, 7), (2, 2)],
+    [(12, 8), (12, 2), (13, 3), (2, 13)],
+    [(3, 7), (13, 8), (13, 9), (12, 2)],
+];
+/// The harvest festival: units, facings (the fifth stands), tables and the bases of the lines.
+const HARVEST: [(usize, usize); 5] = [(10, 6), (12, 8), (5, 4), (3, 6), (4, 12)];
+const HARVEST_ANGLE: [f32; 4] = [45.0, 270.0, 315.0, 90.0];
+const HARVEST_TABLES: [(usize, usize); 3] = [(4, 5), (11, 7), (5, 10)];
+const HARVEST_BASE: [u16; 6] = [15512, 15543, 15419, 15450, 15481, 15574];
+const HARVEST_BASE5: [u16; 6] = [0x3CA4, 0x3CC3, 0x3C47, 0x3C66, 0x3C85, 0x3CE2];
 
 type Units5 = [(usize, usize); 5];
 type Units2 = [(usize, usize); 2];
@@ -151,6 +170,10 @@ fn active_kind(today: &TodayEvents, hour: u8) -> Option<Kind> {
         Some(Kind::Moon)
     } else if today.is_active(ev::NEW_YEARS_EVE_COUNTDOWN, hour) {
         Some(Kind::Count)
+    } else if today.is_active(ev::METEOR_SHOWER, hour) {
+        Some(Kind::Meteor)
+    } else if today.is_active(ev::HARVEST_FESTIVAL, hour) {
+        Some(Kind::Harvest)
     } else {
         None
     }
@@ -193,7 +216,7 @@ fn visit(
     let acre = water_acre(&town);
     let spot = |unit: (usize, usize)| -> Option<Vec3> {
         match kind {
-            Kind::Cherry => crate::tortimer::shrine_cell(&town, unit.0, unit.1),
+            Kind::Cherry | Kind::Harvest => crate::tortimer::shrine_cell(&town, unit.0, unit.1),
             _ => acre.and_then(|a| unit_spot(&town, a, unit)),
         }
     };
@@ -207,9 +230,22 @@ fn visit(
                 }
             }
         }
-        Kind::Moon => {
+        Kind::Harvest => {
+            for (i, u) in HARVEST.iter().enumerate() {
+                if let Some(at) = spot(*u) {
+                    let deg = HARVEST_ANGLE.get(i).copied().unwrap_or(0.0);
+                    guests.push((at, deg.to_radians(), false));
+                }
+            }
+        }
+        Kind::Moon | Kind::Meteor => {
             let (px, pz) = MOON_POS[layout];
-            for u in MOON[layout] {
+            let units = if kind == Kind::Moon {
+                MOON[layout]
+            } else {
+                METEOR[layout]
+            };
+            for u in units {
                 if let Some(at) = spot(u) {
                     let at = at + Vec3::new(px - 20.0, 0.0, pz - 20.0) / UNIT;
                     guests.push((at, MOON_ANGLE[layout].to_radians(), false));
@@ -255,7 +291,12 @@ fn visit(
             Vec3::new(1.6, 0.7, 1.0),
             Color::srgb(0.95, 0.7, 0.75),
         ),
-        Kind::Moon => (Vec::new(), Vec3::ONE, Color::WHITE),
+        Kind::Moon | Kind::Meteor => (Vec::new(), Vec3::ONE, Color::WHITE),
+        Kind::Harvest => (
+            HARVEST_TABLES.to_vec(),
+            Vec3::new(1.6, 0.7, 1.0),
+            Color::srgb(0.8, 0.55, 0.3),
+        ),
         Kind::Count => (
             COUNT[layout].1.to_vec(),
             Vec3::new(1.2, 2.0, 0.3),
@@ -316,6 +357,14 @@ fn line(g: &Guest, term: u8, rand: &mut crate::game_rand::GameRand) -> u16 {
             }
         }
         Kind::Moon => MOON_BASE[looks] + r + 3 * g.idx as u16,
+        Kind::Meteor => METEOR_BASE[looks] + r + 3 * g.idx as u16,
+        Kind::Harvest => {
+            if g.idx == 4 {
+                HARVEST_BASE5[looks] + r
+            } else {
+                HARVEST_BASE[looks] + r + 3 * g.idx as u16
+            }
+        }
         Kind::Count => {
             let more = if term >= 5 { 17 } else { u16::from(term) * 4 };
             COUNT_BASE[looks] + r + more
@@ -474,6 +523,53 @@ fn midnight(
     burst(&mut commands, &mut meshes, &mut materials, &mut rand, at);
 }
 
+/// Shooting stars over the pond acre while the meteor shower runs (a stand-in for the sky effect).
+#[allow(clippy::too_many_arguments)]
+fn meteors(
+    mut commands: Commands,
+    time: Res<Time>,
+    town: Res<Town>,
+    guests: Query<&Guest>,
+    mut next: Local<f32>,
+    mut rand: ResMut<crate::game_rand::GameRand>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    if !guests.iter().any(|g| g.kind == Kind::Meteor) {
+        return;
+    }
+    *next -= time.delta_secs();
+    if *next > 0.0 {
+        return;
+    }
+    *next = 0.6 + rand.0.fqrand() * 1.8;
+    let Some(acre) = water_acre(&town) else {
+        return;
+    };
+    let centre = Town::cell_to_world(acre.0, acre.1, 8, 8);
+    let at = centre
+        + Vec3::new(
+            10.0 + rand.0.fqrand() * 14.0,
+            24.0 + rand.0.fqrand() * 8.0,
+            (rand.0.fqrand() - 0.5) * 30.0,
+        );
+    let vel = Vec3::new(-16.0, -3.0, (rand.0.fqrand() - 0.5) * 4.0);
+    let material = materials.add(StandardMaterial {
+        base_color: Color::WHITE,
+        emissive: LinearRgba::new(6.0, 6.0, 5.0, 1.0),
+        unlit: true,
+        ..default()
+    });
+    commands.spawn((
+        crate::fireworks::Spark { vel, age: 0.0 },
+        Mesh3d(meshes.add(Cuboid::new(2.4, 0.08, 0.08))),
+        MeshMaterial3d(material),
+        Transform::from_translation(at)
+            .looking_to(vel, Vec3::Y)
+            .with_rotation(Quat::from_rotation_arc(Vec3::X, -vel.normalize())),
+    ));
+}
+
 pub struct GatheringsPlugin;
 
 impl Plugin for GatheringsPlugin {
@@ -482,7 +578,7 @@ impl Plugin for GatheringsPlugin {
             Update,
             visit.after(crate::event_today::refresh).in_set(GameplaySet),
         )
-        .add_systems(Update, (wander, midnight).in_set(GameplaySet))
+        .add_systems(Update, (wander, midnight, meteors).in_set(GameplaySet))
         .add_systems(Update, talk.in_set(InteractSet::Talk).in_set(GameplaySet));
     }
 }

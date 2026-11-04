@@ -100,9 +100,9 @@ struct Villager {
 struct Seller;
 
 #[derive(Component)]
-struct Spark {
-    vel: Vec3,
-    age: f32,
+pub(crate) struct Spark {
+    pub(crate) vel: Vec3,
+    pub(crate) age: f32,
 }
 
 /// The acre with the most water.
