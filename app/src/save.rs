@@ -362,6 +362,9 @@ pub struct SaveData {
     /// Saharah's event area (the trade-ins this special event).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) carpet_event: Option<crate::saharah::CarpetEvent>,
+    /// Gracie's event area (the pieces given and whether the game was played).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) designer_event: Option<crate::gracie::DesignerEvent>,
 }
 
 /// Save data loaded at startup (PreStartup), consumed by Startup systems.
@@ -678,6 +681,7 @@ fn collect_save(
         weekly_event: None,
         artist_event: None,
         carpet_event: None,
+        designer_event: None,
     }
 }
 
@@ -770,9 +774,7 @@ fn quick_save(
         memory,
         house_mail,
         catalog,
-        today,
-        artist,
-        carpet,
+        (today, artist, carpet, designer),
     ): (
         Res<PlayerLook>,
         Option<Res<crate::roster::TownRoster>>,
@@ -787,9 +789,12 @@ fn quick_save(
         Option<Res<crate::villager_memory::VillagerMemory>>,
         Option<Res<crate::mail::HouseMailbox>>,
         Option<Res<crate::catalog::Catalog>>,
-        Option<Res<crate::event_today::TodayEvents>>,
-        Option<Res<crate::wendell::ArtistEvent>>,
-        Option<Res<crate::saharah::CarpetEvent>>,
+        (
+            Option<Res<crate::event_today::TodayEvents>>,
+            Option<Res<crate::wendell::ArtistEvent>>,
+            Option<Res<crate::saharah::CarpetEvent>>,
+            Option<Res<crate::gracie::DesignerEvent>>,
+        ),
     ),
 ) {
     // Furniture movement already has an atomic committed destination. Other
@@ -837,6 +842,7 @@ fn quick_save(
     save.weekly_event = today.map(|t| t.weekly_save());
     save.artist_event = artist.map(|a| a.clone());
     save.carpet_event = carpet.map(|c| c.clone());
+    save.designer_event = designer.map(|d| d.clone());
     if let Some(r) = roster {
         save.villagers = Some(r.residents.iter().map(|e| e.index).collect());
         save.villagers_appeared = r.appeared.clone();
@@ -897,6 +903,7 @@ fn quick_load(
         today,
         artist,
         carpet,
+        designer,
     ): (
         Option<ResMut<crate::home::PlayerHouse>>,
         ResMut<crate::player_room::floors::HomeFloors>,
@@ -911,6 +918,7 @@ fn quick_load(
         Option<ResMut<crate::event_today::TodayEvents>>,
         Option<ResMut<crate::wendell::ArtistEvent>>,
         Option<ResMut<crate::saharah::CarpetEvent>>,
+        Option<ResMut<crate::gracie::DesignerEvent>>,
     ),
 ) {
     if !actions.just_pressed(Action::QuickLoad)
@@ -951,6 +959,9 @@ fn quick_load(
     }
     if let Some(mut carpet) = carpet {
         *carpet = save.carpet_event.clone().unwrap_or_default();
+    }
+    if let Some(mut designer) = designer {
+        *designer = save.designer_event.clone().unwrap_or_default();
     }
     room.restore(save.home_furniture.as_ref(), disc.as_deref());
     if disc.is_some() {

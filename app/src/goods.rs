@@ -367,6 +367,19 @@ pub(crate) fn delivery_item(
         .copied()
 }
 
+/// `mSP_SelectRandomItem_New(.., kind, mSP_LISTTYPE_COMMON, ..)`: one good of the shop's common list of `kind`
+/// (the list whose priority is 0), none in `exclude`.
+pub(crate) fn select_common(
+    kind: Kind,
+    exclude: &[ItemId],
+    below: &mut dyn FnMut(u32) -> u32,
+) -> Option<ItemId> {
+    let roll = roll_now();
+    select_items(&roll, kind, 1, exclude, below, Some(0))
+        .first()
+        .copied()
+}
+
 /// init_sp_bargain: first uncollected rare->uncommon->common, then rare goods.
 pub(crate) fn bargain_stock(
     kind: u8,
