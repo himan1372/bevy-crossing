@@ -98,6 +98,7 @@ mod shop;
 mod shop_display;
 mod shop_nook;
 mod skeleton;
+mod soncho;
 mod sound;
 mod sound_rom;
 mod spirits;
@@ -223,6 +224,7 @@ fn main() {
         .add_plugins(spooky::SpookyPlugin)
         .add_plugins(miko::MikoPlugin)
         .add_plugins(groundhog::GroundhogPlugin)
+        .add_plugins(soncho::SonchoPlugin)
         .add_plugins(spirits::SpiritsPlugin)
         .add_plugins(field_rank::FieldRankPlugin)
         .add_plugins(post::PostPlugin)

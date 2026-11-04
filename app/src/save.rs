@@ -54,6 +54,12 @@ pub(crate) struct PlayerIdentity {
     /// `mSC_SPECIAL_EVENT_ARBEIT`: the player has talked to Tortimer for the job.
     #[serde(default)]
     pub arbeit_trophy: bool,
+    /// `soncho_trophy_field0/1`: bit n is the commemorative item of Tortimer's event n (`mSC_EVENT_*`) received.
+    #[serde(default)]
+    pub soncho_trophies: u32,
+    /// `calendar.event_flags`: the events (`mSC_EVENT_*`) the player has talked to Tortimer about, with the date.
+    #[serde(default)]
+    pub soncho_calendar: Vec<(u8, u16, u8, u8)>,
     /// `Common(map_flag)`: the player has the town map. Off from the new-game intro until the
     /// guide hands it over; towns that never ran the job always have it.
     #[serde(default = "map_flag_on")]
@@ -173,6 +179,8 @@ impl Default for PlayerIdentity {
             events: Default::default(),
             events_day: 0,
             arbeit_trophy: false,
+            soncho_trophies: 0,
+            soncho_calendar: Vec::new(),
             map_flag: true,
             first_job: None,
             intro_done: false,
