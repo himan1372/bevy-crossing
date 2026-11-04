@@ -12,7 +12,8 @@
 //! off-by-one kept), a doll by gender on Toy Day, a random flower model on Groundhog Day and a station toy on Town Day
 //! (the port picks from the train goods list).
 //!
-//! On the sports fairs he talks during the foot race and the tug of war but not during the aerobics and the ball toss.
+//! On the sports fairs he talks during the foot race, the aerobics (standing in the line, `aerobics.rs`) and the tug of war
+//! but not during the ball toss.
 //!
 //! Not built: the villagers' contests of the sports fairs, the lighthouse quest, the morning aerobics, his wandering
 //! and the event's name string (`mSC_event_name_set`).
@@ -120,6 +121,8 @@ const ITEM_TABLE: [u16; 28] = [
 struct Soncho {
     day: i64,
     event: u8,
+    /// He stands in the aerobics line (`SP_NPC_SONCHO_D078`) rather than at his own place.
+    lined: bool,
     /// `soncho->item`.
     item: u16,
 }
@@ -132,10 +135,9 @@ fn running_event(today: &TodayEvents, hour: u8) -> Option<u8> {
     order.find(|&e| today.is_active(EVENT_ROWS[usize::from(e)], hour))
 }
 
-/// `aES2_wait`: the field events of a sports fair that keep him from talking.
+/// `aES2_wait`: the field event of a sports fair that keeps him from talking (in the aerobics he talks from the line).
 fn busy_with_field_event(today: &TodayEvents, hour: u8) -> bool {
-    today.is_active(ev::SPORTS_FAIR_AEROBICS, hour)
-        || today.is_active(ev::SPORTS_FAIR_BALL_TOSS, hour)
+    today.is_active(ev::SPORTS_FAIR_BALL_TOSS, hour)
 }
 
 fn trophy(identity: &crate::save::PlayerIdentity, event: u8) -> bool {
@@ -199,11 +201,13 @@ fn visit(
 ) {
     let now = crate::clock::now();
     let event = running_event(&today, now.hour);
+    let lined = event.is_some_and(|e| SPORTS_FAIRS.contains(&e))
+        && today.is_active(ev::SPORTS_FAIR_AEROBICS, now.hour);
     let out = event.is_some()
         && *state.get() == ShopLocation::Town
         && *house.get() == crate::house::HouseState::Town;
     for (entity, s) in &existing {
-        if !out || s.day != now.day_number || Some(s.event) != event {
+        if !out || s.day != now.day_number || Some(s.event) != event || s.lined != lined {
             commands.entity(entity).despawn();
         }
     }
@@ -213,7 +217,12 @@ fn visit(
     if !existing.is_empty() {
         return;
     }
-    let Some(at) = crate::tortimer::shrine_cell(&town, 11, 6) else {
+    let unit = if lined {
+        crate::aerobics::LEADER_UNIT
+    } else {
+        (11, 6)
+    };
+    let Some(at) = crate::tortimer::shrine_cell(&town, unit.0, unit.1) else {
         return;
     };
     let item = trophy_item(event, look.female, &mut rand);
@@ -222,11 +231,13 @@ fn visit(
         Soncho {
             day: now.day_number,
             event,
+            lined,
             item,
         },
         NpcClip::default(),
         NpcGait::default(),
-        NpcModel(SONCHO2_NPC),
+        // `SP_NPC_SONCHO_D078` in the line.
+        NpcModel(if lined { 238 + 120 } else { SONCHO2_NPC }),
         Mesh3d(meshes.add(Capsule3d::new(0.35, 0.9))),
         Transform::from_translation(at + Vec3::Y),
     ));

@@ -3,6 +3,7 @@
 
 use bevy::prelude::*;
 
+mod aerobics;
 mod ambience;
 mod assets;
 mod broker_tent;
@@ -226,6 +227,7 @@ fn main() {
         .add_plugins(miko::MikoPlugin)
         .add_plugins(groundhog::GroundhogPlugin)
         .add_plugins(soncho::SonchoPlugin)
+        .add_plugins(aerobics::AerobicsPlugin)
         .add_plugins(tourney::TourneyPlugin)
         .add_plugins(spirits::SpiritsPlugin)
         .add_plugins(field_rank::FieldRankPlugin)
