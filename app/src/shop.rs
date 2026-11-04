@@ -49,6 +49,8 @@ pub enum ShopLocation {
     Museum,
     /// Crazy Redd's tent (`broker_tent.rs`).
     BrokerTent,
+    /// A generic event room (`event_room.rs`): which one is `EventRooms::current`.
+    EventRoom,
     /// The new-game intro's train (`intro_train.rs`).
     Train,
 }
@@ -1429,6 +1431,7 @@ fn update_shop_hud(
             | ShopLocation::PoliceBox
             | ShopLocation::Museum
             | ShopLocation::BrokerTent
+            | ShopLocation::EventRoom
             | ShopLocation::Train => Visibility::Hidden,
         };
     }
