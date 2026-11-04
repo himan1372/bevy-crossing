@@ -6,6 +6,7 @@ use bevy::prelude::*;
 mod aerobics;
 mod ambience;
 mod assets;
+mod balltoss;
 mod broker_tent;
 mod catalog;
 mod catalog_lists;
@@ -230,6 +231,7 @@ fn main() {
         .add_plugins(soncho::SonchoPlugin)
         .add_plugins(aerobics::AerobicsPlugin)
         .add_plugins(footrace::FootRacePlugin)
+        .add_plugins(balltoss::BallTossPlugin)
         .add_plugins(tourney::TourneyPlugin)
         .add_plugins(spirits::SpiritsPlugin)
         .add_plugins(field_rank::FieldRankPlugin)
