@@ -34,6 +34,7 @@ mod game_rand;
 mod goods;
 mod gracie;
 mod ground_map;
+mod groundhog;
 mod gulliver;
 mod gyroid;
 mod halloween;
@@ -221,6 +222,7 @@ fn main() {
         .add_plugins(franklin::FranklinPlugin)
         .add_plugins(spooky::SpookyPlugin)
         .add_plugins(miko::MikoPlugin)
+        .add_plugins(groundhog::GroundhogPlugin)
         .add_plugins(spirits::SpiritsPlugin)
         .add_plugins(field_rank::FieldRankPlugin)
         .add_plugins(post::PostPlugin)
