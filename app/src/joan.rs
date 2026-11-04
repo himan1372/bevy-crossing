@@ -1,6 +1,6 @@
 //! Joan (SP_NPC_KABUPEDDLER), the turnip peddler who visits on Sunday mornings.
 //!
-//! Schedule (`m_event_schedule.c_inc`): every Sunday from 06:00 to 11:59. She
+//! Schedule (`m_event_schedule.c_inc`, via `TodayEvents`): Sunday 06:00-11:59. She
 //! stands in a free spot of a block picked from the day (`ac_event_manager.c`
 //! `turnipbuyer_in` / `search_free_unit`). Talking (`ac_ev_kabuPeddler.c`): the
 //! first time this Sunday 0x06FD (with her turnip lesson), afterwards 0x0718;
@@ -28,10 +28,6 @@ const JOAN_NPC: u32 = 238 + 7;
 const JOAN_SOUND: u8 = 8;
 /// Her walking pace in world units a second (a villager's `WALK_SPEED`).
 const WALK_SPEED: f32 = 1.6;
-/// First and last hour she is out (`mEv_EVENT_KABU_PEDDLER`).
-const FIRST_HOUR: u8 = 6;
-const LAST_HOUR: u8 = 11;
-
 #[derive(Component)]
 struct Joan {
     /// The game day she came out for.
@@ -40,11 +36,6 @@ struct Joan {
     goal: Option<Vec3>,
     /// Talks so far, to vary where she goes next.
     talks: u32,
-}
-
-/// Whether Joan is out now: Sunday morning.
-fn visiting(now: &crate::clock::Now) -> bool {
-    now.weekday == 0 && (FIRST_HOUR..=LAST_HOUR).contains(&now.hour)
 }
 
 /// `search_free_unit`, over this town's acres: the day picks an acre, and her
@@ -83,13 +74,14 @@ fn visit(
     mut commands: Commands,
     town: Res<Town>,
     items: Option<Res<crate::field_items::FieldItems>>,
+    today: Res<crate::event_today::TodayEvents>,
     state: Res<State<ShopLocation>>,
     house: Res<State<crate::house::HouseState>>,
     existing: Query<(Entity, &Joan)>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
     let now = crate::clock::now();
-    let out = visiting(&now)
+    let out = today.is_active(rustimal_logic::event_schedule::ev::KABU_PEDDLER, now.hour)
         && *state.get() == ShopLocation::Town
         && *house.get() == crate::house::HouseState::Town;
     for (entity, joan) in &existing {
@@ -454,7 +446,10 @@ pub struct JoanPlugin;
 impl Plugin for JoanPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Talk>()
-            .add_systems(Update, (visit, face, walk).in_set(GameplaySet))
+            .add_systems(
+                Update,
+                (visit.after(crate::event_today::refresh), face, walk).in_set(GameplaySet),
+            )
             .add_systems(Update, talk.in_set(InteractSet::Talk).in_set(GameplaySet));
     }
 }
