@@ -864,6 +864,69 @@ impl CrannyDoor {
     }
 }
 
+/// Crazy Redd's tent (`ac_br_shop`: `obj_{s,w}_yamishop`, palette `aSTR_PAL_BR_SHOP`): the body and its two doors,
+/// every part posed from the skeleton's animation at the doors' open frame (the rest pose lays the walls flat), each
+/// with the local transform it needs.
+pub(crate) fn broker_tent_model(
+    disc: &GameDisc,
+    winter: bool,
+    (meshes, materials, images): (
+        &mut Assets<Mesh>,
+        &mut Assets<N64Material>,
+        &mut Assets<Image>,
+    ),
+) -> Vec<(Handle<Mesh>, Handle<N64Material>, Transform)> {
+    /// `aSTR_PAL_BR_SHOP`.
+    const PAL_BR_SHOP: u32 = 64;
+    /// The doors' open frame (`aBRS_setup_action`: 1 closed, 17 open).
+    const OPEN: f32 = 17.0;
+    let prefix = format!("obj_{}_yamishop", if winter { "w" } else { "s" });
+    let palette = structure_palette(disc, PAL_BR_SHOP, winter);
+    let mut out: Vec<(Handle<Mesh>, Handle<N64Material>, Transform)> = Vec::new();
+    let skeleton = disc
+        .catalog
+        .get(&format!("cKF_bs_r_{prefix}"))
+        .and_then(|a| crate::skeleton::Skeleton::read(&disc.rom, a.offset));
+    let animation = skeleton.as_ref().and_then(|s| {
+        crate::skeleton::Animation::read(
+            &disc.rom,
+            disc.catalog.get(&format!("cKF_ba_r_{prefix}"))?.offset,
+            s.joints.len(),
+        )
+    });
+    let (Some(skeleton), Some(animation)) = (skeleton, animation) else {
+        return out;
+    };
+    let world = skeleton.world_matrices(Some(&animation), OPEN);
+    // The body and the doors; the window glass and the light need the day's lighting and are not drawn.
+    for part in ["t1", "door1", "door2"] {
+        let Some(list) = disc
+            .catalog
+            .get(&format!("{prefix}_{part}_model"))
+            .map(|a| a.offset)
+        else {
+            continue;
+        };
+        let Some(joint) = skeleton.joints.iter().position(|j| j.model == Some(list)) else {
+            continue;
+        };
+        let mut at = Transform::from_matrix(world[joint]);
+        at.translation *= OBJECT_SCALE;
+        let sink = run_display_lists(&disc.rom, &[list]);
+        for (mesh, material) in sink_meshes(
+            disc,
+            &sink,
+            palette,
+            false,
+            &Segments::default(),
+            (meshes, materials, images),
+        ) {
+            out.push((mesh, material, at));
+        }
+    }
+    out
+}
+
 fn cranny_door_pose(
     disc: &GameDisc,
     prefix: &str,

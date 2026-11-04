@@ -1,26 +1,26 @@
 //! Crazy Redd (`SP_NPC_BROKER`), the dealer with the tent.
 //!
 //! He is out while the original scheduler says `mEv_EVENT_BROKER_SALE` is active (18:00 on his day until 17:59 the
-//! next), on free ground like the other visitors. The event area (`mEv_broker_c`) is rolled when the shop calendar
-//! rolls the event (`init_sp_broker`: three different furniture pieces, each from the event list with 50%, else the
-//! common list) and starts empty with the next one.
+//! next), two cells south of his tent (`broker_tent.rs`). The event area (`mEv_broker_c`) is rolled when the shop
+//! calendar rolls the event (`init_sp_broker`: three different furniture pieces, each from the event list with 50%, else
+//! the common list) and starts empty with the next one.
 //!
-//! Talking outside (`ac_ev_broker_move.c_inc`): `0x788`, `0x789` once the player has been in the tent, `0x78A` after a
-//! purchase. Inside (`ac_ev_broker2_move.c_inc`): `0x78B`; each piece is explained (`0x793 + RANDOM(5)` the first time,
-//! `0x7A1` after) with its name and price (four times Nook's) and a question: Buy goes on with `0x798 + RANDOM(5)`, then
-//! too poor `0x7A0`, no free pocket `0x79F`, else the piece goes into the first free pocket, the price is paid and
-//! `0x79E`; No is `0x79D`. Leaving: `0x792` after a purchase, else `0x791`; a sold-out tent says `0x7A2`.
+//! Outside (`ac_ev_broker_move.c_inc`): one talk, `0x788`, `0x789` once the player has been in the tent, `0x78A` after a
+//! purchase; then he goes into the tent (and is outside again when the player has been in and out).
+//! Inside (`ac_ev_broker2_move.c_inc`): `0x78B` as the player arrives; A facing one of the three pieces on display
+//! explains it (`0x793 + RANDOM(5)` the first time, `0x7A1` after) with its name and price (four times Nook's) and a
+//! question: Buy goes on with `0x798 + RANDOM(5)`, then too poor `0x7A0`, no free pocket `0x79F`, else the piece goes into
+//! the first free pocket, the price is paid and `0x79E`; No is `0x79D`. A on Redd himself chatters: `0x7A2` once sold out,
+//! else `0x78C` (the player has bought) or `0x78D + RANDOM(3)`. Leaving: his goodbye `0x792` after a purchase, else `0x791`.
 //!
-//! Port adaptation: the tent is not built. After the outside talk the stall is a menu of the pieces left (name and
-//! price) and Leave, the rest through the original messages; Redd stays outside. The menu's own words are the port's.
-//!
-//! Not built: the tent and its interior, Redd walking in, money bags as payment, the handbills.
+//! Not built: Redd following the player about the room, money bags as payment, the handbills.
 
 use bevy::prelude::*;
 use rustimal_logic::event_schedule::ev;
 use rustimal_logic::inventory::EMPTY_NO;
 use serde::{Deserialize, Serialize};
 
+use crate::broker_tent::{Redd2, Tent, ARRIVAL, DISPLAY_UNITS, TENT_ORIGIN};
 use crate::character::{NpcClip, NpcGait, NpcModel};
 use crate::dialogue::DialogueState;
 use crate::event_today::TodayEvents;
@@ -32,10 +32,9 @@ use crate::player::Player;
 use crate::save::LoadedSave;
 use crate::shop::ShopLocation;
 use crate::states::GameplaySet;
-use crate::town::Town;
 
 /// ALL_NPC_NUM + (SP_NPC_BROKER - SP_NPC_START).
-const REDD_NPC: u32 = 238 + 1;
+pub(crate) const REDD_NPC: u32 = 238 + 1;
 /// `l_sp_actor_name` sound id of `SP_NPC_BROKER`.
 const REDD_SOUND: u8 = 2;
 /// `mSP_LIST_EVENT`.
@@ -79,23 +78,23 @@ fn apply_loaded(loaded: Res<LoadedSave>, mut event: ResMut<BrokerEvent>) {
     }
 }
 
-/// Brings him out for his day and sends him off when the event ends.
+/// Brings him out beside his tent and takes him off when the event ends or he has gone in.
 #[allow(clippy::too_many_arguments)]
 fn visit(
     mut commands: Commands,
-    town: Res<Town>,
-    items: Option<Res<crate::field_items::FieldItems>>,
+    tent: Res<Tent>,
     today: Res<TodayEvents>,
     state: Res<State<ShopLocation>>,
     house: Res<State<crate::house::HouseState>>,
     existing: Query<(Entity, &Redd)>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut flow: ResMut<Talk>,
 ) {
     let now = crate::clock::now();
     let out = today.is_active(ev::BROKER_SALE, now.hour)
         && *state.get() == ShopLocation::Town
-        && *house.get() == crate::house::HouseState::Town;
+        && *house.get() == crate::house::HouseState::Town
+        && tent.at.is_some()
+        && !tent.redd_inside;
     // Until 18:00 of the next day he is still the previous day's visitor.
     let day = if now.hour < 18 {
         now.day_number - 1
@@ -110,10 +109,9 @@ fn visit(
     if !out || !existing.is_empty() {
         return;
     }
-    let Some(items) = items else { return };
-    let Some(at) = crate::joan::spot(&town, &items, day) else {
-        return;
-    };
+    let Some(at) = tent.at else { return };
+    // `unit.z + 2`: two cells south of the tent.
+    let at = at + Vec3::new(0.0, 0.0, 2.0);
     commands.spawn((
         Name::new("Crazy Redd"),
         Redd { day },
@@ -123,13 +121,10 @@ fn visit(
         Mesh3d(meshes.add(Capsule3d::new(0.35, 0.9))),
         Transform::from_translation(at + Vec3::Y),
     ));
-    // `broker2->explain_flag` and `sell_flag` belong to the actor.
-    flow.explained = 0;
-    flow.sold_now = false;
     info!("Crazy Redd is out at {at:?}");
 }
 
-/// `init_sp_broker`: a new ROLLED event gets its three pieces.
+/// `init_sp_broker`: a new rolled event gets its three pieces.
 fn reset_for_new_event(
     shop: Option<Res<crate::shop::ShopData>>,
     mut event: ResMut<BrokerEvent>,
@@ -173,14 +168,12 @@ fn reset_for_new_event(
 #[derive(Clone, Copy, Debug)]
 enum After {
     Close,
-    /// Redd's `0x78B` follows, then the stall.
-    Hello,
-    /// The stall menu.
-    Menu,
+    /// Outside: he goes into the tent.
+    Hide,
     /// The purchase of this slot.
     Buy(usize),
-    /// The goodbye line.
-    Goodbye,
+    /// The goodbye line, then the player leaves.
+    Exit,
 }
 
 #[derive(Default)]
@@ -189,19 +182,29 @@ enum Step {
     Idle,
     /// A line is up.
     Said(After),
-    /// The menu of the slots left is up.
-    Menu(Vec<usize>),
     /// A piece's explanation with its question (the slot).
     Explain(usize),
 }
 
 #[derive(Resource, Default)]
-struct Talk {
+pub(crate) struct Talk {
     step: Step,
     /// `broker2->explain_flag`.
     explained: u8,
     /// `broker2->sell_flag`.
     sold_now: bool,
+    /// The hello was said this visit.
+    hello_done: bool,
+}
+
+impl Talk {
+    /// A new visit to the tent: Redd inside is a new actor (`aEBR2_actor_ct`).
+    pub(crate) fn reset_visit(&mut self) {
+        self.explained = 0;
+        self.sold_now = false;
+        self.hello_done = false;
+        self.step = Step::Idle;
+    }
 }
 
 fn context(
@@ -267,8 +270,8 @@ fn say_abs(
 fn face(
     time: Res<Time>,
     flow: Res<Talk>,
-    player: Query<&Transform, (With<Player>, Without<Redd>)>,
-    mut redd: Query<&mut Transform, With<Redd>>,
+    player: Query<&Transform, (With<Player>, Without<Redd>, Without<Redd2>)>,
+    mut redd: Query<&mut Transform, Or<(With<Redd>, With<Redd2>)>>,
 ) {
     let (Ok(at), Ok(mut transform)) = (player.single(), redd.single_mut()) else {
         return;
@@ -285,7 +288,7 @@ fn face(
     }
 }
 
-/// The talk and the stall.
+/// The talks outside and inside the tent.
 #[allow(clippy::too_many_arguments)]
 fn talk(
     disc: Option<Res<GameDisc>>,
@@ -294,21 +297,25 @@ fn talk(
     mut focus: ResMut<InputFocus>,
     mut actions: ResMut<Actions>,
     player: Query<(&Transform, &Facing), With<Player>>,
-    redd: Query<(Entity, &Transform), With<Redd>>,
+    actors: Query<(Entity, &Transform), Or<(With<Redd>, With<Redd2>)>>,
     mut flow: ResMut<Talk>,
     mut dialogue: ResMut<DialogueState>,
     mut inventory: ResMut<PlayerInventory>,
     mut event: ResMut<BrokerEvent>,
+    mut tent: ResMut<Tent>,
     identity: Res<crate::save::PlayerIdentity>,
     mut rand: ResMut<crate::game_rand::GameRand>,
 ) {
     let Some(disc) = disc.filter(|d| d.text.is_some()) else {
         return;
     };
-    if *state != ShopLocation::Town || *house.get() != crate::house::HouseState::Town {
+    let inside = *state.get() == ShopLocation::BrokerTent;
+    if !inside
+        && (*state.get() != ShopLocation::Town || *house.get() != crate::house::HouseState::Town)
+    {
         return;
     }
-    let Ok((actor, actor_at)) = redd.single() else {
+    let Ok((actor, actor_at)) = actors.single() else {
         return;
     };
     let end = |dialogue: &mut DialogueState, focus: &mut InputFocus, flow: &mut Talk| {
@@ -325,77 +332,7 @@ fn talk(
     };
     if let Some(choice) = answer {
         *focus = InputFocus::Dialogue;
-        let ctx = context(&disc, &identity, &event, None);
-        // The menu of what is left.
-        let show_menu = |dialogue: &mut DialogueState, flow: &mut Talk, event: &BrokerEvent| {
-            let slots = event.left();
-            let labels: Vec<String> = slots
-                .iter()
-                .map(|&s| {
-                    let item = event.items[s];
-                    format!(
-                        "{} - {} Bells",
-                        crate::items::name(item),
-                        crate::items::price(item).unwrap_or(0) * PRICE_MULT
-                    )
-                })
-                .chain(["Leave".to_string()])
-                .collect();
-            dialogue.begin_special(
-                actor,
-                "Crazy Redd",
-                (REDD_NPC, REDD_SOUND),
-                vec!["Which one?".to_string()],
-                Some(labels),
-            );
-            flow.step = Step::Menu(slots);
-        };
         match std::mem::take(&mut flow.step) {
-            Step::Said(After::Hello) => {
-                // The player walks in: `aEBR2_say_hello_init` records them (`entered_pid`), then `0x78B`.
-                event.entered = true;
-                say_abs(&disc, &mut dialogue, actor, &ctx, BASE + 3);
-                flow.step = Step::Said(After::Menu);
-            }
-            Step::Said(After::Menu) => {
-                if event.left().is_empty() {
-                    // `save_p->used == mEv_BROKER_ITEM_NUM`.
-                    say_abs(&disc, &mut dialogue, actor, &ctx, 0x07A2);
-                    flow.step = Step::Said(After::Goodbye);
-                } else {
-                    show_menu(&mut dialogue, &mut flow, &event);
-                }
-            }
-            Step::Said(After::Goodbye) => {
-                // `aEBR2_set_talk_info_goodbye_wait`.
-                let m = if flow.sold_now { 0x0792 } else { 0x0791 };
-                say_abs(&disc, &mut dialogue, actor, &ctx, m);
-                flow.step = Step::Said(After::Close);
-            }
-            Step::Menu(slots) => {
-                if let Some(&slot) = slots.get(choice) {
-                    // The piece's explanation (`aEBR2_set_talk_info_sell_item`).
-                    let ctx = context(&disc, &identity, &event, Some(slot));
-                    let bit = 1u8 << slot;
-                    let msg = if flow.explained & bit != 0 {
-                        0x07A1
-                    } else {
-                        flow.explained |= bit;
-                        0x0793 + rand.0.random(5) as usize
-                    };
-                    let asked = say_abs(&disc, &mut dialogue, actor, &ctx, msg);
-                    flow.step = if asked.is_some() {
-                        Step::Explain(slot)
-                    } else {
-                        Step::Said(After::Menu)
-                    };
-                } else {
-                    // Leave.
-                    let m = if flow.sold_now { 0x0792 } else { 0x0791 };
-                    say_abs(&disc, &mut dialogue, actor, &ctx, m);
-                    flow.step = Step::Said(After::Close);
-                }
-            }
             Step::Explain(slot) => {
                 let ctx = context(&disc, &identity, &event, Some(slot));
                 if choice == 0 {
@@ -410,7 +347,7 @@ fn talk(
                     flow.step = Step::Said(After::Buy(slot));
                 } else {
                     say_abs(&disc, &mut dialogue, actor, &ctx, 0x079D);
-                    flow.step = Step::Said(After::Menu);
+                    flow.step = Step::Said(After::Close);
                 }
             }
             Step::Said(After::Buy(slot)) => {
@@ -432,16 +369,101 @@ fn talk(
                     0x079E
                 };
                 say_abs(&disc, &mut dialogue, actor, &ctx, msg);
-                flow.step = Step::Said(After::Menu);
+                flow.step = Step::Said(After::Close);
+            }
+            Step::Said(After::Hide) => {
+                // He goes into the tent and is not outside until the tent has been left.
+                tent.redd_inside = true;
+                end(&mut dialogue, &mut focus, &mut flow);
+            }
+            Step::Said(After::Exit) => {
+                tent.exit_now = true;
+                end(&mut dialogue, &mut focus, &mut flow);
             }
             Step::Said(After::Close) | Step::Idle => end(&mut dialogue, &mut focus, &mut flow),
         }
         return;
     }
-    if !matches!(flow.step, Step::Idle)
-        || !focus.is_world()
-        || !actions.just_pressed(Action::Interact)
-    {
+    if !matches!(flow.step, Step::Idle) {
+        return;
+    }
+    let ctx = context(&disc, &identity, &event, None);
+    if inside {
+        if !focus.is_world() {
+            return;
+        }
+        // `aEBR2_say_hello`: as the player arrives.
+        if !flow.hello_done && tent.inside_for.is_some_and(|t| t >= ARRIVAL) {
+            flow.hello_done = true;
+            event.entered = true;
+            *focus = InputFocus::Dialogue;
+            say_abs(&disc, &mut dialogue, actor, &ctx, BASE + 3);
+            flow.step = Step::Said(After::Close);
+            return;
+        }
+        // `aEBR2_set_talk_info_goodbye_wait`.
+        if tent.exit_request {
+            *focus = InputFocus::Dialogue;
+            let m = if flow.sold_now { 0x0792 } else { 0x0791 };
+            say_abs(&disc, &mut dialogue, actor, &ctx, m);
+            flow.step = Step::Said(After::Exit);
+            return;
+        }
+        if !actions.just_pressed(Action::Interact) {
+            return;
+        }
+        let Ok((at, facing)) = player.single() else {
+            return;
+        };
+        // `aEBR2_message_ctrl`: A facing a piece on display.
+        let front = at.translation + facing.dir * 0.7;
+        let cell = (
+            (front.x - TENT_ORIGIN.x).floor() as i32,
+            (front.z - TENT_ORIGIN.z).floor() as i32,
+        );
+        if let Some(slot) = DISPLAY_UNITS
+            .iter()
+            .position(|&u| u == cell)
+            .filter(|&s| event.items[s] != 0)
+        {
+            actions.consume(Action::Interact);
+            *focus = InputFocus::Dialogue;
+            let ctx = context(&disc, &identity, &event, Some(slot));
+            let bit = 1u8 << slot;
+            let msg = if flow.explained & bit != 0 {
+                0x07A1
+            } else {
+                flow.explained |= bit;
+                0x0793 + rand.0.random(5) as usize
+            };
+            let asked = say_abs(&disc, &mut dialogue, actor, &ctx, msg);
+            flow.step = if asked.is_some() {
+                Step::Explain(slot)
+            } else {
+                Step::Said(After::Close)
+            };
+            return;
+        }
+        // A on Redd: `aEBR2_set_talk_info_message_ctrl`.
+        let delta = (actor_at.translation - at.translation).with_y(0.0);
+        if delta.length() > 1.6 || facing.dir.dot(delta.normalize_or_zero()) < 0.5 {
+            return;
+        }
+        actions.consume(Action::Interact);
+        *focus = InputFocus::Dialogue;
+        let rnd = rand.0.random(2);
+        let msg = if event.left().is_empty() {
+            0x07A2
+        } else if !event.sold_items.is_empty() && rnd == 0 {
+            0x078C
+        } else {
+            0x078D + rand.0.random(3) as usize
+        };
+        say_abs(&disc, &mut dialogue, actor, &ctx, msg);
+        flow.step = Step::Said(After::Close);
+        return;
+    }
+    if !focus.is_world() || !actions.just_pressed(Action::Interact) {
         return;
     }
     let Ok((at, facing)) = player.single() else {
@@ -461,9 +483,8 @@ fn talk(
     } else {
         0x0788
     };
-    let ctx = context(&disc, &identity, &event, None);
     say_abs(&disc, &mut dialogue, actor, &ctx, msg);
-    flow.step = Step::Said(After::Hello);
+    flow.step = Step::Said(After::Hide);
 }
 
 pub struct ReddPlugin;

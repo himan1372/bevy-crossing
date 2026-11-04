@@ -47,6 +47,8 @@ pub enum ShopLocation {
     PostOffice,
     PoliceBox,
     Museum,
+    /// Crazy Redd's tent (`broker_tent.rs`).
+    BrokerTent,
     /// The new-game intro's train (`intro_train.rs`).
     Train,
 }
@@ -1426,6 +1428,7 @@ fn update_shop_hud(
             | ShopLocation::PostOffice
             | ShopLocation::PoliceBox
             | ShopLocation::Museum
+            | ShopLocation::BrokerTent
             | ShopLocation::Train => Visibility::Hidden,
         };
     }

@@ -5,6 +5,7 @@ use bevy::prelude::*;
 
 mod ambience;
 mod assets;
+mod broker_tent;
 mod catalog;
 mod catalog_lists;
 mod catalog_screen;
@@ -208,6 +209,7 @@ fn main() {
         .add_plugins(saharah::SaharahPlugin)
         .add_plugins(gracie::GraciePlugin)
         .add_plugins(redd::ReddPlugin)
+        .add_plugins(broker_tent::BrokerTentPlugin)
         .add_plugins(field_rank::FieldRankPlugin)
         .add_plugins(post::PostPlugin)
         .add_plugins(catalog::CatalogPlugin)
