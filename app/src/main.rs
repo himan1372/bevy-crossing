@@ -41,6 +41,7 @@ mod groundhog;
 mod gulliver;
 mod gyroid;
 mod halloween;
+mod hatsumode;
 mod home;
 mod house;
 mod idle_clock;
@@ -235,6 +236,7 @@ fn main() {
         .add_plugins(footrace::FootRacePlugin)
         .add_plugins(balltoss::BallTossPlugin)
         .add_plugins(tugofwar::TugOfWarPlugin)
+        .add_plugins(hatsumode::HatsumodePlugin)
         .add_plugins(tourney::TourneyPlugin)
         .add_plugins(spirits::SpiritsPlugin)
         .add_plugins(field_rank::FieldRankPlugin)
