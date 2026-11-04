@@ -175,6 +175,11 @@ impl Villager {
 #[derive(Component)]
 pub struct Indoors;
 
+/// Set by a talk that has no dialogue window up for a while (the pockets open, an item crossing): every
+/// villager stands still like they do in a conversation (`aNPC_check_chg_schedule` and the talk wait).
+#[derive(Resource, Default)]
+pub(crate) struct VillagerPause(pub bool);
+
 /// Tiny xorshift RNG — avoids adding a `rand` dependency.
 #[derive(Resource)]
 struct WanderRng(u64);
@@ -292,6 +297,7 @@ pub(crate) fn spawn_villagers(
     identity: Res<crate::save::PlayerIdentity>,
 ) {
     commands.insert_resource(WanderRng(0x9E3779B97F4A7C15));
+    commands.init_resource::<VillagerPause>();
     let houses = match roster.as_deref() {
         // A resident lives in the home of their slot (`plan.house_*`).
         Some(roster) => (0..roster.residents.len())
@@ -371,6 +377,7 @@ fn schedule_name(schedule: u32) -> &'static str {
 fn villager_schedule(
     mut commands: Commands,
     dialogue: Res<DialogueState>,
+    pause: Res<VillagerPause>,
     identity: Res<crate::save::PlayerIdentity>,
     mut villagers: Query<(
         Entity,
@@ -382,7 +389,7 @@ fn villager_schedule(
     )>,
 ) {
     // `aNPC_check_chg_schedule`: no schedule change mid-conversation.
-    if dialogue.active {
+    if dialogue.active || pause.0 {
         return;
     }
     for (entity, mut v, mut transform, mut vis, indoors, costumed) in villagers.iter_mut() {
@@ -414,6 +421,7 @@ fn villager_move(
     shop_building: Option<Res<crate::shop::ShopBuilding>>,
     time: Res<Time>,
     dialogue: Res<DialogueState>,
+    pause: Res<VillagerPause>,
     player_query: Query<&Transform, With<Player>>,
     identity: Res<crate::save::PlayerIdentity>,
     mut villagers: Query<
@@ -427,7 +435,7 @@ fn villager_move(
         (Without<Player>, Without<Indoors>),
     >,
 ) {
-    if dialogue.active {
+    if dialogue.active || pause.0 {
         return;
     }
     let dt = time.delta().as_secs_f32();

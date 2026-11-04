@@ -41,6 +41,9 @@ pub struct PocketsUi {
     /// Inventory mode for the museum (mSM_IV_OPEN_CURATOR): pick an item
     /// to offer Blathers; the slot comes back in `sell_slot`.
     pub(crate) donating: bool,
+    /// Inventory mode 6 for the Halloween trick-or-treat (`mSM_IV_OPEN_GIVE`): pick the treat; the slot comes
+    /// back in `sell_slot`.
+    pub(crate) halloween: bool,
     /// Inventory mode 0x10 at Nook's password counter: pick the item to
     /// trade in; the slot comes back in `sell_slot`.
     pub(crate) sending: bool,
@@ -273,6 +276,13 @@ impl PocketsUi {
             // check_possession_item_make_password: plain pocket items Nook sells.
             if condition == 0 && crate::shop_nook::password::present_user(item) {
                 vec!["Send", "Quit"]
+            } else {
+                vec!["Quit"]
+            }
+        } else if self.halloween {
+            // `mTG_TYPE_GIVE_ITEM`: "Give" / "Quit" for any item (a quest item stays out of it here).
+            if condition & 2 == 0 {
+                vec!["Give", "Quit"]
             } else {
                 vec!["Quit"]
             }
@@ -566,7 +576,7 @@ pub(crate) fn pockets_input(
         if item == EMPTY_NO {
             return;
         }
-        if ui.sending || ui.donating || ui.giving.is_some() {
+        if ui.sending || ui.donating || ui.halloween || ui.giving.is_some() {
             if choice == 0 && ui.actions(item, inventory.pockets.item_cond(slot)).len() == 2 {
                 ui.sell_slot = Some(slot);
                 ui.open = false;

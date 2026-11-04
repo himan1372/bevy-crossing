@@ -7,24 +7,37 @@
 //! the player is in their block) and, within 70 units (1.75 here) in the same block, force a talk
 //! (`aHWN_force_talk_request`): the greeting `2442` (`0x98A`), then the question `0x98B + looks * 6`.
 //!
-//! This is the first slice: costumes, the chase, the forced greeting and the question. The treat (an item from the
-//! pockets: candy, a tool, anything else), the trick (an item swapped for a Halloween piece or the player in the
-//! costume shirt) and the ordinary talk afterwards (`2479 + looks`) follow in later slices.
+//! The answer: Treat opens the pockets in the give mode (`mSM_IV_OPEN_GIVE`, "Give" / "Quit" for any item). Nothing
+//! picked: `0x98C` and the trick. Candy (`ITM_FOOD_CANDY`): taken, `0x98F`, no trick. A tool (net, rod, golden net,
+//! golden rod): handed over, `0x990`, handed back, then the trick. Anything else: taken, `0x98E`, the trick. Trick
+//! (`aHWN_get_trick_type`): if the pockets hold a swappable item (furniture or an item that is not a tool, not a
+//! quest item, not a jack-o'-lantern or jack-in-the-box) and `RANDOM_F < 0.5`, one of them becomes a random piece of
+//! the Halloween2 furniture list; otherwise the player puts on the costume shirt (`ITM_CLOTH017`). Then
+//! `0x98D + looks * 6`. All the `looks * 6` lines are the villager's personality (`mNpc_GetLooks`).
+//!
+//! Port adaptations: a hand-over plays before the line that follows it (as with K.K. Slider), the quest-item
+//! condition keeps an item from being offered, and the shirt change has no change animation or sparkle (nor does the
+//! item trick have its player animation, order `0xFD`). The ordinary talk afterwards (`2479 + looks`) is not built.
 
 use std::collections::HashSet;
 
 use bevy::prelude::*;
 use rustimal_logic::event_schedule::ev;
 use rustimal_logic::halloween as native;
+use rustimal_logic::inventory::EMPTY_NO;
 
-use crate::character::Costume;
+use crate::character::{Costume, NpcClip, PlayerLook};
 use crate::dialogue::DialogueState;
 use crate::event_today::TodayEvents;
 use crate::game_disc::GameDisc;
 use crate::input::{InputFocus, InteractSet};
+use crate::interaction::PlayerInventory;
+use crate::messages::MsgChoice;
 use crate::npc::{Indoors, Villager};
 use crate::player::Player;
+use crate::pockets::PocketsUi;
 use crate::shop::ShopLocation;
+use crate::shop_nook::handover::{HandOver, Item, Party, Request};
 use crate::states::GameplaySet;
 use crate::town::Town;
 
@@ -36,6 +49,12 @@ const MAX_COSTUMES: usize = 5;
 const FORCE_TALK_DISTANCE: f32 = native::schedule::FORCE_TALK_DISTANCE / 40.0;
 /// `ABS(player_distance_y) < 20`.
 const FORCE_TALK_HEIGHT: f32 = native::schedule::FORCE_TALK_HEIGHT / 40.0;
+/// `mSP_LIST_HALLOWEEN2`: the furniture list of the item trick.
+const HALLOWEEN2_LIST: usize = 10;
+/// The costume shirt's index in the clothing bank (`ITM_CLOTH017`).
+const COSTUME_SHIRT: usize = 17;
+/// `mPr_ITEM_COND_QUEST`.
+const COND_QUEST: u32 = 2;
 
 /// Puts costumes on the first five villagers while the event runs and takes them off after.
 fn assign_costumes(
@@ -71,7 +90,10 @@ fn assign_costumes(
             break;
         };
         used.insert(COSTUME_BASE + slot);
-        commands.entity(entity).insert(Costume(COSTUME_BASE + slot));
+        // The arm clips of a hand-over play through `NpcClip`.
+        commands
+            .entity(entity)
+            .insert((Costume(COSTUME_BASE + slot), NpcClip::default()));
         info!("Halloween: a villager puts on costume {slot}");
     }
 }
@@ -81,10 +103,12 @@ fn approach(
     state: Res<State<ShopLocation>>,
     house: Res<State<crate::house::HouseState>>,
     dialogue: Res<DialogueState>,
+    talk: Res<Talk>,
     player: Query<&Transform, (With<Player>, Without<Villager>)>,
     mut villagers: Query<(&mut Villager, &Transform), (With<Costume>, Without<Indoors>)>,
 ) {
     if dialogue.active
+        || !matches!(talk.step, Step::Idle)
         || *state.get() != ShopLocation::Town
         || *house.get() != crate::house::HouseState::Town
     {
@@ -100,14 +124,40 @@ fn approach(
     }
 }
 
+/// What happens when the line that is up has been read.
+#[derive(Clone, Copy, Debug)]
+enum After {
+    /// `aHWN_trick_timing_wait_talk_proc`: the trick.
+    Trick,
+    /// The talk ends.
+    Close,
+    /// A tool was taken for show (`aHWN_receive_tool_item_start_wait_talk_proc`): it is handed back, then the trick.
+    ReturnTool(u16),
+}
+
+/// What follows a hand-over.
+#[derive(Clone, Copy, Debug)]
+enum Then {
+    /// The line (a message number before `looks * 6`) and what follows it.
+    Say(u16, After),
+    /// The trick.
+    Trick,
+}
+
 #[derive(Default)]
 enum Step {
     #[default]
     Idle,
     /// `2442` is up: the question follows.
     Greeting,
-    /// The question is up (`next`: each answer's own follow-up, if the message gives one).
-    Asked,
+    /// The question is up (`next`: each answer's own follow-up line).
+    Asked(Vec<Option<usize>>),
+    /// The pockets are open in the give mode.
+    Picking,
+    /// A line is up.
+    Said(After),
+    /// An item is crossing.
+    Hand(Then),
 }
 
 #[derive(Resource, Default)]
@@ -119,8 +169,53 @@ struct Talk {
     greeted: HashSet<Entity>,
 }
 
+/// `aHWN_get_trick_type`: the trick this time. An item trick changes one pocket now and returns true.
+fn trick(
+    inventory: &mut PlayerInventory,
+    look: &mut PlayerLook,
+    rand: &mut crate::game_rand::GameRand,
+) -> bool {
+    let mut pockets = [native::TrickPocket {
+        item_type: 0,
+        cat: 0,
+        is_quest: false,
+        ftr_idx: u16::MAX,
+    }; native::POCKETS_SLOT_COUNT];
+    for (slot, entry) in pockets.iter_mut().enumerate() {
+        let item = inventory.pockets.pockets[slot];
+        *entry = native::TrickPocket {
+            item_type: (item >> 12) as u8,
+            cat: ((item >> 8) & 0xF) as u8,
+            is_quest: inventory.pockets.item_cond(slot) & COND_QUEST != 0,
+            ftr_idx: crate::furniture::furniture_index(item).map_or(u16::MAX, |i| i as u16),
+        };
+    }
+    let (count, slots) = native::scan_trick_candidates(&pockets);
+    // `count > 0 && RANDOM_F(1.0f) < 0.5f`: the roll is only made with a candidate.
+    let item_trick =
+        count > 0 && native::trick_decision(count, rand.0.fqrand()) == native::trick::CHG_ITEM;
+    let list = crate::goods::list(crate::goods::Kind::Furniture, HALLOWEEN2_LIST);
+    if item_trick && !list.is_empty() {
+        let item = list[rand.0.random(list.len() as i32) as usize];
+        let slot = usize::from(slots[rand.0.random(count as i32) as usize]);
+        inventory.pockets.pockets[slot] = item;
+        inventory.pockets.set_item_cond(slot, 0);
+        info!("Halloween trick: pocket {slot} becomes {item:#06x}");
+        true
+    } else {
+        look.cloth = COSTUME_SHIRT;
+        crate::sound::se(crate::sound::se_id::WEAR);
+        info!("Halloween trick: the player is in the costume shirt");
+        false
+    }
+}
+
+fn is_tool(item: u16) -> bool {
+    native::items::is_tool_range(item)
+}
+
 /// The forced talk and its steps (`aHWN_force_talk_request`, `aHWN_first_call_talk_proc`,
-/// `aHWN_trick_or_treat_talk_proc`).
+/// `aHWN_trick_or_treat_talk_proc`, the item and trick procs).
 #[allow(clippy::too_many_arguments)]
 fn talk(
     disc: Option<Res<GameDisc>>,
@@ -131,6 +226,11 @@ fn talk(
     villagers: Query<(Entity, &Villager, &Transform), (With<Costume>, Without<Indoors>)>,
     mut flow: ResMut<Talk>,
     mut dialogue: ResMut<DialogueState>,
+    mut pockets: ResMut<PocketsUi>,
+    mut inventory: ResMut<PlayerInventory>,
+    mut handover: ResMut<HandOver>,
+    mut look: ResMut<PlayerLook>,
+    mut rand: ResMut<crate::game_rand::GameRand>,
 ) {
     let Some(disc) = disc.filter(|d| d.text.is_some()) else {
         return;
@@ -146,7 +246,7 @@ fn talk(
                entity: Entity,
                villager: &Villager,
                msg: u16|
-     -> Option<Vec<String>> {
+     -> Option<MsgChoice> {
         let ctx = crate::dialogue::disc_message_context(&disc, villager, None, &now);
         let (pages, asked) = text.talk_asking(usize::from(msg), &ctx, &mut |_| 0);
         dialogue.begin_special(
@@ -157,48 +257,177 @@ fn talk(
             asked.as_ref().map(|(_, c)| c.labels.clone()),
         );
         info!("Halloween: {} says message {msg:#06x}", villager.name);
-        asked.map(|(_, c)| c.labels)
+        asked.map(|(_, c)| c)
+    };
+    let end = |dialogue: &mut DialogueState, focus: &mut InputFocus, flow: &mut Talk| {
+        *dialogue = DialogueState::default();
+        *focus = InputFocus::World;
+        flow.villager = None;
+        flow.step = Step::Idle;
     };
 
-    // The player answered (only our own dialogue: other talkers take theirs).
-    if let Some(entity) = flow.villager.filter(|&e| dialogue.speaker == Some(e)) {
-        if let Some(choice) = dialogue.external_result.take() {
-            *focus = InputFocus::Dialogue;
-            let Ok((_, villager, _)) = villagers.get(entity) else {
-                *dialogue = DialogueState::default();
-                *focus = InputFocus::World;
-                *flow = Talk {
-                    greeted: std::mem::take(&mut flow.greeted),
-                    ..default()
-                };
+    // A talk in progress belongs to one villager.
+    if let Some(entity) = flow.villager {
+        let Ok((_, villager, _)) = villagers.get(entity) else {
+            // They took the costume off or went away: the talk is over.
+            pockets.halloween = false;
+            end(&mut dialogue, &mut focus, &mut flow);
+            return;
+        };
+        let looks = villager.looks;
+
+        // The pockets are open: `aHWN_menu_close_wait_talk_proc`.
+        if matches!(flow.step, Step::Picking) {
+            if pockets.open {
                 return;
-            };
-            match std::mem::take(&mut flow.step) {
-                Step::Greeting => {
-                    // `aHWN_first_call_talk_proc`: the continuing message is the trick-or-treat question.
+            }
+            pockets.halloween = false;
+            *focus = InputFocus::Dialogue;
+            match pockets.sell_slot.take() {
+                None => {
+                    // Nothing picked: `aHWN_restart_msg_win(0x098C)`, then the trick.
                     say(
                         &mut dialogue,
                         entity,
                         villager,
-                        native::msg::first_call_continue(villager.looks),
+                        native::msg::restart(looks, 0x098C),
                     );
-                    flow.step = Step::Asked;
+                    flow.step = Step::Said(After::Trick);
                 }
-                Step::Asked => {
-                    // `aHWN_trick_or_treat_talk_proc`: Treat (0) opens the pockets, anything else is the trick.
-                    // Both are later slices; the talk ends here.
-                    info!(
-                        "Halloween: {} answered {choice} (treat / trick not built yet)",
-                        villager.name
+                Some(slot) => {
+                    let item = inventory.pockets.pockets[slot];
+                    info!("Halloween: {} is offered {item:#06x}", villager.name);
+                    let (msg, after) = if item == native::items::CANDY {
+                        (0x098F, After::Close)
+                    } else if is_tool(item) {
+                        (0x0990, After::ReturnTool(item))
+                    } else {
+                        (0x098E, After::Trick)
+                    };
+                    if !is_tool(item) {
+                        // `mPr_SetPossessionItem(.., slot, EMPTY_NO, ..)`: tools stay in the pockets.
+                        inventory.pockets.pockets[slot] = EMPTY_NO;
+                        inventory.pockets.set_item_cond(slot, 0);
+                    }
+                    handover.start(Request {
+                        item: Item::Goods(item),
+                        giver: Party::Player,
+                        taker: Party::Npc(entity),
+                    });
+                    flow.step = Step::Hand(Then::Say(msg, after));
+                }
+            }
+            return;
+        }
+
+        // An item is crossing.
+        if let Step::Hand(then) = flow.step {
+            if handover.busy() {
+                *focus = InputFocus::Dialogue;
+                return;
+            }
+            *focus = InputFocus::Dialogue;
+            match then {
+                Then::Say(msg, after) => {
+                    say(
+                        &mut dialogue,
+                        entity,
+                        villager,
+                        native::msg::restart(looks, msg),
                     );
-                    *dialogue = DialogueState::default();
-                    *focus = InputFocus::World;
-                    flow.villager = None;
+                    flow.step = Step::Said(after);
                 }
-                Step::Idle => {
-                    *dialogue = DialogueState::default();
-                    *focus = InputFocus::World;
-                    flow.villager = None;
+                Then::Trick => {
+                    trick(&mut inventory, &mut look, &mut rand);
+                    say(
+                        &mut dialogue,
+                        entity,
+                        villager,
+                        native::msg::trick_cloth_done(looks),
+                    );
+                    flow.step = Step::Said(After::Close);
+                }
+            }
+            return;
+        }
+
+        // A line was read (or the player answered a question).
+        if dialogue.speaker == Some(entity) {
+            if let Some(choice) = dialogue.external_result.take() {
+                *focus = InputFocus::Dialogue;
+                match std::mem::take(&mut flow.step) {
+                    Step::Greeting => {
+                        // `aHWN_first_call_talk_proc`: the continuing message is the question.
+                        let asked = say(
+                            &mut dialogue,
+                            entity,
+                            villager,
+                            native::msg::first_call_continue(looks),
+                        );
+                        flow.step = Step::Asked(asked.map(|c| c.next).unwrap_or_default());
+                    }
+                    Step::Asked(next) => {
+                        if choice == 0 {
+                            // `aHWN_trick_or_treat_talk_proc`: Treat opens the pockets in the give mode.
+                            *pockets = PocketsUi {
+                                open: true,
+                                halloween: true,
+                                ..default()
+                            };
+                            *dialogue = DialogueState::default();
+                            *focus = InputFocus::Pockets;
+                            crate::sound::se(crate::sound::se_id::MENU_PAUSE);
+                            flow.step = Step::Picking;
+                        } else if let Some(Some(msg)) = next.get(choice).copied() {
+                            // Trick: the answer's own line, then the trick.
+                            let ctx =
+                                crate::dialogue::disc_message_context(&disc, villager, None, &now);
+                            let (pages, _) = text.talk_asking(msg, &ctx, &mut |_| 0);
+                            dialogue.begin_special(
+                                entity,
+                                villager.name,
+                                (villager.npc_index.unwrap_or(0), 0),
+                                pages,
+                                None,
+                            );
+                            flow.step = Step::Said(After::Trick);
+                        } else {
+                            // No line of its own: straight to the trick.
+                            *dialogue = DialogueState::default();
+                            trick(&mut inventory, &mut look, &mut rand);
+                            say(
+                                &mut dialogue,
+                                entity,
+                                villager,
+                                native::msg::trick_cloth_done(looks),
+                            );
+                            flow.step = Step::Said(After::Close);
+                        }
+                    }
+                    Step::Said(After::Trick) => {
+                        *dialogue = DialogueState::default();
+                        trick(&mut inventory, &mut look, &mut rand);
+                        say(
+                            &mut dialogue,
+                            entity,
+                            villager,
+                            native::msg::trick_cloth_done(looks),
+                        );
+                        flow.step = Step::Said(After::Close);
+                    }
+                    Step::Said(After::ReturnTool(item)) => {
+                        // `aNPC_DEMO_GIVE_ITEM(item, aHOI_REQUEST_PUTAWAY)`: the tool goes back, then the trick.
+                        *dialogue = DialogueState::default();
+                        handover.start(Request {
+                            item: Item::Goods(item),
+                            giver: Party::Npc(entity),
+                            taker: Party::Player,
+                        });
+                        flow.step = Step::Hand(Then::Trick);
+                    }
+                    Step::Said(After::Close) | Step::Idle | Step::Picking | Step::Hand(_) => {
+                        end(&mut dialogue, &mut focus, &mut flow);
+                    }
                 }
             }
         }
@@ -232,6 +461,11 @@ fn talk(
     }
 }
 
+/// While a talk is in any step the villagers stand still, as in a conversation.
+fn pause_villagers(talk: Res<Talk>, mut pause: ResMut<crate::npc::VillagerPause>) {
+    pause.0 = !matches!(talk.step, Step::Idle);
+}
+
 pub struct HalloweenPlugin;
 
 impl Plugin for HalloweenPlugin {
@@ -244,6 +478,7 @@ impl Plugin for HalloweenPlugin {
                     .after(crate::event_today::refresh)
                     .in_set(GameplaySet),
             )
-            .add_systems(Update, talk.in_set(InteractSet::Talk).in_set(GameplaySet));
+            .add_systems(Update, talk.in_set(InteractSet::Talk).in_set(GameplaySet))
+            .add_systems(Update, pause_villagers.after(talk).in_set(GameplaySet));
     }
 }

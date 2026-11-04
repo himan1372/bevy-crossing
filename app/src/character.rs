@@ -1056,7 +1056,15 @@ fn animate_characters(
         (&Locomotion, &Facing, Option<&mut NpcClip>),
         (With<Player>, Without<NpcModel>),
     >,
-    villagers: Query<(&GlobalTransform, &Villager, Option<&VillagerTalk>)>,
+    mut villagers: Query<
+        (
+            &GlobalTransform,
+            &Villager,
+            Option<&VillagerTalk>,
+            Option<&mut NpcClip>,
+        ),
+        (Without<Player>, Without<NpcModel>),
+    >,
     mut npcs: Query<
         (
             Option<&crate::shop_nook::Shopkeeper>,
@@ -1326,10 +1334,23 @@ fn animate_characters(
                 }
                 rig.pose_morph = (rig.pose_morph - ticks).max(0.0);
             }
-        } else if let Ok((g, villager, talk)) = villagers.get(owner) {
+        } else if let Ok((g, villager, talk, clip)) = villagers.get_mut(owner) {
             let pos = g.translation();
             let moved = rig.last_pos.map_or(0.0, |p| (pos - p).with_y(0.0).length());
             rig.last_pos = Some(pos);
+            // A hand-over clip (a costumed villager taking a treat) replaces the walking pose.
+            if let Some(mut clip) = clip {
+                if play_clip(
+                    &mut rig,
+                    &mut clip,
+                    disc.as_deref(),
+                    ticks,
+                    &mut transforms,
+                    false,
+                ) {
+                    continue;
+                }
+            }
             let speed = if dt > 0.0 { moved / dt } else { 0.0 };
             let motion = if villager.is_greeting() {
                 Motion::Greet
