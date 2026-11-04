@@ -127,6 +127,8 @@ struct Soncho {
     foot: bool,
     /// He stands by the ball toss (unit (9, 4)).
     tama: bool,
+    /// He stands by the tug of war (unit (10, 8)).
+    tug: bool,
     /// `soncho->item`.
     item: u16,
 }
@@ -211,6 +213,8 @@ fn visit(
         && today.is_active(ev::SPORTS_FAIR_FOOT_RACE, now.hour);
     let tama = event.is_some_and(|e| SPORTS_FAIRS.contains(&e))
         && today.is_active(ev::SPORTS_FAIR_BALL_TOSS, now.hour);
+    let tug = event.is_some_and(|e| SPORTS_FAIRS.contains(&e))
+        && today.is_active(ev::SPORTS_FAIR_TUG_OF_WAR, now.hour);
     let out = event.is_some()
         && *state.get() == ShopLocation::Town
         && *house.get() == crate::house::HouseState::Town;
@@ -221,6 +225,7 @@ fn visit(
             || s.lined != lined
             || s.foot != foot
             || s.tama != tama
+            || s.tug != tug
         {
             commands.entity(entity).despawn();
         }
@@ -237,6 +242,8 @@ fn visit(
         crate::footrace::TORTIMER_UNIT
     } else if tama {
         crate::balltoss::TORTIMER_UNIT
+    } else if tug {
+        crate::tugofwar::TORTIMER_UNIT
     } else {
         (11, 6)
     };
@@ -252,6 +259,7 @@ fn visit(
             lined,
             foot,
             tama,
+            tug,
             item,
         },
         NpcClip::default(),

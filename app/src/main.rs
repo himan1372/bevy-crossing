@@ -114,6 +114,7 @@ mod tortimer;
 mod tourney;
 mod town;
 mod town_map;
+mod tugofwar;
 mod villager_memory;
 mod warning_panel;
 mod wendell;
@@ -232,6 +233,7 @@ fn main() {
         .add_plugins(aerobics::AerobicsPlugin)
         .add_plugins(footrace::FootRacePlugin)
         .add_plugins(balltoss::BallTossPlugin)
+        .add_plugins(tugofwar::TugOfWarPlugin)
         .add_plugins(tourney::TourneyPlugin)
         .add_plugins(spirits::SpiritsPlugin)
         .add_plugins(field_rank::FieldRankPlugin)
