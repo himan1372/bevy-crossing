@@ -12,8 +12,10 @@
 //! off-by-one kept), a doll by gender on Toy Day, a random flower model on Groundhog Day and a station toy on Town Day
 //! (the port picks from the train goods list).
 //!
-//! Not built: the sports fairs' field events (`aES2_THINK_FOOT_RACE` and the others), the lighthouse quest, the morning
-//! aerobics, his wandering and the event's name string (`mSC_event_name_set`).
+//! On the sports fairs he talks during the foot race and the tug of war but not during the aerobics and the ball toss.
+//!
+//! Not built: the villagers' contests of the sports fairs, the lighthouse quest, the morning aerobics, his wandering
+//! and the event's name string (`mSC_event_name_set`).
 
 use bevy::prelude::*;
 use rustimal_logic::event_schedule::ev;
@@ -46,7 +48,8 @@ const TOY_DAY: u8 = 25;
 const TOWN_DAY: u8 = 4;
 const GROUNDHOG_DAY: u8 = 13;
 const NEW_YEARS_DAY: u8 = 0;
-/// The sports fairs: their field events are not built.
+/// The sports fairs (`mSC_EVENT_SPRING_SPORTS_FAIR` and `_FALL_`): during the aerobics and the ball toss he does not
+/// talk (`aES2_THINK_AEROBICS`, `aES2_THINK_BALL_TOSS`: no talk request).
 const SPORTS_FAIRS: [u8; 2] = [8, 20];
 
 /// `event_table`: the scheduler row of each `mSC_EVENT_*`.
@@ -121,17 +124,18 @@ struct Soncho {
     item: u16,
 }
 
-/// `mSC_get_soncho_event`: the first running event (the second fishing tourney last), none of the unbuilt ones.
+/// `mSC_get_soncho_event`: the first running event (the second fishing tourney last).
 fn running_event(today: &TodayEvents, hour: u8) -> Option<u8> {
-    let order = (0..EVENT_ROWS.len() as u8)
+    let mut order = (0..EVENT_ROWS.len() as u8)
         .filter(|&e| e != 22)
         .chain(std::iter::once(22));
-    for e in order {
-        if today.is_active(EVENT_ROWS[usize::from(e)], hour) {
-            return (!SPORTS_FAIRS.contains(&e)).then_some(e);
-        }
-    }
-    None
+    order.find(|&e| today.is_active(EVENT_ROWS[usize::from(e)], hour))
+}
+
+/// `aES2_wait`: the field events of a sports fair that keep him from talking.
+fn busy_with_field_event(today: &TodayEvents, hour: u8) -> bool {
+    today.is_active(ev::SPORTS_FAIR_AEROBICS, hour)
+        || today.is_active(ev::SPORTS_FAIR_BALL_TOSS, hour)
 }
 
 fn trophy(identity: &crate::save::PlayerIdentity, event: u8) -> bool {
@@ -331,6 +335,7 @@ fn talk(
     mut handover: ResMut<HandOver>,
     mut identity: ResMut<crate::save::PlayerIdentity>,
     mut rand: ResMut<crate::game_rand::GameRand>,
+    today: Res<TodayEvents>,
 ) {
     let Some(disc) = disc.filter(|d| d.text.is_some()) else {
         return;
@@ -418,6 +423,10 @@ fn talk(
     };
     let delta = (actor_at.translation - at.translation).with_y(0.0);
     if delta.length() > 1.8 || facing.dir.dot(delta.normalize_or_zero()) < 0.5 {
+        return;
+    }
+    // He takes no talk during a sports fair's aerobics or ball toss.
+    if SPORTS_FAIRS.contains(&me.event) && busy_with_field_event(&today, crate::clock::now().hour) {
         return;
     }
     actions.consume(Action::Interact);
