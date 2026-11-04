@@ -63,6 +63,7 @@ mod mail;
 mod mail_disc;
 mod mailbox;
 mod messages;
+mod miko;
 mod model_view;
 mod msg_window;
 mod museum;
@@ -219,6 +220,7 @@ fn main() {
         .add_plugins(jack::JackPlugin)
         .add_plugins(franklin::FranklinPlugin)
         .add_plugins(spooky::SpookyPlugin)
+        .add_plugins(miko::MikoPlugin)
         .add_plugins(spirits::SpiritsPlugin)
         .add_plugins(field_rank::FieldRankPlugin)
         .add_plugins(post::PostPlugin)

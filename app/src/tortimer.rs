@@ -24,6 +24,18 @@ const TORTIMER_SOUND: u8 = 2;
 #[derive(Component)]
 struct Tortimer;
 
+/// A unit of the shrine block (the wishing well's acre) as a world position on the ground.
+pub(crate) fn shrine_cell(town: &Town, cx: usize, cz: usize) -> Option<Vec3> {
+    let acre = town
+        .plan
+        .acres
+        .iter()
+        .position(|a| a.feature == rustimal_logic::town_gen::Feature::WishingWell as u8)?;
+    let width = rustimal_logic::town_gen::ACRE_WIDTH;
+    let at = Town::cell_to_world(acre % width, acre / width, cx, cz);
+    Some(at.with_y(town.ground_y(at)))
+}
+
 /// Out only while the job runs, in the town.
 fn visit(
     mut commands: Commands,
@@ -46,18 +58,9 @@ fn visit(
     if !existing.is_empty() {
         return;
     }
-    // The shrine block: the wishing well's acre.
-    let Some(acre) = town
-        .plan
-        .acres
-        .iter()
-        .position(|a| a.feature == rustimal_logic::town_gen::Feature::WishingWell as u8)
-    else {
+    let Some(at) = shrine_cell(&town, 10, 10) else {
         return;
     };
-    let width = rustimal_logic::town_gen::ACRE_WIDTH;
-    let at = Town::cell_to_world(acre % width, acre / width, 10, 10);
-    let at = at.with_y(town.ground_y(at));
     commands.spawn((
         Name::new("Tortimer"),
         Tortimer,
