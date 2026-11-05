@@ -449,7 +449,7 @@ const BUILDINGS: [BuildingSpec; 11] = [
         parts: &["1", "2", "3", "door"],
         light: "light",
         palette: 97, // aSTR_PAL_HOUSE_I
-        shift: (20.0, 20.0),
+        shift: (0.0, 0.0),
     },
     // ac_needlework_shop.c: x -20, z +20.
     BuildingSpec {
@@ -549,24 +549,54 @@ fn place_buildings(
         }
         let mut sink = run_display_lists(&disc.rom, &lists);
         pose_parts(disc, &lists, &mut sink);
-        let points: Vec<Vec2> = sink
+        let mut points: Vec<Vec2> = sink
             .parts
             .iter()
             .flat_map(|p| &p.vertices)
             .map(|v| Vec2::new(v.pos[0], v.pos[2]) * OBJECT_SCALE)
             .collect();
+        // The island's cottages are turned so their door faces south, toward the camera (the posed models
+        // stand at an angle). `turn` is `Quat::from_rotation_y(yaw)` on (x, z).
+        let cottage = matches!(item, 0x5850 | 0x5851);
+        let yaw = if cottage {
+            posed_centroid(disc, &prefix, "door").map_or(0.0, |d| {
+                let eighth = std::f32::consts::FRAC_PI_4;
+                ((-d.x).atan2(d.z) / eighth).round() * eighth
+            })
+        } else {
+            0.0
+        };
+        let turn = |p: Vec2| {
+            Vec2::new(
+                p.x * yaw.cos() + p.y * yaw.sin(),
+                -p.x * yaw.sin() + p.y * yaw.cos(),
+            )
+        };
+        if cottage {
+            for p in &mut points {
+                *p = turn(*p);
+            }
+        }
         let (box_yaw, lo, hi) = tightest_box(&points);
         let shift = Vec3::new(spec.shift.0, 0.0, spec.shift.1) / GAME_UNITS_PER_CELL * CELL_SIZE;
         let origin = Town::cell_to_world(ax, az, cx, cz) + shift;
         let mid = (lo + hi) / 2.0;
         // The actors don't turn these models (rotation 0); the posed model
         // already faces the way the game shows it.
-        let door = posed_centroid(disc, &prefix, "door").map(|d| origin + d * OBJECT_SCALE);
+        let door = posed_centroid(disc, &prefix, "door").map(|d| {
+            let d = d * OBJECT_SCALE;
+            let t = if cottage {
+                turn(Vec2::new(d.x, d.z))
+            } else {
+                Vec2::new(d.x, d.z)
+            };
+            origin + Vec3::new(t.x, d.y, t.y)
+        });
         out.push(RetailBuilding {
             item,
             spec: spec_index,
             centre: origin + Quat::from_rotation_y(box_yaw) * Vec3::new(mid.x, 0.0, mid.y),
-            yaw: 0.0,
+            yaw,
             half: (hi - lo) / 2.0,
             box_yaw,
             origin,
