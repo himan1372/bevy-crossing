@@ -134,6 +134,13 @@ impl Town {
     /// the drawn box is 3x3 — without this you could walk into the front of
     /// a house and end up past its door.
     pub fn can_stand(&self, world_pos: Vec3) -> bool {
+        // The island is outside the plan's acres: the disc terrain says what is ground.
+        if Self::on_island(world_pos) {
+            return self
+                .ground
+                .as_ref()
+                .is_some_and(|g| g.walkable_at(world_pos.x, world_pos.z));
+        }
         self.is_walkable(world_pos)
             && !self.in_house_box(world_pos)
             && !self.in_retail_obstacle(world_pos)
@@ -158,6 +165,10 @@ impl Town {
                 return false;
             }
         }
+        // On the island the terrain alone decides (no plan cells there).
+        if Self::on_island(to) {
+            return self.ground.is_some();
+        }
         if self.in_retail_obstacle(to) && !self.in_retail_obstacle(from) {
             return false;
         }
@@ -166,6 +177,12 @@ impl Town {
         } else {
             self.can_stand(to)
         }
+    }
+
+    /// The two island blocks of the map's grid, (4,8) and (5,8) (`ISLAND_LEFT` / `ISLAND_RIGHT`): Kapp'n's island, east of
+    /// x = 8 and from z = 64 to 80 in world cells.
+    pub fn on_island(p: Vec3) -> bool {
+        (8.0..40.0).contains(&p.x) && (64.0..80.0).contains(&p.z)
     }
 
     /// Public buildings, posed player-home bodies, board units and house

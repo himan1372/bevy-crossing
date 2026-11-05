@@ -66,6 +66,7 @@ mod jingle;
 mod joan;
 mod job_end;
 mod kamakura;
+mod kappn;
 mod katrina;
 mod kk_slider;
 mod lighthouse;
@@ -247,6 +248,7 @@ fn main() {
         .add_plugins(event_body::EventBodyPlugin)
         .add_plugins(event_room::EventRoomPlugin)
         .add_plugins(kamakura::KamakuraPlugin)
+        .add_plugins(kappn::KappnPlugin)
         .add_plugins(tourney::TourneyPlugin)
         .add_plugins(spirits::SpiritsPlugin)
         .add_plugins(field_rank::FieldRankPlugin)
