@@ -32,6 +32,8 @@ const UNIT: f32 = 40.0;
 pub(crate) enum RoomKind {
     /// The kamakura's room (`rom_kamakura_model`).
     Kamakura,
+    /// The lighthouse's room (`rom_toudai_model`).
+    Lighthouse,
 }
 
 /// A room's fixed data (`<scene>_info`, `<SCENE>_player_data`).
@@ -42,6 +44,8 @@ struct Spec {
     models: (&'static str, Option<&'static str>),
     /// Where the player stands on coming in, room-local game units.
     entry: Vec2,
+    /// The way the player faces on coming in; the door is behind.
+    enter_dir: Vec3,
 }
 
 impl RoomKind {
@@ -52,6 +56,14 @@ impl RoomKind {
                 origin: Vec3::new(0.0, 0.0, -3500.0),
                 models: ("rom_kamakura_model", Some("rom_kamakura_modelT")),
                 entry: Vec2::new(160.0, 260.0),
+                enter_dir: Vec3::NEG_Z,
+            },
+            RoomKind::Lighthouse => Spec {
+                name: "lighthouse room",
+                origin: Vec3::new(0.0, 0.0, -4000.0),
+                models: ("rom_toudai_model", Some("rom_toudai_modelT")),
+                entry: Vec2::new(120.0, 100.0),
+                enter_dir: Vec3::Z,
             },
         }
     }
@@ -70,6 +82,10 @@ pub(crate) struct Door {
     pub radius: f32,
     /// Where the player comes out (world), the ground height taken from the player.
     pub exit: Vec3,
+    /// The player walks south into the door (a north-facing one is walked into going north).
+    pub south: bool,
+    /// The player is carried in on arriving at the door, facing or not (`mPlib_request_main_door_type1` at dusk).
+    pub auto: bool,
 }
 
 #[derive(Resource, Default)]
@@ -157,17 +173,16 @@ fn enter(
     let pressed =
         actions.just_pressed(Action::Interact) && *tool == crate::ecology::EquippedTool::None;
     let walking = loco.state() != rustimal_logic::player_move::LocomotionState::Wait;
-    if !(walking || pressed) {
+    let auto_any = rooms.doors.values().any(|d| d.auto);
+    if !(walking || pressed || auto_any) {
         return;
     }
-    // Facing between 135 and 225 degrees, the door's side.
+    // Facing the door: north (between 135 and 225 degrees) or south (within 45 of 0).
     let yaw = facing.dir.x.atan2(facing.dir.z).to_degrees().abs();
-    if yaw <= 135.0 {
-        return;
-    }
     let found = rooms.doors.iter().find(|(kind, door)| {
         rooms.rooms.contains_key(kind)
             && (transform.translation - door.check).with_y(0.0).length() < door.radius
+            && (door.auto || if door.south { yaw < 45.0 } else { yaw > 135.0 })
     });
     let Some((&kind, &door)) = found else { return };
     if pressed {
@@ -175,7 +190,7 @@ fn enter(
     }
     commands.insert_resource(ShopReturnPos(door.exit.with_y(transform.translation.y)));
     transform.translation = kind.local(kind.spec().entry) + Vec3::Y;
-    facing.dir = Vec3::NEG_Z;
+    facing.dir = kind.spec().enter_dir;
     rooms.current = Some(kind);
     rooms.inside_for = Some(0.0);
     crate::sound::door_sound(None, true);
@@ -203,15 +218,22 @@ fn leave(
         .with_y(0.0)
         .length()
         < 0.6;
-    let into = actions.pressed(Action::MoveDown) || actions.just_pressed(Action::Interact);
-    if !(near && facing.dir.z > 0.7 && into) {
+    // Out is the way the door lies: behind the player's entry facing.
+    let out = -kind.spec().enter_dir;
+    let step_out = if out.z > 0.0 {
+        actions.pressed(Action::MoveDown)
+    } else {
+        actions.pressed(Action::MoveUp)
+    };
+    let into = step_out || actions.just_pressed(Action::Interact);
+    if !(near && facing.dir.dot(out) > 0.7 && into) {
         return;
     }
     actions.consume(Action::Interact);
     if let Some(r) = return_pos {
         transform.translation = r.0;
     }
-    facing.dir = Vec3::Z;
+    facing.dir = out;
     rooms.current = None;
     rooms.inside_for = None;
     crate::sound::door_sound(None, false);

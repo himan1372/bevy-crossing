@@ -1,27 +1,25 @@
-# Lighthouse quest (Tortimer's vacation), the town side
+# The lighthouse, its switch and the quest's present (finishes Tortimer's lighthouse quest)
 
-Scope: SONCHO_VACATION_JANUARY / _FEBRUARY rows (Jan 15-24 / Feb 12-21, 10:00-17:59) become live when the lighthouse
-data allows (`mSC_LightHouse_Event_Start`); Tortimer (event 101 / 102) stands at the shrine; the first talk is
-`MSG_SONCHO_LIGHTHOUSE_1/2` (0x33F4 / 0x340B) and starts the quest (`mSC_LightHouse_Quest_Start`: the date, the
-player's started bit; free strings the days a week and a week and a day on); a talk after it (quest running) is the
-message + 6 + RANDOM(3). The quest's period (`mSC_LightHouse_get_period`): the start day 0, a week 1, ten more days 2,
-then none (data cleared at the next event start). Saved with the identity.
-NOT in this slice: the island and the lighthouse switch (the quest cannot be finished without the island, so no
-completion, no present, no Kapp'n), the present NPC's ceremony, Tortimer deleting himself when a quest is running.
-
-- [ ] logic: lighthouse_open input and the rows, tests
-- [ ] app: lighthouse.rs data + periods, event_today input, soncho.rs events 101/102
-- [ ] gates, Temp run Jan 16, result, comms, commit
-
-## Result
-Logic: `Inputs.lighthouse_open`, the two vacation rows no longer in the unsupported list (test added; the event_schedule
-tests pass, 19). App: `app/src/lighthouse.rs` (the quest's save `LightHouse` kept in the identity, `period`, `event_start`,
-`talk_after`, `quest_start`, date helpers; two unit tests pass), `event_today.rs` feeds `lighthouse_open`, `soncho.rs` has
-Tortimer for events 101 / 102 (the lighthouse vacations). Run in game (Temp save, disc, 16 Jan 2027 12:xx): Tortimer at
-the shrine; the first talk 0x33F4 starts the quest ("The lighthouse quest starts on (2027, 1, 16)"), the explanation
-0x33F5 and the questions ("Sure! / No!", "Got it! / I have no idea.") follow through the message's own branches; after a
-start a talk is 0x33FA + RANDOM(3) (0x33FC seen).
-Unverified: the February vacation, the day strings (free 0 and 1) in the later pages, "I have no idea." repeating, and a
-second day (he stays away once the quest runs).
-NOT built: the island and the lighthouse switch (so the quest cannot be finished: no completion, no present, no
-Kapp'n), the present NPC's ceremony, the effects of the periods on the town (`travel_check`).
+`app/src/toudai.rs`, `app/src/lighthouse.rs` (switch days, `in_check`, `switch_check`, `switch_on`, `event_check/clear`, the present
+item: 0x3070 = FTR_TAK_TOUDAI in January, 0x1FA4 = FTR_IKE_JNY_MAKADA01 in February; test added), `app/src/event_room.rs`
+(`RoomKind::Lighthouse`, doors that face south or north and may carry the player in at dusk, per-room entry facing).
+The lighthouse (TOUDAI) is on the town's southern coast, block (3,6) unit (5,7): world (-3, 39) (found by scanning the field's FG
+records: the default island has FLAG, BOAT, COTTAGE_MY and COTTAGE_NPC, no lighthouse).
+- Outside: a placeholder tower; its lamp is lit at night (18:00-05:00) when the day's switch was thrown or no quest runs; the door is
+  on the north side (walking south into it within 0.9 cells of (x, z - 0.8)); in the quest's week at 18:00-21:59 before the day's
+  switch it takes the player in by itself.
+- Inside: the real `rom_toudai_model` room (hatch, life buoy, door alcove); the switch at (180, 100) game units: E beside it between
+  18:00 and 05:00 in the quest's week throws it (2 s pause, `switch_on`: the day's bit and the player's); the lever glows; leaving
+  by walking north at the entry.
+- The present demo: after the week (period 2), when the player is in town, Tortimer comes up and says 0x33FD / 0x3414 (all seven days
+  switched; 0x33FF / 0x3416 with full pockets: nothing given or cleared), or 0x3400 / 0x3417 (a started quest that fell short);
+  the item goes to the pockets and `event_clear` is called.
+Run in game (Temp saves, disc): 4 Jan 2027 19:xx with the quest started on the 2nd: walking to the door took me into the lighthouse
+room by itself (dusk), E beside the switch threw it ("The lighthouse switch is thrown (day 1)", the lever glowed), walking north
+left to the coast; 15 Jan with seven switched days: Tortimer came up, the line "Ho there, phi! ... hot spring resort" and
+"Tortimer gives the lighthouse present 0x3070". clippy / fmt / the lighthouse tests clean.
+Unverified: Tortimer leaving after the last page (the despawn), the "started only" and February lines, full pockets, the lamp's
+glow at night (set, not seen), `in_check` after midnight, walking in and out repeatedly, saving inside the room.
+Not built: the tower's disc model (`obj_s_toudai_*` draws black through the building path: it is drawn in the NPC render path in the
+original; the model parts and palette 90 are known), the beam and lens, the switch / pole skeletons and animation, the player's switch
+animation, the other presents of the present demo (birthday, golden rod / net).

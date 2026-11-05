@@ -86,6 +86,8 @@ fn hut(
             check: at + Vec3::new(0.0, 0.0, 40.0 / UNIT),
             radius: 40.0 / UNIT,
             exit: at + Vec3::new(0.0, 0.0, 86.0 / UNIT),
+            south: false,
+            auto: false,
         },
     );
     info!("The kamakura stands at {at:?}");

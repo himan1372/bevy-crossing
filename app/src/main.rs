@@ -119,6 +119,7 @@ mod statue;
 mod talk;
 mod time_window;
 mod tortimer;
+mod toudai;
 mod tourney;
 mod town;
 mod town_map;
@@ -249,6 +250,7 @@ fn main() {
         .add_plugins(event_room::EventRoomPlugin)
         .add_plugins(kamakura::KamakuraPlugin)
         .add_plugins(kappn::KappnPlugin)
+        .add_plugins(toudai::ToudaiPlugin)
         .add_plugins(tourney::TourneyPlugin)
         .add_plugins(spirits::SpiritsPlugin)
         .add_plugins(field_rank::FieldRankPlugin)

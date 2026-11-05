@@ -7,8 +7,9 @@
 //! days), the following ten days period 2 (the reward), then it is over and the data is cleared when the next vacation
 //! event is due (`mSC_LightHouse_Event_Start`).
 //!
-//! The port keeps the quest's data and its periods. The island and the switch are not built, so a started quest
-//! cannot be carried through to its reward yet.
+//! The port keeps the quest's data and its periods, the switch days (`mSC_LightHouse_Switch_On`, `_Switch_Check`,
+//! `_In_Check`) and the reward (`_Event_Check`, `_Event_Clear`, `_Event_Present_Item`); `toudai.rs` is the lighthouse that
+//! throws the switch and the present demo that gives the reward.
 
 use serde::{Deserialize, Serialize};
 
@@ -23,6 +24,16 @@ pub(crate) enum Period {
     Week,
     Reward,
     None,
+}
+
+/// `mSC_LIGHTHOUSE_EVENT_*`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Event {
+    None,
+    JanStarted,
+    JanContributed,
+    FebStarted,
+    FebContributed,
 }
 
 /// The quest's save (`LightHouse_c`).
@@ -112,6 +123,97 @@ impl LightHouse {
         self.period(now) != Period::None && self.started & 0x0F != 0
     }
 
+    /// `mSC_LightHouse_day`: the quest's day (0 on the first, up to 6) of a date.
+    pub fn day(&self, now: (u16, u8, u8)) -> u8 {
+        let Some(start) = self.start_days() else {
+            return 0;
+        };
+        let today = civil_days(i32::from(now.0), u32::from(now.1), u32::from(now.2));
+        if today < start {
+            return 0;
+        }
+        let days = today - start - 1;
+        days.clamp(0, WEEK - 1) as u8
+    }
+
+    /// `mSC_LightHouse_Switch_Check` (the date six hours back, as the lamp's day starts at 06:00): the lamp may be on at
+    /// night, either because no quest is running (it lights by itself) or because today's switch was thrown.
+    pub fn switch_check(&self, now: (u16, u8, u8), hour: u8) -> bool {
+        if self.renew.2 == 0 {
+            return true;
+        }
+        let back = if hour < 6 { -1 } else { 0 };
+        let (m, d) = after_days(now.0, now.1, now.2, back);
+        let year = if back < 0 && now.1 == 1 && now.2 == 1 {
+            now.0 - 1
+        } else {
+            now.0
+        };
+        let adjusted = (year, m, d);
+        if self.period(adjusted) != Period::Week {
+            return true;
+        }
+        self.switched & (1 << self.day(adjusted)) != 0
+    }
+
+    /// `mSC_LightHouse_In_Check`: in the quest's week, 18:00-21:59, today's switch not thrown yet.
+    pub fn in_check(&self, now: (u16, u8, u8), hour: u8) -> bool {
+        if self.renew.2 == 0 || self.period(now) != Period::Week || !(18..22).contains(&hour) {
+            return false;
+        }
+        self.switched & (1 << self.day(now)) == 0
+    }
+
+    /// `mSC_LightHouse_Switch_On` for the one player: today's bit and the player's own (bit 4).
+    pub fn switch_on(&mut self, now: (u16, u8, u8)) {
+        self.switched |= 1 << self.day(now);
+        self.started |= 1 << 4;
+    }
+
+    /// `mSC_LightHouse_Event_Check` for the one player.
+    pub fn event_check(&self, now: (u16, u8, u8)) -> Event {
+        if self.period(now) != Period::Reward || self.completed & 1 != 0 {
+            return Event::None;
+        }
+        let january = self.renew.1 == 1;
+        if self.switched & 0x7F == 0x7F {
+            if self.started & (1 << 4) != 0 {
+                return if january {
+                    Event::JanContributed
+                } else {
+                    Event::FebContributed
+                };
+            }
+        } else if self.started & 1 != 0 {
+            return if january {
+                Event::JanStarted
+            } else {
+                Event::FebStarted
+            };
+        }
+        Event::None
+    }
+
+    /// `mSC_LightHouse_Event_Clear`.
+    pub fn event_clear(&mut self, now: (u16, u8, u8)) {
+        self.completed |= 1;
+        if matches!(
+            self.event_check(now),
+            Event::JanContributed | Event::JanStarted
+        ) {
+            self.completed |= 0x0F;
+        }
+    }
+
+    /// `mSC_LightHouse_Event_Present_Item`: `FTR_TAK_TOUDAI` in January, `FTR_IKE_JNY_MAKADA01` in February.
+    pub fn present_item(&self) -> u16 {
+        if self.renew.1 == 1 {
+            0x3070
+        } else {
+            0x1FA4
+        }
+    }
+
     /// `mSC_LightHouse_Quest_Start` for the one player.
     pub fn quest_start(&mut self, now: (u16, u8, u8)) {
         *self = Self {
@@ -142,6 +244,34 @@ mod tests {
         assert!(!lh.clone().event_start((2027, 1, 20)));
         assert!(lh.event_start((2027, 2, 12)));
         assert_eq!(lh, LightHouse::default());
+    }
+
+    #[test]
+    fn the_switch_days_and_the_reward() {
+        let mut lh = LightHouse::default();
+        lh.quest_start((2027, 1, 16));
+        assert_eq!(lh.day((2027, 1, 16)), 0);
+        assert_eq!(lh.day((2027, 1, 17)), 0);
+        assert_eq!(lh.day((2027, 1, 18)), 1);
+        assert_eq!(lh.day((2027, 1, 23)), 6);
+        assert!(lh.in_check((2027, 1, 18), 19));
+        assert!(!lh.in_check((2027, 1, 18), 10));
+        // At night before the switch the lamp is dark; afterwards it shines.
+        assert!(!lh.switch_check((2027, 1, 18), 20));
+        lh.switch_on((2027, 1, 18));
+        assert!(lh.switch_check((2027, 1, 18), 20));
+        assert!(!lh.in_check((2027, 1, 18), 19));
+        // After 1 a.m. the lamp's day is still the evening's.
+        assert!(lh.switch_check((2027, 1, 19), 2));
+        // Seven switches earn the present; one only the "started" line.
+        assert_eq!(lh.event_check((2027, 1, 25)), Event::JanStarted);
+        for d in 17..24 {
+            lh.switch_on((2027, 1, d));
+        }
+        assert_eq!(lh.event_check((2027, 1, 25)), Event::JanContributed);
+        assert_eq!(lh.present_item(), 0x3070);
+        lh.event_clear((2027, 1, 25));
+        assert_eq!(lh.event_check((2027, 1, 25)), Event::None);
     }
 
     #[test]
