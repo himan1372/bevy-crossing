@@ -66,6 +66,9 @@ pub(crate) struct PlayerIdentity {
     /// `LightHouse_c`: Tortimer's lighthouse quest.
     #[serde(default)]
     pub lighthouse: crate::lighthouse::LightHouse,
+    /// What the island resident has been given (`mNpc_Island_Ftr_c`).
+    #[serde(default)]
+    pub island_room: crate::island_trade::IslandRoom,
     /// `Common(map_flag)`: the player has the town map. Off from the new-game intro until the
     /// guide hands it over; towns that never ran the job always have it.
     #[serde(default = "map_flag_on")]
@@ -189,6 +192,7 @@ impl Default for PlayerIdentity {
             soncho_calendar: Vec::new(),
             radio_card: ((0, 0, 0), 0),
             lighthouse: Default::default(),
+            island_room: Default::default(),
             map_flag: true,
             first_job: None,
             intro_done: false,

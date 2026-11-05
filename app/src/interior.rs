@@ -336,7 +336,7 @@ fn spawn_blend_lists(
 const HOUSE_DATA_SIZE: u32 = 8;
 
 /// A villager room's floor spans model cells 1..7: centre (4, 1, 4).
-const VILLAGER_ROOM_CENTRE: Vec3 = Vec3::new(4.0, 1.0, 4.0);
+pub(crate) const VILLAGER_ROOM_CENTRE: Vec3 = Vec3::new(4.0, 1.0, 4.0);
 /// Half a villager room's inside width, in cells.
 pub const VILLAGER_ROOM_HALF: f32 = 3.0;
 
@@ -355,6 +355,20 @@ pub fn spawn_villager_room(
     materials: &mut Assets<N64Material>,
     images: &mut Assets<Image>,
 ) -> Option<Vec<RoomFurniture>> {
+    let data = spawn_villager_shell(commands, disc, npc_index, origin, meshes, materials, images)?;
+    spawn_villager_layers(commands, disc, data, origin, meshes, materials, images)
+}
+
+/// The villager room's walls and floor with their own wallpaper and carpet; the house data they came from.
+pub(crate) fn spawn_villager_shell(
+    commands: &mut Commands,
+    disc: &GameDisc,
+    npc_index: u32,
+    origin: Vec3,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<N64Material>,
+    images: &mut Assets<Image>,
+) -> Option<Vec<u8>> {
     let list = |name: &str| disc.catalog.get(name).map(|a| a.offset);
     let (Some(floor), Some(wall)) = (
         list("rom_myhome2_floor_model"),
@@ -386,7 +400,19 @@ pub fn spawn_villager_room(
         wall_no,
         assets,
     );
+    Some(data.to_vec())
+}
 
+/// The furniture layers the house data names.
+fn spawn_villager_layers(
+    commands: &mut Commands,
+    disc: &GameDisc,
+    data: Vec<u8>,
+    origin: Vec3,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<N64Material>,
+    images: &mut Assets<Image>,
+) -> Option<Vec<RoomFurniture>> {
     let layer = |o: usize| u16::from_be_bytes([data[o], data[o + 1]]);
     let layouts = rustimal_logic::parse_fg_records(&disc.npc_room_layouts).ok()?;
     let items = |id: u16| layouts.iter().find(|r| r.fg_id == id).map(|r| r.items);

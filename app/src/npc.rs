@@ -289,7 +289,7 @@ fn town_villagers(
 
 /// The island's resident (`island.animal`): the villager's table index, once picked.
 #[derive(Resource, Default, Clone, Copy)]
-pub(crate) struct IslandNpc(pub Option<u32>);
+pub(crate) struct IslandNpc(pub Option<u32>, pub usize);
 
 pub(crate) fn spawn_villagers(
     mut commands: Commands,
@@ -330,12 +330,12 @@ pub(crate) fn spawn_villagers(
             .and_then(|d| crate::roster::VillagerTables::from_disc(d))
             .zip(seed)
             .and_then(|(tables, seed)| tables.islander(seed.0));
-        if let (Some(cottage), Some(entry)) = (cottage, islander) {
+        if let (Some(cottage), Some((entry, ordinal))) = (cottage, islander) {
             info!(
-                "The island's resident is {} (villager {})",
+                "The island's resident is {} (villager {}, islander {ordinal})",
                 entry.name, entry.index
             );
-            commands.insert_resource(IslandNpc(Some(entry.index)));
+            commands.insert_resource(IslandNpc(Some(entry.index), ordinal));
             // The door is a step south of the cottage's south face: `c.z + HOUSE_SIZE / 2.0 + 0.5` below.
             houses.push(cottage - Vec3::new(0.0, 0.0, 0.4));
             villagers.push((

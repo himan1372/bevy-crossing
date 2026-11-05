@@ -103,6 +103,22 @@ impl Obstacle {
 }
 
 impl InteriorObstacles {
+    /// Another room's furniture boxes (a room at `origin`, rooms stand 100 cells apart), replaced.
+    pub(crate) fn replace_room(
+        &mut self,
+        origin: Vec3,
+        furniture: &[crate::interior::RoomFurniture],
+    ) {
+        self.0.retain(|o| {
+            !(o.min_x >= origin.x - 5.0
+                && o.max_x <= origin.x + 5.0
+                && o.min_z >= origin.z - 5.0
+                && o.max_z <= origin.z + 5.0)
+        });
+        self.0
+            .extend(furniture.iter().map(|f| Obstacle::around(origin, f)));
+    }
+
     pub(crate) fn replace_player(&mut self, furniture: &[crate::interior::RoomFurniture]) {
         self.0.retain(|o| !o.player_room);
         self.0.extend(
@@ -154,6 +170,7 @@ fn build_villager_rooms(
     disc: Option<Res<crate::game_disc::GameDisc>>,
     villagers: Query<&crate::npc::Villager>,
     town: Res<Town>,
+    island: Option<Res<crate::npc::IslandNpc>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut n64: ResMut<Assets<crate::n64_material::N64Material>>,
     mut images: ResMut<Assets<Image>>,
@@ -164,15 +181,33 @@ fn build_villager_rooms(
     for (i, v) in villagers.iter().enumerate() {
         let Some(idx) = v.npc_index else { continue };
         let origin = INTERIOR_ORIGIN + Vec3::X * VILLAGER_ROOM_SPACING * (i + 1) as f32;
-        let Some(furniture) = crate::interior::spawn_villager_room(
-            &mut commands,
-            &disc,
-            idx,
-            origin,
-            &mut meshes,
-            &mut n64,
-            &mut images,
-        ) else {
+        // The island resident's room holds her own pieces, which `island_trade` keeps (a bare shell here).
+        let furniture = if island.as_ref().and_then(|i| i.0) == Some(idx) {
+            crate::interior::spawn_villager_shell(
+                &mut commands,
+                &disc,
+                idx,
+                origin,
+                &mut meshes,
+                &mut n64,
+                &mut images,
+            )
+            .map(|_| {
+                commands.insert_resource(crate::island_trade::IslandRoomSite(origin));
+                Vec::new()
+            })
+        } else {
+            crate::interior::spawn_villager_room(
+                &mut commands,
+                &disc,
+                idx,
+                origin,
+                &mut meshes,
+                &mut n64,
+                &mut images,
+            )
+        };
+        let Some(furniture) = furniture else {
             continue;
         };
         obstacles

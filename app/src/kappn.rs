@@ -226,7 +226,10 @@ fn talk(
     mut island: ResMut<Island>,
     mut voyage: ResMut<Voyage>,
     identity: Res<crate::save::PlayerIdentity>,
-    look: Res<crate::character::PlayerLook>,
+    (look, mut chat): (
+        Res<crate::character::PlayerLook>,
+        ResMut<crate::island_trade::IslandChat>,
+    ),
     mut rand: ResMut<crate::game_rand::GameRand>,
 ) {
     let (Some(disc), Some(town)) = (disc.filter(|d| d.text.is_some()), town) else {
@@ -293,6 +296,10 @@ fn talk(
                     facing.dir = Vec3::Z;
                 }
                 island.at_island = *to_island;
+                if *to_island {
+                    // A new visit: her first talk checks for a trade again (`mNpc_SetIslandCheckFtrMsg`).
+                    chat.checked = false;
+                }
                 let arrival = if *to_island { 0x307A } else { 0x308B };
                 say(&disc, &mut dialogue, actor, &ctx, arrival);
                 *focus = InputFocus::Dialogue;

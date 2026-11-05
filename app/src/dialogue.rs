@@ -49,6 +49,8 @@ pub struct DialogueState {
     pub(crate) external_voice: Option<(u32, u8)>,
     pub(crate) external_result: Option<usize>,
     external_choices: Option<Vec<String>>,
+    /// The island resident's trade in this talk (what her messages' orders act on).
+    island: Option<crate::island_trade::Deal>,
     /// A question the last page asks (the game's own message): its
     /// answers and branches, with the speaker's name and the message
     /// context to render the chosen branch.
@@ -304,6 +306,8 @@ fn on_talk(
     disc: Option<Res<crate::game_disc::GameDisc>>,
     island: Option<Res<crate::npc::IslandNpc>>,
     mut last_island_msg: Local<u32>,
+    mut island_chat: ResMut<crate::island_trade::IslandChat>,
+    identity: Res<crate::save::PlayerIdentity>,
 ) {
     for event in events.read() {
         if quest_claim.0 == Some(event.villager) {
@@ -321,6 +325,7 @@ fn on_talk(
 
         let patience = chat.info.patience(looks);
         let mut lines = Vec::new();
+        let mut island_deal = None;
         dialogue.trade = None;
         if patience == Patience::Annoyed {
             lines.push(say(talk::annoyed(looks)));
@@ -356,18 +361,41 @@ fn on_talk(
             let (topic, msg_no) = if island.as_ref().and_then(|i| i.0).is_some()
                 && island.as_ref().and_then(|i| i.0) == villager.npc_index
             {
-                // `aQMgr_decide_normal_msg_no_island`: the island's own chat by personality, never twice running.
-                const BASE: [u32; 6] = [0x3631, 0x3654, 0x36BC, 0x36DB, 0x367A, 0x369D];
-                let base = BASE[looks.min(5)];
-                let mut msg = base + rng.below(10);
-                if msg == *last_island_msg {
-                    msg = base + rng.below(9);
+                // `aQMgr_talk_island_select_talk`: a furniture trade first, when one can happen.
+                let ordinal = island.as_ref().map_or(0, |i| i.1);
+                let roll = rng.below(100);
+                let trade = if !island_chat.checked || roll < 85 {
+                    disc.as_deref().and_then(|d| {
+                        crate::island_trade::decide(
+                            d,
+                            ordinal,
+                            looks,
+                            &identity.island_room,
+                            &inventory,
+                            &mut island_chat,
+                            &mut |n| rng.below(n),
+                        )
+                    })
+                } else {
+                    None
+                };
+                if let Some((msg, deal)) = trade {
+                    island_deal = Some(deal);
+                    (Topic::Chat, msg as _)
+                } else {
+                    // `aQMgr_decide_normal_msg_no_island`: the island's own chat by personality, never twice running.
+                    const BASE: [u32; 6] = [0x3631, 0x3654, 0x36BC, 0x36DB, 0x367A, 0x369D];
+                    let base = BASE[looks.min(5)];
+                    let mut msg = base + rng.below(10);
                     if msg == *last_island_msg {
-                        msg += 1;
+                        msg = base + rng.below(9);
+                        if msg == *last_island_msg {
+                            msg += 1;
+                        }
                     }
+                    *last_island_msg = msg;
+                    (Topic::Chat, msg as _)
                 }
-                *last_island_msg = msg;
-                (Topic::Chat, msg as _)
             } else {
                 talk::choose(&ctx, &mut |n| rng.below(n))
             };
@@ -400,7 +428,10 @@ fn on_talk(
             // The game's own words for this message, when the disc has them.
             let disc_pages = disc.as_deref().and_then(|d| {
                 let text = d.text.as_ref()?;
-                let msg = disc_message_context(d, villager, item.as_deref(), &now);
+                let mut msg = disc_message_context(d, villager, item.as_deref(), &now);
+                if let Some(deal) = &island_deal {
+                    deal.apply(&mut msg);
+                }
                 let (pages, ask) = text.talk(msg_no as usize, &msg, &mut |n| rng.below(n));
                 (!pages.is_empty()).then_some((pages, ask.map(|a| (a, villager.name, msg))))
             });
@@ -457,6 +488,7 @@ fn on_talk(
         chat.info.unlock_timer = TEMPER_TABLE[looks.min(TEMPER_TABLE.len() - 1)].0;
 
         dialogue.active = true;
+        dialogue.island = island_deal;
         dialogue.speaker = Some(event.villager);
         if let (Some(roster), Some(idx)) = (roster.as_deref_mut(), villager.npc_index) {
             if !roster.met.contains(&idx) {
@@ -651,7 +683,12 @@ fn dialogue_input(
     mut inventory: ResMut<PlayerInventory>,
     mut box_query: Query<&mut Visibility, With<DialogueBox>>,
     mut text_query: Query<&mut Text, With<DialogueText>>,
-    (disc, mut rng): (Option<Res<crate::game_disc::GameDisc>>, ResMut<TalkRng>),
+    (disc, mut rng, island, mut identity): (
+        Option<Res<crate::game_disc::GameDisc>>,
+        ResMut<TalkRng>,
+        Option<Res<crate::npc::IslandNpc>>,
+        ResMut<crate::save::PlayerIdentity>,
+    ),
 ) {
     if !dialogue.active || dialogue.revealing || dialogue.held {
         return;
@@ -721,6 +758,17 @@ fn dialogue_input(
                 dialogue.choice = 0;
                 match branch {
                     Some((pages, ask)) if !pages.is_empty() => {
+                        // The island resident's messages carry the trade's orders (`aQMgr_order_trade`).
+                        if let (Some(deal), Some(d)) = (dialogue.island.clone(), disc.as_deref()) {
+                            crate::island_trade::orders(
+                                &deal,
+                                &pages,
+                                d,
+                                island.as_ref().map_or(0, |i| i.1),
+                                &mut identity.island_room,
+                                &mut inventory,
+                            );
+                        }
                         dialogue
                             .lines
                             .extend(pages.iter().map(|p| format!("{speaker}: {p}")));

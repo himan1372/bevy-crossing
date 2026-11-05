@@ -122,7 +122,7 @@ const GROW_ISLANDER: i8 = 2;
 impl VillagerTables {
     /// `mNpc_DecideIslandNpc`: the island's resident, one of the first eighteen villagers whose grow
     /// permission is islander, picked by the town's seed (the game saves the pick in `island.animal`).
-    pub fn islander(&self, seed: u32) -> Option<RosterEntry> {
+    pub fn islander(&self, seed: u32) -> Option<(RosterEntry, usize)> {
         let candidates: Vec<usize> = self
             .grow
             .iter()
@@ -136,7 +136,7 @@ impl VillagerTables {
         }
         let mut rng = Rng::new(seed.wrapping_mul(0x6C07_8965) ^ 0x151A_ADE5);
         let pick = ((rng.next() * candidates.len() as f32) as usize).min(candidates.len() - 1);
-        self.entry(candidates[pick] as u32)
+        self.entry(candidates[pick] as u32).map(|e| (e, pick))
     }
 
     /// The roster entry for table index `idx`.

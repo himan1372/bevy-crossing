@@ -60,6 +60,7 @@ mod intro_house;
 mod intro_reaction_effects;
 mod intro_reactions;
 mod intro_train;
+mod island_trade;
 mod items;
 mod jack;
 mod jingle;
@@ -250,6 +251,7 @@ fn main() {
         .add_plugins(event_room::EventRoomPlugin)
         .add_plugins(kamakura::KamakuraPlugin)
         .add_plugins(kappn::KappnPlugin)
+        .add_plugins(island_trade::IslandTradePlugin)
         .add_plugins(toudai::ToudaiPlugin)
         .add_plugins(tourney::TourneyPlugin)
         .add_plugins(spirits::SpiritsPlugin)
