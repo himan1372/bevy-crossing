@@ -23,6 +23,7 @@ mod disc_town;
 mod ecology;
 mod edit_end_chk_ui;
 mod environment;
+mod event_body;
 mod event_room;
 mod event_today;
 mod face;
@@ -243,6 +244,7 @@ fn main() {
         .add_plugins(hatsumode::HatsumodePlugin)
         .add_plugins(fireworks::FireworksPlugin)
         .add_plugins(gatherings::GatheringsPlugin)
+        .add_plugins(event_body::EventBodyPlugin)
         .add_plugins(event_room::EventRoomPlugin)
         .add_plugins(kamakura::KamakuraPlugin)
         .add_plugins(tourney::TourneyPlugin)

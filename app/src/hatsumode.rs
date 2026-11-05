@@ -222,6 +222,10 @@ struct Walker {
     coin: bool,
     /// How far the player's walk has gone (`player`).
     player: usize,
+    /// Seconds the run has been held up by a body or the ground.
+    blocked: f32,
+    /// The disc clip the action plays (`aNPC_ANIM_*`).
+    want: Option<&'static str>,
 }
 
 /// `aEv_hatumode_save_c`.
@@ -314,12 +318,18 @@ fn setup(w: &mut Walker, at: &Transform, hs: &mut Hatsu, town: &Town, centre: Ve
     w.coin = false;
     let parity = (w.id & 1) as u32;
     w.act = Act::Wait;
+    w.want = None;
     match d.init {
         Init::Wait => {}
         Init::Move => w.act = Act::Run(world(town, centre, w.pos)),
         Init::TurnF => w.act = Act::Turn(std::f32::consts::PI),
         Init::Saisen => {
             w.act = Act::Anim(if think == 4 { THROW } else { PRAY });
+            w.want = Some(if think == 4 {
+                "cKF_ba_r_npc_1_saisen1"
+            } else {
+                "cKF_ba_r_npc_1_omairi1"
+            });
         }
         Init::OmairiAf => w.timer = AFTER_PRAYER,
         Init::NextPos => {
@@ -344,16 +354,28 @@ fn setup(w: &mut Walker, at: &Transform, hs: &mut Hatsu, town: &Town, centre: Ve
         }
         Init::Aisatu => {
             w.act = Act::Anim(GREET);
+            w.want = Some(greeting(w.looks));
             hs.flags0 &= !(0x2000 | 0x1000);
         }
         Init::Aisatu2 => {
             w.act = Act::Anim(GREET);
+            w.want = Some(greeting(w.looks));
             hs.flags0 |= 0x2000;
         }
         Init::Haigo => {
             w.pos = Vec2::new(20.0, 115.0);
             w.act = Act::Turn(yaw_to(at.translation, world(town, centre, w.pos)));
         }
+    }
+}
+
+/// `aHN0_aisatu_local`: the greeting by looks.
+fn greeting(looks: u8) -> &'static str {
+    match looks {
+        1 | 3 => "cKF_ba_r_npc_1_aisatu1",
+        0 | 2 => "cKF_ba_r_npc_1_aisatu2",
+        4 => "cKF_ba_r_npc_1_aisatu3",
+        _ => "cKF_ba_r_npc_1_aisatu4",
     }
 }
 
@@ -430,9 +452,12 @@ fn visit(
                 anim_t: 0.0,
                 coin: false,
                 player: 0,
+                blocked: 0.0,
+                want: None,
             },
             NpcClip::default(),
             NpcGait::default(),
+            crate::event_body::EventBody::default(),
             NpcModel(entry.index),
             Mesh3d(meshes.add(Capsule3d::new(0.35, 0.9))),
             // Facing north, toward the shrine (`DEG2SHORT_ANGLE2(180)`).
@@ -454,11 +479,24 @@ fn walkers(
     mut escort: ResMut<Escort>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut walkers: Query<(Entity, &mut Walker, &mut Transform)>,
+    mut walkers: Query<(Entity, &mut Walker, &mut Transform, &mut NpcClip)>,
+    player: Query<&Transform, (With<Player>, Without<Walker>)>,
 ) {
     let Some(centre) = well(&town) else { return };
     let dt = time.delta_secs();
-    for (entity, mut w, mut at) in &mut walkers {
+    let player_at = player.single().ok().map(|t| t.translation);
+    // Where the others stand, for the bodies.
+    let bodies: Vec<(Entity, Vec3)> = walkers
+        .iter()
+        .map(|(e, _, t, _)| (e, t.translation))
+        .collect();
+    for (entity, mut w, mut at, mut clip) in &mut walkers {
+        // The action's clip.
+        match (w.want, clip.name) {
+            (Some(name), cur) if cur != Some(name) => clip.start(name, true, 8.0),
+            (None, Some(_)) => clip.stop(8.0),
+            _ => {}
+        }
         // A talk holds him (`mDemo_Check(TALK)`).
         if dialogue.active && dialogue.speaker == Some(entity) {
             continue;
@@ -487,9 +525,24 @@ fn walkers(
                     w.finished = true;
                 } else {
                     let dir = d.normalize();
-                    at.translation += dir * step;
-                    at.translation.y = town.ground_y(at.translation) + 1.0;
+                    let next = at.translation + dir * step;
+                    // The ground and the bodies (`aNPC_BG_CHECK`, the collision pipes); held up too long he goes on.
+                    let free = (town.can_step(at.translation, next)
+                        && crate::event_body::step_clear(
+                            at.translation,
+                            next,
+                            bodies.iter().filter(|(e, _)| *e != entity).map(|(_, p)| *p),
+                            player_at,
+                        ))
+                        || w.blocked > 1.5;
                     at.rotation = Quat::from_rotation_y(dir.x.atan2(dir.z));
+                    if free {
+                        w.blocked = if w.blocked > 1.5 { 0.0 } else { w.blocked };
+                        at.translation = next;
+                        at.translation.y = town.ground_y(at.translation) + 1.0;
+                    } else {
+                        w.blocked += dt;
+                    }
                 }
             }
             Act::Anim(left) => {

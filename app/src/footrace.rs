@@ -157,6 +157,7 @@ fn visit(
             },
             NpcClip::default(),
             NpcGait::default(),
+            crate::event_body::EventBody::default(),
             // The villager's own model (the event slots' models carry no villager texture).
             NpcModel(
                 roster

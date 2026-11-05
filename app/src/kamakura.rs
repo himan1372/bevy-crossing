@@ -120,6 +120,7 @@ fn keeper(
         },
         NpcClip::default(),
         NpcGait::default(),
+        crate::event_body::EventBody::default(),
         NpcModel(entry.index),
         Mesh3d(meshes.add(Capsule3d::new(0.35, 0.9))),
         Transform::from_translation(RoomKind::Kamakura.local(VILLAGER) + Vec3::Y)

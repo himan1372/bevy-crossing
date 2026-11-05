@@ -213,6 +213,7 @@ fn visit(
         },
         NpcClip::default(),
         NpcGait::default(),
+        crate::event_body::EventBody::default(),
         NpcModel(SPOOKY_NPC),
         Mesh3d(meshes.add(Capsule3d::new(0.35, 0.9))),
         if event.found {

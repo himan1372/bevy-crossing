@@ -81,6 +81,7 @@ pub fn player_movement(
             )>,
         ),
     >,
+    bodies: Query<&Transform, (With<crate::event_body::EventBody>, Without<Player>)>,
 ) {
     if *state != HouseState::Town || *shop_loc != crate::shop::ShopLocation::Town {
         return;
@@ -104,6 +105,12 @@ pub fn player_movement(
                 .is_some_and(|s| crate::shop::point_blocked(s, x, z))
                 || statue.as_ref().is_some_and(|s| s.blocks(x, z))
                 || copper.as_ref().is_some_and(|c| c.blocks(x, z))
+                || !crate::event_body::step_clear(
+                    from,
+                    Vec3::new(x, from.y, z),
+                    bodies.iter().map(|b| b.translation),
+                    None,
+                )
                 || guides.iter().any(|at| {
                     crate::intro_arrival::Porter.blocks(
                         at.translation,

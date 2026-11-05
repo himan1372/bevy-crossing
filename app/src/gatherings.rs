@@ -264,7 +264,7 @@ fn visit(
     for (idx, ((at, heading, wanders), entry)) in
         guests.into_iter().zip(roster.residents.iter()).enumerate()
     {
-        commands.spawn((
+        let mut guest = commands.spawn((
             Name::new(format!("{} ({kind:?})", entry.name)),
             Guest {
                 kind,
@@ -279,10 +279,14 @@ fn visit(
             },
             NpcClip::default(),
             NpcGait::default(),
+            crate::event_body::EventBody::default(),
             NpcModel(entry.index),
             Mesh3d(meshes.add(Capsule3d::new(0.35, 0.9))),
             Transform::from_translation(at + Vec3::Y).with_rotation(Quat::from_rotation_y(heading)),
         ));
+        if let Some(idle) = seated(kind, idx) {
+            guest.insert(idle);
+        }
     }
     // The tables and signs, as boxes.
     let (units, size, colour): (Vec<(usize, usize)>, Vec3, Color) = match kind {
@@ -321,10 +325,14 @@ fn visit(
 fn wander(
     time: Res<Time>,
     mut rand: ResMut<crate::game_rand::GameRand>,
-    mut guests: Query<(&mut Guest, &mut Transform)>,
+    town: Res<Town>,
+    mut guests: Query<(Entity, &mut Guest, &mut Transform)>,
+    player: Query<&Transform, (With<Player>, Without<Guest>)>,
 ) {
     let dt = time.delta_secs();
-    for (mut g, mut at) in &mut guests {
+    let player_at = player.single().ok().map(|t| t.translation);
+    let bodies: Vec<(Entity, Vec3)> = guests.iter().map(|(e, _, t)| (e, t.translation)).collect();
+    for (entity, mut g, mut at) in &mut guests {
         if !g.wanders {
             continue;
         }
@@ -340,8 +348,34 @@ fn wander(
             g.heading = (-away.x).atan2(-away.z);
             continue;
         }
+        if !town.can_step(at.translation, next)
+            || !crate::event_body::step_clear(
+                at.translation,
+                next,
+                bodies.iter().filter(|(e, _)| *e != entity).map(|(_, p)| *p),
+                player_at,
+            )
+        {
+            g.wait = 0.0;
+            continue;
+        }
         at.translation = next;
         at.rotation = Quat::from_rotation_y(g.heading);
+    }
+}
+
+/// What they do while they stand: the viewers sit (`aHM0_ACT_WAIT / MERRY`), the moon-gazers sit on the pier edge
+/// (`aNPC_ANIM_SANBASI1`), the harvest guests clap now and then.
+fn seated(kind: Kind, idx: usize) -> Option<crate::event_body::Idle> {
+    use crate::event_body::Idle;
+    match kind {
+        Kind::Cherry if idx < 4 && idx.is_multiple_of(2) => {
+            Some(Idle("cKF_ba_r_npc_1_sitdown_wait1"))
+        }
+        Kind::Cherry if idx < 4 => Some(Idle("cKF_ba_r_npc_1_sitdown_clap1")),
+        Kind::Moon | Kind::Meteor => Some(Idle("cKF_ba_r_npc_1_sanbasi1")),
+        Kind::Harvest if idx < 4 && idx % 2 == 1 => Some(Idle("cKF_ba_r_npc_1_clap1")),
+        _ => None,
     }
 }
 

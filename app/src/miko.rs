@@ -82,6 +82,7 @@ fn visit(
         },
         NpcClip::default(),
         NpcGait::default(),
+        crate::event_body::EventBody::default(),
         NpcModel(MIKO_NPC),
         Mesh3d(meshes.add(Capsule3d::new(0.35, 0.9))),
         Transform::from_translation(at + Vec3::Y).with_rotation(Quat::from_rotation_y(FACING_YAW)),

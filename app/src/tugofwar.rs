@@ -152,6 +152,8 @@ fn visit(
             },
             NpcClip::default(),
             NpcGait::default(),
+            crate::event_body::EventBody::default(),
+            crate::event_body::Idle("cKF_ba_r_npc_1_tunahiki_aiko1"),
             NpcModel(model(k + 1)),
             Mesh3d(meshes.add(Capsule3d::new(0.35, 0.9))),
             Transform::from_translation(home + Vec3::Y)
@@ -166,6 +168,8 @@ fn visit(
             Leader { looks: looks(0) },
             NpcClip::default(),
             NpcGait::default(),
+            crate::event_body::EventBody::default(),
+            crate::event_body::Idle("cKF_ba_r_npc_1_hatafuri1"),
             NpcModel(model(0)),
             Mesh3d(meshes.add(Capsule3d::new(0.35, 0.9))),
             Transform::from_translation(at + Vec3::Y),

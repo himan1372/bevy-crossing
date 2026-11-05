@@ -189,7 +189,7 @@ fn visit(
         } else {
             ANGLES[k - 1][layout].to_radians()
         };
-        commands.spawn((
+        let mut villager = commands.spawn((
             Name::new(format!("{} (fireworks)", entry.name)),
             show(),
             Villager {
@@ -202,10 +202,24 @@ fn visit(
             },
             NpcClip::default(),
             NpcGait::default(),
+            crate::event_body::EventBody::default(),
             NpcModel(entry.index),
             Mesh3d(meshes.add(Capsule3d::new(0.35, 0.9))),
             Transform::from_translation(at + Vec3::Y).with_rotation(Quat::from_rotation_y(heading)),
         ));
+        // The others fan, clap and cheer while they stand (`aHN1_ACT_FAN / CLAPPING / HURRAHS`).
+        match k {
+            0 => {}
+            2 => {
+                villager.insert(crate::event_body::Idle("cKF_ba_r_npc_1_clap1"));
+            }
+            3 => {
+                villager.insert(crate::event_body::Idle("cKF_ba_r_npc_1_banzai1"));
+            }
+            _ => {
+                villager.insert(crate::event_body::Idle("cKF_ba_r_npc_1_utiwa_wait1"));
+            }
+        }
     }
     if let Some(at) = unit_spot(&town, acre, seller_unit) {
         let centre = Town::cell_to_world(acre.0, acre.1, 8, 8);
@@ -227,6 +241,7 @@ fn visit(
             Seller,
             NpcClip::default(),
             NpcGait::default(),
+            crate::event_body::EventBody::default(),
             NpcModel(YOMISE_NPC[usize::from(second)]),
             Mesh3d(meshes.add(Capsule3d::new(0.35, 0.9))),
             Transform::from_translation(at + Vec3::Y)
@@ -244,10 +259,26 @@ fn visit(
 fn wander(
     time: Res<Time>,
     mut rand: ResMut<crate::game_rand::GameRand>,
-    mut villagers: Query<(&mut Villager, &mut Transform)>,
+    town: Res<Town>,
+    mut villagers: Query<(Entity, &mut Villager, &mut Transform)>,
+    others: Query<(Entity, &Transform), (With<crate::event_body::EventBody>, Without<Villager>)>,
+    player: Query<
+        &Transform,
+        (
+            With<Player>,
+            Without<Villager>,
+            Without<crate::event_body::EventBody>,
+        ),
+    >,
 ) {
     let dt = time.delta_secs();
-    for (mut v, mut at) in &mut villagers {
+    let player_at = player.single().ok().map(|t| t.translation);
+    let mut bodies: Vec<(Entity, Vec3)> = villagers
+        .iter()
+        .map(|(e, _, t)| (e, t.translation))
+        .collect();
+    bodies.extend(others.iter().map(|(e, t)| (e, t.translation)));
+    for (entity, mut v, mut at) in &mut villagers {
         if v.k != 0 {
             continue;
         }
@@ -262,6 +293,18 @@ fn wander(
         if away.length() > 100.0 / UNIT {
             // Back toward the middle (`aHN0_revise_moveRange`).
             v.heading = (-away.x).atan2(-away.z);
+            continue;
+        }
+        // The ground and the bodies; blocked, he turns elsewhere.
+        if !town.can_step(at.translation, next)
+            || !crate::event_body::step_clear(
+                at.translation,
+                next,
+                bodies.iter().filter(|(e, _)| *e != entity).map(|(_, p)| *p),
+                player_at,
+            )
+        {
+            v.wait = 0.0;
             continue;
         }
         at.translation = next;

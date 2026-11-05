@@ -138,6 +138,8 @@ fn visit(
             role,
             NpcClip::default(),
             NpcGait::default(),
+            crate::event_body::EventBody::default(),
+            crate::event_body::Idle("cKF_ba_r_npc_1_taisou1"),
             NpcModel(model),
             Mesh3d(meshes.add(Capsule3d::new(0.35, 0.9))),
             Transform::from_translation(at + Vec3::Y).with_rotation(Quat::from_rotation_y(yaw)),
