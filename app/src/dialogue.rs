@@ -302,6 +302,8 @@ fn on_talk(
     mut text_query: Query<&mut Text, With<DialogueText>>,
     mut roster: Option<ResMut<crate::roster::TownRoster>>,
     disc: Option<Res<crate::game_disc::GameDisc>>,
+    island: Option<Res<crate::npc::IslandNpc>>,
+    mut last_island_msg: Local<u32>,
 ) {
     for event in events.read() {
         if quest_claim.0 == Some(event.villager) {
@@ -351,7 +353,24 @@ fn on_talk(
                 season: now.season,
                 hour: now.hour,
             };
-            let (topic, msg_no) = talk::choose(&ctx, &mut |n| rng.below(n));
+            let (topic, msg_no) = if island.as_ref().and_then(|i| i.0).is_some()
+                && island.as_ref().and_then(|i| i.0) == villager.npc_index
+            {
+                // `aQMgr_decide_normal_msg_no_island`: the island's own chat by personality, never twice running.
+                const BASE: [u32; 6] = [0x3631, 0x3654, 0x36BC, 0x36DB, 0x367A, 0x369D];
+                let base = BASE[looks.min(5)];
+                let mut msg = base + rng.below(10);
+                if msg == *last_island_msg {
+                    msg = base + rng.below(9);
+                    if msg == *last_island_msg {
+                        msg += 1;
+                    }
+                }
+                *last_island_msg = msg;
+                (Topic::Chat, msg as _)
+            } else {
+                talk::choose(&ctx, &mut |n| rng.below(n))
+            };
             // The topic's subject: the gift handed over, or the item admired.
             let item = match topic {
                 Topic::Gift => {

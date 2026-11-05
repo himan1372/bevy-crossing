@@ -115,7 +115,30 @@ pub struct TownRoster {
     pub leaver: Option<usize>,
 }
 
+/// `NPC_ISLANDER_NUM`: islanders the decomp lists, and `mNpc_GROW_ISLANDER`.
+const ISLANDER_NUM: usize = 18;
+const GROW_ISLANDER: i8 = 2;
+
 impl VillagerTables {
+    /// `mNpc_DecideIslandNpc`: the island's resident, one of the first eighteen villagers whose grow
+    /// permission is islander, picked by the town's seed (the game saves the pick in `island.animal`).
+    pub fn islander(&self, seed: u32) -> Option<RosterEntry> {
+        let candidates: Vec<usize> = self
+            .grow
+            .iter()
+            .enumerate()
+            .filter(|(_, &g)| g == GROW_ISLANDER)
+            .map(|(i, _)| i)
+            .take(ISLANDER_NUM)
+            .collect();
+        if candidates.is_empty() {
+            return None;
+        }
+        let mut rng = Rng::new(seed.wrapping_mul(0x6C07_8965) ^ 0x151A_ADE5);
+        let pick = ((rng.next() * candidates.len() as f32) as usize).min(candidates.len() - 1);
+        self.entry(candidates[pick] as u32)
+    }
+
     /// The roster entry for table index `idx`.
     pub fn entry(&self, idx: u32) -> Option<RosterEntry> {
         Some(RosterEntry {

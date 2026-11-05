@@ -397,7 +397,7 @@ struct BuildingSpec {
     shift: (f32, f32),
 }
 
-const BUILDINGS: [BuildingSpec; 9] = [
+const BUILDINGS: [BuildingSpec; 11] = [
     // ac_shop.c: x -20, z +20.
     BuildingSpec {
         item: 0x5804,
@@ -433,6 +433,23 @@ const BUILDINGS: [BuildingSpec; 9] = [
         light: "lightT",
         palette: 91, // aSTR_PAL_MUSEUM
         shift: (0.0, 0.0),
+    },
+    // ac_cottage.c: the island's cottages (`Cottage_my_actor_ct` / `Cottage_npc_actor_ct`: x +20, z +20).
+    BuildingSpec {
+        item: 0x5850,
+        prefix: "myhome_i",
+        parts: &["1", "2", "3", "door"],
+        light: "light",
+        palette: 96, // aSTR_PAL_MYHOME_ISLAND
+        shift: (20.0, 20.0),
+    },
+    BuildingSpec {
+        item: 0x5851,
+        prefix: "house_i",
+        parts: &["1", "2", "3", "door"],
+        light: "light",
+        palette: 97, // aSTR_PAL_HOUSE_I
+        shift: (20.0, 20.0),
     },
     // ac_needlework_shop.c: x -20, z +20.
     BuildingSpec {
@@ -617,7 +634,11 @@ fn spawn_buildings(
     let season = if winter { "w" } else { "s" };
     for b in &retail.buildings {
         let spec = &BUILDINGS[b.spec];
-        let prefix = format!("obj_{season}_{}", spec.prefix);
+        let mut prefix = format!("obj_{season}_{}", spec.prefix);
+        // Some structures (the island's cottages) have no winter model, only the winter palette.
+        if building_lists(disc, &prefix, spec.parts).is_empty() {
+            prefix = format!("obj_s_{}", spec.prefix);
+        }
         let palette = structure_palette(disc, spec.palette + b.palette_shift, winter);
         let mut lists = building_lists(disc, &prefix, spec.parts);
         let door_pose = (spec.prefix == "shop1")
@@ -1279,6 +1300,20 @@ fn find_structures(
                 if (0x5800..0x5900).contains(&item) {
                     out.push((item, ax, az, cell % 16, cell / 16));
                 }
+            }
+        }
+    }
+    // The island's two blocks, (4,8) and (5,8) of the grid (acres (3,7) and (4,7) past the plan's rows): its cottages.
+    for (block, ax) in [(8 * BLOCK_X_NUM + 4, 3usize), (8 * BLOCK_X_NUM + 5, 4)] {
+        let Some(items) = combos
+            .get(field.combi[block].combi as usize)
+            .and_then(|c| fg.get(&c.fg_id))
+        else {
+            continue;
+        };
+        for (cell, &item) in items.iter().enumerate() {
+            if matches!(item, 0x5850 | 0x5851) {
+                out.push((item, ax, ACRE_DEPTH + 1, cell % 16, cell / 16));
             }
         }
     }

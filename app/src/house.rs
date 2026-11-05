@@ -144,7 +144,7 @@ impl Default for CurrentRoom {
 
 /// Villager front doors and the rooms behind them.
 #[derive(Resource, Default)]
-struct VillagerDoors(Vec<(Vec3, Vec3)>);
+struct VillagerDoors(Vec<(Vec3, Vec3, RoomBounds)>);
 
 /// Startup, after the villagers: builds each villager's room and records
 /// their door.
@@ -153,6 +153,7 @@ fn build_villager_rooms(
     mut commands: Commands,
     disc: Option<Res<crate::game_disc::GameDisc>>,
     villagers: Query<&crate::npc::Villager>,
+    town: Res<Town>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut n64: ResMut<Assets<crate::n64_material::N64Material>>,
     mut images: ResMut<Assets<Image>>,
@@ -178,7 +179,40 @@ fn build_villager_rooms(
             .0
             .extend(furniture.iter().map(|f| Obstacle::around(origin, f)));
         info!("villager {i} door at {:?}", v.door());
-        doors.push((v.door(), origin));
+        doors.push((
+            v.door(),
+            origin,
+            RoomBounds::square(crate::interior::VILLAGER_ROOM_HALF),
+        ));
+    }
+    // The player's own cottage on the island (`COTTAGE_MY`, `PLAYER_ROOM_ISLAND`): the player's kind of room, bare for
+    // now (the island's furniture save is not built), behind the cottage's door.
+    if let Some(cottage) = town
+        .retail
+        .as_ref()
+        .and_then(|r| r.buildings.iter().find(|b| b.item == 0x5850))
+    {
+        let origin = INTERIOR_ORIGIN + Vec3::X * VILLAGER_ROOM_SPACING * (doors.len() + 1) as f32;
+        if let Some(furniture) = crate::interior::spawn_player_room(
+            &mut commands,
+            &disc,
+            origin,
+            &mut meshes,
+            &mut n64,
+            &mut images,
+        ) {
+            obstacles
+                .0
+                .extend(furniture.iter().map(|f| Obstacle::around(origin, f)));
+            // The door a step in front of the cottage's south face (the villagers' doors, `aHUS` rotation 0).
+            let door = cottage.door.unwrap_or(cottage.origin + Vec3::Z * 1.5);
+            doors.push((
+                Vec3::new(door.x, cottage.origin.y + 1.0, cottage.origin.z + 1.6),
+                origin,
+                RoomBounds::disc_room(),
+            ));
+            info!("the island cottage's room is ready");
+        }
     }
     info!("{} villager rooms from the disc", doors.len());
     commands.insert_resource(VillagerDoors(doors));
@@ -561,22 +595,24 @@ fn house_enter(
         return;
     };
     // A villager's front door (they face south, `aHUS` rotation 0).
-    let villager_room = villager_doors.0.iter().find_map(|&(door_pos, origin)| {
-        let door = DoorPanel {
-            center_x: door_pos.x,
-            half_w: DOOR_HALF_W,
-            face_z: door_pos.z - 0.5,
-            into_z: -1.0,
-        };
-        door.faced_by(transform.translation, facing.dir, DOOR_RANGE_OUT, DOOR_DOT)
-            .then_some(origin)
-    });
-    if let Some(origin) = villager_room {
+    let villager_room = villager_doors
+        .0
+        .iter()
+        .find_map(|&(door_pos, origin, room)| {
+            let door = DoorPanel {
+                center_x: door_pos.x,
+                half_w: DOOR_HALF_W,
+                face_z: door_pos.z - 0.5,
+                into_z: -1.0,
+            };
+            door.faced_by(transform.translation, facing.dir, DOOR_RANGE_OUT, DOOR_DOT)
+                .then_some((origin, room))
+        });
+    if let Some((origin, room)) = villager_room {
         if !actions.consume(Action::Interact) {
             return;
         }
         commands.insert_resource(ReturnPosition(transform.translation));
-        let room = RoomBounds::square(crate::interior::VILLAGER_ROOM_HALF);
         commands.insert_resource(CurrentRoom(origin, room));
         transform.translation = origin + Vec3::new(0.0, 1.0, room.spawn_z);
         facing.dir = Vec3::new(0.0, 0.0, -1.0);

@@ -287,6 +287,10 @@ fn town_villagers(
         .collect()
 }
 
+/// The island's resident (`island.animal`): the villager's table index, once picked.
+#[derive(Resource, Default, Clone, Copy)]
+pub(crate) struct IslandNpc(pub Option<u32>);
+
 pub(crate) fn spawn_villagers(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -295,10 +299,12 @@ pub(crate) fn spawn_villagers(
     player_house: Option<Res<crate::house::PlayerHouse>>,
     roster: Option<Res<crate::roster::TownRoster>>,
     identity: Res<crate::save::PlayerIdentity>,
+    disc: Option<Res<crate::game_disc::GameDisc>>,
+    seed: Option<Res<crate::town::TownSeed>>,
 ) {
     commands.insert_resource(WanderRng(0x9E3779B97F4A7C15));
     commands.init_resource::<VillagerPause>();
-    let houses = match roster.as_deref() {
+    let mut houses: Vec<Vec3> = match roster.as_deref() {
         // A resident lives in the home of their slot (`plan.house_*`).
         Some(roster) => (0..roster.residents.len())
             .map(|n| {
@@ -311,16 +317,58 @@ pub(crate) fn spawn_villagers(
         None => villager_house_centres(&town, player_house.map(|h| h.door_pos)),
     };
 
-    for (i, (name, looks, npc_index)) in town_villagers(roster.as_deref()).iter().enumerate() {
+    let mut villagers = town_villagers(roster.as_deref());
+    // The island's resident lives in the island's cottage (`COTTAGE_NPC`), with their own room behind its door.
+    if roster.is_some() {
+        let cottage = town
+            .retail
+            .as_ref()
+            .and_then(|r| r.buildings.iter().find(|b| b.item == 0x5851))
+            .map(|b| b.origin);
+        let islander = disc
+            .as_ref()
+            .and_then(|d| crate::roster::VillagerTables::from_disc(d))
+            .zip(seed)
+            .and_then(|(tables, seed)| tables.islander(seed.0));
+        if let (Some(cottage), Some(entry)) = (cottage, islander) {
+            info!(
+                "The island's resident is {} (villager {})",
+                entry.name, entry.index
+            );
+            commands.insert_resource(IslandNpc(Some(entry.index)));
+            // The door is a step south of the cottage's south face: `c.z + HOUSE_SIZE / 2.0 + 0.5` below.
+            houses.push(cottage - Vec3::new(0.0, 0.0, 0.4));
+            villagers.push((
+                &*Box::leak(entry.name.into_boxed_str()),
+                entry.looks,
+                Some(entry.index),
+            ));
+        }
+    }
+    for (i, (name, looks, npc_index)) in villagers.iter().enumerate() {
         let (r, g, b) = LOOKS_COLOURS[*looks as usize % LOOKS_COLOURS.len()];
         let personality = Personality::from_looks(*looks).unwrap_or(Personality::Girl);
         // Door just in front of the house's south face; home a step further out.
         let (door, home) = match houses.get(i) {
-            Some(c) => (
-                Vec3::new(c.x, 1.0, c.z + HOUSE_SIZE / 2.0 + 0.5),
-                Vec3::new(c.x, 1.0, c.z + HOUSE_SIZE / 2.0 + 2.0),
-            ),
+            Some(c) => {
+                // On the ground there (the island stands higher than the town's flat acres).
+                let y = if Town::on_island(*c) {
+                    town.ground_y(*c) + 1.0
+                } else {
+                    1.0
+                };
+                (
+                    Vec3::new(c.x, y, c.z + HOUSE_SIZE / 2.0 + 0.5),
+                    Vec3::new(c.x, y, c.z + HOUSE_SIZE / 2.0 + 2.0),
+                )
+            }
             None => (FALLBACK_HOMES[i % 4], FALLBACK_HOMES[i % 4]),
+        };
+        // The island's rim is a cell from the doorstep: the resident's wander centre is the step itself.
+        let home = if Town::on_island(door) {
+            door + Vec3::new(0.0, 0.0, 0.2)
+        } else {
+            home
         };
         let schedule = schedule_now(*looks, identity.events.first_job);
         let out = is_out(schedule);
