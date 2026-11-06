@@ -35,3 +35,7 @@ Still unverified: a 2x2 piece, check 7's wording, presents, the first 1x1 marker
 Found, not fixed: the shared quest system offers the island resident a villager errand ("cabin wall at the shop", "Annalise has a
 quest") that blocks talks until answered; the original's errands are for town villagers. QA traps: the `first_job` flag of a copied
 save greets before any trade check (clear `identity.events` / `first_job`); a villager standing at her door turns E into a door entry.
+
+Fixed 2026-11-06 (`island-no-villager-quests`): `quest.rs::quest_cooldown_tick` now leaves the island resident out of both the giver
+pick and the list of names a quest can mention. Check/clippy/fmt pass; live run offered a quest from a town villager (Eloise), the
+negative case is by construction (one random pick per quest, not sampled to exhaustion).

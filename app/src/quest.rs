@@ -567,8 +567,11 @@ fn quest_cooldown_tick(
         (With<QuestNotifyText>, Without<QuestPanel>),
     >,
     identity: Res<crate::save::PlayerIdentity>,
+    island: Option<Res<crate::npc::IslandNpc>>,
 ) {
     let now = crate::clock::now();
+    // The island's resident is not a town villager: no errands from or about them.
+    let islander = island.and_then(|i| i.0);
     // Time limit (`quest::limit_days`): past it, the request lapses.
     if let Some(active) = quest.active.as_ref() {
         if days_left(active, now.day_number).is_some_and(|d| d < 0) {
@@ -605,6 +608,7 @@ fn quest_cooldown_tick(
     }
     let list: Vec<(Entity, String)> = villagers
         .iter()
+        .filter(|(_, v)| islander.is_none() || v.npc_index != islander)
         .map(|(e, v)| (e, v.name.to_string()))
         .collect();
     if list.is_empty() {
@@ -612,7 +616,11 @@ fn quest_cooldown_tick(
         return;
     }
     let (entity, name) = list[(quest.rng_next() as usize) % list.len()].clone();
-    let all_names: Vec<String> = talks.iter().map(|(v, _)| v.name.to_string()).collect();
+    let all_names: Vec<String> = talks
+        .iter()
+        .filter(|(v, _)| islander.is_none() || v.npc_index != islander)
+        .map(|(v, _)| v.name.to_string())
+        .collect();
     let stock_names: Vec<String> = shop_data.goods().iter().map(|s| s.name.clone()).collect();
     let rolls = [
         quest.rng_next() as u32,
