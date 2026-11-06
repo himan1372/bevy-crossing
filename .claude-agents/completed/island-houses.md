@@ -18,3 +18,14 @@ size), the island furniture save (`island.cottage`), the resident's schedule / s
 positions against the originals (south-facing here), the lights of the cottages' windows at night.
 Not built: those talks (furniture trade, player and other-player lines, mail), the island's own item layout from the island save
 (trees, flowers, the flag), naming the island, the island's save (so nothing is kept between visits).
+
+## Cottages turned to face the camera (`35f1fee5`, checked 2026-11-06)
+Deliberate departure from the original, which draws the island cottages unturned (their doors point diagonally) and fires the player
+cottage's door from a point at +20/+20 (`Cottage_my_check_door_pl_in`). Philip asked for doors toward the camera, so
+`disc_town.rs::place_buildings` turns `0x5850` / `0x5851` by the posed door's angle rounded to 45 deg (yaw 135 deg / -90 deg here)
+and rotates the collision points and the door point with it. `COTTAGE_NPC` has no +20/+20 in the original (`Cottage_npc_actor_ct`),
+so its shift is now (0, 0); `COTTAGE_MY` keeps (20, 20).
+Run in game (Temp save, disc, debug build): both doors face south; E at the player cottage and at the resident's cottage enters their
+rooms and E at the room doorway returns to the island at the door; the bodies block the player from the sides.
+Traps: after entering, leave through the room's own doorway before teleporting again, or later door tests fail silently (the state is
+still Inside). Not verified: the original's own door-trigger geometry (the port keeps its own door panel), window lights at night.
