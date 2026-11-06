@@ -15,8 +15,10 @@
 //!   the 30, 10, 5 and one minute marks (`base1 + (term - 1) * 4`, `7531 7552 7510 7573 7594 7615`), and fireworks go
 //!   off at midnight (`eEC_EFFECT_HANABI_SWITCH`).
 //!
-//! Not built: the sitting, toasting and cheering animations, the models of the tables and signs (boxes stand), the
-//! moon-viewing table, the host's freezing the player at midnight, the visiting towns' names, the sounds.
+//! The cherry viewing's mats and the harvest festival's tables are the disc's `obj_e_hanami_{a,b}` / `obj_e_hfes_{a,b,c}`.
+//!
+//! Not built: the sitting, toasting and cheering animations, the countdown's sign (a skeleton: a box stands), the
+//! moon-viewing table (`obj_e_tukimi_*_endai`), the host's freezing the player at midnight, the visiting towns' names, the sounds.
 
 use bevy::prelude::*;
 use rustimal_logic::event_schedule::ev;
@@ -190,6 +192,10 @@ fn visit(
     existing: Query<(Entity, Option<&Guest>, Option<&Prop>), Or<(With<Guest>, With<Prop>)>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    disc: Option<Res<crate::game_disc::GameDisc>>,
+    mut props: ResMut<crate::event_body::Props>,
+    mut n64: ResMut<Assets<crate::n64_material::N64Material>>,
+    mut images: ResMut<Assets<Image>>,
 ) {
     let now = crate::clock::now();
     let kind = active_kind(&today, now.hour).filter(|_| {
@@ -307,15 +313,47 @@ fn visit(
             Color::srgb(0.9, 0.9, 0.5),
         ),
     };
-    for u in units {
-        if let Some(at) = spot(u) {
-            commands.spawn((
+    for (i, u) in units.into_iter().enumerate() {
+        let Some(mut at) = spot(u) else { continue };
+        // The disc's models, drawn translucent list then opaque: the cherry viewing's mats (`ac_goza`:
+        // `obj_e_hanami_{a,b}`, alternating) and the harvest festival's tables (`ac_htable`: `obj_e_hfes_{a,b,c}`,
+        // the third half a unit further south). The countdown's sign is a skeleton, still a box.
+        let lists: Option<&[&str]> = match (kind, i) {
+            (Kind::Cherry, _) if i % 2 == 0 => {
+                Some(&["obj_e_hanami_a_modelT", "obj_e_hanami_a_model"])
+            }
+            (Kind::Cherry, _) => Some(&["obj_e_hanami_b_modelT", "obj_e_hanami_b_model"]),
+            (Kind::Harvest, 0) => Some(&["obj_e_hfes_a_modelT", "obj_e_hfes_a_model"]),
+            (Kind::Harvest, 1) => Some(&["obj_e_hfes_b_modelT", "obj_e_hfes_b_model"]),
+            (Kind::Harvest, _) => Some(&["obj_e_hfes_c_modelT", "obj_e_hfes_c_model"]),
+            _ => None,
+        };
+        if kind == Kind::Harvest && i == 2 {
+            at.z += 0.5;
+        }
+        let parts = match (lists, disc.as_deref()) {
+            (Some(lists), Some(d)) => {
+                props.get(d, lists, None, None, (&mut meshes, &mut n64, &mut images))
+            }
+            _ => Vec::new(),
+        };
+        let root = commands
+            .spawn((
                 Name::new("gathering prop"),
                 Prop { day },
+                Transform::from_translation(at),
+                Visibility::default(),
+            ))
+            .id();
+        if parts.is_empty() {
+            commands.spawn((
                 Mesh3d(meshes.add(Cuboid::new(size.x, size.y, size.z))),
                 MeshMaterial3d(materials.add(colour)),
-                Transform::from_translation(at + Vec3::Y * size.y / 2.0),
+                Transform::from_xyz(0.0, size.y / 2.0, 0.0),
+                ChildOf(root),
             ));
+        } else {
+            crate::event_body::attach(&mut commands, root, &parts);
         }
     }
     info!("The {kind:?} gathering is on");

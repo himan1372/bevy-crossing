@@ -170,7 +170,7 @@ fn visit(
             };
             props.get(
                 d,
-                symbol,
+                &[symbol],
                 Some(if i == 0 { PAL_KAGO_R } else { PAL_KAGO_R + 1 }),
                 None,
                 (&mut meshes, &mut n64, &mut images),
@@ -368,7 +368,7 @@ fn run(
                         };
                         props.get(
                             d,
-                            symbol,
+                            &[symbol],
                             Some(PAL_KAGO_R + u32::from(t.team != 0)),
                             None,
                             (&mut meshes, &mut n64, &mut images),

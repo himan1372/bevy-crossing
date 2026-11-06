@@ -16,7 +16,9 @@
 //!
 //! Fireworks: bursts of coloured sparks over the acre while the show runs (a stand-in for `eEC_EFFECT_HANABI_*`).
 //!
-//! Not built: the villagers' fan and clap animations, the stall's model (a box stands), the seller's fan, the sounds and
+//! The stall is the disc's `obj_e_yatai_{l,r}` model (palette `aSTR_PAL_YATAI`).
+//!
+//! Not built: the villagers' fan and clap animations, the stall's shadow, the seller's fan, the sounds and
 //! the effect's own timing.
 
 use bevy::prelude::*;
@@ -40,6 +42,8 @@ use crate::town::Town;
 
 const SOUND: u8 = 2;
 const UNIT: f32 = 40.0;
+/// `aSTR_PAL_YATAI`: the stall's palette.
+const PAL_YATAI: u32 = 70;
 /// `SP_NPC_EV_YOMISE` and `SP_NPC_EV_YOMISE2` as model numbers.
 const YOMISE_NPC: [u32; 2] = [238 + 44, 238 + 57];
 /// The stall seller's kinds: base item, price, the offer's message.
@@ -149,6 +153,10 @@ fn visit(
     mut rand: ResMut<crate::game_rand::GameRand>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    disc: Option<Res<crate::game_disc::GameDisc>>,
+    mut props: ResMut<crate::event_body::Props>,
+    mut n64: ResMut<Assets<crate::n64_material::N64Material>>,
+    mut images: ResMut<Assets<Image>>,
 ) {
     let now = crate::clock::now();
     let on = today.is_active(ev::FIREWORKS_SHOW, now.hour);
@@ -225,16 +233,42 @@ fn visit(
         let centre = Town::cell_to_world(acre.0, acre.1, 8, 8);
         // He faces the land side, away from the water, with the stall before him.
         let to = (at - centre).with_y(0.0);
-        // The stall (a box) beside him.
-        commands.spawn((
-            Name::new("stall"),
-            show(),
-            Mesh3d(meshes.add(Cuboid::new(1.6, 1.0, 0.9))),
-            MeshMaterial3d(materials.add(Color::srgb(0.7, 0.35, 0.2))),
-            Transform::from_translation(
-                at + Vec3::new(0.0, 0.5, 0.0) + to.normalize_or_zero() * 1.3,
-            ),
-        ));
+        // The stall beside him: `ac_yatai`'s `obj_e_yatai_{l,r}_modelT` then `_model` with the stall palette
+        // (`aSTR_PAL_YATAI`); a box when the disc has no model.
+        let stall_at = at + to.normalize_or_zero() * 1.3;
+        let parts = disc.as_deref().map_or_else(Vec::new, |d| {
+            let lists: &[&str] = if second {
+                &["obj_e_yatai_r_modelT", "obj_e_yatai_r_model"]
+            } else {
+                &["obj_e_yatai_l_modelT", "obj_e_yatai_l_model"]
+            };
+            props.get(
+                d,
+                lists,
+                Some(PAL_YATAI),
+                None,
+                (&mut meshes, &mut n64, &mut images),
+            )
+        });
+        let stall_root = commands
+            .spawn((
+                Name::new("stall"),
+                show(),
+                Transform::from_translation(stall_at.with_y(town.ground_y(stall_at)))
+                    .with_rotation(Quat::from_rotation_y(to.x.atan2(to.z))),
+                Visibility::default(),
+            ))
+            .id();
+        if parts.is_empty() {
+            commands.spawn((
+                Mesh3d(meshes.add(Cuboid::new(1.6, 1.0, 0.9))),
+                MeshMaterial3d(materials.add(Color::srgb(0.7, 0.35, 0.2))),
+                Transform::from_xyz(0.0, 0.5, 0.0),
+                ChildOf(stall_root),
+            ));
+        } else {
+            crate::event_body::attach(&mut commands, stall_root, &parts);
+        }
         commands.spawn((
             Name::new("night stall seller"),
             show(),

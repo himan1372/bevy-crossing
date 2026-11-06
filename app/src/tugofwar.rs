@@ -188,7 +188,7 @@ fn visit(
     let parts = disc.as_deref().map_or_else(Vec::new, |d| {
         props.get(
             d,
-            "tol_rope_1T_model",
+            &["tol_rope_1T_model"],
             None,
             Some("tol_rope_1_v"),
             (&mut meshes, &mut n64, &mut images),

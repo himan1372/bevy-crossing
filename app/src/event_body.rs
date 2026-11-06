@@ -21,11 +21,11 @@ pub(crate) type PropParts = Vec<(Handle<Mesh>, Handle<N64Material>)>;
 pub(crate) struct Props(HashMap<&'static str, PropParts>);
 
 impl Props {
-    /// The model's parts; empty when the disc has no such model (the caller keeps its stand-in shape).
+    /// The parts of the model drawn by `symbols` in turn (cached under the first); empty when the disc has no such model (the caller keeps its stand-in shape).
     pub(crate) fn get(
         &mut self,
         disc: &GameDisc,
-        symbol: &'static str,
+        symbols: &[&'static str],
         palette: Option<u32>,
         segment8: Option<&'static str>,
         (meshes, materials, images): (
@@ -35,12 +35,17 @@ impl Props {
         ),
     ) -> PropParts {
         self.0
-            .entry(symbol)
+            .entry(symbols[0])
             .or_insert_with(|| {
-                let Some(model) = disc.catalog.get(symbol) else {
-                    warn!("event prop {symbol} is not on the disc");
-                    return Vec::new();
-                };
+                // The lists the draw code runs in turn (translucent, then opaque, for the stalls and tables).
+                let mut lists = Vec::new();
+                for symbol in symbols {
+                    let Some(model) = disc.catalog.get(symbol) else {
+                        warn!("event prop {symbol} is not on the disc");
+                        return Vec::new();
+                    };
+                    lists.push(model.offset);
+                }
                 let colours = crate::disc_town::DrawColors {
                     prim: [255; 4],
                     prim_lod: 128,
@@ -54,7 +59,7 @@ impl Props {
                 let built = if let Some(v) = segment8.and_then(|name| disc.catalog.get(name)) {
                     crate::disc_town::build_model_segments(
                         disc,
-                        &[model.offset],
+                        &lists,
                         palette,
                         colours.prim,
                         &[(8, v.offset)],
@@ -63,7 +68,7 @@ impl Props {
                 } else {
                     crate::disc_town::build_model_full(
                         disc,
-                        &[model.offset],
+                        &lists,
                         palette,
                         colours,
                         false,
