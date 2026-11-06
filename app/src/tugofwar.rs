@@ -15,7 +15,9 @@
 //! Talking: `base(looks) + offset + RANDOM(3)`, the offset `3` even, `6` swaying, `9` straining; the leader's `0`. The
 //! bases are `6532 6544 6520 6556 6568 6580` by looks.
 //!
-//! Not built: the animations, the rope model (a brown cylinder stands in), the sweat effect, the sounds, any winner.
+//! The rope is the disc's `tol_rope_1T_model` drawn unbent (the original bends the middle vertices with the rope's offset).
+//!
+//! Not built: the animations, the sweat effect, the sounds, any winner.
 
 use bevy::prelude::*;
 use rustimal_logic::event_schedule::ev;
@@ -108,6 +110,10 @@ fn visit(
     mut pull: ResMut<Pull>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    disc: Option<Res<crate::game_disc::GameDisc>>,
+    mut props: ResMut<crate::event_body::Props>,
+    mut n64: ResMut<Assets<crate::n64_material::N64Material>>,
+    mut images: ResMut<Assets<Image>>,
 ) {
     let now = crate::clock::now();
     let on = today.is_active(ev::SPORTS_FAIR_TUG_OF_WAR, now.hour);
@@ -178,15 +184,40 @@ fn visit(
     // The rope between the teams.
     let (from, to) = (rope_ends[0], rope_ends[3]);
     let length = (to - from).length();
-    commands.spawn((
-        Name::new("rope"),
-        tug(),
-        Rope((from.x + to.x) * 0.5),
-        Mesh3d(meshes.add(Cylinder::new(0.06, length))),
-        MeshMaterial3d(materials.add(Color::srgb(0.55, 0.38, 0.2))),
-        Transform::from_translation((from + to) * 0.5 + Vec3::Y * 0.9)
-            .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
-    ));
+    // `tol_rope_1T_model` (the original's rope actor); a brown cylinder when the disc has no model.
+    let parts = disc.as_deref().map_or_else(Vec::new, |d| {
+        props.get(
+            d,
+            "tol_rope_1T_model",
+            None,
+            Some("tol_rope_1_v"),
+            (&mut meshes, &mut n64, &mut images),
+        )
+    });
+    let mid = (from + to) * 0.5;
+    let root = commands
+        .spawn((
+            Name::new("rope"),
+            tug(),
+            Rope(mid.x),
+            Transform::from_translation(if parts.is_empty() {
+                mid + Vec3::Y * 0.9
+            } else {
+                mid.with_y(town.ground_y(mid))
+            }),
+            Visibility::default(),
+        ))
+        .id();
+    if parts.is_empty() {
+        commands.spawn((
+            Mesh3d(meshes.add(Cylinder::new(0.06, length))),
+            MeshMaterial3d(materials.add(Color::srgb(0.55, 0.38, 0.2))),
+            Transform::from_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
+            ChildOf(root),
+        ));
+    } else {
+        crate::event_body::attach(&mut commands, root, &parts);
+    }
     info!("The tug of war is set at the shrine");
 }
 

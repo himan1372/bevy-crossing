@@ -13,7 +13,9 @@
 //! up or throwing, `9` after a throw; the leader `base0(looks) + RANDOM(3)`. The bases are `7781 7793 7769 7805 7817
 //! 7829` by looks (the leader's the same table).
 //!
-//! Not built: the animations, the basket and ball models (plain shapes stand in), the ball effect's own scatter and the
+//! The baskets and balls are the disc's `kago_{r,w}_DL_model` / `kago_{r,w}_ball_DL_model` (palettes `aSTR_PAL_KAGO_R/W`).
+//!
+//! Not built: the animations, the ball effect's own scatter and the
 //! sounds. The shrine's structures are drawn as placeholders.
 
 use bevy::prelude::*;
@@ -54,6 +56,11 @@ struct Toss {
 
 #[derive(Component)]
 struct Basket;
+
+/// `aSTR_PAL_KAGO_R` (the white one follows): the basket and ball palettes.
+const PAL_KAGO_R: u32 = 76;
+/// Height of the model basket's mouth, cells (its pole is 1.5 high and the basket reaches 2.5).
+const BASKET_MOUTH: f32 = 2.3;
 
 #[derive(Component)]
 struct Ball {
@@ -122,6 +129,10 @@ fn visit(
     mut busy: ResMut<Busy>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    disc: Option<Res<crate::game_disc::GameDisc>>,
+    mut props: ResMut<crate::event_body::Props>,
+    mut n64: ResMut<Assets<crate::n64_material::N64Material>>,
+    mut images: ResMut<Assets<Image>>,
 ) {
     let now = crate::clock::now();
     let on = today.is_active(ev::SPORTS_FAIR_BALL_TOSS, now.hour);
@@ -150,14 +161,40 @@ fn visit(
         } else {
             Color::srgb(0.95, 0.95, 0.95)
         };
-        commands.spawn((
-            Name::new(format!("basket {i}")),
-            toss(),
-            Basket,
-            Mesh3d(meshes.add(Cylinder::new(0.55, 0.9))),
-            MeshMaterial3d(materials.add(colour)),
-            Transform::from_translation(at + Vec3::Y * 0.45),
-        ));
+        // `kago_r_DL_model` / `kago_w_DL_model`; a cylinder when the disc has no model.
+        let parts = disc.as_deref().map_or_else(Vec::new, |d| {
+            let symbol = if i == 0 {
+                "kago_r_DL_model"
+            } else {
+                "kago_w_DL_model"
+            };
+            props.get(
+                d,
+                symbol,
+                Some(if i == 0 { PAL_KAGO_R } else { PAL_KAGO_R + 1 }),
+                None,
+                (&mut meshes, &mut n64, &mut images),
+            )
+        });
+        let root = commands
+            .spawn((
+                Name::new(format!("basket {i}")),
+                toss(),
+                Basket,
+                Transform::from_translation(at),
+                Visibility::default(),
+            ))
+            .id();
+        if parts.is_empty() {
+            commands.spawn((
+                Mesh3d(meshes.add(Cylinder::new(0.55, 0.9))),
+                MeshMaterial3d(materials.add(colour)),
+                Transform::from_xyz(0.0, 0.45, 0.0),
+                ChildOf(root),
+            ));
+        } else {
+            crate::event_body::attach(&mut commands, root, &parts);
+        }
     }
     let model = |i: usize| {
         roster
@@ -236,6 +273,10 @@ fn run(
     mut rand: ResMut<crate::game_rand::GameRand>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    disc: Option<Res<crate::game_disc::GameDisc>>,
+    mut props: ResMut<crate::event_body::Props>,
+    mut n64: ResMut<Assets<crate::n64_material::N64Material>>,
+    mut images: ResMut<Assets<Image>>,
     player: Query<
         &Transform,
         (
@@ -318,21 +359,48 @@ fn run(
                     t.thrown = true;
                     let scatter =
                         Vec3::new(rand.0.fqrand() - 0.5, 0.0, rand.0.fqrand() - 0.5) * 0.7;
-                    commands.spawn((
-                        Name::new("ball"),
-                        Ball {
-                            from: at.translation + Vec3::Y * 0.6,
-                            to: basket + Vec3::Y * 0.9 + scatter,
-                            age: 0.0,
-                        },
-                        Mesh3d(meshes.add(Sphere::new(0.14))),
-                        MeshMaterial3d(materials.add(if t.team == 0 {
-                            Color::srgb(0.9, 0.2, 0.15)
+                    // `kago_r_ball_DL_model` / `kago_w_ball_DL_model`; a sphere when the disc has no model.
+                    let parts = disc.as_deref().map_or_else(Vec::new, |d| {
+                        let symbol = if t.team == 0 {
+                            "kago_r_ball_DL_model"
                         } else {
-                            Color::srgb(0.95, 0.95, 0.9)
-                        })),
-                        Transform::from_translation(at.translation + Vec3::Y * 0.6),
-                    ));
+                            "kago_w_ball_DL_model"
+                        };
+                        props.get(
+                            d,
+                            symbol,
+                            Some(PAL_KAGO_R + u32::from(t.team != 0)),
+                            None,
+                            (&mut meshes, &mut n64, &mut images),
+                        )
+                    });
+                    let ball = commands
+                        .spawn((
+                            Name::new("ball"),
+                            Ball {
+                                from: at.translation + Vec3::Y * 0.6,
+                                to: basket
+                                    + Vec3::Y * if parts.is_empty() { 0.9 } else { BASKET_MOUTH }
+                                    + scatter,
+                                age: 0.0,
+                            },
+                            Transform::from_translation(at.translation + Vec3::Y * 0.6),
+                            Visibility::default(),
+                        ))
+                        .id();
+                    if parts.is_empty() {
+                        commands.spawn((
+                            Mesh3d(meshes.add(Sphere::new(0.14))),
+                            MeshMaterial3d(materials.add(if t.team == 0 {
+                                Color::srgb(0.9, 0.2, 0.15)
+                            } else {
+                                Color::srgb(0.95, 0.95, 0.9)
+                            })),
+                            ChildOf(ball),
+                        ));
+                    } else {
+                        crate::event_body::attach(&mut commands, ball, &parts);
+                    }
                 }
                 if t.throw_age >= 1.0 {
                     t.throw_age = 0.0;

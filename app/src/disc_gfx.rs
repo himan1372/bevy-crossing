@@ -92,6 +92,17 @@ impl<'a> RelGfx<'a> {
                         None => Gfx::new(0, 0),
                     };
                 }
+                if gfx.opcode() == op::G_VTX && gfx.addr() >> 24 != 0 {
+                    // A vertex load from a runtime segment the caller points at REL data
+                    // (`gSPSegment(8, tol_rope_1_v)`): the segment's base plus the offset.
+                    if let Some((_, base)) = self
+                        .dl_segments
+                        .iter()
+                        .find(|(seg, _)| u32::from(*seg) == gfx.addr() >> 24)
+                    {
+                        gfx = Gfx::new(gfx.w0, base + (gfx.addr() & 0x00FF_FFFF));
+                    }
+                }
                 list.push(gfx);
                 at += GFX_SIZE;
                 if matches!(gfx.opcode(), op::G_TRIN | op::G_TRIN_INDEPEND) {

@@ -7,7 +7,86 @@
 
 use bevy::prelude::*;
 
+use std::collections::HashMap;
+
 use crate::character::{NpcClip, NpcGait};
+use crate::game_disc::GameDisc;
+use crate::n64_material::N64Material;
+
+/// The meshes and materials of one disc model.
+pub(crate) type PropParts = Vec<(Handle<Mesh>, Handle<N64Material>)>;
+
+/// Disc models the event props use (baskets, balls, the rope), built once by symbol name.
+#[derive(Resource, Default)]
+pub(crate) struct Props(HashMap<&'static str, PropParts>);
+
+impl Props {
+    /// The model's parts; empty when the disc has no such model (the caller keeps its stand-in shape).
+    pub(crate) fn get(
+        &mut self,
+        disc: &GameDisc,
+        symbol: &'static str,
+        palette: Option<u32>,
+        segment8: Option<&'static str>,
+        (meshes, materials, images): (
+            &mut Assets<Mesh>,
+            &mut Assets<N64Material>,
+            &mut Assets<Image>,
+        ),
+    ) -> PropParts {
+        self.0
+            .entry(symbol)
+            .or_insert_with(|| {
+                let Some(model) = disc.catalog.get(symbol) else {
+                    warn!("event prop {symbol} is not on the disc");
+                    return Vec::new();
+                };
+                let colours = crate::disc_town::DrawColors {
+                    prim: [255; 4],
+                    prim_lod: 128,
+                    env: [0; 4],
+                };
+                // `aSTR_PAL_*`: the structure palette the draw code puts in segment 8.
+                let palette =
+                    palette.and_then(|i| crate::disc_town::structure_palette(disc, i, false));
+                // `gSPSegment(8, ...)`: models whose draw code points segment 8 at a vertex array (the tug
+                // of war's rope, `tol_rope_1_v`, drawn unbent here).
+                let built = if let Some(v) = segment8.and_then(|name| disc.catalog.get(name)) {
+                    crate::disc_town::build_model_segments(
+                        disc,
+                        &[model.offset],
+                        palette,
+                        colours.prim,
+                        &[(8, v.offset)],
+                        (meshes, materials, images),
+                    )
+                } else {
+                    crate::disc_town::build_model_full(
+                        disc,
+                        &[model.offset],
+                        palette,
+                        colours,
+                        false,
+                        (&crate::disc_gfx::Segments::default(), &[]),
+                        (meshes, materials, images),
+                    )
+                };
+                built
+            })
+            .clone()
+    }
+}
+
+/// Hangs a model's parts under `root`.
+pub(crate) fn attach(commands: &mut Commands, root: Entity, parts: &PropParts) {
+    for (mesh, material) in parts {
+        commands.spawn((
+            Mesh3d(mesh.clone()),
+            MeshMaterial3d(material.clone()),
+            ChildOf(root),
+        ));
+    }
+}
 
 /// The collision pipe's radius, cells (`pipe.radius = 20` game units of 40).
 pub(crate) const RADIUS: f32 = 0.5;
@@ -85,7 +164,7 @@ pub struct EventBodyPlugin;
 
 impl Plugin for EventBodyPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
+        app.init_resource::<Props>().add_systems(
             Update,
             (gait, idle).chain().in_set(crate::states::GameplaySet),
         );

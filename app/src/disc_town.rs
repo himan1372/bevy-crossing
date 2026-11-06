@@ -1894,6 +1894,33 @@ pub(crate) fn build_model_full(
     )
 }
 
+/// As [`build_model_full`], for a draw code that points runtime segments at REL data (`gSPSegment`):
+/// (segment, REL offset), used by display-list calls and vertex loads alike.
+pub(crate) fn build_model_segments(
+    disc: &GameDisc,
+    lists: &[u32],
+    palette: Option<u32>,
+    prim: [u8; 4],
+    segments: &[(u8, u32)],
+    assets: (
+        &mut Assets<Mesh>,
+        &mut Assets<N64Material>,
+        &mut Assets<Image>,
+    ),
+) -> Vec<(Handle<Mesh>, Handle<N64Material>)> {
+    let mut sink =
+        crate::disc_gfx::run_display_lists_with_segment_lists(&disc.rom, lists, prim, segments);
+    pose_parts(disc, lists, &mut sink);
+    sink_meshes(
+        disc,
+        &sink,
+        palette,
+        false,
+        &crate::disc_gfx::Segments::default(),
+        assets,
+    )
+}
+
 /// Meshes and materials for an already run (and placed) sink.
 pub(crate) fn sink_meshes(
     disc: &GameDisc,
