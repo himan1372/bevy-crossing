@@ -45,6 +45,7 @@ mod groundhog;
 mod gulliver;
 mod gyroid;
 mod halloween;
+mod hanabi;
 mod hatsumode;
 mod home;
 mod house;
@@ -246,6 +247,7 @@ fn main() {
         .add_plugins(tugofwar::TugOfWarPlugin)
         .add_plugins(hatsumode::HatsumodePlugin)
         .add_plugins(fireworks::FireworksPlugin)
+        .add_plugins(hanabi::HanabiPlugin)
         .add_plugins(gatherings::GatheringsPlugin)
         .add_plugins(event_body::EventBodyPlugin)
         .add_plugins(event_room::EventRoomPlugin)

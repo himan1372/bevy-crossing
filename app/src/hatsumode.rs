@@ -711,6 +711,10 @@ fn say(
         pages,
         asked.as_ref().map(|(_, c)| c.labels.clone()),
     );
+    // The shrine's offering talk has no speaker and a red window (`aSHR_set_talk_info`).
+    if name.is_empty() {
+        dialogue.window_color = Some([205, 80, 40, 255]);
+    }
     info!("Hatsumode message {msg}");
 }
 

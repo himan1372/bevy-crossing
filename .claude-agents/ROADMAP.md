@@ -633,10 +633,10 @@ Event props and presentation
 12. [x] **gracie-wash-anim** (done 2026-11-08; camera and sweat open) - the player's wash animation, camera and wash speed for Gracie's car. Why: the game is a counter only.
 13. [x] **sports-fair-poses** (done 2026-11-08; the tug sweat effect open) - foot race stumbles and poses, ball toss poses, the tug sweat effect. Why: they glide upright.
 14. [x] **gathering-animations** (done 2026-11-08; cracker guests open) - sitting, toasting and midnight cheering clips for the cherry viewing, moon and countdown. Why: guests stand.
-15. [ ] **fireworks-effect** - the real hanabi effect (`eEC_EFFECT_HANABI_*`), the seller's fan, the guests' fan and clap clips. Why: coloured sparks stand in.
-16. [ ] **aerobics-routine** - the exercise sequence (`taisou1..7`), music sync, failures and Tortimer's tiredness. Why: the line holds one pose.
-17. [ ] **hatsumode-extras** - the shrine bell, red window, rerouting and the New Year table. Why: the procession is bare.
-18. [ ] **event-actor-polish** - Halloween shirt/trick animations, Gulliver's getting-up and dock exclusion, Jingle/Jack/Franklin moves. Why: the visitor events are static talks.
+15. [x] **fireworks-effect** (done 2026-11-08; lights and sounds open) - the real hanabi effect (`eEC_EFFECT_HANABI_*`), the seller's fan, the guests' fan and clap clips. Why: coloured sparks stand in.
+16. [x] **aerobics-routine** (done 2026-11-08 without the music sync) - the exercise sequence (`taisou1..7`), music sync, failures and Tortimer's tiredness. Why: the line holds one pose.
+17. [~] **hatsumode-extras** (2026-11-08: stand and red window built, unseen; bell, rerouting open) - the shrine bell, red window, rerouting and the New Year table. Why: the procession is bare.
+18. [~] **event-actor-polish** (2026-11-08: only Gulliver lying / getting up, unseen; the rest open) - Halloween shirt/trick animations, Gulliver's getting-up and dock exclusion, Jingle/Jack/Franklin moves. Why: the visitor events are static talks.
 
 Open acceptance and fidelity
 19. [ ] **retail-pockets-ui-accept** - Philip's pass on `retail-pockets-ui`. Why: waiting on Philip.

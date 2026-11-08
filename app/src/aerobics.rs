@@ -15,11 +15,13 @@
 //! advances anyway; after 18 August without a card `0x3437` and `0x3438..=0x343A`; two cards in the pockets `0x343C`
 //! (they are taken). Free pockets are needed for a new card (`0x3424` otherwise).
 //!
-//! Not built: the radio music and its sync, the exercise animations (they stand), the failures in the routine
-//! (`gymnastic_state` 2/3) and Tortimer's tiredness, the player's own exercises.
+//! The line's routine is `routine.rs`: the exercise clips in order, slips and Tortimer's tiredness.
+//!
+//! Not built: the radio music and its sync, the player's own exercises.
 //! The radio set is the disc's `radio_DL_model` at unit (5, 13).
 
 mod radio_effect;
+mod routine;
 
 use std::collections::VecDeque;
 
@@ -116,6 +118,7 @@ fn visit(
     state: Res<State<ShopLocation>>,
     house: Res<State<crate::house::HouseState>>,
     existing: Query<(Entity, &Line)>,
+    mut rand: ResMut<crate::game_rand::GameRand>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     disc: Option<Res<crate::game_disc::GameDisc>>,
@@ -147,6 +150,7 @@ fn visit(
                 morning: is_morning,
             },
             role,
+            routine::Routine::new(&mut rand, role == Role::Copper),
             NpcClip::default(),
             NpcGait::default(),
             crate::event_body::EventBody::default(),
@@ -648,6 +652,7 @@ pub struct AerobicsPlugin;
 impl Plugin for AerobicsPlugin {
     fn build(&self, app: &mut App) {
         radio_effect::register(app);
+        routine::register(app);
         app.init_resource::<Talk>()
             .add_systems(
                 Update,

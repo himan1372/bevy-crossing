@@ -54,6 +54,7 @@ const WINDOW_CENTRE: Vec2 = Vec2::new(160.0, 185.4);
 const CELL: Vec2 = Vec2::new(12.0, 16.0);
 /// `mDemo_WINDOW_COLOR_*`.
 const WINDOW_COLOR: [u8; 4] = [235, 255, 235, 255];
+const SHRINE_WINDOW: [u8; 4] = [205, 80, 40, 255];
 /// `mMsg_init_FontColor`.
 const TEXT_COLOR: [u8; 4] = [50, 60, 50, 255];
 /// Name plate (background, text) by sex: male, female, other.
@@ -87,6 +88,8 @@ pub(crate) struct MsgAssets {
     pub(crate) window: Model,
     /// The window in the part-time job's cheer colour (`mDemo_Set_talk_window_color`).
     window_cheer: Model,
+    /// The shrine's red (`aSHR_set_talk_info`: 205, 80, 40).
+    window_shrine: Model,
     /// Name plate per `PLATE_COLORS` entry.
     plates: [Model; 3],
     pub(crate) choice_body: Model,
@@ -183,6 +186,7 @@ fn setup(
     };
     let window = build(init.offset, body.offset, WINDOW_COLOR);
     let window_cheer = build(init.offset, body.offset, [185, 245, 80, 255]);
+    let window_shrine = build(init.offset, body.offset, SHRINE_WINDOW);
     let plates = PLATE_COLORS.map(|(bg, _)| build(init.offset, plate.offset, bg));
     // con_sentaku2_modelT sets its own prim (255, 255, 155).
     let choice_body = build(choice_init.offset, choice.offset, [255; 4]);
@@ -204,6 +208,7 @@ fn setup(
         widths,
         window,
         window_cheer,
+        window_shrine,
         plates,
         choice_body,
         choice_bounds,
@@ -660,6 +665,7 @@ fn draw_window(
     };
     let body = match dialogue.window_color {
         Some([185, 245, 80, _]) => &assets.window_cheer,
+        Some([205, 80, 40, _]) => &assets.window_shrine,
         _ => &assets.window,
     };
     model(&mut commands, body, window_at, 0.0);

@@ -14,7 +14,7 @@
 //! a purchase `0x1764`, then `0x1766` (anything else, Yes / No) or `0x1765` when he has none left; a refusal at the end of
 //! the list `0x1763`, otherwise `0x1767` and the next three; with no goods left `0x1757`.
 //!
-//! Fireworks: bursts of coloured sparks over the acre while the show runs (a stand-in for `eEC_EFFECT_HANABI_*`).
+//! The show's bursts are `hanabi.rs`'s (the disc's `ef_hanabi_*` models); the sparks here are the countdown's salvo.
 //!
 //! The stall is the disc's `obj_e_yatai_{l,r}` model (palette `aSTR_PAL_YATAI`).
 //!
@@ -287,6 +287,7 @@ fn visit(
             Name::new("night stall seller"),
             show(),
             Seller,
+            crate::event_body::Idle("cKF_ba_r_npc_1_utiwa_wait1"),
             NpcClip::default(),
             NpcGait::default(),
             crate::event_body::EventBody::default(),
@@ -360,17 +361,10 @@ fn wander(
     }
 }
 
-/// Sparks over the acre while the show runs.
-#[allow(clippy::too_many_arguments)]
+/// The countdown's salvo sparks (`burst`) fly and fade; the show's own bursts are `hanabi.rs`'s.
 fn fireworks(
     mut commands: Commands,
     time: Res<Time>,
-    town: Res<Town>,
-    today: Res<TodayEvents>,
-    mut next: Local<f32>,
-    mut rand: ResMut<crate::game_rand::GameRand>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     mut sparks: Query<(Entity, &mut Spark, &mut Transform)>,
 ) {
     let dt = time.delta_secs();
@@ -383,26 +377,6 @@ fn fireworks(
             commands.entity(entity).despawn();
         }
     }
-    let now = crate::clock::now();
-    if !today.is_active(ev::FIREWORKS_SHOW, now.hour) {
-        return;
-    }
-    let Some(acre) = water_acre(&town) else {
-        return;
-    };
-    *next -= dt;
-    if *next > 0.0 {
-        return;
-    }
-    *next = 1.2 + rand.0.fqrand() * 2.8;
-    let centre = Town::cell_to_world(acre.0, acre.1, 8, 8);
-    let at = centre
-        + Vec3::new(
-            (rand.0.fqrand() - 0.5) * 10.0,
-            9.0 + rand.0.fqrand() * 4.0,
-            (rand.0.fqrand() - 0.5) * 10.0,
-        );
-    burst(&mut commands, &mut meshes, &mut materials, &mut rand, at);
 }
 
 /// One burst of coloured sparks (`eEC_EFFECT_HANABI_*` stand-in).

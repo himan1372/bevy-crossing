@@ -16,7 +16,7 @@
 //! (`0x2409` / `0x2405`, then `0x2407`) and a talk after it gives `0x240A + RANDOM(6)`. The three flags are kept by
 //! `TodayEvents` and saved with the weekly state.
 //!
-//! Port adaptations: no lying / getting-up animation and no camera, the forced talk follows `0x23F8` directly, and
+//! Port adaptations: he lies (`getup_wait_seg1`) and gets up (`getup_seg1`) with the disc clips; no camera, the forced talk follows `0x23F8` directly, and
 //! the hand-over plays after the gift message (as with K.K. Slider). A free pocket means an empty slot; the
 //! original also asks for normal condition.
 //!
@@ -213,6 +213,22 @@ fn say(disc: &GameDisc, dialogue: &mut DialogueState, actor: Entity, ctx: &MsgCo
     info!("Gulliver message {msg:#06x}");
 }
 
+/// He lies on the sand until woken (`aEDZ_taoreru_init`: `getup_wait_seg1`), then gets up (`aEDZ_okiagaru_init`:
+/// `getup_seg1`, once) and stands (`aEDZ_think_init_proc`: a day already awake stands from the start).
+fn lying(today: Res<TodayEvents>, mut gulliver: Query<&mut NpcClip, With<Gulliver>>) {
+    let awake = today.dozaemon_flags() & save_flag::WAKEUP != 0;
+    for mut clip in &mut gulliver {
+        match (awake, clip.name) {
+            (false, None) => clip.start("cKF_ba_r_npc_1_getup_wait_seg1", false, 0.0),
+            (true, Some("cKF_ba_r_npc_1_getup_wait_seg1")) => {
+                clip.start("cKF_ba_r_npc_1_getup_seg1", true, 8.0);
+            }
+            (true, Some("cKF_ba_r_npc_1_getup_seg1")) if clip.done => clip.stop(8.0),
+            _ => {}
+        }
+    }
+}
+
 /// He turns to face the player while they talk.
 fn face(
     time: Res<Time>,
@@ -407,7 +423,7 @@ impl Plugin for GulliverPlugin {
                 Update,
                 visit.after(crate::event_today::refresh).in_set(GameplaySet),
             )
-            .add_systems(Update, face.in_set(GameplaySet))
+            .add_systems(Update, (face, lying).in_set(GameplaySet))
             .add_systems(Update, talk.in_set(InteractSet::Talk).in_set(GameplaySet));
     }
 }

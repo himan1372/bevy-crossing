@@ -50,6 +50,12 @@ struct Miko {
     day: i64,
 }
 
+/// The omikuji stand (`NEWYEAR_TABLE`) that stands with her.
+#[derive(Component)]
+struct Stand {
+    day: i64,
+}
+
 /// Brings her out on New Year's morning.
 fn visit(
     mut commands: Commands,
@@ -58,7 +64,12 @@ fn visit(
     state: Res<State<ShopLocation>>,
     house: Res<State<crate::house::HouseState>>,
     existing: Query<(Entity, &Miko)>,
+    stands: Query<(Entity, &Stand)>,
     mut meshes: ResMut<Assets<Mesh>>,
+    disc: Option<Res<crate::game_disc::GameDisc>>,
+    mut props: ResMut<crate::event_body::Props>,
+    mut n64: ResMut<Assets<crate::n64_material::N64Material>>,
+    mut images: ResMut<Assets<Image>>,
 ) {
     let now = crate::clock::now();
     let out = today.is_active(ev::NEW_YEARS_DAY, now.hour)
@@ -66,6 +77,11 @@ fn visit(
         && *house.get() == crate::house::HouseState::Town;
     for (entity, m) in &existing {
         if !out || m.day != now.day_number {
+            commands.entity(entity).despawn();
+        }
+    }
+    for (entity, s) in &stands {
+        if !out || s.day != now.day_number {
             commands.entity(entity).despawn();
         }
     }
@@ -87,6 +103,36 @@ fn visit(
         Mesh3d(meshes.add(Capsule3d::new(0.35, 0.9))),
         Transform::from_translation(at + Vec3::Y).with_rotation(Quat::from_rotation_y(FACING_YAW)),
     ));
+    // The omikuji stand (`ac_mikuji`, `NEWYEAR_TABLE` at the same unit): `obj_e_mikuji_model` and its shadow.
+    let stand = commands
+        .spawn((
+            Name::new("omikuji stand"),
+            Stand {
+                day: now.day_number,
+            },
+            Transform::from_translation(at),
+            Visibility::default(),
+        ))
+        .id();
+    let parts = disc.as_deref().map_or_else(Vec::new, |d| {
+        props.get(
+            d,
+            &["obj_e_mikuji_model"],
+            None,
+            None,
+            (&mut meshes, &mut n64, &mut images),
+        )
+    });
+    crate::event_body::attach(&mut commands, stand, &parts);
+    crate::event_body::attach_shadow(
+        &mut commands,
+        stand,
+        &mut props,
+        disc.as_deref(),
+        &["obj_e_mikuji_shadow_model"],
+        Some("obj_e_mikuji_shadow_v"),
+        (&mut meshes, &mut n64, &mut images),
+    );
     info!("The shrine maiden is out at {at:?}");
 }
 

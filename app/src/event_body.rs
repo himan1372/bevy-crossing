@@ -65,6 +65,8 @@ impl Props {
                 }
                 // `bIT_draw_shadow`: the shadow colour and alpha as the prim colour.
                 let shadow = symbols[0].contains("shadow");
+                // Shadows and the fireworks' effect models are drawn blended.
+                let blend = shadow || symbols[0].starts_with("ef_");
                 let colours = crate::disc_town::DrawColors {
                     prim: if shadow { [0, 0, 0, 200] } else { [255; 4] },
                     prim_lod: if shadow { 200 } else { 128 },
@@ -81,7 +83,7 @@ impl Props {
                         &lists,
                         palette,
                         colours.prim,
-                        shadow,
+                        blend,
                         &[(8, v.offset)],
                         (&mut *meshes, materials, images),
                     )
@@ -91,7 +93,7 @@ impl Props {
                         &lists,
                         palette,
                         colours,
-                        shadow,
+                        blend,
                         (&crate::disc_gfx::Segments::default(), &[]),
                         (&mut *meshes, materials, images),
                     )
