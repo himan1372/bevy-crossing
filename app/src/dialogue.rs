@@ -361,10 +361,14 @@ fn on_talk(
             let (topic, msg_no) = if island.as_ref().and_then(|i| i.0).is_some()
                 && island.as_ref().and_then(|i| i.0) == villager.npc_index
             {
-                // `aQMgr_talk_island_select_talk`: a furniture trade first, when one can happen.
+                // `aQMgr_talk_island_select_talk`: the first talk of a visit checks for a furniture trade; otherwise the
+                // roll picks (`prob_table` 10 / 50 / 85 / 100): furniture, a remark on the player's actions, another
+                // player's (nobody to recall with one player, so furniture), a letter (not built: plain chat). A
+                // failed action remark falls back to the furniture check, then to plain chat.
                 let ordinal = island.as_ref().map_or(0, |i| i.1);
+                let first = !island_chat.checked;
                 let roll = rng.below(100);
-                let trade = if !island_chat.checked || roll < 85 {
+                let furniture = |chat: &mut crate::island_trade::IslandChat, rng: &mut TalkRng| {
                     disc.as_deref().and_then(|d| {
                         crate::island_trade::decide(
                             d,
@@ -372,13 +376,29 @@ fn on_talk(
                             looks,
                             &identity.island_room,
                             &inventory,
-                            &mut island_chat,
+                            chat,
                             &mut |n| rng.below(n),
                         )
                     })
+                };
+                let mut trade = if first {
+                    furniture(&mut island_chat, &mut rng)
                 } else {
                     None
                 };
+                if trade.is_none() {
+                    trade = match roll {
+                        0..=9 | 50..=84 => furniture(&mut island_chat, &mut rng),
+                        10..=49 => crate::island_trade::player_msg(
+                            &identity.island_room,
+                            looks,
+                            &mut |n| rng.below(n),
+                        )
+                        .map(|msg| (msg, crate::island_trade::Deal::default()))
+                        .or_else(|| furniture(&mut island_chat, &mut rng)),
+                        _ => None,
+                    };
+                }
                 if let Some((msg, deal)) = trade {
                     island_deal = Some(deal);
                     (Topic::Chat, msg as _)

@@ -620,12 +620,12 @@ Island and lighthouse
 1. [x] **toudai-tower-model** (done 2026-11-07) - the lighthouse tower draws black through the building path (`obj_s_toudai_*` is an NPC-path model); load it the NPC way. Why: the quest's landmark is a placeholder.
 2. [x] **island-trade-leftovers** (done 2026-11-07) - verify check 7's wording, a 2x2 piece, the first 1x1 marker and her wardrobe's turn. Why: the last unverified bits of the trade.
 3. [x] **island-layout-save** (done 2026-11-07; picking up only, see completed/island-layout-save.md) - the island's own item layout (trees, flowers, flag) and its save so nothing resets between visits. Why: the island is empty ground today.
-4. [ ] **island-resident-life** - her schedule, sleeping, the boat greeting, the mail and player-action talks (`aQMgr_talk_island_*`). Why: she only chats and trades.
+4. [x] **island-resident-life** (done 2026-11-07: the talk roll and action remarks; mail talk and island action sources still open, see completed/island-resident-life.md) - her schedule, sleeping, the boat greeting, the mail and player-action talks (`aQMgr_talk_island_*`). Why: she only chats and trades.
 5. [ ] **island-player-cottage-room** - the cottage's real room size and the island furniture save (`island.cottage`). Why: the room is a bare shell.
 6. [ ] **island-naming** - naming the island (Kapp'n's island naming flow). Why: a retail first-visit beat.
 
 Event props and presentation
-7. [ ] **moon-table-placement** - find where the event manager places `NEWYEAR_SHRINE0/1` (the `l_ev_structure_table` placement in `m_event.c`) and build the moon table from `obj_e_tukimi_*_endai_model`. Why: researched, no placement found yet; see completed/event-props-moon-radio.md.
+7. [x] **moon-table-placement** (done 2026-11-07: researched, the original never places it, see completed/moon-table-placement.md) - find where the event manager places `NEWYEAR_SHRINE0/1` (the `l_ev_structure_table` placement in `m_event.c`) and build the moon table from `obj_e_tukimi_*_endai_model`. Why: researched, no placement found yet; see completed/event-props-moon-radio.md.
 8. [ ] **event-prop-shadows** - shadows for baskets, rope, stall, tables, radio and Gracie's car (`obj_e_*_shadow*`). Why: the new models float without them.
 9. [ ] **countdown-sign** - the New Year countdown sign skeleton (`cKF_bs_r_obj_e_count01`, `count02`). Why: still a box.
 10. [ ] **rope-bend** - bend the tug rope's flagged vertices by the rope offset (`aRP_make_vtx`). Why: it slides rigidly.

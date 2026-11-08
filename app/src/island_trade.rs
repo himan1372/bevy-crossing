@@ -40,11 +40,18 @@ const CLOTH: std::ops::Range<u16> = 0x2400..0x2500;
 /// What the island keeps of the trades (`mNpc_Island_Ftr_c` and the memory's `have_bitfield`).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct IslandRoom {
+    /// `mISL_PLAYER_ACTION_*`: what the player did on the island this trip (`Island_c` memory `check`); the resident
+    /// remarks on one of them. Cleared when a new trip starts.
+    #[serde(default)]
+    pub actions: u32,
     /// Bit n: slot n has been given to her.
     pub have: u16,
     /// The normal pieces given: two 1x1, one 1x2, one 2x2.
     pub trade: [u16; 4],
 }
+
+/// `mISL_PLAYER_ACTION_TRADE_CLOTH`: the player gave her a shirt.
+pub(crate) const ACTION_TRADE_CLOTH: u32 = 1 << 30;
 
 /// This visit's chat state: the first talk always checks for a trade (`mNpc_GetIslandCheckFtrMsg`).
 #[derive(Resource, Default)]
@@ -342,6 +349,37 @@ pub(crate) fn decide(
     found.map(|d| (MSG[looks.min(5)] + n, d))
 }
 
+/// `aQMgr_decide_player_msg_no`: the remark on one of the player's actions this trip (the base by looks plus the
+/// action's bit), trying three actions from a random one.
+pub(crate) fn player_msg(
+    room: &IslandRoom,
+    looks: usize,
+    rng: &mut dyn FnMut(u32) -> u32,
+) -> Option<u32> {
+    const BASE: [u32; 6] = [0x3937, 0x3974, 0x37BA, 0x378A, 0x39B1, 0x37EA];
+    let mut action = rng(32);
+    for _ in 0..3 {
+        if room.actions & (1 << action) != 0 {
+            return Some(BASE[looks.min(5)] + action);
+        }
+        action = (action + 1) % 32;
+    }
+    None
+}
+
+/// A new trip clears what the player did last time (`mISL_ClearNowPlayerAction` when the boat leaves).
+fn clear_actions(
+    chat: Res<IslandChat>,
+    mut identity: ResMut<crate::save::PlayerIdentity>,
+    mut was_checked: Local<bool>,
+) {
+    // `kappn.rs` re-arms the first-talk check at a trip's start.
+    if *was_checked && !chat.checked {
+        identity.island_room.actions = 0;
+    }
+    *was_checked = chat.checked;
+}
+
 /// A message's trade orders (`SET_DEMO_ORDER` quest kind, index 3 = `aQMgr_order_trade`, then the value): carries
 /// them out as the message is shown.
 pub(crate) fn orders(
@@ -364,6 +402,9 @@ pub(crate) fn orders(
                     if deal.give != 0 && inventory.remove(deal.give) {
                         if value != 24 {
                             room.get(disc, ordinal, deal.give);
+                        } else {
+                            // `aQMgr_order_move_trade_24`: a shirt changes hands.
+                            room.actions |= ACTION_TRADE_CLOTH;
                         }
                         info!("The island resident takes {:#06x}", deal.give);
                     }
@@ -446,6 +487,6 @@ pub struct IslandTradePlugin;
 impl Plugin for IslandTradePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<IslandChat>()
-            .add_systems(Update, refresh_room);
+            .add_systems(Update, (refresh_room, clear_actions));
     }
 }
