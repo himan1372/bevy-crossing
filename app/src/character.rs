@@ -336,6 +336,8 @@ pub struct NpcClip {
     pub motion: Vec3,
     /// The root's turn about the model's x (the actor's yaw in the original).
     pub turn: f32,
+    /// Frames per 60 Hz tick, when it is not the usual stride (the car wash's `mPlib_Set_AnimeSpeedWashCar`).
+    pub speed: Option<f32>,
 }
 
 /// A special NPC's stride: 0 standing, 1 walking, 2 running.
@@ -1008,7 +1010,7 @@ fn play_clip(
         return false;
     };
     let (first, last) = clip.range.unwrap_or((1.0, anim.frames.max(2) as f32));
-    rig.frame += WAIT_SPEED * ticks;
+    rig.frame += clip.speed.unwrap_or(WAIT_SPEED) * ticks;
     if clip.once {
         if rig.frame >= last {
             rig.frame = last;

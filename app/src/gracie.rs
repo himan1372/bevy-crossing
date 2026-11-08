@@ -375,7 +375,26 @@ fn face(
     }
 }
 
+/// The player at the car while the wash runs (`Player_actor_setup_main_Wash_car`): where they stood, the wash clip in turn
+/// (`wash1..5`, four runs each) and the clip's speed (`designer->clean_speed`, which a press raises and time lowers).
+#[derive(Default)]
+struct WashPose {
+    from: Option<(Vec3, Vec3)>,
+    clip: usize,
+    runs_seen: u32,
+    speed: f32,
+}
+
+const WASH_CLIPS: [&str; 5] = [
+    "cKF_ba_r_ply_1_wash1",
+    "cKF_ba_r_ply_1_wash2",
+    "cKF_ba_r_ply_1_wash3",
+    "cKF_ba_r_ply_1_wash4",
+    "cKF_ba_r_ply_1_wash5",
+];
+
 /// `aEDSN_game_end_wait`: the wash, with the counter on screen.
+#[allow(clippy::too_many_arguments)]
 fn wash(
     mut commands: Commands,
     time: Res<Time>,
@@ -383,18 +402,66 @@ fn wash(
     mut focus: ResMut<InputFocus>,
     mut flow: ResMut<Talk>,
     mut text: Query<(Entity, &mut Text), With<WashText>>,
+    mut player: Query<(Entity, &mut Transform, &mut Facing, Option<&mut NpcClip>), With<Player>>,
+    cars: Query<&Transform, (With<GracieCar>, Without<Player>)>,
+    mut pose: Local<WashPose>,
 ) {
     let Step::Washing { left, presses } = &mut flow.step else {
         for (entity, _) in &text {
             commands.entity(entity).despawn();
         }
+        // `Player_actor_settle_main_Wash_car`: back where they stood.
+        if let Some((at, dir)) = pose.from.take() {
+            if let Ok((_, mut transform, mut facing, clip)) = player.single_mut() {
+                transform.translation = at;
+                facing.dir = dir;
+                if let Some(mut clip) = clip {
+                    clip.stop(8.0);
+                }
+            }
+        }
         return;
     };
     *focus = InputFocus::Dialogue;
     // `chkTrigger(BUTTON_A)`: each press counts.
-    if actions.just_pressed(Action::Interact) {
+    let pressed = actions.just_pressed(Action::Interact);
+    if pressed {
         actions.consume(Action::Interact);
         *presses += 1;
+    }
+    // The wash clip: the player stands at the car, facing south, and scrubs (`aEDSN_game_end_wait`: a press adds 0.61
+    // to the speed up to 2.25, it falls 0.07 a 60 Hz tick).
+    if let (Ok((entity, mut transform, mut facing, clip)), Ok(car)) =
+        (player.single_mut(), cars.single())
+    {
+        if pose.from.is_none() {
+            pose.from = Some((transform.translation, facing.dir));
+            pose.clip = 0;
+            pose.runs_seen = 0;
+            pose.speed = 0.0;
+        }
+        transform.translation = car.translation;
+        facing.dir = Vec3::Z;
+        pose.speed = if pressed {
+            (pose.speed + 0.61).min(2.25)
+        } else {
+            (pose.speed - 0.07 * 60.0 * time.delta_secs()).max(0.0)
+        };
+        if clip.is_none() {
+            commands.entity(entity).insert(NpcClip::default());
+        }
+        if let Some(mut clip) = clip {
+            // Four runs of a clip, then the next (`counter >= 3`).
+            if clip.name != Some(WASH_CLIPS[pose.clip]) {
+                clip.start(WASH_CLIPS[pose.clip], false, 0.0);
+                pose.runs_seen = 0;
+            } else if clip.loops >= 4 {
+                pose.clip = (pose.clip + 1) % WASH_CLIPS.len();
+                clip.start(WASH_CLIPS[pose.clip], false, 0.0);
+                pose.runs_seen = 0;
+            }
+            clip.speed = Some(pose.speed * 0.5);
+        }
     }
     *left -= time.delta_secs();
     let line = format!(

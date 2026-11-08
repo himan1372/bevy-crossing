@@ -463,6 +463,43 @@ fn run(
     }
 }
 
+/// The tossers' clips (`aTMN1_hirou` / `_nageru`: `tamahiroi1` to pick up, `tamanage1` for each throw) and the leader's
+/// cheering while a team tosses (`aTMN0_kansen_init`: `clap1` or `banzai1`).
+fn toss_clips(
+    time: Res<Time>,
+    busy: Res<Busy>,
+    mut tossers: Query<(&Tosser, &mut NpcClip), Without<Leader>>,
+    mut leaders: Query<&mut NpcClip, (With<Leader>, Without<Tosser>)>,
+) {
+    for (t, mut clip) in &mut tossers {
+        let want = match t.stage {
+            Stage::Pick => Some("cKF_ba_r_npc_1_tamahiroi1"),
+            Stage::Throw(_) => Some("cKF_ba_r_npc_1_tamanage1"),
+            _ => None,
+        };
+        match want {
+            Some(name) if clip.name != Some(name) => clip.start(name, true, 8.0),
+            // The next ball of a run of throws starts its clip again.
+            Some(name) if clip.done && t.throw_age < 0.05 => clip.start(name, true, 8.0),
+            None if clip.name.is_some() => clip.stop(8.0),
+            _ => {}
+        }
+    }
+    let cheering = busy.0[0] || busy.0[1];
+    let pick = if (time.elapsed_secs() as u32).is_multiple_of(2) {
+        "cKF_ba_r_npc_1_clap1"
+    } else {
+        "cKF_ba_r_npc_1_banzai1"
+    };
+    for mut clip in &mut leaders {
+        if cheering && clip.name.is_none() {
+            clip.start(pick, false, 8.0);
+        } else if !cheering && clip.name.is_some() {
+            clip.stop(8.0);
+        }
+    }
+}
+
 fn context(identity: &crate::save::PlayerIdentity) -> MsgContext {
     let now = crate::clock::now();
     MsgContext {
@@ -571,6 +608,7 @@ impl Plugin for BallTossPlugin {
                 visit.after(crate::event_today::refresh).in_set(GameplaySet),
             )
             .add_systems(Update, run.after(visit).in_set(GameplaySet))
+            .add_systems(Update, toss_clips.after(run).in_set(GameplaySet))
             .add_systems(Update, talk.in_set(InteractSet::Talk).in_set(GameplaySet));
     }
 }

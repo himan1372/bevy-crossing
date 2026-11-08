@@ -630,9 +630,9 @@ Event props and presentation
 9. [x] **countdown-sign** (done 2026-11-08: the board; the clock digits are still open) - the New Year countdown sign skeleton (`cKF_bs_r_obj_e_count01`, `count02`). Why: still a box.
 10. [x] **rope-bend** (done 2026-11-08) - bend the tug rope's flagged vertices by the rope offset (`aRP_make_vtx`). Why: it slides rigidly.
 11. [ ] **radio-effect** - the radio's music-note effect (effect 32 every 36 ticks). Why: the radio is silent and static.
-12. [ ] **gracie-wash-anim** - the player's wash animation, camera and wash speed for Gracie's car. Why: the game is a counter only.
-13. [ ] **sports-fair-poses** - foot race stumbles and poses, ball toss poses, the tug sweat effect. Why: they glide upright.
-14. [ ] **gathering-animations** - sitting, toasting and midnight cheering clips for the cherry viewing, moon and countdown. Why: guests stand.
+12. [x] **gracie-wash-anim** (done 2026-11-08; camera and sweat open) - the player's wash animation, camera and wash speed for Gracie's car. Why: the game is a counter only.
+13. [x] **sports-fair-poses** (done 2026-11-08; the tug sweat effect open) - foot race stumbles and poses, ball toss poses, the tug sweat effect. Why: they glide upright.
+14. [x] **gathering-animations** (done 2026-11-08; cracker guests open) - sitting, toasting and midnight cheering clips for the cherry viewing, moon and countdown. Why: guests stand.
 15. [ ] **fireworks-effect** - the real hanabi effect (`eEC_EFFECT_HANABI_*`), the seller's fan, the guests' fan and clap clips. Why: coloured sparks stand in.
 16. [ ] **aerobics-routine** - the exercise sequence (`taisou1..7`), music sync, failures and Tortimer's tiredness. Why: the line holds one pose.
 17. [ ] **hatsumode-extras** - the shrine bell, red window, rerouting and the New Year table. Why: the procession is bare.

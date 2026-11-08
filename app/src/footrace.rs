@@ -89,6 +89,8 @@ struct Race {
     lane: [f32; 2],
     speed: [f32; 2],
     result: [u8; 2],
+    /// A runner's tumble (`aTKN1_kokeru` then `aTKN1_getup`): 0 none, 1 falling, 2 getting up.
+    fall: [u8; 2],
 }
 
 fn well(town: &Town) -> Option<Vec3> {
@@ -191,7 +193,7 @@ fn run(
     mut race: ResMut<Race>,
     mut rand: ResMut<crate::game_rand::GameRand>,
     player: Query<&Transform, (With<Player>, Without<Racer>)>,
-    mut racers: Query<(&Racer, &mut Transform)>,
+    mut racers: Query<(&Racer, &mut Transform, &mut NpcClip)>,
 ) {
     let now = crate::clock::now();
     if !today.is_active(ev::SPORTS_FAIR_FOOT_RACE, now.hour) {
@@ -225,13 +227,14 @@ fn run(
                 race.angle = [0.0; 2];
                 race.sublaps = [0; 2];
                 race.result = [0; 2];
+                race.fall = [0; 2];
                 lanes(&mut race, &mut rand);
                 info!("Foot race: go!");
             }
         }
         Phase::Run => {
             for team in 0..2 {
-                if race.result[team] != 0 {
+                if race.result[team] != 0 || race.fall[team] != 0 {
                     continue;
                 }
                 // The leader slows by one unit a tick (`aTKC_clip_top_check`).
@@ -241,7 +244,17 @@ fn run(
                             > race.angle[1 - team] % std::f32::consts::PI);
                 let speed = race.speed[team] - if ahead { 60.0 / UNIT } else { 0.0 };
                 race.angle[team] += speed / race.lane[team] * dt;
+                let before = race.sublaps[team];
                 race.sublaps[team] = (race.angle[team] / std::f32::consts::PI) as u32;
+                // At a turn the leader trips one time in ten (`aTKN1_run`: `top_check` and `RANDOM_F(1.0) < 0.1`).
+                if race.sublaps[team] > before
+                    && race.sublaps[team] < SUBLAPS
+                    && ahead
+                    && rand.0.fqrand() < 0.1
+                {
+                    race.fall[team] = 1;
+                    info!("Foot race: team {team} falls");
+                }
                 if race.sublaps[team] >= SUBLAPS {
                     race.result[team] = if race.result[1 - team] == 0 { 1 } else { 2 };
                     info!(
@@ -264,7 +277,44 @@ fn run(
         }
     }
     // Where everyone stands.
-    for (r, mut at) in &mut racers {
+    for (r, mut at, mut clip) in &mut racers {
+        // The clip the actor plays: (name, held after one run); none leaves the stride to the gait.
+        let want: Option<(&'static str, bool)> = match r.role {
+            Role::Runner(team) => match race.phase {
+                Phase::Stretch => Some(("cKF_ba_r_npc_1_warmup1", false)),
+                Phase::Ready => Some(("cKF_ba_r_npc_1_ready1", true)),
+                Phase::Run => match race.fall[team] {
+                    1 => Some(("cKF_ba_r_npc_1_kokeru1", true)),
+                    2 => Some(("cKF_ba_r_npc_1_kokeru_getup1", true)),
+                    _ => None,
+                },
+                Phase::Goal => Some(if race.result[team] == 1 {
+                    ("cKF_ba_r_npc_1_banzai1", false)
+                } else {
+                    ("cKF_ba_r_npc_1_tired1", false)
+                }),
+            },
+            Role::Spectator(team) => (race.phase == Phase::Goal && race.result[team] == 1)
+                .then_some(("cKF_ba_r_npc_1_clap1", false)),
+            Role::Starter => match race.phase {
+                Phase::Stretch => Some(("cKF_ba_r_npc_1_tamakome1", true)),
+                Phase::Ready => Some(("cKF_ba_r_npc_1_youi1", true)),
+                Phase::Run => Some(("cKF_ba_r_npc_1_don1", true)),
+                Phase::Goal => None,
+            },
+        };
+        // A tumble runs its two clips in turn.
+        if let Role::Runner(team) = r.role {
+            if clip.done && race.fall[team] != 0 && race.phase == Phase::Run {
+                race.fall[team] = if race.fall[team] == 1 { 2 } else { 0 };
+            }
+        }
+        if clip.name != want.map(|w| w.0) {
+            match want {
+                Some((name, once)) => clip.start(name, once, 8.0),
+                None => clip.stop(8.0),
+            }
+        }
         let ground = |p: Vec3| p.with_y(town.ground_y(p) + 1.0);
         match r.role {
             Role::Runner(team) => {

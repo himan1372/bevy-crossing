@@ -291,6 +291,22 @@ fn visit(
     info!("The tug of war is set at the shrine");
 }
 
+/// A puller's clip follows the pose picked for the pull (`aTNN1_aiko` / `_yuri` / `_furi`): even, swaying or straining.
+fn pull_clips(mut pullers: Query<(&Puller, &mut crate::event_body::Idle, &mut NpcClip)>) {
+    for (p, mut idle, mut clip) in &mut pullers {
+        let want = match p.pose {
+            Pose::Even => "cKF_ba_r_npc_1_tunahiki_aiko1",
+            Pose::Swaying => "cKF_ba_r_npc_1_tunahiki_yuri1",
+            Pose::Straining => "cKF_ba_r_npc_1_tunahiki_furi1",
+        };
+        if idle.0 != want {
+            idle.0 = want;
+            // The idle system starts the new clip once this one is stopped.
+            clip.stop(8.0);
+        }
+    }
+}
+
 /// The rope and the pullers.
 #[allow(clippy::too_many_arguments)]
 fn run(
@@ -505,6 +521,7 @@ impl Plugin for TugOfWarPlugin {
                 visit.after(crate::event_today::refresh).in_set(GameplaySet),
             )
             .add_systems(Update, run.after(visit).in_set(GameplaySet))
+            .add_systems(Update, pull_clips.after(run).in_set(GameplaySet))
             .add_systems(Update, talk.in_set(InteractSet::Talk).in_set(GameplaySet));
     }
 }

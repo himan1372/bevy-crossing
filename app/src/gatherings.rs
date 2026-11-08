@@ -293,7 +293,7 @@ fn visit(
             Transform::from_translation(at + Vec3::Y).with_rotation(Quat::from_rotation_y(heading)),
         ));
         if let Some(idle) = seated(kind, idx) {
-            guest.insert(idle);
+            guest.insert((idle, Seat::default()));
         }
     }
     // The tables and signs, as boxes.
@@ -430,6 +430,46 @@ fn visit(
     info!("The {kind:?} gathering is on");
 }
 
+/// A seated guest's merrymaking (`aHM0_wait` / `_merry` / `_drink`, `aHT0_*`): from time to time they clap or raise a cup
+/// (`sitdown_clap1`, `sitdown_drink1`) and sit back.
+#[derive(Component, Default)]
+struct Seat {
+    timer: f32,
+}
+
+fn merrymaking(
+    time: Res<Time>,
+    mut rand: ResMut<crate::game_rand::GameRand>,
+    mut seated: Query<(&Guest, &mut Seat, &mut NpcClip)>,
+) {
+    for (g, mut seat, mut clip) in &mut seated {
+        let sitting = matches!(g.kind, Kind::Cherry | Kind::Harvest) && g.idx < 4;
+        if !sitting {
+            continue;
+        }
+        let playing = matches!(
+            clip.name,
+            Some("cKF_ba_r_npc_1_sitdown_clap1" | "cKF_ba_r_npc_1_sitdown_drink1")
+        );
+        if playing {
+            // The drink runs once; the clapping a few runs.
+            if clip.done || clip.loops >= 3 {
+                clip.stop(8.0);
+                seat.timer = 3.0 + rand.0.fqrand() * 5.0;
+            }
+        } else {
+            seat.timer -= time.delta_secs();
+            if seat.timer <= 0.0 && clip.name.is_some() {
+                if rand.0.fqrand() < 0.5 {
+                    clip.start("cKF_ba_r_npc_1_sitdown_clap1", false, 8.0);
+                } else {
+                    clip.start("cKF_ba_r_npc_1_sitdown_drink1", true, 8.0);
+                }
+            }
+        }
+    }
+}
+
 /// The cherry viewing's fifth villager wanders.
 fn wander(
     time: Res<Time>,
@@ -478,12 +518,11 @@ fn wander(
 fn seated(kind: Kind, idx: usize) -> Option<crate::event_body::Idle> {
     use crate::event_body::Idle;
     match kind {
-        Kind::Cherry if idx < 4 && idx.is_multiple_of(2) => {
-            Some(Idle("cKF_ba_r_npc_1_sitdown_wait1"))
-        }
-        Kind::Cherry if idx < 4 => Some(Idle("cKF_ba_r_npc_1_sitdown_clap1")),
+        Kind::Cherry if idx < 4 => Some(Idle("cKF_ba_r_npc_1_sitdown_wait1")),
+        // `ac_hanami_npc1`: the fifth dances (`aNPC_ANIM_DANCE1`) whenever they stand.
+        Kind::Cherry => Some(Idle("cKF_ba_r_npc_1_dance1")),
         Kind::Moon | Kind::Meteor => Some(Idle("cKF_ba_r_npc_1_sanbasi1")),
-        Kind::Harvest if idx < 4 && idx % 2 == 1 => Some(Idle("cKF_ba_r_npc_1_clap1")),
+        Kind::Harvest if idx < 4 => Some(Idle("cKF_ba_r_npc_1_sitdown_wait1")),
         _ => None,
     }
 }
@@ -623,16 +662,17 @@ fn midnight(
     mut commands: Commands,
     time: Res<Time>,
     town: Res<Town>,
-    guests: Query<&Guest>,
+    mut guests: Query<(&Guest, &mut NpcClip)>,
     mut left: Local<f32>,
     mut next: Local<f32>,
     mut seen: Local<Option<u8>>,
+    mut cheering: Local<bool>,
     mut rand: ResMut<crate::game_rand::GameRand>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let t = term(crate::clock::now().day_secs);
-    let counting = guests.iter().any(|g| g.kind == Kind::Count);
+    let counting = guests.iter().any(|(g, _)| g.kind == Kind::Count);
     if counting && *seen != Some(t) {
         if t == 5 && seen.is_some() {
             *left = 12.0;
@@ -642,6 +682,22 @@ fn midnight(
     if !counting {
         *seen = None;
         *left = 0.0;
+    }
+    // The countdown's guests cheer through the salvo (`banzai1`) and then stand again.
+    if *left > 0.0 {
+        for (g, mut clip) in &mut guests {
+            if g.kind == Kind::Count && clip.name != Some("cKF_ba_r_npc_1_banzai1") {
+                clip.start("cKF_ba_r_npc_1_banzai1", false, 8.0);
+            }
+        }
+        *cheering = true;
+    } else if *cheering {
+        *cheering = false;
+        for (g, mut clip) in &mut guests {
+            if g.kind == Kind::Count {
+                clip.stop(8.0);
+            }
+        }
     }
     if *left <= 0.0 {
         return;
@@ -721,7 +777,10 @@ impl Plugin for GatheringsPlugin {
             Update,
             visit.after(crate::event_today::refresh).in_set(GameplaySet),
         )
-        .add_systems(Update, (wander, midnight, meteors).in_set(GameplaySet))
+        .add_systems(
+            Update,
+            (wander, midnight, meteors, merrymaking).in_set(GameplaySet),
+        )
         .add_systems(Update, talk.in_set(InteractSet::Talk).in_set(GameplaySet));
     }
 }
