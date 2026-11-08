@@ -16,7 +16,8 @@
 //! (they are taken). Free pockets are needed for a new card (`0x3424` otherwise).
 //!
 //! Not built: the radio music and its sync, the exercise animations (they stand), the failures in the routine
-//! (`gymnastic_state` 2/3) and Tortimer's tiredness, the radio set, the player's own exercises.
+//! (`gymnastic_state` 2/3) and Tortimer's tiredness, the radio's shadow and music effect, the player's own exercises.
+//! The radio set is the disc's `radio_DL_model` at unit (5, 13).
 
 use std::collections::VecDeque;
 
@@ -55,6 +56,9 @@ const MORNING_EVENT: u8 = 103;
 const VILLAGER_UNITS: [(usize, usize); 4] = [(4, 10), (6, 10), (8, 10), (10, 10)];
 const COPPER_UNIT: (usize, usize) = (7, 12);
 pub(crate) const LEADER_UNIT: (usize, usize) = (9, 8);
+/// `AEROBICS_RADIO` in `l_rc_map`, and its palette `aSTR_PAL_RADIO`.
+const RADIO_UNIT: (usize, usize) = (5, 13);
+const PAL_RADIO: u32 = 69;
 /// `msg_base`: by event (morning, sports fair) and looks.
 const MSG_BASE: [[u16; 6]; 2] = [
     [0x1A3C, 0x1A4B, 0x1A2D, 0x1A5A, 0x1A69, 0x1A78],
@@ -111,6 +115,11 @@ fn visit(
     house: Res<State<crate::house::HouseState>>,
     existing: Query<(Entity, &Line)>,
     mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    disc: Option<Res<crate::game_disc::GameDisc>>,
+    mut props: ResMut<crate::event_body::Props>,
+    mut n64: ResMut<Assets<crate::n64_material::N64Material>>,
+    mut images: ResMut<Assets<Image>>,
 ) {
     let now = crate::clock::now();
     let is_morning = morning(&today, now.hour);
@@ -172,6 +181,40 @@ fn visit(
             0.0,
             "Tortimer (aerobics)",
         );
+    }
+    // The radio set (`ac_radio`: `radio_DL_model`, palette `aSTR_PAL_RADIO`) at unit (5, 13) of the shrine block
+    // (`AEROBICS_RADIO` in `l_rc_map`); a box when the disc has no model.
+    if let Some(at) = crate::tortimer::shrine_cell(&town, RADIO_UNIT.0, RADIO_UNIT.1) {
+        let parts = disc.as_deref().map_or_else(Vec::new, |d| {
+            props.get(
+                d,
+                &["radio_DL_model"],
+                Some(PAL_RADIO),
+                None,
+                (&mut meshes, &mut n64, &mut images),
+            )
+        });
+        let root = commands
+            .spawn((
+                Name::new("radio (aerobics)"),
+                Line {
+                    day: now.day_number,
+                    morning: is_morning,
+                },
+                Transform::from_translation(at),
+                Visibility::default(),
+            ))
+            .id();
+        if parts.is_empty() {
+            commands.spawn((
+                Mesh3d(meshes.add(Cuboid::new(0.8, 0.5, 0.4))),
+                MeshMaterial3d(materials.add(Color::srgb(0.3, 0.3, 0.35))),
+                Transform::from_xyz(0.0, 0.25, 0.0),
+                ChildOf(root),
+            ));
+        } else {
+            crate::event_body::attach(&mut commands, root, &parts);
+        }
     }
     info!(
         "The {} aerobics line stands at the shrine",
