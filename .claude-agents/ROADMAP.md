@@ -629,7 +629,7 @@ Event props and presentation
 8. [x] **event-prop-shadows** (done 2026-11-08; fixed alpha, no sun slant, car shadow open) - shadows for baskets, rope, stall, tables, radio and Gracie's car (`obj_e_*_shadow*`). Why: the new models float without them.
 9. [x] **countdown-sign** (done 2026-11-08: the board; the clock digits are still open) - the New Year countdown sign skeleton (`cKF_bs_r_obj_e_count01`, `count02`). Why: still a box.
 10. [x] **rope-bend** (done 2026-11-08) - bend the tug rope's flagged vertices by the rope offset (`aRP_make_vtx`). Why: it slides rigidly.
-11. [ ] **radio-effect** - the radio's music-note effect (effect 32 every 36 ticks). Why: the radio is silent and static.
+11. [x] **radio-effect** - native effect32 notes,36-tick emission,72-tick motion/fade and pooled disc visuals. [Evidence](completed/radio-effect.md); exercise music sync remains task16, Philip visual acceptance pending.
 12. [x] **gracie-wash-anim** (done 2026-11-08; camera and sweat open) - the player's wash animation, camera and wash speed for Gracie's car. Why: the game is a counter only.
 13. [x] **sports-fair-poses** (done 2026-11-08; the tug sweat effect open) - foot race stumbles and poses, ball toss poses, the tug sweat effect. Why: they glide upright.
 14. [x] **gathering-animations** (done 2026-11-08; cracker guests open) - sitting, toasting and midnight cheering clips for the cherry viewing, moon and countdown. Why: guests stand.

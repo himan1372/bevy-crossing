@@ -16,8 +16,10 @@
 //! (they are taken). Free pockets are needed for a new card (`0x3424` otherwise).
 //!
 //! Not built: the radio music and its sync, the exercise animations (they stand), the failures in the routine
-//! (`gymnastic_state` 2/3) and Tortimer's tiredness, the radio's music effect, the player's own exercises.
+//! (`gymnastic_state` 2/3) and Tortimer's tiredness, the player's own exercises.
 //! The radio set is the disc's `radio_DL_model` at unit (5, 13).
+
+mod radio_effect;
 
 use std::collections::VecDeque;
 
@@ -197,6 +199,7 @@ fn visit(
         let root = commands
             .spawn((
                 Name::new("radio (aerobics)"),
+                radio_effect::Emitter::default(),
                 Line {
                     day: now.day_number,
                     morning: is_morning,
@@ -644,6 +647,7 @@ pub struct AerobicsPlugin;
 
 impl Plugin for AerobicsPlugin {
     fn build(&self, app: &mut App) {
+        radio_effect::register(app);
         app.init_resource::<Talk>()
             .add_systems(
                 Update,

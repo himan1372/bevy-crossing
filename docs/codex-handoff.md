@@ -1,5 +1,11 @@
 # Codex handoff - 2026-11-07
 
+## Codex session - 2026-11-08: task11 radio-effect (latest)
+
+Philip selected task11 and resumed it; implementation and bounded verification are complete. The aerobics radio emits original effect32 KONPU notes every36 ticks (first tick37), with native72-tick velocity/decay/stretch/colour/fade and all three disc note models. It reuses logic::radio and Qrand, pools nine visual entities, freezes on pause and clears on F9, range and radio/event/scene removal. Native arg0=1 notes are silent; exercise BGM/synchronization remains task16 (another Claude agent has claimed it). No save-format change, dependency or extracted asset.
+
+Workspace check/Clippy/fmt and default/capture/release pass; release8m37s. Shared worktree builds overwrote the common debug executable: ordinary Cargo cache hits could yield stale output. Forced cargo rustc metadata rebuilt the capture/release executable and its radio-note code was verified before QA. Synthetic Temp/bevy-radio-20261107 on BRP25743: native screenshots inspected; movement/pool reuse, pause, F9 clear/re-emission, neighbor-acre range,07:00 event end and no-disc fallback/possessions pass. Own previews closed; actual save SHA256 remains0495927D27B005E9FD0A4AED424EAAD883F56BBD8A9C4F5910167C1F9BBB1BD9. No tests requested/run. See `.claude-agents/completed/radio-effect.md` for exact limits; Philip visual acceptance and M4 remain open.
+
 ## Codex session - 2026-11-07: Next30 tasks 5 and 6 (latest)
 
 Philip explicitly selected **island-player-cottage-room** and **island-naming**. Do not ask him to select these again. Implementation and bounded verification are complete; see `.claude-agents/completed/island-cottage-naming.md`. Check/Clippy/fmt, capture/default/release builds pass (release9m10s; unrelated tree_palette warning). Cottage editing/exit/reentry, naming No/empty/accept/repeat, F9, upgraded-house isolation, fresh native and no-disc numeric retention pass. Owned previews are closed. Philip acceptance remains pending.
