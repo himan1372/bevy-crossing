@@ -194,6 +194,15 @@ fn visit(
             ));
         } else {
             crate::event_body::attach(&mut commands, root, &parts);
+            crate::event_body::attach_shadow(
+                &mut commands,
+                root,
+                &mut props,
+                disc.as_deref(),
+                &["obj_e_kago_shadow_model"],
+                Some("obj_e_kago_shadow_v"),
+                (&mut meshes, &mut n64, &mut images),
+            );
         }
     }
     let model = |i: usize| {

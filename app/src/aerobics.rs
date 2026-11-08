@@ -16,7 +16,7 @@
 //! (they are taken). Free pockets are needed for a new card (`0x3424` otherwise).
 //!
 //! Not built: the radio music and its sync, the exercise animations (they stand), the failures in the routine
-//! (`gymnastic_state` 2/3) and Tortimer's tiredness, the radio's shadow and music effect, the player's own exercises.
+//! (`gymnastic_state` 2/3) and Tortimer's tiredness, the radio's music effect, the player's own exercises.
 //! The radio set is the disc's `radio_DL_model` at unit (5, 13).
 
 use std::collections::VecDeque;
@@ -214,6 +214,15 @@ fn visit(
             ));
         } else {
             crate::event_body::attach(&mut commands, root, &parts);
+            crate::event_body::attach_shadow(
+                &mut commands,
+                root,
+                &mut props,
+                disc.as_deref(),
+                &["obj_e_radio_shadowT_model"],
+                Some("obj_e_radio_shadow_v"),
+                (&mut meshes, &mut n64, &mut images),
+            );
         }
     }
     info!(

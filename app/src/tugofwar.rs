@@ -58,6 +58,63 @@ struct Tug {
 #[derive(Component)]
 struct Rope(f32);
 
+/// `aRP_make_vtx`: the vertices flagged in the rope's table slide along x by the rope's offset; the others (its ends) stay.
+/// Per part mesh: its vertices at rest and which of them move.
+#[derive(Component)]
+struct RopeBend(Vec<(Handle<Mesh>, Vec<[f32; 3]>, Vec<bool>)>);
+
+/// `aRP_make_vtx`'s `flg`: which of `tol_rope_1_v`'s 60 vertices move.
+const ROPE_MOVES: [bool; 60] = {
+    let mut flags = [false; 60];
+    let moving = [
+        16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 29, 30, 51, 52, 54, 55, 56, 57, 58, 59,
+    ];
+    let mut i = 0;
+    while i < moving.len() {
+        flags[moving[i]] = true;
+        i += 1;
+    }
+    flags
+};
+
+/// The rope's part meshes with their resting vertices, and which of them the offset moves (matched by position to
+/// the disc's vertex table).
+fn rope_bend(
+    disc: &GameDisc,
+    parts: &[(Handle<Mesh>, Handle<crate::n64_material::N64Material>)],
+    meshes: &Assets<Mesh>,
+) -> Option<RopeBend> {
+    let table = disc.catalog.get("tol_rope_1_v")?;
+    let raw = disc
+        .rom
+        .slice(disc::RomSource::Rel, table.offset, table.size)?;
+    let scale = crate::disc_town::OBJECT_SCALE;
+    let at = |i: usize| -> [f32; 3] {
+        let o = i * 16;
+        [0, 2, 4].map(|k| i16::from_be_bytes([raw[o + k], raw[o + k + 1]]) as f32 * scale)
+    };
+    let near = |a: [f32; 3], b: [f32; 3]| (0..3).all(|k| (a[k] - b[k]).abs() < 1e-4);
+    let count = (raw.len() / 16).min(ROPE_MOVES.len());
+    let mut out = Vec::new();
+    for (mesh, _) in parts {
+        let positions: Vec<[f32; 3]> = meshes
+            .get(mesh)?
+            .attribute(Mesh::ATTRIBUTE_POSITION)?
+            .as_float3()?
+            .to_vec();
+        let moves = positions
+            .iter()
+            .map(|&p| {
+                let moving = (0..count).any(|i| ROPE_MOVES[i] && near(p, at(i)));
+                let fixed = (0..count).any(|i| !ROPE_MOVES[i] && near(p, at(i)));
+                moving && !fixed
+            })
+            .collect();
+        out.push((mesh.clone(), positions, moves));
+    }
+    Some(RopeBend(out))
+}
+
 #[derive(Component)]
 struct Puller {
     looks: u8,
@@ -217,6 +274,19 @@ fn visit(
         ));
     } else {
         crate::event_body::attach(&mut commands, root, &parts);
+        if let Some(bend) = disc.as_deref().and_then(|d| rope_bend(d, &parts, &meshes)) {
+            commands.entity(root).insert(bend);
+        }
+        // `aRP_actor_draw`: the rope's own shadow list (its vertices are direct).
+        crate::event_body::attach_shadow(
+            &mut commands,
+            root,
+            &mut props,
+            disc.as_deref(),
+            &["tol_rope_1_shadowT_model"],
+            None,
+            (&mut meshes, &mut n64, &mut images),
+        );
     }
     info!("The tug of war is set at the shrine");
 }
@@ -233,6 +303,8 @@ fn run(
     player: Query<&Transform, (With<Player>, Without<Puller>, Without<Rope>)>,
     mut pullers: Query<(Entity, &mut Puller, &mut Transform), Without<Rope>>,
     mut rope: Query<(&Rope, &mut Transform), Without<Puller>>,
+    bends: Query<&RopeBend>,
+    mut meshes: ResMut<Assets<Mesh>>,
 ) {
     let now = crate::clock::now();
     if !today.is_active(ev::SPORTS_FAIR_TUG_OF_WAR, now.hour) {
@@ -306,7 +378,22 @@ fn run(
         } else {
             0.0
         };
-        at.translation.x = r.0 + shift + wobble;
+        // The rope itself stays put; its flagged vertices slide (`aRP_make_vtx`), shake included.
+        at.translation.x = r.0;
+        let slide = shift + wobble;
+        for bend in &bends {
+            for (handle, rest, moves) in &bend.0 {
+                let Some(mut mesh) = meshes.get_mut(handle) else {
+                    continue;
+                };
+                let moved: Vec<[f32; 3]> = rest
+                    .iter()
+                    .zip(moves)
+                    .map(|(&[x, y, z], &moves)| [if moves { x + slide } else { x }, y, z])
+                    .collect();
+                mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, moved);
+            }
+        }
     }
 }
 

@@ -1914,6 +1914,7 @@ pub(crate) fn build_model_segments(
     lists: &[u32],
     palette: Option<u32>,
     prim: [u8; 4],
+    blend: bool,
     segments: &[(u8, u32)],
     assets: (
         &mut Assets<Mesh>,
@@ -1928,7 +1929,7 @@ pub(crate) fn build_model_segments(
         disc,
         &sink,
         palette,
-        false,
+        blend,
         &crate::disc_gfx::Segments::default(),
         assets,
     )

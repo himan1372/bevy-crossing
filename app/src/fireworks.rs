@@ -268,6 +268,20 @@ fn visit(
             ));
         } else {
             crate::event_body::attach(&mut commands, stall_root, &parts);
+            let (shadow, vertices) = if second {
+                ("obj_e_yatai_shadow_r_modelT", "obj_e_yatai_shadow_r_v")
+            } else {
+                ("obj_e_yatai_shadow_l_modelT", "obj_e_yatai_shadow_l_v")
+            };
+            crate::event_body::attach_shadow(
+                &mut commands,
+                stall_root,
+                &mut props,
+                disc.as_deref(),
+                &[shadow],
+                Some(vertices),
+                (&mut meshes, &mut n64, &mut images),
+            );
         }
         commands.spawn((
             Name::new("night stall seller"),

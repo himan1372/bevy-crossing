@@ -37,6 +37,8 @@ use crate::states::GameplaySet;
 use crate::town::Town;
 
 const UNIT: f32 = 40.0;
+/// `aSTR_PAL_COUNT`: the countdown board's palette.
+const PAL_COUNT: u32 = 74;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Kind {
@@ -337,6 +339,36 @@ fn visit(
             }
             _ => Vec::new(),
         };
+        // The countdown's board (`ac_countdown`, `NEWYEAR_COUNTDOWN0`): the skeleton `cKF_bs_r_obj_e_count01` at frame 1,
+        // joint 4 (the lamp panel) lit blue, the rest dark (`aCOU_actor_draw_before` outside the New Year).
+        let board = (kind == Kind::Count && i == 0)
+            .then_some(disc.as_deref())
+            .flatten()
+            .map(|d| {
+                let palette = crate::disc_town::structure_palette(d, PAL_COUNT, false);
+                crate::event_body::skeleton_parts(
+                    d,
+                    "cKF_bs_r_obj_e_count01",
+                    "cKF_ba_r_obj_e_count01",
+                    1.0,
+                    palette,
+                    &|joint| {
+                        let (prim, env, lod) = match joint {
+                            4 => ([100, 70, 200, 255], [10, 10, 80, 255], 128),
+                            5 => ([0, 0, 0, 255], [0, 0, 60, 255], 40),
+                            6 => ([0, 0, 0, 255], [0, 0, 60, 255], 20),
+                            _ => ([255; 4], [0; 4], 255),
+                        };
+                        crate::disc_town::DrawColors {
+                            prim,
+                            prim_lod: lod,
+                            env,
+                        }
+                    },
+                    (&mut meshes, &mut n64, &mut images),
+                )
+            })
+            .unwrap_or_default();
         let root = commands
             .spawn((
                 Name::new("gathering prop"),
@@ -345,7 +377,26 @@ fn visit(
                 Visibility::default(),
             ))
             .id();
-        if parts.is_empty() {
+        for (mesh, material, at) in &board {
+            commands.spawn((
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(material.clone()),
+                *at,
+                ChildOf(root),
+            ));
+        }
+        if !board.is_empty() {
+            crate::event_body::attach_shadow(
+                &mut commands,
+                root,
+                &mut props,
+                disc.as_deref(),
+                &["obj_e_count_shadow_model"],
+                Some("obj_e_count_shadow_v"),
+                (&mut meshes, &mut n64, &mut images),
+            );
+        }
+        if parts.is_empty() && board.is_empty() {
             commands.spawn((
                 Mesh3d(meshes.add(Cuboid::new(size.x, size.y, size.z))),
                 MeshMaterial3d(materials.add(colour)),
@@ -354,6 +405,26 @@ fn visit(
             ));
         } else {
             crate::event_body::attach(&mut commands, root, &parts);
+            // `ac_goza` / `ac_htable` shadows: `obj_e_hfes_shadow_{a,b,c}`.
+            let (shadow, vertices): (&'static str, &'static str) = match (kind, i) {
+                (Kind::Cherry, _) if i % 2 == 0 => {
+                    ("obj_e_hfes_shadow_a_modelT", "obj_e_hfes_shadow_a_v")
+                }
+                (Kind::Cherry, _) | (Kind::Harvest, 1) => {
+                    ("obj_e_hfes_shadow_b_modelT", "obj_e_hfes_shadow_b_v")
+                }
+                (Kind::Harvest, 0) => ("obj_e_hfes_shadow_a_modelT", "obj_e_hfes_shadow_a_v"),
+                _ => ("obj_e_hfes_shadow_c_modelT", "obj_e_hfes_shadow_c_v"),
+            };
+            crate::event_body::attach_shadow(
+                &mut commands,
+                root,
+                &mut props,
+                disc.as_deref(),
+                &[shadow],
+                Some(vertices),
+                (&mut meshes, &mut n64, &mut images),
+            );
         }
     }
     info!("The {kind:?} gathering is on");

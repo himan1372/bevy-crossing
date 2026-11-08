@@ -626,9 +626,9 @@ Island and lighthouse
 
 Event props and presentation
 7. [x] **moon-table-placement** (done 2026-11-07: researched, the original never places it, see completed/moon-table-placement.md) - find where the event manager places `NEWYEAR_SHRINE0/1` (the `l_ev_structure_table` placement in `m_event.c`) and build the moon table from `obj_e_tukimi_*_endai_model`. Why: researched, no placement found yet; see completed/event-props-moon-radio.md.
-8. [ ] **event-prop-shadows** - shadows for baskets, rope, stall, tables, radio and Gracie's car (`obj_e_*_shadow*`). Why: the new models float without them.
-9. [ ] **countdown-sign** - the New Year countdown sign skeleton (`cKF_bs_r_obj_e_count01`, `count02`). Why: still a box.
-10. [ ] **rope-bend** - bend the tug rope's flagged vertices by the rope offset (`aRP_make_vtx`). Why: it slides rigidly.
+8. [x] **event-prop-shadows** (done 2026-11-08; fixed alpha, no sun slant, car shadow open) - shadows for baskets, rope, stall, tables, radio and Gracie's car (`obj_e_*_shadow*`). Why: the new models float without them.
+9. [x] **countdown-sign** (done 2026-11-08: the board; the clock digits are still open) - the New Year countdown sign skeleton (`cKF_bs_r_obj_e_count01`, `count02`). Why: still a box.
+10. [x] **rope-bend** (done 2026-11-08) - bend the tug rope's flagged vertices by the rope offset (`aRP_make_vtx`). Why: it slides rigidly.
 11. [ ] **radio-effect** - the radio's music-note effect (effect 32 every 36 ticks). Why: the radio is silent and static.
 12. [ ] **gracie-wash-anim** - the player's wash animation, camera and wash speed for Gracie's car. Why: the game is a counter only.
 13. [ ] **sports-fair-poses** - foot race stumbles and poses, ball toss poses, the tug sweat effect. Why: they glide upright.

@@ -63,9 +63,11 @@ impl Props {
                     };
                     lists.push(model.offset);
                 }
+                // `bIT_draw_shadow`: the shadow colour and alpha as the prim colour.
+                let shadow = symbols[0].contains("shadow");
                 let colours = crate::disc_town::DrawColors {
-                    prim: [255; 4],
-                    prim_lod: 128,
+                    prim: if shadow { [0, 0, 0, 200] } else { [255; 4] },
+                    prim_lod: if shadow { 200 } else { 128 },
                     env: [0; 4],
                 };
                 // `aSTR_PAL_*`: the structure palette the draw code puts in segment 8.
@@ -79,8 +81,9 @@ impl Props {
                         &lists,
                         palette,
                         colours.prim,
+                        shadow,
                         &[(8, v.offset)],
-                        (meshes, materials, images),
+                        (&mut *meshes, materials, images),
                     )
                 } else {
                     crate::disc_town::build_model_full(
@@ -88,15 +91,112 @@ impl Props {
                         &lists,
                         palette,
                         colours,
-                        false,
+                        shadow,
                         (&crate::disc_gfx::Segments::default(), &[]),
-                        (meshes, materials, images),
+                        (&mut *meshes, materials, images),
                     )
                 };
-                built
+                // A model whose vertices a system moves (the rope, drawn from a vertex segment) keeps a main-world copy:
+                // the usual meshes are render-world only and cannot be read or changed again.
+                if segment8.is_some() && !shadow {
+                    built
+                        .into_iter()
+                        .map(|(handle, material)| {
+                            let copy = meshes.get(&handle).cloned().map(|mut m| {
+                                m.asset_usage = bevy::asset::RenderAssetUsages::default();
+                                m
+                            });
+                            (copy.map_or(handle, |m| meshes.add(m)), material)
+                        })
+                        .collect()
+                } else {
+                    built
+                }
             })
             .clone()
     }
+}
+
+/// Hangs a prop's ground shadow under `root`: the disc's shadow display lists (`bIT_ShadowData`, drawn in the shadow pass with
+/// the vertex array in segment 8 and the shadow colour), a hair above the ground, unslanted (the sun's offset is zero). Nothing when the disc lacks them.
+pub(crate) fn attach_shadow(
+    commands: &mut Commands,
+    root: Entity,
+    props: &mut Props,
+    disc: Option<&GameDisc>,
+    symbols: &[&'static str],
+    vertices: Option<&'static str>,
+    assets: (
+        &mut Assets<Mesh>,
+        &mut Assets<N64Material>,
+        &mut Assets<Image>,
+    ),
+) {
+    let Some(disc) = disc else { return };
+    for (mesh, material) in props.get(disc, symbols, None, vertices, assets) {
+        commands.spawn((
+            Mesh3d(mesh),
+            MeshMaterial3d(material),
+            Transform::from_xyz(0.0, 0.12, 0.0),
+            ChildOf(root),
+        ));
+    }
+}
+
+/// A structure skeleton posed at `frame` of its animation: each joint's display list as its own meshes with the joint's
+/// transform (`cKF_Si3_draw_R_SV`), the colours per joint as the draw code's `before` callback sets them.
+pub(crate) fn skeleton_parts(
+    disc: &GameDisc,
+    skeleton: &str,
+    animation: &str,
+    frame: f32,
+    palette: Option<u32>,
+    colours: &dyn Fn(usize) -> crate::disc_town::DrawColors,
+    (meshes, materials, images): (
+        &mut Assets<Mesh>,
+        &mut Assets<N64Material>,
+        &mut Assets<Image>,
+    ),
+) -> Vec<(Handle<Mesh>, Handle<N64Material>, Transform)> {
+    use crate::skeleton::{Animation, Skeleton};
+    let mut out = Vec::new();
+    let Some(skel) = disc
+        .catalog
+        .get(skeleton)
+        .and_then(|a| Skeleton::read(&disc.rom, a.offset))
+    else {
+        return out;
+    };
+    let anim = disc
+        .catalog
+        .get(animation)
+        .and_then(|a| Animation::read(&disc.rom, a.offset, skel.joints.len()));
+    let world = skel.world_matrices(anim.as_ref(), frame);
+    for (j, joint) in skel.joints.iter().enumerate() {
+        let Some(list) = joint.model else { continue };
+        let c = colours(j);
+        let sink = crate::disc_gfx::run_display_lists_with_colors(
+            &disc.rom,
+            &[list],
+            c.prim,
+            c.prim_lod,
+            c.env,
+            &[],
+        );
+        let mut at = Transform::from_matrix(world[j]);
+        at.translation *= crate::disc_town::OBJECT_SCALE;
+        for (mesh, material) in crate::disc_town::sink_meshes(
+            disc,
+            &sink,
+            palette,
+            false,
+            &crate::disc_gfx::Segments::default(),
+            (&mut *meshes, &mut *materials, &mut *images),
+        ) {
+            out.push((mesh, material, at));
+        }
+    }
+    out
 }
 
 /// Hangs a model's parts under `root`.
