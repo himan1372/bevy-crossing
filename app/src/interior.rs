@@ -103,7 +103,7 @@ pub(crate) fn spawn_decorated_player_room(
     );
     commands
         .entity(shell)
-        .insert(PlayerRoomShell(decoration, crate::home::floor()));
+        .insert(PlayerRoomShell(decoration, crate::home::room_key()));
     info!("player room from the disc: wallpaper {wall}, carpet {floor}");
     Some(shell)
 }

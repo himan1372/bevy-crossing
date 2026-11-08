@@ -23,22 +23,86 @@ use crate::player::Player;
 #[derive(Resource, Default)]
 pub(crate) struct HomeFloors {
     pub(crate) saved: [Option<RoomSave>; 3],
+    cottage: Option<RoomSave>,
 }
 
 impl HomeFloors {
+    pub(crate) fn spoil_turnips(&mut self) {
+        for saved in self
+            .saved
+            .iter_mut()
+            .chain(std::iter::once(&mut self.cottage))
+            .flatten()
+        {
+            saved.spoil_turnips();
+        }
+    }
+
     /// (main floor, [upstairs, basement]) with the shown floor current.
     pub(crate) fn snapshot(&self, room: &PlayerRoom) -> (Option<RoomSave>, [Option<RoomSave>; 2]) {
         let mut all = self.saved.clone();
-        all[home::floor() as usize] = room.snapshot();
+        if !home::is_cottage() {
+            all[home::floor() as usize] = room.snapshot();
+        }
         let [main, upper, basement] = all;
         (main, [upper, basement])
     }
 
     /// After a load: the main floor is shown, the others are kept.
-    pub(crate) fn restore(&mut self, extra: Option<&[Option<RoomSave>; 2]>) {
+    pub(crate) fn restore(
+        &mut self,
+        extra: Option<&[Option<RoomSave>; 2]>,
+        cottage: Option<&RoomSave>,
+    ) {
         let [upper, basement] = extra.cloned().unwrap_or_default();
         self.saved = [None, upper, basement];
+        self.cottage = cottage.cloned();
+        home::set_cottage(false);
         home::set_floor(home::MAIN_FLOOR);
+    }
+
+    pub(crate) fn cottage_snapshot(&self, room: &PlayerRoom) -> Option<RoomSave> {
+        if home::is_cottage() {
+            room.snapshot()
+        } else {
+            self.cottage.clone()
+        }
+    }
+
+    pub(crate) fn enter_cottage(&mut self, room: &mut PlayerRoom, disc: Option<&GameDisc>) {
+        if home::is_cottage() {
+            return;
+        }
+        self.saved[home::floor() as usize] = room.snapshot();
+        let next = self
+            .cottage
+            .clone()
+            .unwrap_or_else(RoomSave::cottage_defaults);
+        home::set_floor(home::MAIN_FLOOR);
+        home::set_cottage(true);
+        room.restore(Some(&next), disc);
+    }
+
+    fn leave_cottage(&mut self, room: &mut PlayerRoom, disc: Option<&GameDisc>) {
+        if !home::is_cottage() {
+            return;
+        }
+        self.cottage = room.snapshot();
+        home::set_cottage(false);
+        home::set_floor(home::MAIN_FLOOR);
+        room.restore(self.saved[0].as_ref(), disc);
+    }
+}
+
+fn leave_cottage(
+    mut floors: ResMut<HomeFloors>,
+    mut room: ResMut<PlayerRoom>,
+    disc: Option<Res<GameDisc>>,
+    mut commands: Commands,
+) {
+    if home::is_cottage() {
+        floors.leave_cottage(&mut room, disc.as_deref());
+        crate::house::refresh_player_room_bounds(&mut commands);
     }
 }
 
@@ -64,7 +128,7 @@ fn sync_stairs(
     let (Some(disc), Some(house)) = (disc, house) else {
         return;
     };
-    let key = (home::floor(), house.0.size, house.0.has_basement);
+    let key = (home::room_key(), house.0.size, house.0.has_basement);
     if built.0 == Some(key) {
         return;
     }
@@ -188,9 +252,11 @@ pub(super) struct FloorsPlugin;
 
 impl Plugin for FloorsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<HomeFloors>().add_systems(
-            Update,
-            (sync_stairs, climb.in_set(crate::states::GameplaySet)),
-        );
+        app.init_resource::<HomeFloors>()
+            .add_systems(OnExit(HouseState::Inside), leave_cottage)
+            .add_systems(
+                Update,
+                (sync_stairs, climb.in_set(crate::states::GameplaySet)),
+            );
     }
 }

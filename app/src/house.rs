@@ -162,6 +162,9 @@ impl Default for CurrentRoom {
 #[derive(Resource, Default)]
 struct VillagerDoors(Vec<(Vec3, Vec3, RoomBounds)>);
 
+#[derive(Resource, Default)]
+struct CottageDoor(Option<Vec3>);
+
 /// Startup, after the villagers: builds each villager's room and records
 /// their door.
 #[allow(clippy::too_many_arguments)]
@@ -220,34 +223,20 @@ fn build_villager_rooms(
             RoomBounds::square(crate::interior::VILLAGER_ROOM_HALF),
         ));
     }
-    // The player's own cottage on the island (`COTTAGE_MY`, `PLAYER_ROOM_ISLAND`): the player's kind of room, bare for
-    // now (the island's furniture save is not built), behind the cottage's door.
+    // The editable cottage uses the player-room renderer and independent save.
+    // Keep its accepted south-facing exterior trigger separate from NPC rooms.
     if let Some(cottage) = town
         .retail
         .as_ref()
         .and_then(|r| r.buildings.iter().find(|b| b.item == 0x5850))
     {
-        let origin = INTERIOR_ORIGIN + Vec3::X * VILLAGER_ROOM_SPACING * (doors.len() + 1) as f32;
-        if let Some(furniture) = crate::interior::spawn_player_room(
-            &mut commands,
-            &disc,
-            origin,
-            &mut meshes,
-            &mut n64,
-            &mut images,
-        ) {
-            obstacles
-                .0
-                .extend(furniture.iter().map(|f| Obstacle::around(origin, f)));
-            // The door a step in front of the cottage's south face (the villagers' doors, `aHUS` rotation 0).
-            let door = cottage.door.unwrap_or(cottage.origin + Vec3::Z * 1.5);
-            doors.push((
-                Vec3::new(door.x, cottage.origin.y + 1.0, cottage.origin.z + 1.6),
-                origin,
-                RoomBounds::disc_room(),
-            ));
-            info!("the island cottage's room is ready");
-        }
+        let door = cottage.door.unwrap_or(cottage.origin + Vec3::Z * 1.5);
+        commands.insert_resource(CottageDoor(Some(Vec3::new(
+            door.x,
+            cottage.origin.y + 1.0,
+            cottage.origin.z + 1.6,
+        ))));
+        info!("the island cottage's editable room door at {:?}", door);
     }
     info!("{} villager rooms from the disc", doors.len());
     commands.insert_resource(VillagerDoors(doors));
@@ -612,6 +601,12 @@ fn house_enter(
     bounds: Res<RoomBounds>,
     villager_doors: Res<VillagerDoors>,
     intro: Option<Res<crate::intro::Intro>>,
+    cottage: Res<CottageDoor>,
+    (mut floors, mut player_room, disc): (
+        ResMut<crate::player_room::floors::HomeFloors>,
+        ResMut<crate::player_room::PlayerRoom>,
+        Option<Res<crate::game_disc::GameDisc>>,
+    ),
 ) {
     if intro.as_deref() == Some(&crate::intro::Intro::Houses) {
         return;
@@ -629,6 +624,28 @@ fn house_enter(
     let Ok((mut transform, mut facing)) = player_query.single_mut() else {
         return;
     };
+    if let Some(at) = cottage.0 {
+        let door = DoorPanel {
+            center_x: at.x,
+            half_w: DOOR_HALF_W,
+            face_z: at.z - 0.5,
+            into_z: -1.0,
+        };
+        if door.faced_by(transform.translation, facing.dir, DOOR_RANGE_OUT, DOOR_DOT)
+            && actions.consume(Action::Interact)
+        {
+            commands.insert_resource(ReturnPosition(transform.translation));
+            floors.enter_cottage(&mut player_room, disc.as_deref());
+            refresh_player_room_bounds(&mut commands);
+            let room = RoomBounds::disc_room();
+            transform.translation = INTERIOR_ORIGIN + Vec3::new(0.0, 1.0, room.spawn_z);
+            facing.dir = Vec3::NEG_Z;
+            crate::sound::door_sound(None, true);
+            next_state.set(HouseState::Inside);
+            info!("Entered player island cottage");
+            return;
+        }
+    }
     // A villager's front door (they face south, `aHUS` rotation 0).
     let villager_room = villager_doors
         .0
@@ -818,6 +835,7 @@ impl Plugin for HousePlugin {
             .init_resource::<CurrentRoom>()
             .init_resource::<InteriorObstacles>()
             .init_resource::<VillagerDoors>()
+            .init_resource::<CottageDoor>()
             .add_systems(
                 Startup,
                 build_villager_rooms

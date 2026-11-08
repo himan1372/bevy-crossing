@@ -621,8 +621,8 @@ Island and lighthouse
 2. [x] **island-trade-leftovers** (done 2026-11-07) - verify check 7's wording, a 2x2 piece, the first 1x1 marker and her wardrobe's turn. Why: the last unverified bits of the trade.
 3. [x] **island-layout-save** (done 2026-11-07; picking up only, see completed/island-layout-save.md) - the island's own item layout (trees, flowers, flag) and its save so nothing resets between visits. Why: the island is empty ground today.
 4. [x] **island-resident-life** (done 2026-11-07: the talk roll and action remarks; mail talk and island action sources still open, see completed/island-resident-life.md) - her schedule, sleeping, the boat greeting, the mail and player-action talks (`aQMgr_talk_island_*`). Why: she only chats and trades.
-5. [ ] **island-player-cottage-room** - the cottage's real room size and the island furniture save (`island.cottage`). Why: the room is a bare shell.
-6. [ ] **island-naming** - naming the island (Kapp'n's island naming flow). Why: a retail first-visit beat.
+5. [x] **island-player-cottage-room** - native large editable cottage and independent room save. See [evidence](completed/island-cottage-naming.md); Philip acceptance pending.
+6. [x] **island-naming** - native first-crossing name window, persisted name and repeat trips. See [evidence](completed/island-cottage-naming.md); Philip acceptance pending.
 
 Event props and presentation
 7. [x] **moon-table-placement** (done 2026-11-07: researched, the original never places it, see completed/moon-table-placement.md) - find where the event manager places `NEWYEAR_SHRINE0/1` (the `l_ev_structure_table` placement in `m_event.c`) and build the moon table from `obj_e_tukimi_*_endai_model`. Why: researched, no placement found yet; see completed/event-props-moon-radio.md.

@@ -5,7 +5,7 @@
 //! pending order from an earlier date is built (size, basement or statue),
 //! the ordered roof colour applied, and `renew` set so Nook bills the next
 //! loan when the player next visits ([`rustimal_logic::house`]).
-use std::sync::atomic::{AtomicU16, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU8, Ordering};
 
 use bevy::prelude::*;
 use rustimal_logic::house::{HomeSizeInfo, House, HouseSize};
@@ -248,6 +248,17 @@ pub const BASEMENT: u8 = 2;
 
 /// The floor of the player's house being shown.
 static FLOOR: AtomicU8 = AtomicU8::new(MAIN_FLOOR);
+static COTTAGE: AtomicBool = AtomicBool::new(false);
+
+pub(crate) fn is_cottage() -> bool {
+    COTTAGE.load(Ordering::Relaxed)
+}
+pub(crate) fn set_cottage(cottage: bool) {
+    COTTAGE.store(cottage, Ordering::Relaxed);
+}
+pub(crate) fn room_key() -> u8 {
+    floor() | if is_cottage() { 0x80 } else { 0 }
+}
 
 pub fn floor() -> u8 {
     FLOOR.load(Ordering::Relaxed)
@@ -260,6 +271,10 @@ pub fn set_floor(floor: u8) {
 /// The room on the current floor: model prefix and width in units
 /// (LL2 rom_myhome4_2 is size M; the basement rom_myhome_ug is size L).
 fn room() -> (&'static str, f32) {
+    // aMR_GetSceneRoomKind: SCENE_COTTAGE_MY always uses aMI_ROOM_KIND_L.
+    if is_cottage() {
+        return ("rom_myhome3", 10.0);
+    }
     match floor() {
         UPPER_FLOOR => ("rom_myhome4_2", 8.0),
         BASEMENT => ("rom_myhome_ug", 10.0),
@@ -318,6 +333,9 @@ pub fn stair_pos() -> Vec3 {
 
 /// The current floor's stairs for this house.
 pub fn stairs(house: &HouseSave) -> Vec<Stair> {
+    if is_cottage() {
+        return Vec::new();
+    }
     const DOWN: &str = "obj_myhome_step_down_model";
     const UP: &str = "obj_myhome_step_up_model";
     let mut out = Vec::new();

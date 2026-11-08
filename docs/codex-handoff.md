@@ -1,5 +1,15 @@
 # Codex handoff - 2026-11-07
 
+## Codex session - 2026-11-07: Next30 tasks 5 and 6 (latest)
+
+Philip explicitly selected **island-player-cottage-room** and **island-naming**. Do not ask him to select these again. Implementation and bounded verification are complete; see `.claude-agents/completed/island-cottage-naming.md`. Check/Clippy/fmt, capture/default/release builds pass (release9m10s; unrelated tree_palette warning). Cottage editing/exit/reentry, naming No/empty/accept/repeat, F9, upgraded-house isolation, fresh native and no-disc numeric retention pass. Owned previews are closed. Philip acceptance remains pending.
+
+The cottage now swaps an independent numeric room into the editable player-room renderer: native L room, floor/wall13, four aloha mannequins26/27, no house stairs. Furniture, owner-cell storage, switches, music and diary are saved under optional `island_cottage`; mainland floors retain their own records. Cached cottage turnips join the existing spoil pass. Accepted south-facing exterior doors are preserved.
+
+Kapp'n first Yes uses3079, the original shi_win island name window (8 characters,80px), then30BE. Accepted `identity.island_name` survives save/F9; repeat trips use3076. Fixed messages select the player's gender; song IDs retain their existing selection. F9 clears owned naming/voyage state and restores the boat endpoint from the loaded exterior position.
+
+QA uses synthetic Temp/bevy-cottage-naming-20261107 on **BRP25742** (`BRP_EXTRAS_PORT`), because another preview owns15702/15703. Never stop the other preview. Its actual save is untouched (SHA2560495927D27B005E9FD0A4AED424EAAD883F56BBD8A9C4F5910167C1F9BBB1BD9). Other Claude tasks1-3 have unrelated work in the shared tree; stage only our files. No tests requested or run. M4 and Philip acceptance stay open.
+
 ## Claude session - 2026-11-05..07 (NEWEST; read first, it supersedes the 2026-11-02/03 section below)
 
 Identity `claude`, `main`. Uncommitted and not to be committed: `.gitignore`, `savegame.json`. The real save was never used: QA ran on Temp

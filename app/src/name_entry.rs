@@ -19,6 +19,8 @@ use crate::pockets_disc::Paint;
 pub enum Kind {
     Player,
     Country,
+    /// Kapp'n's first-visit island name (`mLE_TYPE_ISLAND_NAME`).
+    Island,
     /// K.K. Slider's "Request a song!" (`mLE_TYPE_REQUEST`, `mIN_ITEM_NAME_LEN` = 16).
     Request,
 }
@@ -62,13 +64,21 @@ impl Kind {
                 edit_at: Vec2::new(82.0, 76.0),
                 ink: [50, 50, 235, 255],
             },
+            Kind::Island => Window {
+                mode: "shi_win_mode",
+                model: "shi_win_model",
+                title: "Enter a destination.",
+                title_at: Vec2::new(121.0, 40.0),
+                edit_at: Vec2::new(118.0, 75.0),
+                ink: [175, 70, 40, 255],
+            },
         }
     }
 
     /// Characters the field takes (`PLAYER_NAME_LEN`, `LAND_NAME_SIZE`, `mIN_ITEM_NAME_LEN`).
     fn max_len(self) -> usize {
         match self {
-            Kind::Player | Kind::Country => 8,
+            Kind::Player | Kind::Country | Kind::Island => 8,
             Kind::Request => FIELD,
         }
     }
@@ -78,6 +88,15 @@ impl Kind {
             Kind::Player => 0,
             Kind::Country => 1,
             Kind::Request => 2,
+            Kind::Island => 3,
+        }
+    }
+
+    fn edit_scale(self) -> f32 {
+        if self == Kind::Island {
+            1.0
+        } else {
+            EDIT_SCALE
         }
     }
 }
@@ -160,6 +179,18 @@ impl NameEntry {
     pub(crate) fn take_request(&mut self) -> Option<[u8; FIELD]> {
         self.finished.take()
     }
+
+    /// Only the owner of the island-name flow calls this on reload.
+    pub(crate) fn cancel_island(&mut self) {
+        if self
+            .view
+            .as_ref()
+            .is_none_or(|view| view.kind == Kind::Island)
+        {
+            self.view = None;
+            self.finished = None;
+        }
+    }
 }
 
 fn direction(keys: &ButtonInput<KeyCode>) -> Option<kb::Direction> {
@@ -194,8 +225,20 @@ fn acceptable(field: &kb::Field<FIELD>, disc: &GameDisc) -> bool {
     true
 }
 
-fn type_code(view: &mut View, code: u8) {
-    if view.field.len < view.kind.max_len() && view.field.insert(code) {
+fn fits_island(view: &View, code: u8, font: Option<&MsgAssets>) -> bool {
+    view.kind != Kind::Island
+        || font.is_some_and(|font| {
+            width_before(&view.field, view.field.len, &font.widths)
+                + f32::from(font.widths[usize::from(code)])
+                <= 80.0
+        })
+}
+
+fn type_code(view: &mut View, code: u8, font: Option<&MsgAssets>) {
+    if view.field.len < view.kind.max_len()
+        && fits_island(view, code, font)
+        && view.field.insert(code)
+    {
         crate::shop_nook::editor::speak(code, false);
     } else {
         crate::sound::se(ERROR);
@@ -210,6 +253,7 @@ fn input(
     mut focus: ResMut<crate::input::InputFocus>,
     time: Res<Time>,
     disc: Option<Res<GameDisc>>,
+    font: Option<Res<MsgAssets>>,
 ) {
     let Some(mut view) = names.view.take() else {
         events.clear();
@@ -250,12 +294,12 @@ fn input(
         match event.key_code {
             KeyCode::Enter | KeyCode::NumpadEnter => {
                 if let Some(code) = view.keyboard.selected() {
-                    type_code(&mut view, code);
+                    type_code(&mut view, code, font.as_deref());
                 }
                 continue;
             }
             KeyCode::Space => {
-                type_code(&mut view, kb::CHAR_SPACE);
+                type_code(&mut view, kb::CHAR_SPACE, font.as_deref());
                 continue;
             }
             KeyCode::F1 => {
@@ -276,8 +320,18 @@ fn input(
             KeyCode::KeyX if ctrl => {
                 let cursor = view.field.cursor;
                 if let Some(code) = kb::exchange_code(&view.field.text, cursor) {
+                    let old = view.field;
                     kb::exchange(&mut view.field.text, cursor);
-                    crate::shop_nook::editor::speak(code, true);
+                    if view.kind == Kind::Island
+                        && font.as_ref().is_some_and(|font| {
+                            width_before(&view.field, view.field.len, &font.widths) > 80.0
+                        })
+                    {
+                        view.field = old;
+                        crate::sound::se(ERROR);
+                    } else {
+                        crate::shop_nook::editor::speak(code, true);
+                    }
                 } else {
                     crate::sound::se(ERROR);
                 }
@@ -285,7 +339,11 @@ fn input(
             }
             KeyCode::F4 => {
                 // `mED_COMMAND_END_EDIT`.
-                if acceptable(&view.field, &disc) {
+                let width_ok = view.kind != Kind::Island
+                    || font.as_ref().is_some_and(|font| {
+                        width_before(&view.field, view.field.len, &font.widths) <= 80.0
+                    });
+                if width_ok && acceptable(&view.field, &disc) {
                     crate::sound::se(START);
                     view.accepted = Some(view.field.text);
                     view.slide.close();
@@ -305,7 +363,7 @@ fn input(
         if let Key::Character(chars) = &event.logical_key {
             for ch in chars.chars().filter(|c| !c.is_control()) {
                 if let Some(code) = crate::messages::ac_code_opt(ch) {
-                    type_code(&mut view, code);
+                    type_code(&mut view, code, font.as_deref());
                 }
             }
         }
@@ -338,7 +396,17 @@ fn input(
                     let done = match button {
                         kb::Button::Backspace => view.field.backspace(),
                         kb::Button::CursorLeft => view.field.left(),
-                        kb::Button::CursorRight => view.field.right(),
+                        kb::Button::CursorRight => {
+                            if view.kind == Kind::Island
+                                && view.field.cursor == view.field.len
+                                && (view.field.len >= view.kind.max_len()
+                                    || !fits_island(&view, kb::CHAR_SPACE, font.as_deref()))
+                            {
+                                false
+                            } else {
+                                view.field.right()
+                            }
+                        }
                         // A single line: up and down do nothing.
                         kb::Button::CursorUp | kb::Button::CursorDown => false,
                     };
@@ -395,7 +463,7 @@ fn creep(
 #[derive(Resource, Default)]
 pub(crate) struct NameAssets {
     slide: f32,
-    windows: [Option<Model>; 3],
+    windows: [Option<Model>; 4],
     root: Option<Entity>,
     shown: Option<(Kind, u64, bool)>,
     skin: crate::shop_nook::editor::Skin,
@@ -488,7 +556,7 @@ fn draw(
         format!(
             "{}{}{}",
             crate::messages::markup::LINE_SCALE,
-            crate::messages::markup::arg((EDIT_SCALE * 32.0) as u8),
+            crate::messages::markup::arg((view.kind.edit_scale() * 32.0) as u8),
             text
         )
     };
@@ -497,7 +565,8 @@ fn draw(
         .map(|&c| crate::messages::char_of(c).unwrap_or('?'))
         .collect();
     let at = Vec2::new(
-        window.edit_at.x + width_before(&view.field, view.field.cursor, &font.widths) * EDIT_SCALE,
+        window.edit_at.x
+            + width_before(&view.field, view.field.cursor, &font.widths) * view.kind.edit_scale(),
         window.edit_at.y,
     );
     {
@@ -507,13 +576,17 @@ fn draw(
             materials: &mut materials,
             root,
         };
-        paint.text(
-            font,
-            window.title,
-            window.title_at,
-            [255, 255, 255, 255],
-            230.0,
-        );
+        let title = if view.kind == Kind::Island {
+            format!(
+                "{}{}{title}",
+                crate::messages::markup::LINE_SCALE,
+                crate::messages::markup::arg(28),
+                title = window.title
+            )
+        } else {
+            window.title.to_string()
+        };
+        paint.text(font, &title, window.title_at, [255, 255, 255, 255], 230.0);
         paint.text(font, &scaled(shown), window.edit_at, window.ink, 230.0);
         if let Some(caret) = paint.text(font, "_", at, crate::shop_nook::editor::CARET_INK, 230.0) {
             paint

@@ -69,6 +69,9 @@ pub(crate) struct PlayerIdentity {
     /// What the island resident has been given (`mNpc_Island_Ftr_c`).
     #[serde(default)]
     pub island_room: crate::island_trade::IslandRoom,
+    /// Accepted first-visit name; absent in legacy saves until Kapp'n asks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub island_name: Option<String>,
     /// `Common(map_flag)`: the player has the town map. Off from the new-game intro until the
     /// guide hands it over; towns that never ran the job always have it.
     #[serde(default = "map_flag_on")]
@@ -193,6 +196,7 @@ impl Default for PlayerIdentity {
             radio_card: ((0, 0, 0), 0),
             lighthouse: Default::default(),
             island_room: Default::default(),
+            island_name: None,
             map_flag: true,
             first_job: None,
             intro_done: false,
@@ -319,6 +323,9 @@ pub struct SaveData {
     /// Placed furniture and its owner-cell storage. None preserves old saves.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) home_furniture: Option<crate::player_room::RoomSave>,
+    /// Island_c.cottage: independent numeric furniture, storage and decoration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) island_cottage: Option<crate::player_room::RoomSave>,
     /// Item numbering of the pockets: 0/1 the slice's own, 2 the game's
     /// (`crate::items`). Older pockets are migrated on load.
     #[serde(default)]
@@ -698,6 +705,7 @@ fn collect_save(
         shop_turnips: Some(shop.turnips.clone()),
         furniture: Vec::new(),
         home_furniture: None,
+        island_cottage: None,
         home_floors: None,
         item_numbers: ITEM_NUMBERS,
         shop_priorities: shop.priorities,
@@ -879,6 +887,7 @@ fn quick_save(
     save.identity = identity.clone();
     let (main, extra) = floors.snapshot(&room);
     save.home_furniture = main;
+    save.island_cottage = floors.cottage_snapshot(&room);
     save.home_floors = extra.iter().any(Option::is_some).then_some(extra);
     save.house = home.map(|h| h.0);
     save.police_box = lost.map(|l| l.0);
@@ -1002,7 +1011,7 @@ fn quick_load(
     };
     net.cancel();
     *identity = save.identity.clone();
-    floors.restore(save.home_floors.as_ref());
+    floors.restore(save.home_floors.as_ref(), save.island_cottage.as_ref());
     if let (Some(mut lost), Some(kept)) = (lost, save.police_box) {
         lost.0 = kept;
     }

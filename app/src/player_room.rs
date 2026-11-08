@@ -81,6 +81,25 @@ impl TryFrom<RoomSaveData> for RoomSave {
 }
 
 impl RoomSave {
+    /// mHm_InitCottage / mHm_SetDefaultCottageData; independent of home size.
+    fn cottage_defaults() -> Self {
+        let mut layers: [Vec<u16>; 4] = std::array::from_fn(|_| vec![0; 256]);
+        for (x, z, cloth) in [(3, 3, 26), (6, 3, 27), (3, 6, 26), (6, 6, 27)] {
+            if let Some(item) = ftr::clothing_to_furniture(0x2400 + cloth) {
+                layers[0][z * 16 + x] = item;
+            }
+        }
+        Self {
+            layers,
+            switches: [0; 4],
+            music_box: [0; 2],
+            decoration: Some(decorating::Decoration {
+                floor: 13,
+                wall: 13,
+            }),
+            diary: None,
+        }
+    }
     pub(crate) fn spoil_turnips(&mut self) {
         for item in self.layers.iter_mut().flatten() {
             rustimal_logic::turnips::spoil(item);
@@ -651,7 +670,10 @@ fn setup(
     disc: Option<Res<GameDisc>>,
     loaded: Res<crate::save::LoadedSave>,
 ) {
-    floors.restore(loaded.0.as_ref().and_then(|s| s.home_floors.as_ref()));
+    floors.restore(
+        loaded.0.as_ref().and_then(|s| s.home_floors.as_ref()),
+        loaded.0.as_ref().and_then(|s| s.island_cottage.as_ref()),
+    );
     if let Some(disc) = disc.as_deref() {
         if let Some(table) = disc.catalog.get("furniture_quality") {
             for idx in 0..table.size / 4 {
@@ -1236,12 +1258,16 @@ fn refresh(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<crate::n64_material::N64Material>>,
     mut images: ResMut<Assets<Image>>,
+    mut built_room: Local<Option<u8>>,
 ) {
     if !room.dirty {
         return;
     }
     room.dirty = false;
     let Some(disc) = disc else { return };
+    let room_key = crate::home::room_key();
+    let reuse = *built_room == Some(room_key);
+    *built_room = Some(room_key);
     loose::refresh(
         &mut commands,
         &room,
@@ -1266,6 +1292,10 @@ fn refresh(
         })
         .collect();
     for (entity, mut piece, mut transform) in &mut existing {
+        if !reuse {
+            commands.entity(entity).despawn();
+            continue;
+        }
         if let Some(next) = wanted.iter().find(|p| {
             p.slot == piece.slot && p.item >> 2 == piece.item >> 2 && p.layer == piece.layer
         }) {
@@ -1298,7 +1328,7 @@ fn refresh(
         }
     }
     for piece in wanted {
-        if existing.iter().any(|(_, p, _)| *p == piece) {
+        if reuse && existing.iter().any(|(_, p, _)| *p == piece) {
             continue;
         }
         let lift = if piece.layer == 1 {
@@ -1341,9 +1371,9 @@ fn refresh(
         {
             collision.push(crate::interior::RoomFurniture {
                 centre: Vec3::new(
-                    (a.cell_x + dx) as f32 - 2.5,
+                    (a.cell_x + dx) as f32 + 0.5 - crate::home::room_centre().x,
                     0.0,
-                    (a.cell_z + dz) as f32 - 2.5,
+                    (a.cell_z + dz) as f32 + 0.5 - crate::home::room_centre().z,
                 ),
                 half: Vec2::splat(0.45),
             });

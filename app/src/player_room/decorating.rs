@@ -96,7 +96,7 @@ pub(super) fn render(
     if pockets.as_deref().is_some_and(|p| !p.world_ready()) || !decoration.available(disc) {
         return;
     }
-    let floor = crate::home::floor();
+    let floor = crate::home::room_key();
     if !shells
         .iter()
         .any(|(_, shell)| shell.0 == decoration && shell.1 == floor)

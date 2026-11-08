@@ -4,11 +4,11 @@
 //! In the original the island, its resident and the trip's data come over a Game Boy Advance cable. On PC the island is
 //! a built-in default one (the decomp's own PC build skips the GBA chain too: `aSEN_pl_ride_on_check2_talk_proc` goes
 //! straight to "climb aboard"): the island is the two ocean blocks of the town grid (`ISLAND_LEFT` / `ISLAND_RIGHT`, blocks
-//! (4,8) and (5,8)), named after the town.
+//! (4,8) and (5,8)). Kapp'n asks for its name before the first crossing.
 //!
 //! The dock: Kapp'n (`SP_NPC_SENDO`, model 238 + 114) rows his dinghy at unit (5,10) of block (5,6), `aBT_chk_point[0]`.
-//! Talking to him: `0x3073` (Yes, I'll cross / No, I won't): No `0x3074`; Yes, the first time `0x30BE` (the island's
-//! name is the town's), after that `0x3076`, then the boat goes. On the island the same boat waits at the last checkpoint
+//! Talking to him: `0x3073` (Yes, I'll cross / No, I won't): No `0x3074`; the first Yes gives `0x3079`, the native island
+//! name window, then `0x30BE`. Later crossings use `0x3076`. On the island the same boat waits at the last checkpoint
 //! and his question is `0x3080` (leaving: yes `0x3083`, no `0x3081`).
 //!
 //! The voyage (`aBTD_*`): the player rides the boat along the eight checkpoints at `0.625` units a frame. Kapp'n calls out
@@ -18,7 +18,7 @@
 //! boat touches the wharf: the player steps out and he calls the arrival (`0x307A` at the island, `0x308B` home).
 //!
 //! Not built: the boat's and Kapp'n's models (a box, the capsule model of the sailor), the rain and night variants
-//! (`0x30B9`, `0x308C`), the island's name entry (the town's name stands), the oar animation and the songs' music, the
+//! (`0x30B9`, `0x308C`), the oar animation and the songs' music, the
 //! GBA save of the island, and the island's own scenes (see `lighthouse.rs`).
 
 use std::collections::VecDeque;
@@ -65,7 +65,6 @@ struct Kappn;
 #[derive(Resource)]
 struct Island {
     at_island: bool,
-    named: bool,
     last_to: u8,
     last_from: u8,
 }
@@ -74,7 +73,6 @@ impl Default for Island {
     fn default() -> Self {
         Self {
             at_island: false,
-            named: false,
             last_to: boat::song::LAST_SONG_INIT,
             last_from: boat::song::LAST_SONG_INIT,
         }
@@ -87,6 +85,10 @@ enum Step {
     Line,
     /// The question is up (leave / cross).
     Asked,
+    /// `0x3079`: Kapp'n explains the first island's name.
+    NameIntro,
+    /// The mandatory `mLE_TYPE_ISLAND_NAME` window owns input.
+    Naming,
     /// The "climb aboard" line is up: the voyage follows.
     Board,
     /// Sailing: the distance along the route, the lines still to say, the wharf timer.
@@ -139,14 +141,21 @@ fn route_length(points: &[Vec2]) -> f32 {
 fn spawn(
     mut commands: Commands,
     town: Option<Res<Town>>,
-    island: Res<Island>,
+    mut island: ResMut<Island>,
     existing: Query<(), With<Boat>>,
+    player: Query<&Transform, With<Player>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     if !existing.is_empty() || town.is_none() {
         return;
     }
+    // Saves store the exterior return position even when made in the cottage.
+    // Reconstruct which dock owns the boat after a process restart.
+    let Ok(player_at) = player.single() else {
+        return;
+    };
+    island.at_island = Town::on_island(player_at.translation);
     let points = route();
     let at = if island.at_island {
         points[7]
@@ -185,8 +194,21 @@ fn spawn(
 fn context(identity: &crate::save::PlayerIdentity, disc: &GameDisc) -> crate::messages::MsgContext {
     let mut ctx = crate::fireworks::context(identity, disc, 0, 0);
     // `mMsg_FREE_STR0`: the island's name.
-    ctx.free[0] = identity.town.clone();
+    ctx.free[0] = saved_name(identity).unwrap_or(&identity.town).to_string();
     ctx
+}
+
+fn saved_name(identity: &crate::save::PlayerIdentity) -> Option<&str> {
+    identity
+        .island_name
+        .as_deref()
+        .filter(|name| !name.trim().is_empty())
+}
+
+/// `aSEN_get_msg_no`: fixed conversations have a female bank 210 entries later.
+/// Shanty messages already come from `boat`'s gender-specific tables.
+fn fixed_message(message: u16, female: bool) -> u16 {
+    message + if female { 210 } else { 0 }
 }
 
 fn say(
@@ -225,13 +247,45 @@ fn talk(
     mut dialogue: ResMut<DialogueState>,
     mut island: ResMut<Island>,
     mut voyage: ResMut<Voyage>,
-    identity: Res<crate::save::PlayerIdentity>,
-    (look, mut chat): (
+    mut identity: ResMut<crate::save::PlayerIdentity>,
+    (look, mut chat, mut names, mut reset): (
         Res<crate::character::PlayerLook>,
         ResMut<crate::island_trade::IslandChat>,
+        ResMut<crate::name_entry::NameEntry>,
+        MessageReader<crate::sound::ResetAudio>,
     ),
     mut rand: ResMut<crate::game_rand::GameRand>,
 ) {
+    if reset.read().count() > 0 {
+        if matches!(voyage.step, Step::Naming) {
+            names.cancel_island();
+            if !names.open() && *focus == InputFocus::NameEntry {
+                *focus = InputFocus::World;
+            }
+        }
+        if !matches!(voyage.step, Step::Idle)
+            && dialogue.speaker.is_some_and(|actor| kappn.contains(actor))
+        {
+            *dialogue = DialogueState::default();
+            if matches!(*focus, InputFocus::Dialogue | InputFocus::Transition) {
+                *focus = InputFocus::World;
+            }
+        }
+        voyage.step = Step::Idle;
+        island.at_island = player
+            .single()
+            .is_ok_and(|(at, _)| Town::on_island(at.translation));
+        if let Ok(mut boat) = boats.single_mut() {
+            let at = route()[if island.at_island { 7 } else { 0 }];
+            boat.translation = Vec3::new(at.x, 0.1, at.y);
+            boat.rotation = Quat::from_rotation_y(if island.at_island {
+                135f32.to_radians()
+            } else {
+                -45f32.to_radians()
+            });
+        }
+        return;
+    }
     let (Some(disc), Some(town)) = (disc.filter(|d| d.text.is_some()), town) else {
         return;
     };
@@ -244,6 +298,34 @@ fn talk(
     let ctx = context(&identity, &disc);
     let dt = time.delta_secs();
     let female = u8::from(look.female);
+    if matches!(voyage.step, Step::Naming) {
+        if let Some(bytes) = names.take() {
+            let name = crate::messages::plain(&bytes);
+            if name.trim().is_empty() {
+                names.begin(crate::name_entry::Kind::Island);
+                *focus = InputFocus::NameEntry;
+            } else {
+                identity.island_name = Some(name);
+                let ctx = context(&identity, &disc);
+                say(
+                    &disc,
+                    &mut dialogue,
+                    actor,
+                    &ctx,
+                    fixed_message(0x30BE, look.female),
+                );
+                voyage.step = Step::Board;
+                *focus = InputFocus::Dialogue;
+            }
+        } else {
+            *focus = if names.open() {
+                InputFocus::NameEntry
+            } else {
+                InputFocus::Dialogue
+            };
+        }
+        return;
+    }
     // The voyage.
     if let Step::Sailing {
         to_island,
@@ -300,7 +382,7 @@ fn talk(
                     // A new visit: her first talk checks for a trade again (`mNpc_SetIslandCheckFtrMsg`).
                     chat.checked = false;
                 }
-                let arrival = if *to_island { 0x307A } else { 0x308B };
+                let arrival = fixed_message(if *to_island { 0x307A } else { 0x308B }, look.female);
                 say(&disc, &mut dialogue, actor, &ctx, arrival);
                 *focus = InputFocus::Dialogue;
                 voyage.step = Step::Arrival;
@@ -321,21 +403,46 @@ fn talk(
             Step::Asked => {
                 if choice == 0 {
                     // Yes: the GBA chain is skipped (`aSEN_pl_ride_on_check2_talk_proc` on PC).
+                    let first_visit = !island.at_island && saved_name(&identity).is_none();
                     let msg = if island.at_island {
                         0x3083
-                    } else if island.named {
+                    } else if !first_visit {
                         0x3076
                     } else {
-                        0x30BE
+                        0x3079
                     };
-                    island.named = true;
-                    say(&disc, &mut dialogue, actor, &ctx, msg);
-                    voyage.step = Step::Board;
+                    say(
+                        &disc,
+                        &mut dialogue,
+                        actor,
+                        &ctx,
+                        fixed_message(msg, look.female),
+                    );
+                    voyage.step = if first_visit {
+                        Step::NameIntro
+                    } else {
+                        Step::Board
+                    };
                 } else {
                     let msg = if island.at_island { 0x3081 } else { 0x3074 };
-                    say(&disc, &mut dialogue, actor, &ctx, msg);
+                    say(
+                        &disc,
+                        &mut dialogue,
+                        actor,
+                        &ctx,
+                        fixed_message(msg, look.female),
+                    );
                     voyage.step = Step::Line;
                 }
+            }
+            Step::NameIntro => {
+                *dialogue = DialogueState::default();
+                // Keep the owner while LEDIT closes, before Kapp'n consumes its result.
+                dialogue.speaker = Some(actor);
+                dialogue.external_result = Some(0);
+                names.begin(crate::name_entry::Kind::Island);
+                voyage.step = Step::Naming;
+                *focus = InputFocus::NameEntry;
             }
             Step::Board => {
                 *dialogue = DialogueState::default();
@@ -359,7 +466,7 @@ fn talk(
                 }
                 let pattern = boat::player_pattern(!to_island, female);
                 let queue = VecDeque::from([
-                    if to_island { 0x30BF } else { 0x3084 },
+                    fixed_message(if to_island { 0x30BF } else { 0x3084 }, look.female),
                     boat::first_part_msg(pattern, song),
                     boat::dialogue_msg(pattern, rand.0.random(10) as u8),
                     boat::second_part_msg(pattern, rand.0.random(10) as u8),
@@ -373,7 +480,7 @@ fn talk(
                 };
                 *focus = InputFocus::Transition;
             }
-            Step::Line | Step::Arrival | Step::Idle | Step::Sailing { .. } => {
+            Step::Line | Step::Arrival | Step::Idle | Step::Naming | Step::Sailing { .. } => {
                 *dialogue = DialogueState::default();
                 *focus = InputFocus::World;
             }
@@ -392,10 +499,11 @@ fn talk(
     }
     actions.consume(Action::Interact);
     *focus = InputFocus::Dialogue;
-    let msg = if island.at_island { 0x3080 } else { 0x3073 };
+    let msg = fixed_message(if island.at_island { 0x3080 } else { 0x3073 }, look.female);
     info!(
         "Kapp'n talk: at_island {} named {}",
-        island.at_island, island.named
+        island.at_island,
+        saved_name(&identity).is_some()
     );
     say(&disc, &mut dialogue, actor, &ctx, msg);
     voyage.step = Step::Asked;
@@ -420,6 +528,11 @@ impl Plugin for KappnPlugin {
         app.init_resource::<Island>()
             .init_resource::<Voyage>()
             .add_systems(Update, spawn.in_set(GameplaySet))
-            .add_systems(Update, talk.in_set(InteractSet::Talk).in_set(GameplaySet));
+            .add_systems(
+                Update,
+                talk.after(crate::save::LoadSet)
+                    .in_set(InteractSet::Talk)
+                    .in_set(GameplaySet),
+            );
     }
 }

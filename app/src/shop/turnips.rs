@@ -137,9 +137,7 @@ pub(crate) fn tick(
             }
         }
         room.spoil_turnips();
-        for saved in floors.saved.iter_mut().flatten() {
-            saved.spoil_turnips();
-        }
+        floors.spoil_turnips();
         info!("Turnips spoiled at growth boundary/date reversal");
     }
     market.growth_day = Some(now.day_number);
