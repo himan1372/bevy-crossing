@@ -1,6 +1,34 @@
-# Codex handoff - 2026-10-25
+# Codex handoff - 2026-11-07
 
-## Claude session - 2026-11-02/03 (NEWEST; read first, it supersedes the budget wrap-up below)
+## Claude session - 2026-11-05..07 (NEWEST; read first, it supersedes the 2026-11-02/03 section below)
+
+Identity `claude`, `main`. Uncommitted and not to be committed: `.gitignore`, `savegame.json`. The real save was never used: QA ran on Temp
+copies of the capture exe (`Temp/bevy-cottage-20261106` and the older `bevy-*` folders; `qa.py` and `talk.py` helpers). `launch.ps1 -DayOffset N -Hour H`
+sets the date and hour offsets (from 2026-11-06: 23 Sep 2026 = -44, 4 Jul = -125, 3 Aug = -97, 26 Nov = +20, 6 Apr 2027 = +151).
+
+Done since the 2026-11-03 handoff (about 60 commits; each has a note in `.claude-agents/completed/` and a line in `comms.txt`):
+- Migration slices: `game_math` and `calendar`, the event actors (`totakeke`, `gulliver`, `fireworks`, `harvest`, `halloween`, ...), 38 more event and
+  minigame modules, and the event scheduler kernel (`logic/src/event_schedule.rs`, 134 rows) feeding `TodayEvents`.
+- Event characters in the app: K.K. Slider, Gulliver, Katrina, Halloween trick-or-treat (costumes, Jack, Spooky and his spirits), Wendell, Saharah, Gracie
+  (and her car), Crazy Redd (and his tent), Jingle, Franklin, the shrine events (Tortimer's commemorative items, groundhog and audience, hatsumode
+  procession, omikuji), the fishing tourney, the sports fair (Tortimer, aerobics, foot race, ball toss, tug of war), fireworks, cherry viewing, harvest
+  moon, countdown, meteor shower, harvest festival, the generic event room (kamakura) and `event_body.rs` (bodies, strides, idle clips).
+- The island: Kapp'n's boat, the lighthouse (room, switch, lamp, Tortimer's present), the two cottages (turned to face the camera, a deliberate
+  departure from the original), the resident with the island chat and her furniture trade and room (verified in game: best piece, 1x1, 1x2, shirt, save
+  and restart). The shared quest system no longer offers her villager errands.
+- Props from the disc (`event_body::Props`, vertex-segment support in `disc_gfx`): ball-toss baskets and balls, the tug rope, the fireworks stall, the
+  cherry-viewing mats, the harvest tables, the aerobics radio. The moon-viewing table is NOT built: the decomp gives no placement (see
+  `completed/event-props-moon-radio.md`).
+
+Traps learned: a copied QA save with `first_job` set greets before any island trade check (clear `identity.events` and `first_job`); a villager standing
+at her door turns E into a door entry; teleporting while `HouseState::Inside` makes later door tests fail silently (leave through the room's doorway
+first); build the capture exe with `--features remote,capture` or BRP stays closed; copy the exe only after the old process has exited.
+
+### FIRST THING TO DO (Philip's instruction, 2026-11-07)
+Read the **Next 30** plan in `.claude-agents/ROADMAP.md` (section "Next 30 (planned 2026-11-07)"), give Philip a short status, and ask which numbers to
+start with. Items 19-21 wait on Philip himself.
+
+## Claude session - 2026-11-02/03 (older; superseded by the section above)
 
 Identity `claude`, `main`, pushed (last code commit `209c4304`). Uncommitted and not to be committed: `.gitignore`, `savegame.json`. Real save never used for automation (Temp copies of the capture exe,
 synthetic saves; `qa.py` helpers in `Temp/bevy-*-20261102`). The inventory-mail-polish work noted below as incomplete was finished by this session (commits `898244b9`..`3f77754c`, see its completed note).

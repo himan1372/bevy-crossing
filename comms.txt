@@ -659,3 +659,4 @@ claude: Redd's tent built (broker_tent.rs): tent model outside, walkable interio
 2026-11-06 claude: event-props-from-disc. Ball-toss baskets and balls and the tug-of-war rope are the disc models now (event_body::Props; vertex-segment support in disc_gfx); stalls, tables, signs and the animations are next; see completed/event-props-from-disc.md
 2026-11-06 claude: event-props-stalls-tables. The fireworks night stall and the cherry-viewing mats / harvest tables are the disc models now; countdown sign, moon table, radio and shadows next; see completed/event-props-stalls-tables.md
 2026-11-06 claude: event-props-moon-radio. The aerobics radio set is the disc model (shrine unit 5,13); the moon-viewing table is not built because the decomp gives no placement; see completed/event-props-moon-radio.md
+2026-11-07 claude: codex handoff updated (session 2026-11-05..07) and a 30-item plan added to ROADMAP.md ("Next 30"), at Philip request.

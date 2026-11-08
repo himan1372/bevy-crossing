@@ -613,6 +613,47 @@ new-game flow, more disc formats/regions.
 - [ ] **bug-bash** — fix everything the playtest turns up.
 - [ ] **windows-release** — a release build zip (no disc content in it) and plain-English steps: install, then point the game at your own disc image.
 
+### Next 30 (planned 2026-11-07, claude; Philip asked for this list)
+Ordered by what shows most and unblocks most. Each line: what, then why. Claim with task-claimer.sh before starting; strike a line when done.
+
+Island and lighthouse
+1. [ ] **toudai-tower-model** - the lighthouse tower draws black through the building path (`obj_s_toudai_*` is an NPC-path model); load it the NPC way. Why: the quest's landmark is a placeholder.
+2. [ ] **island-trade-leftovers** - verify check 7's wording, a 2x2 piece, the first 1x1 marker and her wardrobe's turn. Why: the last unverified bits of the trade.
+3. [ ] **island-layout-save** - the island's own item layout (trees, flowers, flag) and its save so nothing resets between visits. Why: the island is empty ground today.
+4. [ ] **island-resident-life** - her schedule, sleeping, the boat greeting, the mail and player-action talks (`aQMgr_talk_island_*`). Why: she only chats and trades.
+5. [ ] **island-player-cottage-room** - the cottage's real room size and the island furniture save (`island.cottage`). Why: the room is a bare shell.
+6. [ ] **island-naming** - naming the island (Kapp'n's island naming flow). Why: a retail first-visit beat.
+
+Event props and presentation
+7. [ ] **moon-table-placement** - find where the event manager places `NEWYEAR_SHRINE0/1` (the `l_ev_structure_table` placement in `m_event.c`) and build the moon table from `obj_e_tukimi_*_endai_model`. Why: researched, no placement found yet; see completed/event-props-moon-radio.md.
+8. [ ] **event-prop-shadows** - shadows for baskets, rope, stall, tables, radio and Gracie's car (`obj_e_*_shadow*`). Why: the new models float without them.
+9. [ ] **countdown-sign** - the New Year countdown sign skeleton (`cKF_bs_r_obj_e_count01`, `count02`). Why: still a box.
+10. [ ] **rope-bend** - bend the tug rope's flagged vertices by the rope offset (`aRP_make_vtx`). Why: it slides rigidly.
+11. [ ] **radio-effect** - the radio's music-note effect (effect 32 every 36 ticks). Why: the radio is silent and static.
+12. [ ] **gracie-wash-anim** - the player's wash animation, camera and wash speed for Gracie's car. Why: the game is a counter only.
+13. [ ] **sports-fair-poses** - foot race stumbles and poses, ball toss poses, the tug sweat effect. Why: they glide upright.
+14. [ ] **gathering-animations** - sitting, toasting and midnight cheering clips for the cherry viewing, moon and countdown. Why: guests stand.
+15. [ ] **fireworks-effect** - the real hanabi effect (`eEC_EFFECT_HANABI_*`), the seller's fan, the guests' fan and clap clips. Why: coloured sparks stand in.
+16. [ ] **aerobics-routine** - the exercise sequence (`taisou1..7`), music sync, failures and Tortimer's tiredness. Why: the line holds one pose.
+17. [ ] **hatsumode-extras** - the shrine bell, red window, rerouting and the New Year table. Why: the procession is bare.
+18. [ ] **event-actor-polish** - Halloween shirt/trick animations, Gulliver's getting-up and dock exclusion, Jingle/Jack/Franklin moves. Why: the visitor events are static talks.
+
+Open acceptance and fidelity
+19. [ ] **retail-pockets-ui-accept** - Philip's pass on `retail-pockets-ui`. Why: waiting on Philip.
+20. [ ] **retail-shop-ui-accept** - Philip's pass on `retail-shop-ui`. Why: waiting on Philip.
+21. [ ] **audio-acceptance** - Philip's listening route and the four audio notes. Why: waiting on Philip; audio-from-disc cannot close without it.
+22. [ ] **catalog-viewport** - the catalog circle's 256 px square viewport against retail (the bed spills over the list when enlarged). Why: known open mismatch.
+23. [ ] **event-day-wiring** - call `logic::event_day` from the app's holiday handling. Why: ported, unused.
+24. [ ] **retail-hud-ui** - replace the development HUD with source-backed clock, date, bells and prompts. Why: an M4 item still open.
+25. [ ] **quest-fidelity** - audit the errand system against the original (givers, kinds, limits; the island resident is already excluded). Why: it is port-invented in places.
+
+Migration and hardening
+26. [ ] **migrate-slice-next** - continue `migrate-rustimal-modules`: re-count the source-only modules against `rust/src`, port the next dependency-ordered batch, check each against the C and its callers. Why: about 94 were source-only on 2026-11-03 and many are ported since.
+27. [ ] **module-audit** - audit freshly ported modules the app does not call yet (in the style of docs/furniture-callback-audit.md). Why: dead code hides divergence.
+28. [ ] **title-screen** - the retail title screen (Philip's back burner). Why: loading enters InGame directly.
+29. [ ] **playtest-script** - the step-by-step checklist for the full "done when" list, then **bug-bash**. Why: M5 starts here.
+30. [ ] **windows-release** - a release zip with no disc content and plain steps for pointing at a disc image. Why: the end of the slice.
+
 ### Suggested order
 Philip reports the mix/spatial playtest went well (2026-10-15), following
 ambience playback confirmation. Philip accepts the current voice edge cases (step 7), including accented
