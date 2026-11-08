@@ -17,7 +17,7 @@
 //!
 //! The line's routine is `routine.rs`: the exercise clips in order, slips and Tortimer's tiredness.
 //!
-//! Not built: the radio music and its sync, the player's own exercises.
+//! Music and the shared measure clock come from `sound.rs`; the player's own exercises remain unbuilt.
 //! The radio set is the disc's `radio_DL_model` at unit (5, 13).
 
 mod radio_effect;
@@ -69,6 +69,9 @@ const MSG_BASE: [[u16; 6]; 2] = [
     [0x1A96, 0x1AA5, 0x1A87, 0x1AB4, 0x1AC3, 0x1AD2],
 ];
 const COPPER_MSG: [u16; 2] = [0x2665, 0x2668];
+
+#[derive(Component)]
+pub(crate) struct Radio;
 
 #[derive(Component)]
 struct Line {
@@ -203,6 +206,7 @@ fn visit(
         let root = commands
             .spawn((
                 Name::new("radio (aerobics)"),
+                Radio,
                 radio_effect::Emitter::default(),
                 Line {
                     day: now.day_number,

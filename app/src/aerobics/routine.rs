@@ -1,25 +1,13 @@
-//! The radio calisthenics' routine (`ac_taisou_npc0.c`, `ac_taisou_npc0_anime.c_inc`, `ac_taisou_npc0_talk.c_inc`).
-//!
-//! The line plays ten measures: the intro, the exercises `taisou1`, `2`, `4`, `5`, `6`, `7`, `3`, `1` (the clip ids follow each
-//! other in the disc's table, so measure 2 alternates `taisou2` / `taisou3_a` and so on, as `animeSeqNo[action] + (anime_dir & 1)`
-//! does) and the trailing wait. Each measure is split into quarters (halves for the second and fourth) and every part plays the
-//! next clip of its pair. The original stretches the clips to the radio's measure counter; the port plays them at their own pace,
-//! one after another, so the music (not built) is the only thing missing from the sync.
-//!
-//! Mistakes (`aTS0_ctrl_gymnastic_sub0`): at a measure's end, when nobody is failing, a villager at place `n` slips with the
-//! chance `[0, 0.05, 0.1, 0.15, 0.3]` (Copper and Tortimer never): they do a different exercise, notice it half a measure later
-//! (`kiduku1`, sweating), and rejoin at the next measure. Tortimer tires 20 % of the time instead (`tired1`, one measure).
-//!
-//! Not built: the radio's own measure counter, the shared failure flag across both lines, the player's own exercises.
-
+//! Native radio-clock-driven calisthenics (`ac_taisou_npc0_*`).
+//! The audio sequence owns time; unavailable music leaves the line standing.
 use bevy::prelude::*;
+use rustimal_logic::taisou;
 
 use super::{Line, Role};
-use crate::character::NpcClip;
+use crate::character::{CharacterAnimationSet, NpcClip};
 use crate::game_rand::GameRand;
 use crate::states::GameplaySet;
 
-/// The clips in the disc table's order (`ac_npc_data.c_inc` 0x51..0x5F), `animeSeqNo[action] + (anime_dir & 1)`.
 const CLIPS: [&str; 15] = [
     "cKF_ba_r_npc_1_intro1_a",
     "cKF_ba_r_npc_1_intro1_b",
@@ -37,159 +25,261 @@ const CLIPS: [&str; 15] = [
     "cKF_ba_r_npc_1_kiduku1",
     "cKF_ba_r_npc_1_kiduku2",
 ];
-/// `animeSeqNo` by measure: the first clip index of each (the wait and the trailing note stand).
-const BASE: [usize; 10] = [0, 2, 3, 6, 8, 10, 12, 4, 2, usize::MAX];
-/// How many parts of each measure (`startRatio` entries minus the end).
-const PARTS: [u8; 10] = [2, 4, 2, 4, 4, 4, 4, 4, 4, 1];
-/// `chk_failure_rate` by the actor's place.
-const FAILURE: [f32; 5] = [0.0, 0.05, 0.1, 0.15, 0.3];
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum State {
-    /// In step.
-    Follow,
-    /// Doing another exercise (`gymnastic_state` 2), until the measure's half.
-    Wrong,
-    /// Noticed it (`kiduku1`), until the measure ends.
-    Notice,
-    /// Tired (Tortimer, `gymnastic_state` 4), one measure.
-    Tired,
-}
-
-#[derive(Component)]
+#[derive(Component, Reflect)]
+#[reflect(Component)]
 pub(super) struct Routine {
-    measure: usize,
-    part: u8,
-    state: State,
-    /// Seconds to wait before starting (`delay_cnt`: up to 48 ticks).
-    delay: f32,
-    /// The measure the actor does while wrong.
-    shown: usize,
-    started: bool,
+    action: i32,
+    direction: i32,
+    state: u8,
+    initialized: bool,
+    delay: i32,
+    current_ratio: f32,
+    copper: bool,
+    active: bool,
+    frame: Option<u32>,
+}
+impl Routine {
+    pub(super) fn new(_random: &mut GameRand, copper: bool) -> Self {
+        Self {
+            action: 11,
+            direction: 0,
+            state: 1,
+            initialized: false,
+            delay: 0,
+            current_ratio: 0.0,
+            copper,
+            active: false,
+            frame: None,
+        }
+    }
+    fn reset(&mut self, clip: &mut NpcClip) {
+        self.action = 11;
+        self.direction = 0;
+        self.state = 1;
+        self.initialized = false;
+        self.delay = 0;
+        self.current_ratio = 0.0;
+        self.active = false;
+        self.frame = None;
+        clip.start("cKF_ba_r_npc_1_wait1", false, 0.0);
+    }
+    fn animation(&self, clip: &mut NpcClip) {
+        let id =
+            taisou::pc_taisou_anim_id(self.action) + taisou::pc_taisou_anim_variant(self.direction);
+        if (81..=95).contains(&id) {
+            clip.start(CLIPS[(id - 81) as usize], true, 0.0);
+        } else if id == 105 {
+            clip.start("cKF_ba_r_npc_1_tired1", true, 0.0);
+        } else {
+            clip.start("cKF_ba_r_npc_1_wait1", false, 0.0);
+        }
+    }
+    fn morph(&mut self, action: i32, clip: &mut NpcClip) {
+        self.action = action;
+        self.direction = 0;
+        self.initialized = true;
+        self.current_ratio = 0.0;
+        self.animation(clip);
+    }
 }
 
-impl Routine {
-    pub(super) fn new(rand: &mut GameRand, copper: bool) -> Self {
-        Self {
-            measure: 0,
-            part: 0,
-            state: State::Follow,
-            delay: if copper {
-                0.0
-            } else {
-                rand.0.fqrand() * 48.0 / 60.0
-            },
-            shown: 0,
-            started: false,
+#[derive(Resource, Default)]
+struct Failing(Option<Entity>);
+
+// This reader runs even while gameplay is paused so a reload cannot retain failure ownership.
+fn reset(
+    mut loads: MessageReader<crate::sound::ResetAudio>,
+    mut failing: ResMut<Failing>,
+    mut line: Query<(&mut Routine, &mut NpcClip), With<Line>>,
+) {
+    if loads.read().count() != 0 {
+        failing.0 = None;
+        for (mut routine, mut clip) in &mut line {
+            routine.reset(&mut clip);
         }
     }
 }
 
-/// The name of the clip for a part of a measure, if it is an exercise.
-fn clip_of(measure: usize, part: u8) -> Option<&'static str> {
-    let base = *BASE.get(measure)?;
-    (base != usize::MAX).then(|| CLIPS[base + usize::from(part & 1)])
-}
-
-/// Set when one actor is failing, so two never fail at once (`aTS0_failure_actor_p`).
-#[derive(Resource, Default)]
-struct Failing(bool);
-
+#[allow(clippy::too_many_arguments)]
 fn routine(
     time: Res<Time>,
-    mut rand: ResMut<GameRand>,
+    frame: Res<bevy::diagnostic::FrameCount>,
+    clock: Res<crate::sound::AerobicsClock>,
+    mut random: ResMut<GameRand>,
     mut failing: ResMut<Failing>,
-    mut line: Query<(&Role, &mut Routine, &mut NpcClip), With<Line>>,
+    radio: Query<(), With<super::radio_effect::Emitter>>,
+    mut line: Query<(Entity, &Role, &mut Routine, &mut NpcClip), With<Line>>,
+    mut fraction: Local<f32>,
 ) {
-    let dt = time.delta_secs();
-    for (role, mut r, mut clip) in &mut line {
-        if r.delay > 0.0 {
-            r.delay -= dt;
-            continue;
-        }
-        // A clip is running: wait for it to finish.
-        if r.started && clip.name.is_some() && !clip.done {
-            continue;
-        }
-        if !r.started {
-            r.started = true;
-        } else {
-            match r.state {
-                State::Follow => {
-                    r.part += 1;
-                    if r.part >= PARTS[r.measure] {
-                        next_measure(&mut r, role, &mut failing, &mut rand, &mut clip);
-                    }
-                }
-                State::Wrong => {
-                    r.part += 1;
-                    if r.part >= (PARTS[r.shown] / 2).max(1) {
-                        r.state = State::Notice;
-                        clip.start(CLIPS[13], true, 8.0);
-                        continue;
-                    }
-                }
-                State::Notice | State::Tired => {
-                    next_measure(&mut r, role, &mut failing, &mut rand, &mut clip);
-                }
-            }
-            if r.state == State::Tired && clip.name == Some("cKF_ba_r_npc_1_tired1") && !clip.done {
-                continue;
-            }
-        }
-        let measure = if r.state == State::Wrong {
-            r.shown
-        } else {
-            r.measure
-        };
-        match clip_of(measure, r.part) {
-            Some(name) => clip.start(name, true, 8.0),
-            // The trailing note stands a moment (the wait).
-            None => {
-                clip.stop(8.0);
-                r.delay = 2.0;
-            }
-        }
+    if failing.0.is_some_and(|entity| line.get(entity).is_err()) {
+        failing.0 = None;
     }
-}
-
-/// The measure is over: on to the next, where a villager may slip and Tortimer may tire.
-fn next_measure(
-    r: &mut Routine,
-    role: &Role,
-    failing: &mut Failing,
-    rand: &mut GameRand,
-    clip: &mut NpcClip,
-) {
-    if matches!(r.state, State::Wrong | State::Notice) {
-        failing.0 = false;
-    }
-    r.state = State::Follow;
-    r.measure = (r.measure + 1) % 10;
-    r.part = 0;
-    // `next_action` neither the intro nor the trailing note.
-    if r.measure == 0 || r.measure == 9 {
+    let counter = clock
+        .counter
+        .filter(|counter| (0..10).contains(&counter.measure) && !radio.is_empty());
+    let Some(counter) = counter else {
+        *fraction = 0.0;
+        failing.0 = None;
+        for (_, _, mut routine, mut clip) in &mut line {
+            if routine.active || clip.name != Some("cKF_ba_r_npc_1_wait1") {
+                routine.reset(&mut clip);
+            }
+        }
+        return;
+    };
+    let measure = i32::from(counter.measure);
+    let progress = counter.progress;
+    if !progress.is_finite() {
         return;
     }
-    let place = match role {
-        Role::Villager(place, _) => usize::from(*place).min(4),
-        _ => 0,
-    };
-    if !failing.0 && rand.0.fqrand() < FAILURE[place] {
-        failing.0 = true;
-        let mut other = 1 + rand.0.random(8) as usize;
-        while other == r.measure {
-            other = 1 + rand.0.random(8) as usize;
+    for (entity, _, mut r, mut clip) in &mut line {
+        let skipped = r.frame.is_some_and(|last| frame.0.wrapping_sub(last) > 1);
+        r.frame = Some(frame.0);
+        if skipped && matches!(r.state, 0 | 2) {
+            if failing.0 == Some(entity) {
+                failing.0 = None;
+            }
+            r.action = measure;
+            r.direction = (0..5)
+                .find(|&part| {
+                    !taisou::pc_taisou_over_block(progress - r.current_ratio, measure, part)
+                })
+                .unwrap_or(0);
+            r.initialized = false;
+            r.state = 0;
+            r.animation(&mut clip);
         }
-        r.state = State::Wrong;
-        r.shown = other;
-    } else if *role == Role::Leader && rand.0.fqrand() < 0.2 {
-        r.state = State::Tired;
-        clip.start("cKF_ba_r_npc_1_tired1", true, 8.0);
+    }
+    *fraction += time.delta_secs() * 60.0;
+    let ticks = fraction.floor() as u32;
+    *fraction -= ticks as f32;
+    for _ in 0..ticks {
+        for (entity, role, mut r, mut clip) in &mut line {
+            r.active = true;
+            let end = taisou::END_RATIO[measure as usize];
+            match r.state {
+                0 => {
+                    if measure == r.action {
+                        if r.initialized {
+                            r.initialized = false;
+                        } else if progress >= end {
+                            let next = taisou::pc_taisou_next_action(measure);
+                            let place = match role {
+                                Role::Villager(n, _) => i32::from(*n),
+                                _ => 0,
+                            };
+                            let rate = taisou::pc_taisou_failure_rate(place);
+                            if failing.0.is_none()
+                                && next != 0
+                                && next != 9
+                                && random.0.fqrand() < rate
+                            {
+                                let mut wrong = 1 + random.0.random(8);
+                                while taisou::pc_taisou_failure_reject(wrong, next) {
+                                    wrong = 1 + random.0.random(8);
+                                }
+                                r.state = 2;
+                                r.morph(wrong, &mut clip);
+                                failing.0 = Some(entity);
+                            } else if *role == Role::Leader && random.0.fqrand() < 0.2 {
+                                r.state = 4;
+                                r.morph(12, &mut clip);
+                            } else {
+                                r.morph(next, &mut clip);
+                                if !r.copper {
+                                    r.delay = random.0.random(48);
+                                }
+                            }
+                        }
+                    } else if progress >= end {
+                        let next = taisou::pc_taisou_next_action(measure);
+                        if next != r.action {
+                            r.morph(next, &mut clip);
+                        }
+                    }
+                }
+                1 => {
+                    if progress >= end {
+                        r.morph(taisou::pc_taisou_next_action(measure), &mut clip);
+                        r.state = 0;
+                    }
+                }
+                2 => {
+                    if progress < 0.5 {
+                        r.initialized = false;
+                        r.state = 3;
+                    }
+                }
+                3 => {
+                    if r.action == 10 {
+                        if progress >= end {
+                            r.morph(taisou::pc_taisou_next_action(measure), &mut clip);
+                            failing.0 = None;
+                            r.state = 0;
+                        } else if clip.done {
+                            r.direction = 1;
+                            r.animation(&mut clip);
+                        }
+                    } else if progress >= 0.5 {
+                        r.action = 10;
+                        r.direction = 0;
+                        r.animation(&mut clip);
+                    }
+                }
+                4 => {
+                    if progress < 0.5 {
+                        r.state = 1;
+                    }
+                }
+                _ => r.reset(&mut clip),
+            }
+            if r.action < 10 {
+                if !r.initialized {
+                    let mut adjusted = [0.0; 2];
+                    r.delay = taisou::pc_taisou_delay_step(
+                        progress,
+                        r.delay,
+                        r.current_ratio,
+                        true,
+                        adjusted.as_mut_ptr(),
+                    );
+                    r.current_ratio = adjusted[0];
+                    if taisou::pc_taisou_over_block(adjusted[1], r.action, r.direction) {
+                        r.direction += 1;
+                        r.animation(&mut clip);
+                    }
+                    clip.sync_progress = Some(taisou::pc_taisou_sync_frame(
+                        0.0,
+                        1.0,
+                        progress,
+                        r.current_ratio,
+                        r.action,
+                        r.direction,
+                    ));
+                    clip.morph = 0.0;
+                } else {
+                    clip.sync_progress = Some(0.0);
+                    let delta = progress - end;
+                    clip.morph = if delta > 0.0 {
+                        (taisou::MORPH_RATIO[measure as usize] / delta).max(1.0)
+                    } else {
+                        1.0
+                    };
+                }
+            } else {
+                clip.sync_progress = None;
+            }
+        }
     }
 }
 
 pub(super) fn register(app: &mut App) {
     app.init_resource::<Failing>()
-        .add_systems(Update, routine.in_set(GameplaySet));
+        .register_type::<Routine>()
+        .add_systems(Update, reset.before(routine))
+        .add_systems(
+            Update,
+            routine.in_set(GameplaySet).before(CharacterAnimationSet),
+        );
 }

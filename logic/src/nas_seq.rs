@@ -298,6 +298,7 @@ struct Group {
     tempo: i32,
     tempo_change: i32,
     tempo_acc: i32,
+    counter: u16,
     transposition: i8,
     state: u8,
     fade_timer: u16,
@@ -545,6 +546,7 @@ impl Engine {
             tempo: 120 * TATUMS,
             tempo_change: 0,
             tempo_acc: 0,
+            counter: 0,
             transposition: 0,
             state: STATE_FADE_IN,
             fade_timer: 0,
@@ -614,6 +616,12 @@ impl Engine {
     /// Whether group `g` is playing.
     pub fn playing(&self, g: usize) -> bool {
         self.groups.get(g).is_some_and(|g| g.enabled)
+    }
+
+    /// Native group clock: enabled sequence, tatum counter and base tempo.
+    pub fn sequence_clock(&self, g: usize) -> Option<(usize, u16, u16)> {
+        let group = self.groups.get(g).filter(|group| group.enabled)?;
+        Some((group.seq_id, group.counter, group.tempo as u16))
     }
 
     /// Writes a group's port (the game's way to talk to a script).
@@ -1206,6 +1214,7 @@ impl Engine {
                 return;
             }
             gr.tempo_acc -= max_tempo;
+            gr.counter = gr.counter.wrapping_add(1);
             if gr.stop_script {
                 return;
             }
@@ -1373,7 +1382,7 @@ impl Engine {
                         stop = true;
                     }
                     0xC5 => {
-                        Self::read_s16(seq, &mut m);
+                        gr.counter = Self::read_s16(seq, &mut m) as u16;
                     }
                     0xEF => {
                         Self::read_s16(seq, &mut m);

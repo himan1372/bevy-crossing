@@ -329,6 +329,8 @@ pub struct NpcClip {
     pub done: bool,
     /// Normalized position in the current clip, for movement synchronized with its pose.
     pub progress: f32,
+    /// Optional normalized frame position supplied by a shared animation clock.
+    pub sync_progress: Option<f32>,
     /// The clip's root translation is movement, not pose (`cKF_ANIMATION_TRANS_XZ | TRANS_Y`: the
     /// get-off-train clip): the root stays where it began and `motion` (model units) says how far the
     /// clip has carried it.
@@ -1010,7 +1012,12 @@ fn play_clip(
         return false;
     };
     let (first, last) = clip.range.unwrap_or((1.0, anim.frames.max(2) as f32));
-    rig.frame += clip.speed.unwrap_or(WAIT_SPEED) * ticks;
+    if let Some(progress) = clip.sync_progress.filter(|p| p.is_finite()) {
+        rig.frame = first + progress.clamp(0.0, 1.0) * (last - first);
+        rig.pose_morph = clip.morph;
+    } else {
+        rig.frame += clip.speed.unwrap_or(WAIT_SPEED) * ticks;
+    }
     if clip.once {
         if rig.frame >= last {
             rig.frame = last;

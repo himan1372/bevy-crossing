@@ -39,6 +39,20 @@ struct SoundStream;
 #[derive(Message)]
 pub(crate) struct ResetAudio;
 
+/// Na_GetRadioCounter's snapshot from the actual active BGM sequence.
+#[derive(Clone, Copy, Debug, Default, Reflect)]
+pub(crate) struct RadioCounter {
+    pub measure: i8,
+    pub progress: f32,
+    pub tempo: u16,
+}
+
+#[derive(Resource, Default, Reflect)]
+#[reflect(Resource)]
+pub(crate) struct AerobicsClock {
+    pub counter: Option<RadioCounter>,
+}
+
 /// The running engine, shared with the audio thread.
 #[derive(Resource, Clone)]
 pub struct Sound {
@@ -81,6 +95,26 @@ impl Sound {
         self.engine
             .lock()
             .map_or(0, |e| e.group_port(audio_group::FTR_INST, 2) as u8)
+    }
+
+    fn radio_counter(&self, handle: u8) -> Option<RadioCounter> {
+        let engine = self.engine.lock().ok()?;
+        let (seq, raw, tempo) = engine.sequence_clock(usize::from(handle))?;
+        if rustimal_logic::taisou::pc_taisou_radio_available(1, seq as i32) == 0 {
+            return None;
+        }
+        let mut measure = 0;
+        let mut progress = 0.0;
+        rustimal_logic::taisou::pc_taisou_radio_convert(
+            i32::from(raw),
+            &mut measure,
+            &mut progress,
+        );
+        Some(RadioCounter {
+            measure,
+            progress,
+            tempo: rustimal_logic::taisou::pc_taisou_radio_tempo(tempo),
+        })
     }
 
     /// Sends the game's audio commands to the engine.
@@ -610,13 +644,16 @@ fn update_music(
     mut fanfare: ResMut<Fanfare>,
     focus: Res<crate::input::InputFocus>,
     time: Res<Time<Real>>,
-    (room, current, disc, player): (
+    (room, current, disc, player, radios, mut aerobics): (
         Res<crate::player_room::PlayerRoom>,
         Res<crate::house::CurrentRoom>,
         Option<Res<crate::game_disc::GameDisc>>,
         Query<&GlobalTransform, With<crate::player::Player>>,
+        Query<&Transform, With<crate::aerobics::Radio>>,
+        ResMut<AerobicsClock>,
     ),
 ) {
+    aerobics.counter = None;
     let (Some(sound), Some(mut bgm)) = (sound, bgm) else {
         return;
     };
@@ -664,18 +701,35 @@ fn update_music(
     };
     // Snow on the ground is not proof that it is snowing. Until weather
     // simulation supplies Common(weather), retain the accepted clear mask.
-    let next = music_policy::select_with(
-        scene,
-        crate::clock::now().day_secs,
-        music_policy::FieldWeather::Fine,
-        identity.events.real_arbeit(),
-    )
-    .or_else(|| {
-        (scene == music_policy::Scene::PlayerHouse
-            && crate::house::is_player_room(&current, &house))
-        .then(|| room.music_track())
-        .flatten()
-    });
+    // m_bgm.c event table: BGM27 only in the shrine BLOCK, below scene/fanfare overrides.
+    let in_radio_block = scene == music_policy::Scene::Town
+        && player.single().ok().is_some_and(|player| {
+            let block = |at| crate::town::Town::cell_indices_of(at).map(|(x, z, _, _)| (x, z));
+            let player_block = block(player.translation());
+            player_block.is_some()
+                && radios
+                    .iter()
+                    .any(|radio| block(radio.translation) == player_block)
+        });
+    let next = in_radio_block
+        .then_some(music_policy::Track {
+            id: 27,
+            mute_mask: 0,
+        })
+        .or_else(|| {
+            music_policy::select_with(
+                scene,
+                crate::clock::now().day_secs,
+                music_policy::FieldWeather::Fine,
+                identity.events.real_arbeit(),
+            )
+        })
+        .or_else(|| {
+            (scene == music_policy::Scene::PlayerHouse
+                && crate::house::is_player_room(&current, &house))
+            .then(|| room.music_track())
+            .flatten()
+        });
     // A fanfare in progress replaces whatever the scene wants.
     fanfare.left -= time.delta_secs();
     if fanfare.left <= 0.0 {
@@ -795,6 +849,9 @@ fn update_music(
     if !commands.is_empty() {
         sound.send(&commands);
     }
+    if bgm.playing.is_some_and(|track| track.id == 27) {
+        aerobics.counter = sound.radio_counter(bgm.handle);
+    }
 }
 
 /// Opt-in logging; no audio-thread I/O or extra engine locks by default.
@@ -858,13 +915,28 @@ fn reset_loaded_audio(
     mut voice: ResMut<VoicePlayback>,
     mut door: ResMut<DoorPlayback>,
     footsteps: Option<ResMut<Messages<crate::footsteps::Footstep>>>,
+    mut bgm: Option<ResMut<Bgm>>,
+    mut aerobics: ResMut<AerobicsClock>,
 ) {
     if resets.read().count() == 0 {
         return;
     }
     reset_playback(&mut voice, &mut door, footsteps);
+    aerobics.counter = None;
+    let restart_radio = bgm
+        .as_ref()
+        .is_some_and(|bgm| bgm.playing.is_some_and(|track| track.id == 27));
+    if restart_radio {
+        if let Some(bgm) = &mut bgm {
+            bgm.playing = None;
+        }
+    }
     if let Some(sound) = sound {
         if let Ok(mut engine) = sound.engine.lock() {
+            if restart_radio {
+                engine.stop_sequence(audio_group::BGM0);
+                engine.stop_sequence(audio_group::BGM1);
+            }
             engine.stop_sequence(audio_group::VOICE);
             // Restart only SE: clears trigger/level slots and pending melodies.
             // The next ambience update repopulates sources at the loaded position.
@@ -881,10 +953,11 @@ fn stop_sound(
     mut voice: ResMut<VoicePlayback>,
     mut door: ResMut<DoorPlayback>,
     footsteps: Option<ResMut<Messages<crate::footsteps::Footstep>>>,
-    mut resets: ResMut<Messages<ResetAudio>>,
+    (mut resets, mut aerobics): (ResMut<Messages<ResetAudio>>, ResMut<AerobicsClock>),
 ) {
     reset_playback(&mut voice, &mut door, footsteps);
     resets.clear();
+    aerobics.counter = None;
     if let Some(sound) = sound {
         sound.send(&[cmd(0xFE, 0, 0, 0, AudioParam::S32(0))]);
     }
@@ -901,6 +974,9 @@ pub struct SoundPlugin;
 impl Plugin for SoundPlugin {
     fn build(&self, app: &mut App) {
         app.add_audio_source::<NasStream>()
+            .init_resource::<AerobicsClock>()
+            .register_type::<AerobicsClock>()
+            .register_type::<RadioCounter>()
             .add_message::<ResetAudio>()
             .init_resource::<VoicePlayback>()
             .init_resource::<DoorPlayback>()

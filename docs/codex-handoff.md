@@ -1,5 +1,11 @@
 # Codex handoff - 2026-11-07
 
+## Codex session - 2026-11-08: task16 native music sync (latest)
+
+Philip selected16. Claude's clip-only version had omitted music; Codex completed actual BGM27/shrine-block arbitration and the native sequenceDA u16 counter (tempo ticks, start/opcodeC5 reset). AerobicsClock reads the current BGM handle. The routine now uses logic::taisou native ratio/delay/failure/tired kernels and NpcClip.sync_progress pose seeking, validates failure ownership and resynchronizes skipped updates. Interior/intro/fanfare precedence remains; F9 restarts active aerobics music. No-audio/no-disc participants stand neutral. One reused subagent owned routine/character integration; source review and parent runtime checks completed.
+
+Check/Clippy/fmt and capture/default/release pass (release9m40s). Synthetic Temp/bevy-aerobics-20261108 on BRP25744:563 snapshots/all ten measures/9->0, natural slips and three Tortimer tired recoveries; pause, F9, shrine-block exit/return and event end pass. Sports-fair actual clock/five participants and no-disc neutral/numeric retention pass. Screenshots inspected; music bus peak around.50 with no nonfinite/limiting. Own previews closed; actual save hash unchanged. See `.claude-agents/completed/aerobics-music-sync.md`. Notice sweat/player exercise controls, exhaustive dialogue regression and Philip visual/listening acceptance remain open. No tests requested/run; M4 remains open.
+
 ## Codex session - 2026-11-08: task11 radio-effect (latest)
 
 Philip selected task11 and resumed it; implementation and bounded verification are complete. The aerobics radio emits original effect32 KONPU notes every36 ticks (first tick37), with native72-tick velocity/decay/stretch/colour/fade and all three disc note models. It reuses logic::radio and Qrand, pools nine visual entities, freezes on pause and clears on F9, range and radio/event/scene removal. Native arg0=1 notes are silent; exercise BGM/synchronization remains task16 (another Claude agent has claimed it). No save-format change, dependency or extracted asset.
