@@ -216,7 +216,7 @@ pub fn interact(
     let ahead = player_pos + facing.dir * PICK_UP_AHEAD;
     let Some((acre, cell, item)) = [player_pos, ahead]
         .into_iter()
-        .filter_map(|p| field.at(p))
+        .filter_map(|p| field.at_any(p))
         .find(|&(_, _, item)| crate::field_items::can_pick_up(item))
     else {
         return;
@@ -229,7 +229,7 @@ pub fn interact(
         println!("Pockets full; left {}", items::name(item));
         return;
     }
-    field.acres[acre][cell] = rustimal_logic::field_items::EMPTY_NO;
+    field.set_any(acre, cell, rustimal_logic::field_items::EMPTY_NO);
     crate::sound::se_at(crate::sound::se_id::ITEM_GET, player_pos);
     println!(
         "Picked up {} ({}/15 pockets)",

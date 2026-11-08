@@ -617,9 +617,9 @@ new-game flow, more disc formats/regions.
 Ordered by what shows most and unblocks most. Each line: what, then why. Claim with task-claimer.sh before starting; strike a line when done.
 
 Island and lighthouse
-1. [ ] **toudai-tower-model** - the lighthouse tower draws black through the building path (`obj_s_toudai_*` is an NPC-path model); load it the NPC way. Why: the quest's landmark is a placeholder.
-2. [ ] **island-trade-leftovers** - verify check 7's wording, a 2x2 piece, the first 1x1 marker and her wardrobe's turn. Why: the last unverified bits of the trade.
-3. [ ] **island-layout-save** - the island's own item layout (trees, flowers, flag) and its save so nothing resets between visits. Why: the island is empty ground today.
+1. [x] **toudai-tower-model** (done 2026-11-07) - the lighthouse tower draws black through the building path (`obj_s_toudai_*` is an NPC-path model); load it the NPC way. Why: the quest's landmark is a placeholder.
+2. [x] **island-trade-leftovers** (done 2026-11-07) - verify check 7's wording, a 2x2 piece, the first 1x1 marker and her wardrobe's turn. Why: the last unverified bits of the trade.
+3. [x] **island-layout-save** (done 2026-11-07; picking up only, see completed/island-layout-save.md) - the island's own item layout (trees, flowers, flag) and its save so nothing resets between visits. Why: the island is empty ground today.
 4. [ ] **island-resident-life** - her schedule, sleeping, the boat greeting, the mail and player-action talks (`aQMgr_talk_island_*`). Why: she only chats and trades.
 5. [ ] **island-player-cottage-room** - the cottage's real room size and the island furniture save (`island.cottage`). Why: the room is a bare shell.
 6. [ ] **island-naming** - naming the island (Kapp'n's island naming flow). Why: a retail first-visit beat.

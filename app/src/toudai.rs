@@ -57,6 +57,9 @@ struct Guest {
 }
 
 /// The lighthouse's base, `aTOU_actor_ct`: the unit centre less 20 game units each way.
+/// `aSTR_PAL_TOUDAI`.
+const PAL_TOUDAI: u32 = 90;
+
 fn origin() -> Vec3 {
     Town::cell_to_world(2, 5, 5, 7) + Vec3::new(-0.5, 0.0, -0.5)
 }
@@ -82,6 +85,10 @@ fn tower(
     mut rooms: ResMut<EventRooms>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    disc: Option<Res<crate::game_disc::GameDisc>>,
+    mut props: ResMut<crate::event_body::Props>,
+    mut n64: ResMut<Assets<crate::n64_material::N64Material>>,
+    mut images: ResMut<Assets<Image>>,
 ) {
     let Some(town) = town else { return };
     let at = origin();
@@ -102,25 +109,69 @@ fn tower(
     }
     if existing.is_empty() {
         let ground = town.ground_y(at);
+        // The disc's tower (`ac_toudai`: the skeleton `cKF_bs_r_obj_s_toudai` posed at frame 1, its light joint left to the
+        // lamp), with the structure palette `aSTR_PAL_TOUDAI`; a cylinder when the disc has no model.
+        let parts = disc.as_deref().map_or_else(Vec::new, |d| {
+            let winter = rustimal_logic::game_time::CALENDAR_TERMS
+                [crate::disc_town::current_term() % 18]
+                .season
+                == rustimal_logic::game_time::Season::Winter;
+            let lists: &[&str] = if winter {
+                &[
+                    "obj_w_toudai_body_model",
+                    "obj_w_toudai_mirror_model",
+                    "obj_w_toudai_lenz_model",
+                    "obj_w_toudai_arm_model",
+                ]
+            } else {
+                &[
+                    "obj_s_toudai_body_model",
+                    "obj_s_toudai_mirror_model",
+                    "obj_s_toudai_lenz_model",
+                    "obj_s_toudai_arm_model",
+                ]
+            };
+            props.get_season(
+                d,
+                lists,
+                Some(PAL_TOUDAI),
+                winter,
+                None,
+                (&mut meshes, &mut n64, &mut images),
+            )
+        });
+        let modelled = !parts.is_empty();
         let root = commands
             .spawn((
                 Tower,
                 Name::new("lighthouse"),
-                Mesh3d(meshes.add(Cylinder::new(0.9, 5.0))),
-                MeshMaterial3d(materials.add(Color::srgb(0.93, 0.93, 0.9))),
-                Transform::from_translation(at + Vec3::new(0.0, ground + 2.5, 0.3)),
+                Transform::from_translation(if modelled {
+                    at.with_y(ground)
+                } else {
+                    at + Vec3::new(0.0, ground + 2.5, 0.3)
+                }),
+                Visibility::default(),
             ))
             .id();
-        commands.spawn((
-            Name::new("lighthouse lamp room"),
-            Mesh3d(meshes.add(Cylinder::new(0.7, 1.0))),
-            MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: Color::srgb(0.9, 0.2, 0.15),
-                ..default()
-            })),
-            Transform::from_translation(Vec3::new(0.0, 3.0, 0.0)),
-            ChildOf(root),
-        ));
+        if modelled {
+            crate::event_body::attach(&mut commands, root, &parts);
+        } else {
+            commands.spawn((
+                Mesh3d(meshes.add(Cylinder::new(0.9, 5.0))),
+                MeshMaterial3d(materials.add(Color::srgb(0.93, 0.93, 0.9))),
+                ChildOf(root),
+            ));
+            commands.spawn((
+                Name::new("lighthouse lamp room"),
+                Mesh3d(meshes.add(Cylinder::new(0.7, 1.0))),
+                MeshMaterial3d(materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.9, 0.2, 0.15),
+                    ..default()
+                })),
+                Transform::from_translation(Vec3::new(0.0, 3.0, 0.0)),
+                ChildOf(root),
+            ));
+        }
         commands.spawn((
             Lamp,
             PointLight {

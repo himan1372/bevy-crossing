@@ -280,6 +280,8 @@ pub struct RetailLayout {
     /// Each playable acre's field items (`mActor_name_t`, row by row),
     /// from its layout; objects the plan moved aside are emptied.
     pub items: Vec<[u16; 256]>,
+    /// The island's two blocks, (4,8) and (5,8) of the grid: their field items from the layout (`Island_c.fgblock`).
+    pub island_items: Vec<[u16; 256]>,
     /// The four mailboxes (`ACTOR_PROP_MAILBOX0..3`) by house number.
     pub mailboxes: [Option<(usize, usize, usize, usize)>; 4],
     /// The four houses' gyroids (`ACTOR_PROP_HANIWA0..3`).
@@ -1276,6 +1278,16 @@ pub fn build_retail_town(
             }
         }
     }
+    let island_items: Vec<[u16; 256]> = [8 * BLOCK_X_NUM + 4, 8 * BLOCK_X_NUM + 5]
+        .into_iter()
+        .map(|block| {
+            combos
+                .get(field.combi[block].combi as usize)
+                .and_then(|c| fg.get(&c.fg_id))
+                .copied()
+                .unwrap_or([0; 256])
+        })
+        .collect();
     let player_home_bodies = player_home_bodies(disc, &player_homes);
     let board_cells = crate::field_items::board_cells(&field_items);
     (
@@ -1291,6 +1303,7 @@ pub fn build_retail_town(
             gyroids,
             statue,
             items: field_items,
+            island_items,
         },
         ground,
     )
@@ -1980,7 +1993,7 @@ pub(crate) fn sink_meshes_scaled(
 
 /// Structure skeletons whose parts are drawn in their idle pose: houses,
 /// player houses and public buildings, summer and winter.
-const POSED_STRUCTURES: [&str; 20] = [
+const POSED_STRUCTURES: [&str; 21] = [
     "house1",
     "house2",
     "house3",
@@ -2001,6 +2014,7 @@ const POSED_STRUCTURES: [&str; 20] = [
     "station1",
     "station2",
     "station3",
+    "toudai",
 ];
 
 /// Model-space transform of each structure part's display list (REL

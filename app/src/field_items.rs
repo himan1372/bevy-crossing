@@ -22,7 +22,7 @@ use crate::game_disc::GameDisc;
 use crate::n64_material::N64Material;
 use crate::player::Player;
 use crate::states::AppState;
-use crate::town::{Town, CELL_SIZE};
+use crate::town::{Town, ACRE_SIZE, CELL_SIZE};
 use rustimal_logic::town_gen::{CellKind, ACRE_DEPTH, ACRE_WIDTH};
 
 /// `bIT_TYPE_BASE` (`bIT_DRAW_TYPE_GOLD_TREE000_DEAD`): item tables
@@ -79,6 +79,37 @@ const RND_Z: [[f32; 4]; 4] = [
     [7.5, -7.5, -2.5, -5.0],
 ];
 
+/// Index of the island's first block in the saved changes (after the 30 playable acres).
+pub const ISLAND_A: usize = ACRE_WIDTH * ACRE_DEPTH;
+
+/// The island's blocks sit at acres (3, 7) and (4, 7) of the town's frame (grid blocks (4,8), (5,8)).
+const ISLAND_ACRE_X: usize = 3;
+const ISLAND_ACRE_Z: usize = ACRE_DEPTH + 1;
+
+/// The island block and cell under a scene position.
+fn island_cell_of(pos: Vec3) -> Option<(usize, usize)> {
+    let lx = pos.x + ACRE_WIDTH as f32 * ACRE_SIZE / 2.0;
+    let lz = pos.z + ACRE_DEPTH as f32 * ACRE_SIZE / 2.0;
+    if lx < 0.0 || lz < 0.0 {
+        return None;
+    }
+    let (ax, az) = ((lx / ACRE_SIZE) as usize, (lz / ACRE_SIZE) as usize);
+    if az != ISLAND_ACRE_Z || !(ISLAND_ACRE_X..ISLAND_ACRE_X + 2).contains(&ax) {
+        return None;
+    }
+    let cx = (((lx % ACRE_SIZE) / CELL_SIZE) as usize).min(15);
+    let cz = (((lz % ACRE_SIZE) / CELL_SIZE) as usize).min(15);
+    Some((ax - ISLAND_ACRE_X, cz * 16 + cx))
+}
+
+/// Where acre or island block `a` lies in the town's frame: (ax, az).
+fn block_position(a: usize) -> (usize, usize) {
+    match a.checked_sub(ISLAND_A) {
+        Some(b) => (ISLAND_ACRE_X + b, ISLAND_ACRE_Z),
+        None => (a % ACRE_WIDTH, a / ACRE_WIDTH),
+    }
+}
+
 /// The town's field items, acre by acre (playable acres, row by row).
 #[derive(Resource)]
 pub struct FieldItems {
@@ -90,6 +121,10 @@ pub struct FieldItems {
     pub dust_flag: bool,
     /// The new town's grid: what the save's changes are measured from.
     base: Vec<[u16; 256]>,
+    /// The island's two blocks (`Island_c.fgblock`), saved like the acres with indices `ISLAND_A..`; the acres' own
+    /// consumers (rank, weeds, shells) never see them.
+    pub island: Vec<[u16; 256]>,
+    island_base: Vec<[u16; 256]>,
     /// Shells waiting to wash up (`l_reserve_set_shell`).
     reserved_shells: i32,
     /// The ten-minute mark already counted (`set_flag`).
@@ -100,7 +135,7 @@ pub struct FieldItems {
 impl FieldItems {
     /// A new town's items for the layout: one plain tree in two acres of
     /// every row bears the native fruit.
-    pub fn new(layout: Vec<[u16; 256]>, seed: u32) -> Self {
+    pub fn new(layout: Vec<[u16; 256]>, island: Vec<[u16; 256]>, seed: u32) -> Self {
         let mut rng = seeded_rng(seed ^ 0xF1E1_D17E);
         let mut acres = layout;
         let fruit = logic::decide_fruit(&mut rng);
@@ -109,6 +144,8 @@ impl FieldItems {
             fruit,
             base: acres.clone(),
             acres,
+            island_base: island.clone(),
+            island,
             dust_flag: false,
             reserved_shells: SET_SHELL_NUM,
             shell_mark: false,
@@ -126,19 +163,52 @@ impl FieldItems {
                 }
             }
         }
+        for (b, (now, base)) in self.island.iter().zip(&self.island_base).enumerate() {
+            for c in 0..256 {
+                if now[c] != base[c] {
+                    out.push([(ISLAND_A + b) as u16, c as u16, now[c]]);
+                }
+            }
+        }
         out
     }
 
     /// The new town's grid with the save's changes on it.
     pub fn restore(&mut self, changes: &[[u16; 3]]) {
         self.acres = self.base.clone();
+        self.island = self.island_base.clone();
         for &[a, c, item] in changes {
-            if let Some(acre) = self.acres.get_mut(a as usize) {
-                if let Some(cell) = acre.get_mut(c as usize) {
-                    *cell = item;
-                }
+            if let Some(cell) = self
+                .block_mut(a as usize)
+                .and_then(|block| block.get_mut(c as usize))
+            {
+                *cell = item;
             }
         }
+    }
+
+    /// An acre (index below `ISLAND_A`) or one of the island's blocks.
+    fn block_mut(&mut self, a: usize) -> Option<&mut [u16; 256]> {
+        match a.checked_sub(ISLAND_A) {
+            Some(b) => self.island.get_mut(b),
+            None => self.acres.get_mut(a),
+        }
+    }
+
+    /// Sets an item on an acre or island block cell.
+    pub fn set_any(&mut self, a: usize, c: usize, item: u16) {
+        if let Some(cell) = self.block_mut(a).and_then(|block| block.get_mut(c)) {
+            *cell = item;
+        }
+    }
+
+    /// As [`FieldItems::at`], also on the island's blocks (indices from `ISLAND_A`).
+    pub fn at_any(&self, pos: Vec3) -> Option<(usize, usize, u16)> {
+        if let Some(found) = self.at(pos) {
+            return Some(found);
+        }
+        let (b, c) = island_cell_of(pos)?;
+        Some((ISLAND_A + b, c, self.island.get(b)?[c]))
     }
 
     /// The item on the unit under a scene position: (acre, cell, item).
@@ -156,7 +226,11 @@ fn setup_field_items(
     loaded: Option<Res<crate::save::LoadedSave>>,
 ) {
     let Some(retail) = &town.retail else { return };
-    let mut items = FieldItems::new(retail.items.clone(), town.plan.seed);
+    let mut items = FieldItems::new(
+        retail.items.clone(),
+        retail.island_items.clone(),
+        town.plan.seed,
+    );
     if let Some(changes) = loaded
         .as_ref()
         .and_then(|l| l.0.as_ref())
@@ -368,6 +442,7 @@ pub struct FieldItemModel;
 fn item_model(
     disc: &GameDisc,
     item: u16,
+    island: bool,
     (meshes, materials, images): (
         &mut Assets<Mesh>,
         &mut Assets<N64Material>,
@@ -379,7 +454,10 @@ fn item_model(
     }
     let draw = draw_type(disc, item)?;
     let (mut lists, flags) = part_lists(disc, draw.ty, draw.sub)?;
-    if cell_for_item(item) == Some(CellKind::Tree) {
+    // The plan's trees are `disc_town`'s; the island has no plan, so its trees keep their whole model and take the term's
+    // tree palette.
+    let tree = cell_for_item(item) == Some(CellKind::Tree);
+    if tree && !island {
         let plain = draw_type(disc, logic::TREE)
             .and_then(|t| part_lists(disc, t.ty, t.sub))
             .map(|(l, _)| l)
@@ -390,8 +468,51 @@ fn item_model(
         return None;
     }
     let flat: Vec<u32> = lists.into_iter().flatten().collect();
-    let model = build_model(disc, &flat, None, meshes, materials, images);
+    let model = if island {
+        // `bg_item_common_palload`: the draw loads the term's palettes into the item TLUT slots.
+        let tluts = field_tluts(disc, crate::disc_town::current_term());
+        crate::disc_town::build_model_full(
+            disc,
+            &flat,
+            None,
+            crate::disc_town::DrawColors {
+                prim: [255; 4],
+                prim_lod: 255,
+                env: [0; 4],
+            },
+            false,
+            (&crate::disc_gfx::Segments::default(), &tluts),
+            (meshes, materials, images),
+        )
+    } else {
+        build_model(disc, &flat, None, meshes, materials, images)
+    };
     Some((model, flags & 2 != 0, draw))
+}
+
+/// The palettes `bg_item` loads into its TLUT slots (`bIT_PAL_*`: flowers A-C, grass, the two holes, cedar, palm, gold
+/// tree) for a calendar term (`mFM_SetFGPal`): (slot, REL offset).
+fn field_tluts(disc: &GameDisc, term: usize) -> Vec<(usize, u32)> {
+    const FLOWER_IDX: [u32; 18] = [8, 8, 8, 0, 1, 1, 1, 2, 2, 3, 4, 5, 6, 7, 8, 8, 8, 8];
+    const TREE_IDX: [u32; 18] = [10, 12, 13, 0, 1, 2, 2, 3, 3, 4, 5, 6, 7, 8, 9, 10, 11, 10];
+    let (flower, tree) = (FLOWER_IDX[term % 18], TREE_IDX[term % 18]);
+    let at = |name: &str, index: u32| disc.catalog.get(name).map(|a| a.offset + index * 32);
+    let slots = [
+        at("mFM_obj_a_01_flower_pal", flower),
+        at("mFM_obj_a_01_flower_pal", 9 + flower),
+        at("mFM_obj_a_01_flower_pal", 18 + flower),
+        at("mFM_obj_01_zassou_pal", flower),
+        at("obj_g_hole_pal", 0),
+        at("obj_b_hole_pal", 0),
+        at("mFM_obj_tree_01_pal_dol", tree),
+        at("mFM_obj_palm_01_pal", tree),
+        at("mFM_obj_gold_01_pal_dol", tree),
+    ];
+    slots
+        .into_iter()
+        .enumerate()
+        .filter_map(|(slot, offset)| Some((slot, offset?)))
+        .collect()
 }
 
 /// An item's ground model (as `bg_item` / `bg_police_item` draw it).
@@ -404,7 +525,7 @@ pub(crate) fn item_meshes(
         &mut Assets<Image>,
     ),
 ) -> Option<Model> {
-    item_model(disc, item, assets).map(|(model, ..)| model)
+    item_model(disc, item, false, assets).map(|(model, ..)| model)
 }
 
 /// Keeps the drawn items in step with the grid.
@@ -416,6 +537,7 @@ fn draw_field_items(
     items: Res<FieldItems>,
     mut drawn: ResMut<DrawnItems>,
     mut cache: Local<ModelCache>,
+    mut island_cache: Local<ModelCache>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<N64Material>>,
     mut images: ResMut<Assets<Image>>,
@@ -426,8 +548,8 @@ fn draw_field_items(
     if !items.is_changed() {
         return;
     }
-    for (a, acre) in items.acres.iter().enumerate() {
-        let (ax, az) = (a % ACRE_WIDTH, a / ACRE_WIDTH);
+    for (a, acre) in items.acres.iter().chain(&items.island).enumerate() {
+        let (ax, az) = block_position(a);
         for (c, &item) in acre.iter().enumerate() {
             let key = (a, c);
             if drawn.0.get(&key).map(|d| d.0) == Some(item) {
@@ -439,8 +561,19 @@ fn draw_field_items(
             if item == EMPTY_NO {
                 continue;
             }
-            let entry = cache.0.entry(item).or_insert_with(|| {
-                item_model(&disc, item, (&mut meshes, &mut materials, &mut images))
+            let island = a >= ISLAND_A;
+            let models: &mut ModelCache = if island {
+                &mut island_cache
+            } else {
+                &mut cache
+            };
+            let entry = models.0.entry(item).or_insert_with(|| {
+                item_model(
+                    &disc,
+                    item,
+                    island,
+                    (&mut meshes, &mut materials, &mut images),
+                )
             });
             let Some((model, scatter, draw)) = entry else {
                 continue;

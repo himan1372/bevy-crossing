@@ -28,6 +28,23 @@ impl Props {
         symbols: &[&'static str],
         palette: Option<u32>,
         segment8: Option<&'static str>,
+        assets: (
+            &mut Assets<Mesh>,
+            &mut Assets<N64Material>,
+            &mut Assets<Image>,
+        ),
+    ) -> PropParts {
+        self.get_season(disc, symbols, palette, false, segment8, assets)
+    }
+
+    /// As [`Props::get`], with the winter palette table for structures that have winter models.
+    pub(crate) fn get_season(
+        &mut self,
+        disc: &GameDisc,
+        symbols: &[&'static str],
+        palette: Option<u32>,
+        winter: bool,
+        segment8: Option<&'static str>,
         (meshes, materials, images): (
             &mut Assets<Mesh>,
             &mut Assets<N64Material>,
@@ -53,7 +70,7 @@ impl Props {
                 };
                 // `aSTR_PAL_*`: the structure palette the draw code puts in segment 8.
                 let palette =
-                    palette.and_then(|i| crate::disc_town::structure_palette(disc, i, false));
+                    palette.and_then(|i| crate::disc_town::structure_palette(disc, i, winter));
                 // `gSPSegment(8, ...)`: models whose draw code points segment 8 at a vertex array (the tug
                 // of war's rope, `tol_rope_1_v`, drawn unbent here).
                 let built = if let Some(v) = segment8.and_then(|name| disc.catalog.get(name)) {

@@ -106,7 +106,7 @@ pub(crate) fn rank_at_start(
     let pool: Vec<u16> = (0..15).collect();
     let mut plan = rustimal_logic::town_gen::generate(seed, &pool, 6)?;
     let (retail, _) = crate::disc_town::build_retail_town(disc, &mut plan, None);
-    let mut items = FieldItems::new(retail.items, plan.seed);
+    let mut items = FieldItems::new(retail.items, Vec::new(), plan.seed);
     if let Some(changes) = save.and_then(|s| s.field_items.as_ref()) {
         items.restore(changes);
     }
